@@ -750,23 +750,30 @@ function levelsOfLines(lines: ListLine[], printed: Bullets): void {
   }
 }
 
-/** How many of a LIST block's lines hold a link to a heading (a link with
-    targetOrder). */
+/** How many of a LIST block's lines are a link to a heading: links with
+    targetOrder over half the line's letters or more, as a contents entry's
+    title is. A cross-reference in a sentence ("(Section 8.4)") is not. */
 function linkedLines(block: ParsedBlock): number {
-  const starts: number[] = [];
-  let at = 0;
-  for (const line of block.text.split("\n")) {
-    starts.push(at);
-    at += line.length + 1;
-  }
-  const lines = new Set<number>();
+  const letter = /\p{L}/u;
+  const linked = new Array<boolean>(block.text.length).fill(false);
   for (const l of block.links ?? []) {
     if (l.targetOrder === undefined) continue;
-    let k = 0;
-    while (k + 1 < starts.length && starts[k + 1] <= l.start) k++;
-    lines.add(k);
+    for (let i = Math.max(0, l.start); i < Math.min(block.text.length, l.end); i++) linked[i] = true;
   }
-  return lines.size;
+  let count = 0;
+  let at = 0;
+  for (const line of block.text.split("\n")) {
+    let letters = 0;
+    let inLink = 0;
+    for (let i = 0; i < line.length; i++) {
+      if (!letter.test(line[i])) continue;
+      letters++;
+      if (linked[at + i]) inLink++;
+    }
+    if (letters > 0 && inLink * 2 >= letters) count++;
+    at += line.length + 1;
+  }
+  return count;
 }
 
 /** Each line's depth: how many lines still open above it are set less
@@ -1448,9 +1455,10 @@ class Converter {
     // A contents list: its class, or lines that link to headings, whatever
     // their markers ("1 Introduction", "2.1 Background"): half its lines or
     // more. A cross-reference in an item's sentence ("see Step 1: Sample
-    // Data") makes no contents list. Word benchmark finding: a CDC guide's
-    // bulleted notes, one citing a step by its heading, drew as paragraphs
-    // with their bullets as words.
+    // Data", "(Section 8.4)") makes no contents list. Word benchmark
+    // finding: a CDC guide's bulleted notes, one citing a step by its
+    // heading, drew as paragraphs with their bullets as words, and so did a
+    // specification's one-line notes citing a section.
     const contents = tokensOf(block.html).includes("contents") || linkedLines(block) * 2 >= block.text.split("\n").length;
     if (!contents && this.resume(lines, block, index)) return;
     nestLines(lines);

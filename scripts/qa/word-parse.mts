@@ -244,6 +244,14 @@ function importLists(blocks: ParsedBlock[]): string[] {
   ];
   const tocKinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: contents }).richText.content ?? []).map((n) => n.type).join(",");
   check("lines that each link to a heading are a contents list: a paragraph each", tocKinds === "paragraph,paragraph,heading,heading", tocKinds);
+  const note = "NOTE A template for XPath 2.0 needs a processor (Section 7.2).";
+  const ref = note.indexOf("7.2");
+  const one: ParsedBlock[] = [
+    { type: "HEADING", text: "7.2 Booleans", html: "<h2>7.2 Booleans</h2>" },
+    { type: "LIST", text: note, links: [{ start: ref, end: ref + 3, quotedText: "7.2", targetOrder: 0 }] },
+  ];
+  const oneKinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: one }).richText.content ?? []).map((n) => n.type).join(",");
+  check("a one-line note that cites a section stays a list", oneKinds === "heading,bulletList", oneKinds);
 }
 
 if (failed > 0) {
