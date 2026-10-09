@@ -136,10 +136,26 @@ export function mathAsWritten(value: string, spans: TexSpan[]): string {
   return value.replace(PLACEHOLDER_RX, (_, index: string) => spans[Number(index)]?.source ?? "");
 }
 
-// Front matter: the title line, when there is one; the rest drops.
+// Front matter: the title line, when there is one; the rest drops. Front
+// matter is YAML's keys: each of its lines a key ("title: Intro"), a line
+// set in under one, a list's "- " item, or a "#" comment. Lines of words
+// between two "---" lines are no front matter: the first is a thematic
+// break, the words a heading over the second ("---\nFoo\n---\nBar"). Before,
+// those words dropped (Markdown benchmark finding: CommonMark example 96).
+const FRONT_MATTER_KEY_RX = /^[\w$][\w$ .-]*:(?:\s|$)/;
+const FRONT_MATTER_MORE_RX = /^(?:\s|-(?:\s|$)|#)/;
+
+function isFrontMatter(block: string): boolean {
+  const lines = block.split("\n").filter((line) => line.trim());
+  return (
+    lines.some((line) => FRONT_MATTER_KEY_RX.test(line)) &&
+    lines.every((line) => FRONT_MATTER_KEY_RX.test(line) || FRONT_MATTER_MORE_RX.test(line))
+  );
+}
+
 function splitFrontMatter(source: string): { body: string; title: string | null } {
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(source);
-  if (!m) return { body: source, title: null };
+  if (!m || !isFrontMatter(m[1])) return { body: source, title: null };
   const line = /^title:\s*(.+)$/m.exec(m[1]);
   const title = line ? line[1].trim().replace(/^["']|["']$/g, "").trim() : null;
   return { body: source.slice(m[0].length), title: title || null };

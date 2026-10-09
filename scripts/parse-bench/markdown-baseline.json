@@ -1,10 +1,10 @@
 {
  "total": {
   "spec": {
-   "score": 0.946,
+   "score": 0.947,
    "parse": 0.948,
    "words": 0.962,
-   "lost": 15
+   "lost": 14
   },
   "md": {
    "score": 0.983,
@@ -401,8 +401,8 @@
    1
   ],
   "commonmark-96": [
-   0.711,
-   0.711
+   1,
+   1
   ],
   "commonmark-97": [
    1,
