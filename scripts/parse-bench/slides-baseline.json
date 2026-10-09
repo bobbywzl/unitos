@@ -279,8 +279,8 @@
    "lost": 0
   },
   "poi-radar-chart": {
-   "composite": 0.994,
-   "words": 0.976,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": 1,
    "tables": null,

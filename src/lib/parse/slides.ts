@@ -1624,6 +1624,13 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
     const vals = descendants(child(ser, "val"), "pt").map((pt) => shownNumber(cleanText(child(pt, "v")?.textContent ?? ""), code));
     series.push({ name, cats, vals });
   }
+  // A title element without words is the automatic title, as the drawn
+  // chart takes it: the one series' name, "Chart Title" when it has none.
+  // Slides benchmark finding: PowerPoint's thumbnail of poi radar-chart
+  // draws "Sales" over the chart; the table had no title.
+  const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
+  const autoTitle = !titleText && child(chart, "title") && !autoTitleDeleted && series.length === 1 ? series[0].name || "Chart Title" : "";
+  const shownTitle = titleText || autoTitle;
   const rows: string[][] = [];
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];
   if (categories.length > 0) {
@@ -1635,7 +1642,7 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
     for (let i = 0; i < longest; i++) rows.push(series.map((s) => s.vals[i] ?? ""));
   }
   const pieces: RenderedText[] = [];
-  if (titleText) pieces.push({ html: `<div class="sct">${escapeHtml(titleText)}</div>`, text: titleText });
+  if (shownTitle) pieces.push({ html: `<div class="sct">${escapeHtml(shownTitle)}</div>`, text: shownTitle });
   if (rows.length > 0) pieces.push(dataTable(rows));
   if (pieces.length === 0) return null;
   return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
