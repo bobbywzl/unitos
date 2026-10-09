@@ -370,6 +370,8 @@ function hasHeading(node: Root | RootContent): boolean {
 function standingLine(nodes: RootContent[], i: number): string | null {
   const node = nodes[i];
   if (node.type !== "paragraph" || !node.position) return null;
+  // An image's line is a figure, not a title: its alt words are no heading.
+  if (node.children.some((n) => n.type === "image" || n.type === "imageReference")) return null;
   const { start, end } = node.position;
   if (start.line !== end.line) return null;
   const prev = nodes[i - 1];

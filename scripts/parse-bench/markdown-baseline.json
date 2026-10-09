@@ -1,9 +1,9 @@
 {
  "total": {
   "spec": {
-   "score": 0.866,
-   "parse": 0.87,
-   "words": 0.9,
+   "score": 0.85,
+   "parse": 0.854,
+   "words": 0.884,
    "lost": 15
   },
   "md": {
@@ -2309,8 +2309,8 @@
    0
   ],
   "commonmark-573": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-574": [
    0,
@@ -2321,12 +2321,12 @@
    0
   ],
   "commonmark-576": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-577": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-578": [
    0,
@@ -2345,44 +2345,44 @@
    1
   ],
   "commonmark-582": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-583": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-584": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-585": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-586": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-587": [
    0,
    0
   ],
   "commonmark-588": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-589": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-590": [
    0.833,
    0.833
   ],
   "commonmark-591": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-592": [
    0,
