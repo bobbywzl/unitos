@@ -601,13 +601,7 @@ const jsonOut = value("--json");
 if (jsonOut) writeFileSync(jsonOut, JSON.stringify(results, null, 1));
 
 type Baseline = { total: Record<string, number>; files: Record<string, number> };
-if (flag("--save-baseline")) {
-  const prior: Baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { total: {}, files: {} };
-  for (const r of results) prior.files[r.id] = round(r.score);
-  if (!only && !sectionOnly) prior.total = total;
-  writeFileSync(BASELINE, JSON.stringify(prior, null, 1) + "\n");
-  console.log(`Saved ${results.length} results to ${BASELINE}`);
-}
+// Compare against the baseline on disk before saving over it.
 if (flag("--baseline") && existsSync(BASELINE)) {
   const base: Baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
   const drops = results.filter((r) => base.files[r.id] !== undefined && r.score < base.files[r.id] - 0.01);
@@ -616,4 +610,15 @@ if (flag("--baseline") && existsSync(BASELINE)) {
   for (const r of rises) console.log(`  rose    ${r.id.padEnd(26)} ${fmt(base.files[r.id])} → ${fmt(r.score)}`);
   for (const r of drops) console.log(`  dropped ${r.id.padEnd(26)} ${fmt(base.files[r.id])} → ${fmt(r.score)}`);
   if (drops.length > 0) process.exitCode = 1;
+}
+if (flag("--save-baseline")) {
+  const prior: Baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { total: {}, files: {} };
+  for (const r of results) prior.files[r.id] = round(r.score);
+  // A whole section's run updates that section's total and the overall one.
+  if (!only) {
+    for (const s of sections) prior.total[s] = total[s];
+    prior.total.all = round(mean(["a", "b"].filter((s) => prior.total[s] !== undefined).map((s) => prior.total[s])));
+  }
+  writeFileSync(BASELINE, JSON.stringify(prior, null, 1) + "\n");
+  console.log(`Saved ${results.length} results to ${BASELINE}`);
 }

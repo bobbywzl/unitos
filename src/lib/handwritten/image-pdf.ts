@@ -5,10 +5,11 @@ import { sniffImage } from "@/lib/handwritten/image";
 // the handwritten path exactly as a scanned page does: the stored bytes are a
 // PDF, the page renders through pdf.js, Circle & ask and conversion work
 // unchanged — a new source, never a new parser. A JPEG embeds as it is, and
-// its EXIF orientation becomes the page's rotation, so a phone photo shows
-// upright. Any other format decodes through @napi-rs/canvas onto a white
-// ground and stores pixel for pixel (Flate) up to LOSSLESS_MAX_PIXELS, as
-// JPEG above that. The canvas loads per call, like pages.ts.
+// its EXIF orientation becomes the page's rotation (and a mirror, for the
+// four mirrored orientations), so a phone photo shows upright. Any other
+// format decodes through @napi-rs/canvas onto a white ground and stores
+// pixel for pixel (Flate) up to LOSSLESS_MAX_PIXELS, as JPEG above that.
+// The canvas loads per call, like pages.ts.
 
 // Pixel for pixel up to here (a Retina screenshot is about 5 MP); a larger
 // image stores as JPEG — a photo, most likely, where JPEG is the right size.
@@ -23,6 +24,8 @@ const PAGE_MAX_WIDTH = 612;
 const PAGE_MAX_HEIGHT = 792;
 
 type Rotate = 0 | 90 | 180 | 270;
+// EXIF orientation, 1-8; 1 = upright.
+type Orientation = number;
 
 type PdfImage = {
   width: number; // pixels
@@ -30,7 +33,7 @@ type PdfImage = {
   colorSpace: "/DeviceRGB" | "/DeviceGray";
   filter: "/DCTDecode" | "/FlateDecode";
   data: Uint8Array;
-  rotate: Rotate;
+  orientation: Orientation;
 };
 
 /** The image as a one-page PDF. Throws when the bytes are not an image the
@@ -59,8 +62,13 @@ type JpegHeader = {
 const EMBEDDABLE_SOF = new Set([0xc0, 0xc1, 0xc2]);
 // EXIF orientation → the page's /Rotate (clockwise): 6 = the camera was
 // turned right, 8 = left, 3 = upside down. The mirrored values (2, 4, 5, 7)
-// hardly occur; they show as they are.
-const ROTATE_FOR_ORIENTATION: Record<number, Rotate> = { 3: 180, 6: 90, 8: 270 };
+// draw the image mirrored left to right, then turn the page: 2 = mirrored,
+// 4 = mirrored and upside down, 5 = mirrored and turned left (transposed),
+// 7 = mirrored and turned right (transversed) — Pillow's exif_transpose.
+// Images benchmark finding: a mirrored orientation (a front camera, an
+// edited photo) showed mirrored or on its side.
+const ROTATE_FOR_ORIENTATION: Record<number, Rotate> = { 3: 180, 4: 180, 5: 270, 6: 90, 7: 90, 8: 270 };
+const MIRRORED = new Set([2, 4, 5, 7]);
 
 function embedJpeg(bytes: Uint8Array): PdfImage | null {
   const header = readJpegHeader(bytes);
@@ -73,7 +81,7 @@ function embedJpeg(bytes: Uint8Array): PdfImage | null {
     colorSpace: header.components === 1 ? "/DeviceGray" : "/DeviceRGB",
     filter: "/DCTDecode",
     data: bytes,
-    rotate: ROTATE_FOR_ORIENTATION[header.orientation] ?? 0,
+    orientation: header.orientation,
   };
 }
 
@@ -191,7 +199,7 @@ async function decodeWithCanvas(bytes: Uint8Array): Promise<PdfImage> {
       colorSpace: "/DeviceRGB",
       filter: "/FlateDecode",
       data: new Uint8Array(deflateSync(rgb)),
-      rotate: 0,
+      orientation: 1,
     };
   }
   return {
@@ -200,7 +208,7 @@ async function decodeWithCanvas(bytes: Uint8Array): Promise<PdfImage> {
     colorSpace: "/DeviceRGB",
     filter: "/DCTDecode",
     data: new Uint8Array(canvas.toBuffer("image/jpeg", JPEG_QUALITY)),
-    rotate: 0,
+    orientation: 1,
   };
 }
 
@@ -228,8 +236,12 @@ function wrapInPdf(image: PdfImage): Uint8Array<ArrayBuffer> {
   const fit = Math.min(1, PAGE_MAX_WIDTH / image.width, PAGE_MAX_HEIGHT / image.height);
   const pageWidth = image.width * fit;
   const pageHeight = image.height * fit;
-  const content = `q ${num(pageWidth)} 0 0 ${num(pageHeight)} 0 0 cm /Im0 Do Q`;
-  const rotate = image.rotate ? ` /Rotate ${image.rotate}` : "";
+  // A mirrored orientation draws the image right to left across the page.
+  const content = MIRRORED.has(image.orientation)
+    ? `q -${num(pageWidth)} 0 0 ${num(pageHeight)} ${num(pageWidth)} 0 cm /Im0 Do Q`
+    : `q ${num(pageWidth)} 0 0 ${num(pageHeight)} 0 0 cm /Im0 Do Q`;
+  const turn = ROTATE_FOR_ORIENTATION[image.orientation] ?? 0;
+  const rotate = turn ? ` /Rotate ${turn}` : "";
   const objects: Uint8Array[] = [
     ascii("<< /Type /Catalog /Pages 2 0 R >>"),
     ascii("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),

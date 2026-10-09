@@ -1,8 +1,8 @@
 {
  "total": {
   "a": 0.98,
-  "b": 0.931,
-  "all": 0.956
+  "b": 0.985,
+  "all": 0.982
  },
  "files": {
   "a-tracemonkey": 1,
@@ -58,19 +58,19 @@
   "a-notes-junk-layer": 1,
   "b-exif-landscape-0": 1,
   "b-exif-landscape-1": 1,
-  "b-exif-landscape-2": 0.5,
+  "b-exif-landscape-2": 1,
   "b-exif-landscape-3": 1,
-  "b-exif-landscape-4": 0.5,
-  "b-exif-landscape-5": 0.25,
+  "b-exif-landscape-4": 1,
+  "b-exif-landscape-5": 1,
   "b-exif-landscape-6": 1,
-  "b-exif-landscape-7": 0.25,
+  "b-exif-landscape-7": 1,
   "b-exif-landscape-8": 1,
   "b-exif-portrait-0": 1,
-  "b-exif-portrait-2": 0.605,
+  "b-exif-portrait-2": 1,
   "b-exif-portrait-3": 1,
-  "b-exif-portrait-5": 0.279,
+  "b-exif-portrait-5": 1,
   "b-exif-portrait-6": 1,
-  "b-exif-portrait-7": 0.313,
+  "b-exif-portrait-7": 1,
   "b-exif-portrait-8": 1,
   "b-jpeg-hopper": 1,
   "b-jpeg-gray": 1,
