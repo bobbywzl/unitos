@@ -748,8 +748,8 @@ export const CASES: AssistantCase[] = [
     lang: "en",
     profile: ANALYST,
     question: "Turn the paragraph that starts \"Management attributes\" into a bulleted list, one bullet per thing management credits.",
-    expect: { change: true, only: ["edit_block", "format_block"], touch: [4], after: [{ block: 4, kind: "list", includes: ["14 percent"] }] },
-    good: "The paragraph becomes a bulleted list of the three things (the fleet cut, the fuel fall, the pricing), every figure kept as printed, nothing else touched; one-sentence answer.",
+    expect: { change: true, only: ["edit_block", "format_block", "insert_paragraph"], touch: [4], fresh: true, exists: [{ kind: "list", includes: ["14 percent"] }] },
+    good: "The paragraph becomes a bulleted list of the three things (the fleet cut, the fuel fall, the pricing) — the whole paragraph as the list, or a lead sentence kept with the list after it — every figure kept as printed, nothing else touched; one-sentence answer.",
   },
   {
     id: "edit-law-split-example",
