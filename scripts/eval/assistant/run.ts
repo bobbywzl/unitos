@@ -20,7 +20,11 @@ import "../env";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
-import { enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
+import { z } from "zod";
+import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
+import { documentPrefix } from "@/lib/derive/context";
+import { parseJson } from "@/lib/derive/json";
+import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
 import { blockKind } from "@/lib/block-kind";
@@ -32,7 +36,9 @@ import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesi
 import type { AssistantAction } from "@/lib/types";
 import { blockTags, cjkShare, loadFixtures, wordCount, type Fixture } from "../lib";
 import { CASES, type ActionExpect, type AssistantCase, type Family } from "./cases";
-import { fixtureParts, fixtureSections, fixtureSystem, fixtureText, fixtureTranscript, planBlocks, videoBlockId } from "./digest";
+import { caseBlocks, fixtureParts, fixtureSections, fixtureSystem, fixtureText, fixtureTranscript, videoBlockId } from "./digest";
+import { fixtureRichText } from "./richtext";
+import { applyOps, runSuggestAction, type Landed } from "./suggest-run";
 import { FAMILY_RUBRIC, SHARED } from "./rubric";
 import { simulate, type Simulation } from "./simulate";
 
@@ -72,10 +78,34 @@ function prepare(): void {
     if (!f) throw new Error(`fixture ${c.fixture} is missing`);
     const notes = c.notes ?? [];
     const scope = c.scope ?? "document";
-    const system = scope === "document" ? fixtureSystem(f, notes) : corpusSystem(fixtureParts(f, notes));
+    const blocks = caseBlocks(c, f);
     const transcript = fixtureTranscript(f);
     const history = c.history ?? [];
-    const prompt = synthesisAskPrompt({
+    // The selection chat's own prompt (src/app/api/assistant/act/route.ts):
+    // the document prefix as the system message, the act prompt as the user
+    // message, the conversation inside it.
+    const picked = c.chat === "selection" && c.selection ? rowSelection(blocks, c.selection) : null;
+    const actUser =
+      c.chat === "selection"
+        ? actPrompt({
+            profile: c.profile,
+            lang: c.lang,
+            selectionBlock: picked ? textSelectionBlock(picked.blockId, picked.quotedText) : "",
+            toolBlock: "",
+            hasSelection: picked !== null,
+            sections: fixtureSections(notes).map((s) => ({ id: s.id, title: s.title, parentTitle: null })),
+            otherDocuments: [],
+            notes: notes.map((n, i) => ({ id: `note-${i + 1}`, sectionTitle: n.section, content: n.content })),
+            history: history.map((turn) => ({ role: turn.role, content: turn.content })),
+            command: c.question,
+            edits: c.edits ?? "blocks",
+            pages: [],
+            transcript: transcript?.lines ?? null,
+            figureBlockId: null,
+          })
+        : null;
+    const system = actUser !== null ? documentPrefix(f.title, blocks as never, null, null) : scope === "document" ? fixtureSystem(f, notes, blocks) : corpusSystem(fixtureParts(f, notes, blocks));
+    const prompt = actUser ?? synthesisAskPrompt({
       profile: c.profile,
       lang: c.lang,
       scopeLabel: scope === "document" ? DOCUMENT_SCOPE_LABEL : PROJECT_SCOPE_LABEL,
@@ -94,7 +124,7 @@ function prepare(): void {
             }
           : undefined,
     });
-    const turns = history.map((turn) => (turn.role === "assistant" ? `${ASSISTANT}\n${turn.content}` : `${USER}\n${synthesisHistoryTurn({ content: turn.content })}`));
+    const turns = actUser !== null ? [] : history.map((turn) => (turn.role === "assistant" ? `${ASSISTANT}\n${turn.content}` : `${USER}\n${synthesisHistoryTurn({ content: turn.content })}`));
     const dir = dirOf(c.id);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "prompt.md"), [SYSTEM, system, "", ...turns.flatMap((t) => [t, ""]), USER, prompt, ""].join("\n"));
@@ -106,6 +136,24 @@ function prepare(): void {
 
 // ── score: the answer through the plan, the edit passes, the simulation ───
 export type Check = { name: string; ok: boolean; detail?: string };
+
+/** The act route's answer (src/app/api/assistant/act/route.ts planSchema). */
+const actAnswerSchema = z.object({
+  reply: z.string().max(8000).nullable(),
+  actions: actionsSchema,
+  matches: z.array(z.unknown()).optional(),
+});
+
+/** The words a selection-chat case selects: a block by its order among the
+    case's blocks, and the text selected in it (the whole block when none). */
+function rowSelection(blocks: PlanContext["blocks"], selection: { block: number; text?: string }) {
+  const block = blocks[selection.block - 1];
+  if (!block) throw new Error(`block ${selection.block} is not in the document`);
+  const start = selection.text ? block.text.indexOf(selection.text) : 0;
+  if (start === -1) throw new Error(`"${selection.text}" is not in block ${selection.block}`);
+  const end = selection.text ? start + selection.text.length : block.text.length;
+  return { blockId: block.id, startOffset: start, endOffset: end, quotedText: block.text.slice(start, end) };
+}
 
 type CaseResult = {
   id: string;
@@ -126,6 +174,8 @@ type CaseResult = {
   sections: string[];
   documents: { title: string; markdown: string }[];
   words: number;
+  // A suggest action's run: what landed on the page, and what did not.
+  suggestions?: { count: number; summary: string; skipped: string[] };
 };
 
 const lower = (s: string) => s.toLowerCase();
@@ -221,7 +271,7 @@ function describe(e: ActionExpect): string {
 function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadActions | null, fence: string | null, answer: string, actions: AssistantAction[], warnings: string[], sim: Simulation, pending: string[]): Check[] {
   const e = c.expect;
   const checks: Check[] = [];
-  const idOf = (n: number) => (n === 0 ? videoBlockId(f) : f.blocks[n - 1].id);
+  const idOf = (n: number) => (n === 0 ? videoBlockId(f) : c.edits === "suggestions" ? ctx.blocks[n - 1].id : f.blocks[n - 1].id);
   const original = new Map(ctx.blocks.map((b) => [b.id, b]));
   const after = new Map(sim.blocks.map((b) => [b.id, b]));
 
@@ -421,15 +471,27 @@ async function score(): Promise<void> {
     const edits = c.edits ?? "blocks";
     const history = c.history ?? [];
     // The route's read of the answer: the text before the fence, the fence's
-    // content as actions; Project scope drops the block.
-    const { text, content } = splitActionsFence(answerRaw.trim());
-    const fence = scope === "document" ? content : null;
-    const read = fence !== null ? parseActionsFence(fence, text, edits) : null;
+    // content as actions; Project scope drops the block. The selection chat
+    // answers JSON: its reply and its actions (actAnswerSchema).
+    let text: string;
+    let fence: string | null;
+    let read: ReadActions | null;
+    if (c.chat === "selection") {
+      const parsed = parseJson(actAnswerSchema, answerRaw);
+      text = parsed?.reply ?? "";
+      read = parsed?.actions ?? { actions: [], unreadable: [] };
+      fence = parsed && read.actions.length + read.unreadable.length > 0 ? "json" : null;
+    } else {
+      const split = splitActionsFence(answerRaw.trim());
+      text = split.text;
+      fence = scope === "document" ? split.content : null;
+      read = fence !== null ? parseActionsFence(fence, text, edits) : null;
+    }
     const ctx: PlanContext = {
       documentId: f.name,
       edits,
       format: null,
-      blocks: planBlocks(f),
+      blocks: caseBlocks(c, f),
       transcript: fixtureTranscript(f),
       attachedIds: new Set([f.name]),
       sectionIds: new Set(fixtureSections(notes).map((s) => s.id)),
@@ -468,8 +530,39 @@ async function score(): Promise<void> {
       actions = [...actions.slice(0, at), ...revised.actions, ...actions.slice(at + 1)];
       warnings.push(...revised.warnings);
     }
+    // A suggest action on a document with rich text runs its passes now, as
+    // the act route does, and its resolved ops land on the simulated blocks.
+    const suggest = actions.find((a): a is Extract<AssistantAction, { type: "suggest" }> => a.type === "suggest");
+    let landed: Landed | null = null;
+    if (suggest && edits === "suggestions") {
+      const picked = c.chat === "selection" && c.selection ? rowSelection(ctx.blocks, c.selection) : null;
+      const got = await runSuggestAction({
+        dir,
+        title: f.title,
+        richText: fixtureRichText(f),
+        rows: ctx.blocks,
+        action: suggest,
+        passage: picked ? [{ blockId: picked.blockId, startOffset: picked.startOffset, endOffset: picked.endOffset }] : [],
+        command: c.question,
+        history: history.map((turn) => ({ role: turn.role, content: turn.content })),
+        profile: c.profile,
+        lang: c.lang,
+        t,
+      });
+      if (got instanceof Error) {
+        if (!got.message.includes(EXTERNAL_PENDING)) warnings.push(got.message);
+      } else {
+        landed = got;
+        warnings.push(...got.warnings);
+      }
+    }
     const pending = pendingCalls(dir);
     const sim = simulate(ctx.blocks, actions, ctx.transcript?.speakers ?? [], fixtureSections(notes));
+    if (landed) {
+      const applied = applyOps(sim.blocks, landed.ops);
+      sim.blocks = applied.blocks;
+      warnings.push(...applied.notes);
+    }
     const checks = checkCase(c, f, ctx, read, fence, text, actions, warnings, sim, pending);
     const before = new Map(ctx.blocks.map((b) => [b.id, b]));
     const afterById = new Map(sim.blocks.map((b) => [b.id, b]));
@@ -493,9 +586,10 @@ async function score(): Promise<void> {
       sections: sim.sections,
       documents: sim.documents,
       words: wordCount(text),
+      ...(landed ? { suggestions: { count: landed.ops.length, summary: landed.summary, skipped: landed.warnings } } : {}),
     };
     writeJson(join(dir, "result.json"), result);
-    if (pending.length === 0) writeFileSync(join(dir, "judge-prompt.md"), judgePrompt(c, f, result, before));
+    if (pending.length === 0) writeFileSync(join(dir, "judge-prompt.md"), judgePrompt(c, f, result, before, ctx.blocks));
     const failed = checks.filter((k) => !k.ok);
     console.log(`${c.id.padEnd(32)} ${pending.length > 0 ? `PENDING ${pending.length} calls` : failed.length === 0 ? "checks ok" : `FAIL: ${failed.map((k) => `${k.name}${k.detail ? ` (${k.detail})` : ""}`).join("; ")}`}`);
   }
@@ -511,7 +605,7 @@ function pendingCalls(dir: string): string[] {
 }
 
 // ── judge: one packet per case ─────────────────────────────────────────────
-function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<string, { text: string }>): string {
+function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<string, { text: string }>, blocks: PlanContext["blocks"]): string {
   const rubric = FAMILY_RUBRIC[c.family];
   const criteria = [...rubric.criteria, ...SHARED];
   const profile = c.profile
@@ -527,12 +621,12 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     "",
     `The document the assistant read, every block tagged [block <id>] (document title: ${f.title}):`,
     "",
-    fixtureText(f),
+    fixtureText(f, blocks.filter((b) => b.type !== "VIDEO")),
     ...(notes.length > 0 ? ["", "The reader's notes in the project:", ...notes] : []),
     "",
     `The reader context:\n${profile}`,
     "",
-    `The reader's UI language: ${language}. The document ${c.edits === "suggestions" ? "has rich text: a change to its words is one suggest action, whose instruction the page runs as suggestions" : c.edits === "none" ? "cannot be changed: another account's project holds it" : "is an article: changes are block actions the plan card runs"}.${(c.scope ?? "document") === "notebook" ? " The message was sent at Project scope, where no action can run." : ""}`,
+    `The reader's UI language: ${language}. The document ${c.edits === "suggestions" ? "has rich text: a change to its words is one suggest action, whose instruction the page runs as suggestions" : c.edits === "none" ? "cannot be changed: another account's project holds it" : "is an article: changes are block actions the plan card runs"}.${(c.scope ?? "document") === "notebook" ? " The message was sent at Project scope, where no action can run." : ""}${c.chat === "selection" ? ` The message was sent from the selection chat, on the selected words: the route answers JSON (reply, actions), and a suggest action's suggestions land at once, with no confirmation asked.` : ""}`,
     ...(c.history?.length ? ["", "The conversation so far:", ...c.history.map((turn) => `${turn.role === "user" ? "Reader" : "Assistant"}: ${turn.content}`)] : []),
     "",
     `The reader's message:\n${c.question}`,
@@ -544,6 +638,13 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     r.answer || "(empty)",
     "",
     r.actions.length > 0 ? `The plan the reader sees in the plan card (each action with its description and its real target):\n${renderPlan(r.actions, before)}` : "The plan: no actions.",
+    ...(r.suggestions
+      ? [
+          "",
+          `The suggestions the page landed from the suggest action, each pending until the reader accepts it: ${r.suggestions.count}${r.suggestions.summary ? ` — ${r.suggestions.summary}` : ""}`,
+          ...(r.suggestions.skipped.length > 0 ? ["Changes of the run that did not land (the page shows each reason):", ...r.suggestions.skipped.map((w) => `- ${w}`)] : []),
+        ]
+      : []),
     ...(r.warnings.length > 0 ? ["", "What the server refused or could not read (shown to the reader as warnings):", ...r.warnings.map((w) => `- ${w}`)] : []),
     ...(r.changed.length > 0 ? ["", "Blocks whose words the plan changes (before → after):", ...r.changed.map((x) => `- ${x.id}\n  before: ${x.before}\n  after:  ${x.after}`)] : []),
     ...(r.added.length > 0 ? ["", "Blocks the plan adds:", ...r.added.map((x) => `- ${x.text}`)] : []),

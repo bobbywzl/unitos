@@ -36,6 +36,15 @@ export const FAMILY_RUBRIC: Record<Family, { what: string; criteria: Criterion[]
       { key: "descriptions", ask: "Is each action's description one plain sentence a reader can approve from, naming the block or the words it changes?" },
     ],
   },
+  act: {
+    what: "The selection chat on a passage: a question gets its answer from the document in a sentence or two with its evidence cited; a command gets the change proposed at once — on a document with rich text the suggestions land on the selected words, pending, with nothing outside the selection touched and no second turn asked for; a command that asks for new words never writes them into the reply.",
+    criteria: [
+      { key: "at_once", ask: "Does the first turn do the work — the change landed as suggestions, or the plan proposed — with no offer, no question back, and no wait for a confirmation?" },
+      { key: "on_selection", ask: "Do the suggestions change the selected words and nothing outside them, the way the message asked (every op landed, none skipped)?" },
+      { key: "exact", ask: "Are the new words exactly what the message asked for, with every other word, number, and name kept as printed?" },
+      { key: "reply", ask: "Is the reply one sentence on what changed (or the answer, cited, for a question), without the rewritten text and without 'proposed' when it already landed?" },
+    ],
+  },
   suggest: {
     what: "A change to a document with rich text: one suggest action whose blockIds name exactly the part the message concerns (none for the whole document), reorder set only when the message moves blocks, an instruction that says every change to make in plain words without the changed text, and a one-sentence answer.",
     criteria: [

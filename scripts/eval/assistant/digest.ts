@@ -4,6 +4,7 @@
 // blocks; and a recording's transcript context (voices and who speaks from
 // which line), as lib/assistant/transcript.ts builds it from the database.
 import { renderBlockLines } from "@/lib/derive/context";
+import { suggestionRows } from "./richtext";
 import type { PlanContext } from "@/lib/assistant/plan";
 import type { TranscriptContext } from "@/lib/assistant/transcript";
 import { documentSystem } from "@/lib/digest/render";
@@ -39,6 +40,13 @@ export function planBlocks(f: Fixture): PlanContext["blocks"] {
     speaker: b.speaker ? (voices.get(b.speaker) ?? null) : null,
   }));
   return isRecording(f) ? [{ id: videoBlockId(f), type: "VIDEO", text: f.title, html: null, startTime: null, endTime: null, speaker: null }, ...lines] : lines;
+}
+
+/** The blocks a case reads: a document with rich text (edits "suggestions")
+    as the page indexes it, one row per paragraph, heading, and list line
+    (richtext.ts); any other as the plan reads it. */
+export function caseBlocks(c: { edits?: string; fixture: string }, f: Fixture): PlanContext["blocks"] {
+  return c.edits === "suggestions" ? suggestionRows(f) : planBlocks(f);
 }
 
 /** The voices of a recording by name, each with the id the app gives it
@@ -78,10 +86,9 @@ export function fixtureTranscript(f: Fixture): TranscriptContext | null {
 }
 
 /** The document's text as the digest stores it: every block tagged. */
-export function fixtureText(f: Fixture): string {
-  const blocks: (FixtureBlock & { page?: null })[] = f.blocks;
+export function fixtureText(f: Fixture, blocks: PlanContext["blocks"] = planBlocks(f).filter((b) => b.type !== "VIDEO")): string {
   const lines = renderBlockLines(
-    blocks.map((b) => ({ id: b.id, type: b.type, text: b.text, startTime: b.startTime ?? null, endTime: b.endTime ?? null })),
+    blocks.map((b) => ({ id: b.id, type: b.type, text: b.text, startTime: b.startTime ?? null, endTime: b.endTime ?? null })) as never,
     null,
   );
   return isRecording(f) ? `[block ${videoBlockId(f)}] (VIDEO)\n${f.title}\n\n${lines}` : lines;
@@ -113,8 +120,8 @@ export function fixtureSections(notes: CaseNote[]): { id: string; title: string;
 }
 
 /** The project's digest with this one document and the case's notes. */
-export function fixtureParts(f: Fixture, notes: CaseNote[] = []): DigestParts {
-  const text = fixtureText(f);
+export function fixtureParts(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"]): DigestParts {
+  const text = fixtureText(f, blocks);
   const last = f.blocks[f.blocks.length - 1];
   return {
     corpusId: PROJECT_ID,
@@ -144,8 +151,8 @@ export function fixtureParts(f: Fixture, notes: CaseNote[] = []): DigestParts {
 }
 
 /** The This page system prefix for the fixture, as the route renders it. */
-export function fixtureSystem(f: Fixture, notes: CaseNote[] = []): string {
-  const system = documentSystem(fixtureParts(f, notes), f.name);
+export function fixtureSystem(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"]): string {
+  const system = documentSystem(fixtureParts(f, notes, blocks), f.name);
   if (system === null) throw new Error(`${f.name} did not render`);
   return system;
 }
