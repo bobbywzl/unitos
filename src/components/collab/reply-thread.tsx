@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
-import { readReplyDraft, writeReplyDraft } from "@/lib/note-drafts";
+import { DRAFT_KEPT_EVENT, readReplyDraft, replyDraftKey, subscribeDraftKept, writeReplyDraft } from "@/lib/note-drafts";
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { CrossAccountView, ReplyView } from "@/lib/types";
@@ -30,8 +30,6 @@ function draftTarget(
   if ("blockEditId" in target) return `edit:${target.blockEditId}`;
   return `link:${target.docLinkId}`;
 }
-
-const noSubscribe = () => () => {};
 
 // The discussion under one note (notes and annotations alike), one edit, or
 // one link — how collaborators comment on each other's work. Open replies
@@ -72,10 +70,23 @@ export function ReplyThread({
   const { authOn, canEdit, myId, role, people } = useCollab();
   const key = draftTarget(target);
   // The kept draft: null on the server and while hydrating, then what this
-  // browser holds for this account (another account's draft never shows). Typing takes over (typed !== null).
-  const kept = useSyncExternalStore(noSubscribe, () => readReplyDraft(myId, key), () => null);
+  // browser holds for this account (another account's draft never shows),
+  // read again when the queue puts a dropped write's words into a draft.
+  // Typing takes over (typed !== null).
+  const kept = useSyncExternalStore(subscribeDraftKept, () => readReplyDraft(myId, key), () => null);
   const [typed, setTyped] = useState<string | null>(null);
   const draft = typed ?? kept ?? "";
+  // The queue put a dropped reply's words into this box's draft, after what
+  // is typed here (keepDroppedWords, REV9-02): the open box takes the draft,
+  // so the next keystroke writes over nothing.
+  useEffect(() => {
+    const onKept = (e: Event) => {
+      if ((e as CustomEvent<{ key?: unknown }>).detail?.key !== replyDraftKey(myId, key)) return;
+      setTyped((prev) => (prev === null ? prev : (readReplyDraft(myId, key) ?? prev)));
+    };
+    window.addEventListener(DRAFT_KEPT_EVENT, onKept);
+    return () => window.removeEventListener(DRAFT_KEPT_EVENT, onKept);
+  }, [myId, key]);
   const [composingState, setComposing] = useState<boolean | null>(null);
   const [seenRequest, setSeenRequest] = useState(openRequest);
   if (seenRequest !== openRequest) {
