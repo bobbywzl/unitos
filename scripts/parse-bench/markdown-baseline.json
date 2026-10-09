@@ -1,9 +1,9 @@
 {
  "total": {
   "spec": {
-   "score": 0.897,
-   "parse": 0.892,
-   "words": 0.951,
+   "score": 0.894,
+   "parse": 0.889,
+   "words": 0.949,
    "lost": 15
   },
   "md": {
@@ -13,10 +13,10 @@
    "lost": 233
   },
   "txt": {
-   "score": 0.919,
-   "parse": 0.919,
-   "words": 0.995,
-   "lost": 1626
+   "score": 0.92,
+   "parse": 0.92,
+   "words": 0.996,
+   "lost": 1244
   }
  },
  "files": {
@@ -617,8 +617,8 @@
    0.833
   ],
   "commonmark-150": [
-   1,
-   1
+   0.333,
+   0.333
   ],
   "commonmark-151": [
    1,
@@ -2469,8 +2469,8 @@
    1
   ],
   "commonmark-613": [
-   1,
-   1
+   0,
+   0
   ],
   "commonmark-614": [
    1,
@@ -2985,8 +2985,8 @@
    0.667
   ],
   "vim-intro": [
-   0.987,
-   0.987
+   0.998,
+   0.998
   ],
   "vim-usr01": [
    0.998,
@@ -3005,52 +3005,52 @@
    1
   ],
   "vim-tutor-fr": [
+   0.992,
+   0.992
+  ],
+  "vim-tutor-de": [
    0.991,
    0.991
   ],
-  "vim-tutor-de": [
+  "vim-tutor-ja-sjis": [
+   0.996,
+   0.996
+  ],
+  "vim-tutor-ja-euc": [
+   0.996,
+   0.996
+  ],
+  "vim-tutor-ko-euc": [
+   0.995,
+   0.995
+  ],
+  "vim-tutor-zh-euc": [
+   0.995,
+   0.995
+  ],
+  "vim-tutor-pl": [
    0.989,
    0.989
   ],
-  "vim-tutor-ja-sjis": [
-   0.995,
-   0.995
-  ],
-  "vim-tutor-ja-euc": [
-   0.995,
-   0.995
-  ],
-  "vim-tutor-ko-euc": [
-   0.994,
-   0.994
-  ],
-  "vim-tutor-zh-euc": [
-   0.994,
-   0.994
-  ],
-  "vim-tutor-pl": [
-   0.987,
-   0.987
-  ],
   "vim-tutor-ru": [
-   0.988,
-   0.988
-  ],
-  "vim-tutor-ru-cp1251": [
-   0.988,
-   0.988
-  ],
-  "vim-tutor-el": [
    0.99,
    0.99
   ],
+  "vim-tutor-ru-cp1251": [
+   0.99,
+   0.99
+  ],
+  "vim-tutor-el": [
+   0.992,
+   0.992
+  ],
   "vim-tutor-cs": [
-   0.987,
-   0.987
+   0.99,
+   0.99
   ],
   "vim-tutor": [
-   0.989,
-   0.989
+   0.991,
+   0.991
   ]
  }
 }

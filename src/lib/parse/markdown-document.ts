@@ -149,6 +149,31 @@ function plainText(nodes: PhrasingContent[]): string {
   return out.replace(/\s+/g, " ").trim();
 }
 
+// A tag in raw HTML, and the names of HTML's elements (and the SVG and
+// MathML ones a page sets inside HTML). A bare tag (<Esc>: no attribute,
+// not self-closed) whose name is no element and that the file never
+// closes is words: a key or a placeholder the author wrote in angle
+// brackets. A component's tag (<Sandpack>...</Sandpack>, <Intro />) stays
+// markup. Before, every such tag read as markup and its words went: a
+// text file's "press <Esc>", a manual's "<CR>" (Markdown benchmark
+// finding: the Vim reference manual lost 172 words).
+const TAG_RX = /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s[^<>]*)?\/?>/g;
+const BARE_TAG_RX = /^<([A-Za-z][A-Za-z0-9-]*)>$/;
+const CLOSING_TAG_RX = /<\/([A-Za-z][A-Za-z0-9-]*)\s*>/g;
+const HTML_ELEMENTS = new Set(
+  (
+    "a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup " +
+    "data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 " +
+    "head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu meta meter nav noscript " +
+    "object ol optgroup option output p param picture pre progress q rp rt ruby s samp script search section select slot " +
+    "small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track u " +
+    "ul var video wbr center font big tt strike acronym marquee nobr " +
+    "svg g path rect circle ellipse line polyline polygon text tspan defs use symbol clippath lineargradient radialgradient " +
+    "stop mask pattern image foreignobject desc " +
+    "math mi mo mn ms mtext mrow mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mspace semantics annotation"
+  ).split(" "),
+);
+
 // The mdast tree as HTML for the walk.
 class Renderer {
   private readonly definitions = new Map<string, Definition>();
@@ -157,7 +182,10 @@ class Renderer {
   private readonly slugs = new Map<string, number>();
   firstHeading: string | null = null;
 
-  constructor(private readonly spans: TexSpan[]) {}
+  constructor(
+    private readonly spans: TexSpan[],
+    private readonly closed: Set<string> = new Set(),
+  ) {}
 
   render(root: Root): string {
     const collect = (node: RootContent | Root) => {
@@ -325,9 +353,15 @@ class Renderer {
     return mathAsWords(value, this.spans);
   }
 
-  // Raw HTML, with the math set aside put back as text puts it back.
+  // Raw HTML, with the math set aside put back as text puts it back, and a
+  // bare tag of no element's name that the file never closes as its words.
   private html(value: string): string {
-    return value.replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
+    return value
+      .replace(TAG_RX, (tag: string, name: string) => {
+        const lower = name.toLowerCase();
+        return BARE_TAG_RX.test(tag) && !HTML_ELEMENTS.has(lower) && !this.closed.has(lower) ? escapeHtml(tag) : tag;
+      })
+      .replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
   }
 
   private math(index: number): string {
@@ -520,7 +554,8 @@ export function markdownToHtml(
   const { text, spans } = setAsideMath(body);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
   if (body === source) shapeTextOutline(tree, text);
-  const renderer = new Renderer(spans);
+  const closed = new Set([...text.matchAll(CLOSING_TAG_RX)].map((m) => m[1].toLowerCase()));
+  const renderer = new Renderer(spans, closed);
   const article = renderer.render(tree);
   const ownTitle = frontTitle ?? renderer.firstHeading;
   const title = ownTitle ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
