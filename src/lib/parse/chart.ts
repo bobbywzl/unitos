@@ -121,8 +121,23 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
 function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalette): Series {
   const tx = child(ser, "tx");
   const name = tx ? cacheValues(tx, palette).text[0] ?? richText(tx) : "";
-  const cat = cacheValues(child(ser, "cat") ?? child(ser, "xVal"), palette);
+  const catEl = child(ser, "cat") ?? child(ser, "xVal");
+  const cat = cacheValues(catEl, palette);
   const val = cacheValues(child(ser, "val") ?? child(ser, "yVal"), palette);
+  // Number categories (a numCache) show in their format code, as the axis
+  // shows them: m/d/yy shows 37261.0 as 1/5/02. Slides benchmark finding:
+  // date categories read as raw serials.
+  if (kind !== "scatter" && (descendants(catEl, "numCache")[0] ?? descendants(catEl, "numLit")[0])) {
+    cat.text = cat.text.map((t, i) => {
+      const n = cat.numbers[i];
+      if (n === null || n === undefined) return t;
+      try {
+        return cleanText(ssf.format(cat.formatCode ?? "General", n)) || t;
+      } catch {
+        return t;
+      }
+    });
+  }
   const spPr = child(ser, "spPr");
   const fill = palette.resolveColor(colorIn(child(spPr, "solidFill")));
   const line = palette.resolveColor(colorIn(child(child(spPr, "ln"), "solidFill")));

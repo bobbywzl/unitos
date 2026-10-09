@@ -1610,7 +1610,13 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
   const series: { name: string; cats: string[]; vals: string[] }[] = [];
   for (const ser of descendants(chart, "ser")) {
     const name = cleanText(descendants(child(ser, "tx"), "v")[0]?.textContent ?? descendants(child(ser, "tx"), "t").map((t) => t.textContent ?? "").join("")).trim();
-    const cats = descendants(child(ser, "cat"), "pt").map((pt) => cleanText(child(pt, "v")?.textContent ?? ""));
+    // Number categories show in their format code too (m/d/yy: 1/5/02).
+    const catNumbers = descendants(child(ser, "cat"), "numCache")[0] ?? descendants(child(ser, "cat"), "numLit")[0];
+    const catCode = catNumbers ? descendants(catNumbers, "formatCode")[0]?.textContent?.trim() || "General" : null;
+    const cats = descendants(child(ser, "cat"), "pt").map((pt) => {
+      const v = cleanText(child(pt, "v")?.textContent ?? "");
+      return catCode ? shownNumber(v, catCode) : v;
+    });
     // A value shows in its number format, General when it names none, as
     // the chart's own labels show it: the cache's 8.200000000000001 reads
     // 8.2. Slides benchmark finding (a radar chart's data table).
