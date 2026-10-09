@@ -13,10 +13,10 @@
    "lost": 66
   },
   "txt": {
-   "score": 0.931,
-   "parse": 0.931,
-   "words": 0.983,
-   "lost": 18955
+   "score": 0.945,
+   "parse": 0.945,
+   "words": 0.997,
+   "lost": 1399
   }
  },
  "files": {
@@ -3177,8 +3177,8 @@
    0.999
   ],
   "emacs-tutorial-ja-iso2022": [
-   0.078,
-   0.078
+   1,
+   1
   ],
   "pride-paragraph-lines": [
    0.992,

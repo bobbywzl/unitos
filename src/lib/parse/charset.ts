@@ -233,12 +233,31 @@ function utf16Shape(bytes: Uint8Array): "utf-16le" | "utf-16be" | null {
   return null;
 }
 
+/** ISO-2022-JP: 7-bit bytes only, and an escape that switches to a JIS
+    set (ESC $ B, ESC $ @, ESC ( J, ESC ( I). Every byte of such a file
+    reads as UTF-8, so the UTF-8 test alone took it as ASCII with escapes
+    (Markdown benchmark finding: the Emacs tutorial in Japanese, the
+    charset of Japanese mail, lost 92% of its words). */
+function isIso2022Jp(bytes: Uint8Array): boolean {
+  let escapes = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b >= 0x80) return false;
+    if (b !== 0x1b) continue;
+    const a = bytes[i + 1];
+    const c = bytes[i + 2];
+    if ((a === 0x24 && (c === 0x42 || c === 0x40)) || (a === 0x28 && (c === 0x4a || c === 0x49))) escapes++;
+  }
+  return escapes > 0;
+}
+
 /** The charset a text file is in (see above). */
 export function textFileCharset(bytes: Uint8Array): string {
   const bom = bomCharset(bytes);
   if (bom) return bom;
   const wide = utf16Shape(bytes);
   if (wide) return wide;
+  if (isIso2022Jp(bytes)) return "iso-2022-jp";
   try {
     new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return "utf-8";
