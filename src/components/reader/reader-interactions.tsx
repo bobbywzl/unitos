@@ -2344,6 +2344,10 @@ export function ReaderInteractions({
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
+  // When a figure object last opened its tools (DOCS_EVENT.figureTools): a
+  // release that came before it, a tap's pointerup and its mouseup on a
+  // phone, never closes them.
+  const figureToolsAtRef = useRef(-Infinity);
 
   // Tool block placement, by proximity to the highlighted text: with nothing
   // beside it a new block goes right; with a block already close on the right
@@ -3365,6 +3369,8 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // The figure tools this release's own tap opened stay open.
+        if (popoverRef.current?.figure && figureToolsAtRef.current >= event.timeStamp) return;
         // A drag that began on the article and let go in the tray or the
         // header selects the page between: the selection is cut to the
         // article's blocks it crosses, as if the drag had stopped at the
@@ -3730,6 +3736,7 @@ export function ReaderInteractions({
     let disarm = 0;
     const onFigureTools = (e: Event) => {
       const { blockId, x, y } = (e as CustomEvent<{ blockId: string; x: number; y: number }>).detail;
+      figureToolsAtRef.current = performance.now();
       openFigureToolsRef.current(blockId, x, y);
       cancelAnimationFrame(disarm);
       disarm = requestAnimationFrame(() => {
