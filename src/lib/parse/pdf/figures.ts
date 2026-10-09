@@ -1171,10 +1171,16 @@ export function attachFigureRegions(
   // takes one in.
   const inText = new Set(lines);
   const dropped = allLines.filter((l) => !inText.has(l)).map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }));
-  // Each graphic's caption, as a line of text.
+  // Each graphic's caption, as a line of text. Its formulas read as the
+  // page's lines' are: its items never were the page's lines, whose
+  // formulas resolveZones reads (parse loop finding: the MML book p. 136,
+  // the panel captions "(b) A1, σ1 ≈ 228, 052." under Figure 4.11's
+  // pictures, inline formulas as a paragraph, lost them as their row's
+  // caption).
   const captions = new Map(
     graphics.map((g) => {
       const lines = buildLines(g.caption, page);
+      resolveZones(lines, ctx.drawing);
       return [g, lines.length > 0 ? { ...captionPart(lines), size: lines[0].size } : null] as const;
     }),
   );
