@@ -210,7 +210,59 @@ function containerOrientation(bytes: Uint8Array, mime: ImageMime): number {
 
 // ── Everything else through the canvas ──────────────────────────────────────
 
+// The canvas decodes an image whole before it draws it smaller: 4 bytes a
+// pixel, 1 for a gray PNG of 8 bits or less. Past DECODE_MAX_BYTES the add
+// refuses the image with its size instead of running out of memory (the
+// server has 2 GB). A WebP is at most 16383 x 16383, 1.07 GB, so it never
+// passes. Images benchmark finding: a 22000 x 22000 RGB PNG of 2 MB decoded
+// to 1.9 GB and took the add past 2 GB; a 30000 x 30000 gray one decodes
+// to 900 MB and still adds.
+const DECODE_MAX_BYTES = 1_200_000_000;
+
+/** An image too large to decode whole: its size in pixels, for the reason
+    the add gives. */
+export class ImageTooLargeError extends Error {
+  constructor(
+    readonly width: number,
+    readonly height: number,
+  ) {
+    super(`Image is ${width} x ${height} pixels, past what the server decodes`);
+    this.name = "ImageTooLargeError";
+  }
+}
+
+/** The pixel size and the decode's bytes a pixel, from the header; null
+    when the header does not say. */
+function decodeSize(bytes: Uint8Array, mime: ImageMime): { width: number; height: number; bytesPerPixel: number } | null {
+  const u16le = (at: number) => bytes[at] | (bytes[at + 1] << 8);
+  const u32be = (at: number) => ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0;
+  const i32le = (at: number) => bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24);
+  if (mime === "image/png" && bytes.length >= 26) {
+    // IHDR: width, height, bit depth, color type (0 = gray).
+    const gray = bytes[25] === 0 && bytes[24] <= 8;
+    return { width: u32be(16), height: u32be(20), bytesPerPixel: gray ? 1 : 4 };
+  }
+  if (mime === "image/gif" && bytes.length >= 10) return { width: u16le(6), height: u16le(8), bytesPerPixel: 4 };
+  if (mime === "image/bmp" && bytes.length >= 26) {
+    // A 12-byte core header holds 16-bit sizes; the others 32-bit, and a
+    // negative height for top-down rows.
+    const core = i32le(14) === 12;
+    return core
+      ? { width: u16le(18), height: u16le(20), bytesPerPixel: 4 }
+      : { width: Math.abs(i32le(18)), height: Math.abs(i32le(22)), bytesPerPixel: 4 };
+  }
+  if (mime === "image/jpeg") {
+    const header = readJpegHeader(bytes);
+    return header ? { width: header.width, height: header.height, bytesPerPixel: 4 } : null;
+  }
+  return null;
+}
+
 async function decodeWithCanvas(bytes: Uint8Array, mime: ImageMime): Promise<PdfImage> {
+  const size = decodeSize(bytes, mime);
+  if (size && size.width * size.height * size.bytesPerPixel > DECODE_MAX_BYTES) {
+    throw new ImageTooLargeError(size.width, size.height);
+  }
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const img = await loadImage(Buffer.from(bytes));
   const orientation = containerOrientation(bytes, mime);

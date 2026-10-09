@@ -245,6 +245,7 @@ const en = {
   notPdf: "File is not a PDF, an image (png, jpg, gif, webp, bmp), a Markdown file (md, txt), a Word file (docx), slides (pptx), or sheets (xlsx, csv, tsv)",
   imageUnreadable:
     "Could not read this image. The file may be damaged, or in a format this reader cannot decode.",
+  imagePixelsTooMany: "This image is {width} x {height} pixels, too large to open. Save it smaller and add it again.",
   notImage: "File is not an image (png, jpg, gif, webp, bmp)",
   imageNotFound: "Image not found",
   imageTooLarge: "Image is larger than 25 MB",
@@ -604,6 +605,7 @@ const zh: Record<keyof typeof en, string> = {
   missingFile: "缺少文件",
   notPdf: "文件不是 PDF、图片（png、jpg、gif、webp、bmp）、Markdown 文件（md、txt）、Word 文件（docx）、幻灯片（pptx）或电子表格（xlsx、csv、tsv）",
   imageUnreadable: "无法读取此图片。文件可能已损坏，或是阅读器无法解码的格式。",
+  imagePixelsTooMany: "此图片为 {width} x {height} 像素，太大，无法打开。请存为较小的尺寸后重新添加。",
   notImage: "文件不是图片（png、jpg、gif、webp、bmp）",
   imageNotFound: "未找到图片",
   imageTooLarge: "图片超过 25 MB",

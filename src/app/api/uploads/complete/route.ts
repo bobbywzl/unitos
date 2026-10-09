@@ -8,7 +8,7 @@ import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
-import { imageToPdf } from "@/lib/handwritten/image-pdf";
+import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
@@ -117,7 +117,11 @@ export async function POST(req: Request) {
       bytes = await imageToPdf(bytes);
     } catch (err) {
       console.error("Image wrap failed:", err);
-      return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+      const error =
+        err instanceof ImageTooLargeError
+          ? t("api.imagePixelsTooMany", { width: err.width, height: err.height })
+          : t("api.imageUnreadable");
+      return NextResponse.json({ error }, { status: 400 });
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
