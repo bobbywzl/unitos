@@ -28,6 +28,8 @@ const en = {
   keyPending: "Pending notes, awaiting Accept",
   keyNotesGroup: "Notes and comments",
   keyFar: "Zoomed out, link counts and notes hide until a curve is lit; replies stay.",
+  // [style10] WALK10-03: on a phone the waiting node keeps its comments chip, and its card is the way to the comments.
+  keyFarTouch: "Zoomed out, link counts and notes hide until a curve is lit; replies stay. Press the node for its comments.",
   noteCurveLabelOne: "1 note quotes {a} and {b}",
   noteCurveLabel: "{n} notes quote {a} and {b}",
   showNote: "Show this note in the notes tray",
@@ -95,6 +97,7 @@ const zh: Record<keyof typeof en, string> = {
   keyPending: "待定笔记，等待接受",
   keyNotesGroup: "笔记和评论",
   keyFar: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。",
+  keyFarTouch: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。按节点查看它的评论。",
   noteCurveLabelOne: "1 条笔记同时引用 {a} 和 {b}",
   noteCurveLabel: "{n} 条笔记同时引用 {a} 和 {b}",
   showNote: "在笔记栏中显示这条笔记",

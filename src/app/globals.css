@@ -2214,6 +2214,18 @@ ellipse.anchor-flash {
 .corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="notes"] {
   display: none;
 }
+/* [style10] WALK10-03: on a phone the fit of forty documents rests at zoom
+   0.21, where the waiting ring is 6 px and seven presses of + lose the ringed
+   nodes before the chips show, so a node whose ring waits keeps its comments
+   chip drawn: at its screen size (the chip is in flow units; up to 3.5×),
+   right of the ring. */
+@media (pointer: coarse) {
+  .corpus-graph[data-far] [data-graph-node-comments][data-waits] {
+    display: flex;
+    transform: scale(min(3.5, calc(1 / var(--graph-zoom, 1))));
+    transform-origin: left center;
+  }
+}
 /* A curve reached by keyboard (] and [) shows where it runs. */
 .corpus-graph .react-flow__edge:focus {
   outline: none;

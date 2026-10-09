@@ -479,7 +479,9 @@ export function useProjectCoverage(): ProjectCoverage | null {
 }
 
 /** On a node: the comment glyph and the open comments, a "?" when one
-    waits on this account. Hidden at a far zoom, like the notes chip. */
+    waits on this account. Hidden at a far zoom, like the notes chip;
+    [style10] WALK10-03: on a phone a waiting node keeps it (data-waits,
+    globals.css), since the + button never reaches the chips there. */
 export function NodeComments({ documentId }: { documentId: string }) {
   const t = useT();
   const waits = useCommentWaits();
@@ -487,16 +489,18 @@ export function NodeComments({ documentId }: { documentId: string }) {
   const open = useDocumentComments(documentId).filter((c) => c.open);
   if (open.length === 0) return null;
   const label = open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length });
+  const waiting = open.some(waits);
   return (
     <span
       data-graph-node-comments={open.length}
+      data-waits={waiting ? "" : undefined}
       aria-label={label}
       data-tip={label}
       className={`flex items-center gap-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}
     >
       <CommentIcon size={10} />
       {open.length}
-      {open.some(waits) && "?"}
+      {waiting && "?"}
       {/* [lists9] A comment or a reply another person wrote since this account's last visit (WALK9-06): the curve's dot. */}
       {open.some(isNew) && <span data-graph-node-new aria-label={t("graphCover.newCommentTitle")} className="ml-px size-1.5 rounded-full bg-[var(--kind-comment)]" />}
     </span>

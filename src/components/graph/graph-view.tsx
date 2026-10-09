@@ -959,7 +959,7 @@ function GraphKey({
       </div>
       <p className={`border-t border-line pt-2 ${TEXT_META} leading-relaxed text-sand-600`}>
         {t(coarse ? (clickSelects ? "graphView.gesturesTouchSelect" : "graphView.gesturesTouchOpen") : clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] [view10] */}
-        <span className="mt-1 block">{t("graphNotes.keyFar")}</span>
+        <span className="mt-1 block">{t(coarse ? "graphNotes.keyFarTouch" : "graphNotes.keyFar") /* [style10] WALK10-03 */}</span>
       </p>
     </div>
   );
