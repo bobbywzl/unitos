@@ -1567,7 +1567,7 @@
   },
   "ais-04Inference-02Mobilenet-02Cnn": {
    "composite": 1,
-   "words": 0.998,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -2106,7 +2106,7 @@
   },
   "wth-073-NewRelicAgentObservability": {
    "composite": 1,
-   "words": 0.999,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -2887,7 +2887,7 @@
   },
   "aii-04Train-04PostTrainRL-03PPOvsDPO": {
    "composite": 1,
-   "words": 0.998,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,
@@ -3403,8 +3403,8 @@
    "lost": 0
   },
   "sc-023": {
-   "composite": 0.995,
-   "words": 0.979,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -3491,8 +3491,8 @@
    "lost": 0
   },
   "docling-powerpoint-unrecognized-shape": {
-   "composite": 0.993,
-   "words": 0.971,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,

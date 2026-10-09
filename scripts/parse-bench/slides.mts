@@ -281,7 +281,10 @@ function bodyAndNotes(text: string, html: string | undefined): { body: string; n
 function piecesOf(slide: RefSlide): Piece[] {
   const out: Piece[] = [];
   slide.shapes.forEach((s, i) => {
-    if (s.kind === "text") for (const p of s.paras) out.push({ kind: p.math ? "math" : "text", text: p.text, shape: i });
+    // A paragraph's words go after its bullet, as a line shows them, so the
+    // list label rule drops the same label on both sides: "• 2. Report"
+    // keeps its "2." as words.
+    if (s.kind === "text") for (const p of s.paras) out.push({ kind: p.math ? "math" : "text", text: p.bullet ? `${p.bullet} ${p.text}` : p.text, shape: i });
     else if (s.kind === "table") out.push({ kind: "table", text: s.rows.map((r) => r.join("\t")).join("\n"), shape: i });
     else if (s.kind === "chart") out.push({ kind: "chart", text: [s.titleText ?? "", ...s.words, ...s.shown].join("\n"), shape: i });
     else for (const t of s.texts) out.push({ kind: "smartart", text: t, shape: i });
