@@ -61,6 +61,55 @@ function loadRenderer(): Promise<PdfJs> {
   return renderer;
 }
 
+// pdf.js 6.1.200 paints an opaque RGB image (ImageKind RGB_24BPP: every
+// photo, every color or gray scan) by turning it into RGBA 16 rows at a time
+// (putBinaryImageData, convertRGBToRGBA), and that conversion's tail loop
+// starts from the image's first byte instead of the chunk's (j = i * 4, not
+// srcPos + i * 4): each chunk walks every byte before it, writing nothing.
+// The time grows with the square of the image's height — a 12 MP photo's
+// page took 11 s, a 9000 x 9000 scan's two renders 5 minutes. pdf.js fixed
+// the loop later. Here such an image turns into RGBA once, as its data
+// reaches the page (PDFObjects.resolve, for the page's objects and the
+// document's shared ones), and pdf.js paints it by copy: the same pixels,
+// the same render. Images benchmark finding: page images of photos and
+// scans were the slowest step of every add of one.
+const RGB_24BPP = 2;
+const RGBA_32BPP = 3;
+type ImageData24 = { kind?: unknown; data?: unknown; width?: unknown; height?: unknown };
+let rgbPaintFixed = false;
+
+function rgbaImage(value: unknown): unknown {
+  const image = value as ImageData24 | null;
+  if (!image || typeof image !== "object" || image.kind !== RGB_24BPP) return value;
+  const { data, width, height } = image;
+  if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return value;
+  if (typeof width !== "number" || typeof height !== "number") return value;
+  const pixels = width * height;
+  if (data.length < pixels * 3) return value;
+  const rgba = new Uint8ClampedArray(pixels * 4);
+  for (let p = 0, q = 0; q < rgba.length; p += 3, q += 4) {
+    rgba[q] = data[p];
+    rgba[q + 1] = data[p + 1];
+    rgba[q + 2] = data[p + 2];
+    rgba[q + 3] = 255;
+  }
+  return { ...image, kind: RGBA_32BPP, data: rgba };
+}
+
+/** Once per process: images reach the page as RGBA (see above). objs is a
+    page's PDFObjects; its class is not exported, so the fix goes on its
+    prototype. */
+function fixRgbPaint(objs: unknown): void {
+  if (rgbPaintFixed || !objs) return;
+  const proto = Object.getPrototypeOf(objs) as { resolve?: (id: string, data?: unknown) => void };
+  const resolve = proto.resolve;
+  if (typeof resolve !== "function") return;
+  proto.resolve = function (this: unknown, id: string, data: unknown = null) {
+    return resolve.call(this, id, rgbaImage(data));
+  };
+  rgbPaintFixed = true;
+}
+
 /** The PDF opened for rendering, from a copy of the bytes (pdf.js detaches
     its buffer). The caller destroys it. */
 async function openForRender(bytes: Uint8Array): Promise<RenderDocument> {
@@ -72,6 +121,7 @@ async function openForRender(bytes: Uint8Array): Promise<RenderDocument> {
 async function drawPage(pdf: RenderDocument, n: number, width: number) {
   const { createCanvas } = await import("@napi-rs/canvas");
   const page = await pdf.getPage(n);
+  fixRgbPaint(page.objs);
   try {
     const base = page.getViewport({ scale: 1 });
     const size = pageSizeAt(base.width, base.height, width);

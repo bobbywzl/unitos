@@ -53,6 +53,28 @@ export function textLayerEmpty(blocks: ParsedBlock[], pageCount: number): boolea
   return junkTextLayer(blocks) || textChars / Math.max(1, pageCount) < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE;
 }
 
+/** What the text layer decides before any model call: "article" when the
+    yield reads like language at article scale, else null — the model
+    judges — with the kind the yield gives alone (no key, a failed call). */
+export function textLayerVerdict(
+  blocks: ParsedBlock[],
+  pageCount: number,
+): { kind: "article" | null; fallback: PdfKind; perPage: number; junk: boolean; textChars: number } {
+  const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
+  const perPage = textChars / Math.max(1, pageCount);
+  const junk = junkTextLayer(blocks);
+  const fallback: PdfKind =
+    junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
+  return { kind: perPage >= ARTICLE_CHARS_PER_PAGE && !junk ? "article" : null, fallback, perPage, junk, textChars };
+}
+
+/** The pages the model sees: first, middle, last. */
+export function classifySamplePages(pages: number[]): number[] {
+  const n = pages.length;
+  if (n === 0) return [];
+  return [...new Set([pages[0], pages[Math.max(0, Math.ceil(n / 2) - 1)], pages[n - 1]])].slice(0, SAMPLE_PAGES);
+}
+
 // pages: the PDF's pages the document holds, 1-based: every page, or the
 // pages the reader chose at the add (SPEC.md §15). blocks are theirs.
 export async function classifyPdf(
@@ -62,20 +84,11 @@ export async function classifyPdf(
   userId: string | null,
 ): Promise<PdfKind> {
   const pageCount = pages.length;
-  const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
-  const perPage = textChars / Math.max(1, pageCount);
-  const junk = junkTextLayer(blocks);
-  if (perPage >= ARTICLE_CHARS_PER_PAGE && !junk) return "article";
-
-  const fallback: PdfKind =
-    junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
+  const { kind, fallback, textChars, junk } = textLayerVerdict(blocks, pageCount);
+  if (kind) return kind;
   if (!(await featureConfigured("classify")) || pageCount === 0) return fallback;
 
-  // Sample pages: first, middle, last.
-  const samples = [...new Set([pages[0], pages[Math.max(0, Math.ceil(pageCount / 2) - 1)], pages[pageCount - 1]])].slice(
-    0,
-    SAMPLE_PAGES,
-  );
+  const samples = classifySamplePages(pages);
   const images: Uint8Array[] = [];
   for (const page of samples) {
     try {
