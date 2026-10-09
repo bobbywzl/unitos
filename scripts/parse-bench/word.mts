@@ -607,7 +607,8 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
     if (b.type === "HEADING") r.headings.push({ level: Number(/^<h([1-6])/.exec(b.html ?? "")?.[1] ?? 1), text: compact(b.text) });
     if (b.type === "PARAGRAPH" && !b.footnote) r.paragraphs.add(compact(b.text));
     if (b.type === "LIST" && !/class="[^"]*contents/.test(b.html ?? "")) {
-      for (const line of b.text.split("\n")) {
+      // Its lines without the note labels, as the words above.
+      for (const line of words.split("\n")) {
         const m = /^( *)(\S+)\s?(.*)$/.exec(line);
         if (!m) continue;
         r.lists.push({ depth: m[1].length / 2, numbered: /[\p{L}\p{N}]/u.test(m[2]) && m[2].length <= 12, text: compact(line) });

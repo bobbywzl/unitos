@@ -11,7 +11,6 @@
   "mark.bold": 8,
   "list.kind": 4,
   "import.list.depth": 2,
-  "list.missing": 2,
   "mark.italic": 1
  },
  "files": {
@@ -280,9 +279,7 @@
   "poi-smarttag-snippet.docx": {},
   "poi-stress001.docx": {},
   "poi-stress003.docx": {},
-  "poi-stress004.docx": {
-   "list.missing": 1
-  },
+  "poi-stress004.docx": {},
   "poi-stress005.docx": {},
   "poi-stress006.docx": {},
   "poi-stress007.docx": {},
@@ -304,9 +301,7 @@
   "poi-stress015.docx": {},
   "poi-stress016.docx": {},
   "poi-stress017.docx": {},
-  "poi-stress018.docx": {
-   "list.missing": 1
-  },
+  "poi-stress018.docx": {},
   "poi-stress019.docx": {},
   "poi-stress023.docx": {},
   "poi-table-alignment.docx": {},
