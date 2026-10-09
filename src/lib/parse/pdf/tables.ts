@@ -608,6 +608,7 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   // beside its column headers — the vertical rhythm misleads: rows then come
   // from the anchors, split at the widest gap between consecutive anchors.
   const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
+  const pitch = gaps.length > 0 ? Math.min(...gaps) : Infinity;
   const anchors: number[] = [];
   let lastFirst = -1;
   // A statement's labels: a group's name ends in a colon, and a label that
@@ -630,7 +631,13 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     // nbody  8  16  18 …"). Parse loop finding: TraceMonkey's Figure 13 read
     // 24 such rows as one row of wrapped cells.
     const own = lastFirst >= 0 && valued(lastFirst) && cellsOf[lastFirst].every((c, idx) => idx === 0 || !c.text || VALUE_RE.test(cellsOf[k][idx].text.trim()));
-    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own);
+    // A lowercase first cell further below the line over it than the run's
+    // wrapped lines stand is a row's: a symbol in a list of symbols, set
+    // double-spaced with its wraps single-spaced (parse loop finding: the
+    // DTIC Datcom's list of symbols, p. 13, read "a", "etab" and "Cc" as
+    // one row, "airfoil chord chordwise length of trailing edge tab …").
+    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5;
+    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own && !spaced);
     const wrap =
       continues &&
       lastFirst >= 0 &&
