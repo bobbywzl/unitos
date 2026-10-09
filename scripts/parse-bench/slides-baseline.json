@@ -1,6 +1,6 @@
 {
  "total": {
-  "composite": 0.999,
+  "composite": 1,
   "words": 0.999,
   "order": 0.999,
   "bullets": 1,
@@ -3139,8 +3139,8 @@
    "lost": 0
   },
   "lo-tdf121205": {
-   "composite": 0.956,
-   "words": 0.867,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,

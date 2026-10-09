@@ -67,13 +67,25 @@ const LEGEND_POSITIONS = new Set(["r", "l", "t", "b", "tr"]);
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
-function richText(el: Element | null): string {
+/** The words of a rich text: each paragraph's runs joined, the lines (a
+    paragraph, or a line break inside one) joined with `gap`. Slides
+    benchmark finding: a title of three lines read as one word. */
+function richText(el: Element | null, gap = " "): string {
   if (!el) return "";
-  return cleanText(
-    descendants(el, "t")
-      .map((t) => t.textContent ?? "")
-      .join(""),
-  ).trim();
+  const paras = descendants(el, "p");
+  if (paras.length === 0) return cleanText(descendants(el, "t").map((t) => t.textContent ?? "").join("")).trim();
+  const lines: string[] = [];
+  for (const p of paras) {
+    let line = "";
+    for (const c of Array.from(p.children)) {
+      if (c.localName === "br") {
+        lines.push(line);
+        line = "";
+      } else line += descendants(c, "t").map((t) => t.textContent ?? "").join("");
+    }
+    lines.push(line);
+  }
+  return lines.map((l) => cleanText(l).trim()).filter(Boolean).join(gap);
 }
 
 function cacheValues(container: Element | null, palette?: ChartPalette): { text: string[]; numbers: (number | null)[]; formatCode: string | null } {
@@ -301,7 +313,7 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const H = Math.max(200, Math.round((1000 * size.height) / Math.max(1, size.width)));
   const font = Math.max(11, Math.min(20, W * 0.02));
   const out: string[] = [];
-  const explicitTitle = richText(child(chart, "title"));
+  const explicitTitle = richText(child(chart, "title"), "\n");
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
   // A title element without words is the automatic title: the one series'
