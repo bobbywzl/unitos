@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   attachmentKind,
@@ -179,12 +179,49 @@ type OutgoingMessage = {
 // once the answer lands. The key removes it from the queue.
 type QueuedMessage = OutgoingMessage;
 
-// The conversation survives a tab switch and a document switch within the
-// same tab (both remount the panel, so the thread lives outside it, per
-// project, for the page's life) and a reload (it is saved, SPEC.md §21: one
-// note per reader per project, loaded once per project per tab — see the
-// hydration effect below).
-const threads = new Map<string, Thread>();
+// The conversation survives a tab switch, a document switch, and leaving the
+// page within the same tab (each remounts the panel, so the thread lives
+// outside it, per project, for the page's life) and a reload (it is saved,
+// SPEC.md §21: one note per reader per project, loaded once per project per
+// tab — see the hydration effect below). The panel's refs read and write the
+// shared thread, so an answer that lands after the panel closed still lands
+// in it, and a panel open on the project shows it (the listeners).
+type SharedThread = Thread & {
+  // Read from the server, or started here: no load needed.
+  loaded: boolean;
+  listeners: Set<() => void>;
+  // The saves in order, so the second never starts a second note.
+  saving: Promise<void>;
+};
+const threads = new Map<string, SharedThread>();
+function sharedThread(notebookId: string): SharedThread {
+  let thread = threads.get(notebookId);
+  if (!thread) {
+    thread = {
+      turns: [],
+      conversationNoteId: null,
+      sideChats: [],
+      openKey: null,
+      loaded: false,
+      listeners: new Set(),
+      saving: Promise.resolve(),
+    };
+    threads.set(notebookId, thread);
+  }
+  return thread;
+}
+/** A ref onto one field of the shared thread. */
+function sharedRef<K extends keyof Thread>(shared: SharedThread, key: K): { current: Thread[K] } {
+  const thread: Thread = shared;
+  return {
+    get current() {
+      return thread[key];
+    },
+    set current(value: Thread[K]) {
+      thread[key] = value;
+    },
+  };
+}
 
 // The composer's words (SPEC.md §7, CLAUDE.md rule zero 6), one draft per
 // project in localStorage: the words in the box, and each message sent or
@@ -396,15 +433,15 @@ export function AssistantPanel({
   // turn after continues it. Empty = the panel's first layout. The note it
   // is saved on, once a turn has persisted; null until then, and again once
   // New conversation clears it.
-  const cached = threads.get(notebookId);
-  const [turns, setTurnsState] = useState<Turn[]>(() => cached?.turns ?? []);
+  const shared = useMemo(() => sharedThread(notebookId), [notebookId]);
+  const [turns, setTurnsState] = useState<Turn[]>(() => shared.turns);
   const [conversationNoteId, setConversationNoteId] = useState<string | null>(
-    () => cached?.conversationNoteId ?? null,
+    () => shared.conversationNoteId,
   );
   // The side chats of this conversation, and the one on screen (SPEC.md §7).
-  const [sideChats, setSideChatsState] = useState<SideChat[]>(() => cached?.sideChats ?? []);
-  const [openKey, setOpenKeyState] = useState<string | null>(() => cached?.openKey ?? null);
-  const [hydrated, setHydrated] = useState(() => cached !== undefined);
+  const [sideChats, setSideChatsState] = useState<SideChat[]>(() => shared.sideChats);
+  const [openKey, setOpenKeyState] = useState<string | null>(() => shared.openKey);
+  const [hydrated, setHydrated] = useState(() => shared.loaded);
   // The conversations list (SPEC.md §7): this reader's conversations of the
   // project, read when the list opens; null until then.
   const [listOpen, setListOpen] = useState(false);
@@ -412,18 +449,32 @@ export function AssistantPanel({
   const [listError, setListError] = useState<string | null>(null);
   // The thread as the running send() reads it: state is stale inside its own
   // closure, and a queued message sends from there.
-  const turnsRef = useRef<Turn[]>(turns);
-  const sideChatsRef = useRef<SideChat[]>(sideChats);
-  const openKeyRef = useRef<string | null>(openKey);
-  const noteIdRef = useRef<string | null>(conversationNoteId);
+  // They read and write the shared thread, so a run that outlives this panel
+  // still writes where the next panel reads.
+  const turnsRef = useMemo(() => sharedRef(shared, "turns"), [shared]);
+  const sideChatsRef = useMemo(() => sharedRef(shared, "sideChats"), [shared]);
+  const openKeyRef = useMemo(() => sharedRef(shared, "openKey"), [shared]);
+  const noteIdRef = useMemo(() => sharedRef(shared, "conversationNoteId"), [shared]);
+  // The refs changed: every panel open on this project draws them.
   function cacheThread() {
-    threads.set(notebookId, {
-      turns: turnsRef.current,
-      conversationNoteId: noteIdRef.current,
-      sideChats: sideChatsRef.current,
-      openKey: openKeyRef.current,
-    });
+    shared.loaded = true;
+    for (const listener of shared.listeners) listener();
   }
+  useEffect(() => {
+    const listener = () => {
+      setTurnsState(shared.turns);
+      setSideChatsState(shared.sideChats);
+      setOpenKeyState(shared.openKey);
+      setConversationNoteId(shared.conversationNoteId);
+      setHydrated(true);
+    };
+    shared.listeners.add(listener);
+    // What changed between the first render and now.
+    if (shared.loaded) listener();
+    return () => {
+      shared.listeners.delete(listener);
+    };
+  }, [shared]);
   function setSideChats(update: (list: SideChat[]) => SideChat[]) {
     sideChatsRef.current = update(sideChatsRef.current);
     setSideChatsState(sideChatsRef.current);
@@ -466,23 +517,22 @@ export function AssistantPanel({
       );
       return;
     }
-    setTurnsState((prev) => {
-      turnsRef.current = update(prev);
-      cacheThread();
-      return turnsRef.current;
-    });
+    turnsRef.current = update(turnsRef.current);
+    setTurnsState(turnsRef.current);
+    cacheThread();
   }
   // The panel is keyed by document, so it remounts on every document switch;
   // the thread cache (keyed by project) means this only actually fetches the
   // first time this project's conversation is shown in this browser tab.
   useEffect(() => {
-    if (threads.has(notebookId)) return;
+    if (shared.loaded) return;
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}`);
         const json = (await res.json().catch(() => null)) as StoredConversation | null;
-        if (cancelled || !res.ok || !json) return;
+        // A message sent while the load ran started the thread here: it stands.
+        if (cancelled || !res.ok || !json || shared.loaded) return;
         const loaded = toTurns(json.turns ?? []);
         const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
@@ -830,7 +880,15 @@ export function AssistantPanel({
   // every one after updates it in place. Fire-and-forget — a save that fails
   // costs the reader nothing they would notice this session; the thread
   // stays on screen either way, from the threads cache above.
-  async function saveConversation(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
+  // Saves run one after another on the shared thread: the first one's note
+  // id is in place before the next one starts, so a conversation is one note.
+  // The answer says whether this save landed.
+  function saveConversation(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
+    const run = shared.saving.then(() => saveConversationNow(savedTurns, sideChatKey));
+    shared.saving = run.then(() => undefined);
+    return run;
+  }
+  async function saveConversationNow(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
     const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
     if (sideChatKey && !side) return false;
     try {

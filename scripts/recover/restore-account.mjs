@@ -165,6 +165,12 @@ async function main() {
     Dm,
     userId,
   );
+  // Kept conversations (SPEC.md §21): the account's own rows, in any
+  // project. Only when both databases have the table: a backup from before
+  // it existed holds none.
+  const keptChatTable =
+    (await columns(backup, "KeptChat")).size > 0 && (await columns(target, "KeptChat")).size > 0;
+  const keptChats = keptChatTable ? await backupRows("KeptChat", `t."userId" = $1`, userId) : [];
   const replies = await backupRows(
     "Reply",
     `t."noteId" = ANY($1::text[]) OR t."blockEditId" = ANY($2::text[]) OR t."docLinkId" = ANY($3::text[])`,
@@ -215,6 +221,9 @@ async function main() {
   add("BlockEdit", blockEdits);
   add("DocLink", docLinks);
   add("ReadingPosition", readingPositions);
+  // A conversation the account kept again since (same project, same place)
+  // stays: the insert skips the unique key clash.
+  add("KeptChat", keptChats);
   add("ImageAsset", imageKeys.map((r) => ({ id: r.id })), true);
   add("NotebookDocument", attachments);
   add("Note", notes);

@@ -25,7 +25,6 @@ const en = {
   stitchStop: "Stop",
   stitchExpand: "Expand Stitch",
   stitchCollapse: "Collapse Stitch",
-  stitchNew: "New conversation",
   // Which documents the command reads: the nodes picked in the graph, or
   // every document when none is picked.
   stitchScopeAll: "Every document ({n})",
@@ -88,7 +87,6 @@ const zh: Record<keyof typeof en, string> = {
   stitchStop: "停止",
   stitchExpand: "展开缝合",
   stitchCollapse: "收起缝合",
-  stitchNew: "新对话",
   stitchScopeAll: "全部文档（{n}）",
   stitchScopePicked: "已选取 {n} 篇文档",
   stitchScopePickedOne: "已选取 1 篇文档",

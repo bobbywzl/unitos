@@ -13,6 +13,8 @@ import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
 import { graphNavigate } from "@/components/graph/graph-history";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
 // Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
 // command across the project's documents — gather every passage on a
@@ -25,41 +27,19 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // Generated content. Under every reply, what was read of each document: a
 // video or audio document reads as its transcript, and a document with
 // nothing to read says why (the transcript still being written, or failed
-// with the stored reason). The conversation is kept per project for the
-// browser tab, so closing the graph and opening it again keeps it. The box
-// folds to a pill so the canvas is clear.
+// with the stored reason). The conversation is kept for the account per
+// project (lib/kept-chat.ts), so closing the graph, leaving the page, or a
+// reload keeps it; Clear conversation removes it. The box folds to a pill
+// so the canvas is clear.
 
-type Turn = { role: "user" | "assistant"; content: string; result?: StitchResult };
-const threads = new Map<string, Turn[]>();
+type Turn = KeptTurn & { data?: { result?: StitchResult } };
 
-// The typed command and the pick, per project for the browser tab: Escape,
-// a closed graph, or a reload never throws away a command being typed or
-// the documents picked for it (CLAUDE.md rule 6). Session storage, with
-// the memory as the fallback when the store is blocked.
-const drafts = new Map<string, string>();
+// The pick, per project for the browser tab: Escape, a closed graph, or a
+// reload never throws away the documents picked for a command (the command
+// itself is a chat draft, lib/kept-chat.ts). Session storage, with the memory
+// as the fallback when the store is blocked.
 const picks = new Map<string, string[]>();
-const draftKey = (notebookId: string) => `unitos-stitch-draft-${notebookId}`;
 const pickKey = (notebookId: string) => `unitos-stitch-pick-${notebookId}`;
-
-function readDraft(notebookId: string): string {
-  try {
-    const stored = sessionStorage.getItem(draftKey(notebookId));
-    if (stored !== null) return stored;
-  } catch {
-    // Blocked store: the memory's copy.
-  }
-  return drafts.get(notebookId) ?? "";
-}
-
-function writeDraft(notebookId: string, text: string) {
-  drafts.set(notebookId, text);
-  try {
-    if (text) sessionStorage.setItem(draftKey(notebookId), text);
-    else sessionStorage.removeItem(draftKey(notebookId));
-  } catch {
-    // Blocked store: the memory keeps it for this tab.
-  }
-}
 
 export function readStitchPick(notebookId: string): Set<string> {
   try {
@@ -115,35 +95,27 @@ export function StitchBox({
   const router = useRouter();
   const ime = useImeGuard();
   const { canEdit } = useCollab();
-  const [turns, setTurnsState] = useState<Turn[]>(() => threads.get(notebookId) ?? []);
-  const [command, setCommandState] = useState(() => readDraft(notebookId));
+  const kept = useKeptChat<Turn>(notebookId, "stitch");
+  const { turns, setTurns } = kept;
+  const running = kept.busy;
+  const draftKey = `stitch:${notebookId}`;
+  const [command, setCommandState] = useState("");
+  useChatDraft(draftKey, setCommandState);
   function setCommand(text: string) {
     setCommandState(text);
-    writeDraft(notebookId, text);
+    writeChatDraft(draftKey, text);
   }
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  function setTurns(update: (turns: Turn[]) => Turn[]) {
-    setTurnsState((prev) => {
-      const next = update(prev);
-      threads.set(notebookId, next);
-      return next;
-    });
-  }
 
   // The newest turn stays in view.
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns.length, running, open]);
 
-  function stop() {
-    abortRef.current?.abort();
-  }
+  const stop = kept.stop;
 
   async function send() {
     const text = command.trim();
@@ -158,9 +130,7 @@ export function StitchBox({
       .slice(-20)
       .map((turn) => ({ role: turn.role, content: turn.content }));
     setTurns((prev) => [...prev, { role: "user", content: text }]);
-    setRunning(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const controller = kept.begin();
     try {
       const result = await runHeartbeat<StitchResult>(
         `/api/notebooks/${notebookId}/stitch`,
@@ -171,7 +141,7 @@ export function StitchBox({
         },
         controller.signal,
       );
-      setTurns((prev) => [...prev, { role: "assistant", content: result.reply, result }]);
+      setTurns((prev) => [...prev, { role: "assistant", content: result.reply, data: { result } }]);
       // The graph's new curves and the generated list arrive with a refresh.
       if (result.linkCount > 0 || result.document) router.refresh();
     } catch (err) {
@@ -180,8 +150,7 @@ export function StitchBox({
         setError(err instanceof Error ? err.message : t("common.requestFailed"));
       }
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setRunning(false);
+      kept.end(controller);
     }
   }
 
@@ -225,15 +194,7 @@ export function StitchBox({
       <div className="flex items-center gap-2 px-4 pt-3">
         <SparkleIcon size={15} className="shrink-0 text-clay" />
         <span className="mr-auto font-display text-[16px]">{t("stitch.stitch")}</span>
-        {turns.length > 0 && !running && (
-          <button
-            onClick={() => setTurns(() => [])}
-            data-track="stitch-new"
-            className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          >
-            {t("stitch.stitchNew")}
-          </button>
-        )}
+        {turns.length > 0 && !running && <ClearConversation onClear={kept.clear} track="stitch-clear" />}
         <button
           onClick={() => {
             setOpen(false);
@@ -310,7 +271,7 @@ export function StitchBox({
             ) : (
               <div key={i} className="flex max-w-[92%] flex-col gap-1.5 text-[13px] text-sand-800">
                 {turn.content && <Markdown>{turn.content}</Markdown>}
-                {turn.result && <ResultLine result={turn.result} onOpen={openDocument} />}
+                {turn.data?.result && <ResultLine result={turn.data.result} onOpen={openDocument} />}
               </div>
             ),
           )}

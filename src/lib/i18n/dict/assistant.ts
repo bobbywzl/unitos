@@ -39,6 +39,10 @@ const en = {
   conversationCurrent: "open",
   conversationDelete: "Delete this conversation",
   conversationDeleteFailed: "Not deleted. The conversation is back; try again.",
+  // Clear conversation (SPEC.md §21): the one way a kept conversation goes.
+  clearConversation: "Clear",
+  clearConversationTitle: "Clear this conversation. It is kept until you clear it.",
+  clearConversationConfirm: "Clear this conversation? It cannot be brought back.",
   attach: "Attach an image or a file",
   attachTitle:
     "Attach images (png, jpg, gif, webp, bmp), PDFs, video, audio, or text files to your message. Video and audio are transcribed. Paste or drop works too.",
@@ -196,6 +200,9 @@ const zh: Record<keyof typeof en, string> = {
   conversationCurrent: "当前",
   conversationDelete: "删除这段对话",
   conversationDeleteFailed: "没有删除。对话已恢复，请重试。",
+  clearConversation: "清除",
+  clearConversationTitle: "清除这段对话。对话会一直保留，直到你清除它。",
+  clearConversationConfirm: "清除这段对话？清除后无法恢复。",
   attach: "附上图片或文件",
   attachTitle: "给消息附上图片（png、jpg、gif、webp、bmp）、PDF、视频、音频或文本文件。视频和音频会被转写。也可以粘贴或拖入。",
   attachDrive: "从 Google Drive 添加",

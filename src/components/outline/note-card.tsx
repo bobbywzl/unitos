@@ -1102,6 +1102,7 @@ const NoteCardBody = memo(function NoteCardBody({
           </button>
           {canEdit && (
             <NoteAssistant
+              notebookId={notebookId}
               noteId={note.id}
               draft={draft}
               onApply={setDraft}

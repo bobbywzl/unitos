@@ -744,6 +744,7 @@ export function FloatingNoteEditor({
           </button>
           {note && canEdit && (
             <NoteAssistant
+              notebookId={actions.notebookId}
               noteId={note.id}
               draft={draft}
               onApply={(next) => {
