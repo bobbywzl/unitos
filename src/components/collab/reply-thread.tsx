@@ -236,8 +236,9 @@ export function ReplyThread({
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
                   data-tip={t("common.delete")}
-                  // The × stays small; its press area is the card buttons' 28 px (36 on touch).
-                  className="relative text-[11px] text-sand-400 after:absolute after:top-1/2 after:left-1/2 after:size-7 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-red-600 pointer-coarse:after:size-9"
+                  // The × stays small; its press area is the card buttons' 28 px (36 on touch),
+                  // from Resolve's edge (7 px of the 8 px gap) to the right, so it never covers Resolve.
+                  className="relative text-[11px] text-sand-400 after:absolute after:top-1/2 after:-right-[14px] after:-left-[7px] after:h-7 after:-translate-y-1/2 after:content-[''] hover:text-red-600 pointer-coarse:after:-right-[22px] pointer-coarse:after:h-9"
                 >
                   ×
                 </button>
