@@ -9,14 +9,20 @@
 // Run (from the repo root, two DB copies):
 //   npx tsx scripts/qa/stitch-retrieval-eval.ts --needed <needed.json> --out <dir>
 //     --expansions <json> --db-a postgresql://…/dissect_r9reta --db-i postgresql://…/dissect_r9ret
+//   --ab 1 also runs the real cutLines on every select-path command twice —
+//   as STITCH_INDEX=0 reads (the lines ranked alone) and as STITCH_INDEX
+//   reads (the fused rank, the matches' lines kept) — at the kind's cut
+//   budget and at a stress budget of 8,000 tokens, and reports the recall of
+//   the needed groups in the lines shown and the tokens shown (out/ab.json).
 import { PrismaClient, Prisma } from "@prisma/client";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { rank, tokenize } from "../../src/lib/graph/rank";
-import { readSkeleton } from "../../src/lib/graph/skeleton";
+import { readSkeleton, type Skeleton } from "../../src/lib/graph/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 import { searchQuery } from "../../src/lib/graph/search";
 import { commandIntent } from "../../src/lib/graph/intent";
-import { commandKind } from "../../src/lib/graph/stitch";
+import { commandKind, cutLines, textMatches, type SkeletonView } from "../../src/lib/graph/stitch";
+import { STITCH_INDEX_TOP, STITCH_LINKS_SKELETON, STITCH_QUESTION_SKELETON } from "../../src/lib/derive/config";
 
 type Group = { ids: string[]; source: string };
 type Needed = {
@@ -36,6 +42,8 @@ const ROOT = "/home/user/unitos/.qa-tmp/stitch";
 const DB_A = args.get("db-a") ?? "postgresql://postgres:postgres@localhost:5432/dissect_r9reta";
 const DB_I = args.get("db-i") ?? "postgresql://postgres:postgres@localhost:5432/dissect_r9ret";
 const MINE: Record<string, string[]> = args.get("expansions") ? (JSON.parse(readFileSync(args.get("expansions")!, "utf8")) as Record<string, string[]>) : {};
+const AB = args.get("ab") === "1";
+const AB_STRESS = 8_000;
 const KS = [10, 25, 50, 150];
 const WINDOW_CHARS = 600; // a block read as a window: its first 600 characters
 const RRF_K = 60;
@@ -60,7 +68,7 @@ const windowCost = (text: string) => estTokens(text.slice(0, WINDOW_CHARS)) + 10
 
 // The reading of a command: its documents' readable blocks in reading order
 // and their skeleton lines (with the part title, as cutLines ranks them).
-type Reading = { blocks: Block[]; lines: Line[]; lineOf: Map<string, Line>; tokens: Map<string, Set<string>>; df: Map<string, number> };
+type Reading = { blocks: Block[]; lines: Line[]; lineOf: Map<string, Line>; tokens: Map<string, Set<string>>; df: Map<string, number>; skeletons: Map<string, Skeleton> };
 const readings = new Map<string, Reading>();
 async function reading(project: string, docIds: string[]): Promise<Reading> {
   const key = `${project}:${docIds.join(",")}`;
@@ -81,9 +89,11 @@ async function reading(project: string, docIds: string[]): Promise<Reading> {
   }
   const blocks = docIds.flatMap((d) => byDoc.get(d) ?? []);
   const lines: Line[] = [];
+  const skeletons = new Map<string, Skeleton>();
   for (const d of docIds) {
     const sk = readSkeleton(docs.find((x) => x.id === d)?.skeleton);
     if (!sk) continue;
+    skeletons.set(d, sk);
     const partAt = new Map(sk.parts.map((p) => [p.blockId, p.title]));
     let title = "";
     for (const l of sk.lines) {
@@ -94,9 +104,67 @@ async function reading(project: string, docIds: string[]): Promise<Reading> {
   const tokens = new Map(blocks.map((b) => [b.id, new Set(tokenize(b.text))]));
   const df = new Map<string, number>();
   for (const set of tokens.values()) for (const t of set) df.set(t, (df.get(t) ?? 0) + 1);
-  const out = { blocks, lines, lineOf: new Map(lines.map((l) => [l.blockId, l])), tokens, df };
+  const out = { blocks, lines, lineOf: new Map(lines.map((l) => [l.blockId, l])), tokens, df, skeletons };
   readings.set(key, out);
   return out;
+}
+
+// ── The A/B of the real cut (--ab): STITCH_INDEX=0 against STITCH_INDEX ──
+type AbArm = { recall: number; lines: number; tokens: number };
+type AbRow = { budget: number; off: AbArm; on: AbArm; matches: number; matchesNeeded: number };
+const docLetter = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26) - 1)}`);
+const lineCost = (alias: string, text: string) => estTokens(text) + Math.ceil((alias.length + 9) / 4);
+
+/** The reading as pickBlocks sees it (aliases per document in reading
+    order, the skeleton lines under them), cut by the real cutLines with
+    and without the text-match channel, at the kind's budget and at the
+    stress budget. No route pass: at 200 documents production routes
+    first, so the cut there reads the routed parts' lines. */
+async function abCut(n: Needed, r: Reading, query: string): Promise<AbRow[]> {
+  const aliasOf = new Map<string, string>();
+  const aliased: { id: string; alias: string; text: string }[] = [];
+  n.docsRead.forEach((d, i) => {
+    let k = 0;
+    for (const b of r.blocks) {
+      if (b.documentId !== d) continue;
+      const alias = `${docLetter(i)}${++k}`;
+      aliasOf.set(b.id, alias);
+      aliased.push({ id: b.id, alias, text: b.text });
+    }
+  });
+  const textOf = new Map<string, string>();
+  const views = n.docsRead.flatMap((d, i) => {
+    const sk = r.skeletons.get(d);
+    if (!sk) return [];
+    const parts = sk.parts.flatMap((p) => {
+      const alias = aliasOf.get(p.blockId);
+      return alias ? [{ alias, title: p.title, summary: "" }] : [];
+    });
+    const partStarts = new Set(parts.map((p) => p.alias));
+    let partAlias: string | null = null;
+    const lines = sk.lines.flatMap((l) => {
+      const alias = aliasOf.get(l.blockId);
+      if (!alias) return [];
+      if (partStarts.has(alias)) partAlias = alias;
+      textOf.set(alias, l.text);
+      return [{ alias, text: l.text, partAlias }];
+    });
+    return [{ r: { letter: docLetter(i) }, gist: "", parts, lines } as unknown as SkeletonView];
+  });
+  const matches = textMatches(aliased, query, STITCH_INDEX_TOP);
+  const neededAliases = new Set(n.needed.flatMap((g) => g.ids.map((id) => aliasOf.get(id) ?? "")));
+  const arm = (shown: Set<string>): AbArm => ({
+    recall: n.needed.length === 0 ? 1 : n.needed.filter((g) => g.ids.some((id) => shown.has(aliasOf.get(id) ?? ""))).length / n.needed.length,
+    lines: shown.size,
+    tokens: [...shown].reduce((s, a) => s + lineCost(a, textOf.get(a) ?? ""), 0),
+  });
+  const rows: AbRow[] = [];
+  for (const budget of [n.kind === "links" ? STITCH_LINKS_SKELETON : STITCH_QUESTION_SKELETON, AB_STRESS]) {
+    const off = await cutLines(views, null, async () => query, budget);
+    const on = await cutLines(views, null, async () => query, budget, { matches });
+    rows.push({ budget, off: arm(off), on: arm(on), matches: matches.length, matchesNeeded: matches.filter((a) => neededAliases.has(a)).length });
+  }
+  return rows;
 }
 
 // The expansion words of a run, from its dump (answers/<run>.expand.*.json),
@@ -162,6 +230,7 @@ type Result = {
   termInText: boolean[]; termInLine: boolean[];
   rareTerms: number;
   classified: string;
+  ab?: AbRow[];
 };
 
 function recallAt(ranked: string[], groups: Group[], k: number): number {
@@ -245,6 +314,7 @@ async function main() {
       termInText, termInLine, rareTerms: rare.length,
       classified: commandIntent(n.command, n.continued, commandKind(n.command) as "question" | "links" | "page"),
     };
+    if (AB && n.path === "select") res.ab = await abCut(n, r, xQuery);
     for (const [name, l] of Object.entries(lists)) {
       const first = n.needed.length > 0 ? Math.min(...groupRanks(l.ids, n.needed).map((x) => (x === -1 ? Infinity : x))) : null;
       res.retrievers[name] = {

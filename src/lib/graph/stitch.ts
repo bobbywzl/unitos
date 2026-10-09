@@ -1206,6 +1206,7 @@ export async function cutLines(
   const share = Math.floor(budget / (4 * Math.max(1, views.length)));
   const perDoc = new Map<string, number>();
   for (const { item } of ranked) {
+    if (shown.has(item.l.alias)) continue;
     const letter = item.v.r.letter;
     const spent = perDoc.get(letter) ?? 0;
     const cost = lineCost(item.l);
@@ -1899,15 +1900,12 @@ export async function pickBlocks(input: {
     const blocks = read.flatMap((r) => r.blocks);
     // Past STITCH_INDEX_PREFILTER_BLOCKS the index names the candidates
     // that share a word with the query (a few milliseconds at 200
-    // documents); a project without the column ranks every block.
+    // documents); without the column, or when the query fails, every
+    // block is ranked (searchBlocks: null, logged once per process).
     let candidates: Set<string> | null = null;
     if (blocks.length > STITCH_INDEX_PREFILTER_BLOCKS) {
-      try {
-        const hits = await searchBlocks(read.map((r) => r.doc.id), q, STITCH_INDEX_PREFILTER_BLOCKS);
-        if (hits.length > 0) candidates = new Set(hits.map((h) => h.id));
-      } catch (error) {
-        console.warn("[stitch] index query failed, ranking every block:", error);
-      }
+      const hits = await searchBlocks(read.map((r) => r.doc.id), q, STITCH_INDEX_PREFILTER_BLOCKS).catch(() => null);
+      if (hits && hits.length > 0) candidates = new Set(hits.map((h) => h.id));
     }
     matches = textMatches(blocks, q, STITCH_INDEX_TOP, candidates);
     return matches;
@@ -1991,10 +1989,11 @@ export async function pickBlocks(input: {
     shown = await cutLines(views, null, rankQuery, cutBudget, await cutOptions(cutBudget));
   }
   if (shown) for (const n of names) for (const a of n.aliases) shown.add(a);
-  // A project read whole (no cut) gets its matches from the command's own
-  // words — and the expansion's when one ran for a CJK command — so it
-  // pays no call for them; a cut's matches are found above.
-  if (targeted && matches.length === 0) await findMatches(query ? await query : [...earlier, input.command].join("\n"));
+  // A project read whole (no cut) finds its matches with the expansion too
+  // (one Flash call, about $0.00004): with the command's words alone the
+  // matches name a line-blind needed block in 5 of 16 such commands of
+  // Linda's project, with the expansion in 12 (round 9 RETRIEVAL9).
+  if (targeted && matches.length === 0) await findMatches(await rankQuery());
   if (shown) for (const a of matches) shown.add(a);
   if (input.signal?.aborted) aborted();
 

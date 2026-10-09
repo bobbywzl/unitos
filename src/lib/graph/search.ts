@@ -53,19 +53,47 @@ export function searchQuery(text: string): string | null {
 
 export type SearchHit = { id: string; documentId: string; score: number };
 
+// Whether the index can be queried in this process: the column exists
+// (the migration block_search ran) and no query has failed. Probed once;
+// a database without the column, or a failed query, turns the index off
+// for the process with one log line, and the select pass ranks every
+// block in memory as it does under STITCH_INDEX_PREFILTER_BLOCKS.
+let available: Promise<boolean> | null = null;
+export function searchAvailable(): Promise<boolean> {
+  return (available ??= db
+    .$queryRaw<{ ok: number }[]>(Prisma.sql`SELECT 1 AS ok FROM information_schema.columns WHERE table_name = 'Block' AND column_name = 'search'`)
+    .then((rows) => {
+      if (rows.length === 0) console.warn("[stitch] Block.search is missing (migration block_search not applied); ranking every block in memory");
+      return rows.length > 0;
+    })
+    .catch((error) => {
+      console.warn("[stitch] index probe failed; ranking every block in memory:", error);
+      return false;
+    }));
+}
+
 /** The blocks of the documents most like the query, best first, up to
     `limit`: the index's candidates for the select pass. Empty when the
-    query has no token or no block shares one with it. */
-export async function searchBlocks(documentIds: string[], query: string, limit: number): Promise<SearchHit[]> {
+    query has no token or no block shares one with it; null when the index
+    is not available (no column, or a failed query, logged once), so the
+    caller ranks every block instead. A failed search never fails a
+    command. */
+export async function searchBlocks(documentIds: string[], query: string, limit: number): Promise<SearchHit[] | null> {
+  if (!(await searchAvailable())) return null;
   const tsq = searchQuery(query);
   if (!tsq || documentIds.length === 0) return [];
-  const rows = await db.$queryRaw<{ id: string; documentId: string; score: number }[]>(Prisma.sql`
-    SELECT b.id, b."documentId", ts_rank_cd(b.search, q)::float8 AS score
-    FROM "Block" b, to_tsquery('simple', ${tsq}) q
-    WHERE b."documentId" IN (${Prisma.join(documentIds)})
-      AND b.type NOT IN ('VIDEO', 'PAGE')
-      AND b.search @@ q
-    ORDER BY score DESC, b."documentId", b."order"
-    LIMIT ${limit}`);
-  return rows;
+  try {
+    return await db.$queryRaw<{ id: string; documentId: string; score: number }[]>(Prisma.sql`
+      SELECT b.id, b."documentId", ts_rank_cd(b.search, q)::float8 AS score
+      FROM "Block" b, to_tsquery('simple', ${tsq}) q
+      WHERE b."documentId" IN (${Prisma.join(documentIds)})
+        AND b.type NOT IN ('VIDEO', 'PAGE')
+        AND b.search @@ q
+      ORDER BY score DESC, b."documentId", b."order"
+      LIMIT ${limit}`);
+  } catch (error) {
+    console.warn("[stitch] index query failed; ranking every block in memory from now on:", error);
+    available = Promise.resolve(false);
+    return null;
+  }
 }

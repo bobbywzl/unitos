@@ -256,12 +256,13 @@ export const STITCH_LINKS_SKELETON = 40_000;
 export const STITCH_EXPAND_EFFORT: KimiEffort = "low";
 export const STITCH_EXPAND_MAX_OUTPUT_TOKENS = 2048;
 export const STITCH_EXPAND_WORDS = 15;
-// The targeted path (SPEC.md §22; round 9 RETRIEVAL9): off unless the
-// server runs with STITCH_INDEX=1. On, a question, a links command or a
+// The targeted path (SPEC.md §22; round 9 RETRIEVAL9): on, unless the
+// server runs with STITCH_INDEX=0, which gives the round 8 reading exactly
+// (the same prompts, byte for byte). On, a question, a links command or a
 // page ranks the blocks' full text against the command, its earlier
 // commands and its expansion (lib/graph/rank.ts, in memory; past
 // STITCH_INDEX_PREFILTER_BLOCKS the index Block.search names the
-// candidates first, lib/graph/search.ts), and:
+// candidates first when the column exists, lib/graph/search.ts), and:
 //   - a cut keeps the top STITCH_INDEX_TOP text matches' lines and orders
 //     the lines by the fused rank of the lines and the text (fuseRanks);
 //   - the select pass is told which blocks match in their full text though
@@ -271,7 +272,7 @@ export const STITCH_EXPAND_WORDS = 15;
 //     cut budget, in place of every line (COST9-01: 6–9× the cut).
 // An overview, a command about the last answers, and one about the links
 // or replies keep today's reading unchanged (lib/graph/intent.ts).
-export const STITCH_INDEX = process.env.STITCH_INDEX === "1";
+export const STITCH_INDEX = process.env.STITCH_INDEX !== "0";
 export const STITCH_INDEX_TOP = 25;
 // Under this many blocks the full text is ranked in memory (7 documents,
 // 500 blocks: 20–40 ms); past it the index names the candidates first
