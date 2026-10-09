@@ -1,14 +1,14 @@
 {
  "total": {
-  "score": 0.996,
+  "score": 0.993,
   "sheets": 1,
   "text": 0.994,
-  "cells": 0.995,
-  "formats": 0.974,
-  "merges": 1,
-  "frozen": 1,
-  "lost": 629,
-  "dom": 0,
+  "cells": 0.994,
+  "formats": 0.965,
+  "merges": 0.92,
+  "frozen": 0.996,
+  "lost": 772,
+  "dom": 1,
   "errors": 0
  },
  "files": {
@@ -1561,6 +1561,306 @@
    "frozen": 1,
    "lost": 0,
    "dom": 0
+  },
+  "umya-issue_216": {
+   "score": 0.862,
+   "text": 0.999,
+   "cells": 0.997,
+   "formats": 0.818,
+   "merges": 1,
+   "frozen": 0.357,
+   "lost": 133,
+   "dom": 0
+  },
+  "umya-issue_188_3": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_194_2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_206": {
+   "score": 0.944,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 0.667,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_281": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_233": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-aaa": {
+   "score": 0.986,
+   "text": 0.987,
+   "cells": 0.99,
+   "formats": 0.941,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 2,
+   "dom": 0
+  },
+  "umya-google": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre2": {
+   "score": 0.8,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 0,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre": {
+   "score": 0.912,
+   "text": 0.986,
+   "cells": 0.985,
+   "formats": 0.5,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 1,
+   "dom": 0
+  },
+  "umya-issue_232": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-wps_comment": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_288": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_188_2": {
+   "score": 0.8,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 0,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_268": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-Ekaterinburg_IP_9": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-iris-google-doc": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-dates-1900-LibreOffice": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-deaths": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-datasets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-geometry": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-types": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-Bibelbund": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-numbers1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-simple_spreadsheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "excelize-Book1": {
+   "score": 0.982,
+   "text": 0.978,
+   "cells": 0.951,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 2,
+   "dom": 0
+  },
+  "excelize-MergeCell": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "agate-covid_19-iss": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pyexcel-complex-merged-cells-sheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-merged-hidden-words": {
+   "score": 0.934,
+   "text": 0.877,
+   "cells": 0.792,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 5,
+   "dom": 1
   }
  }
 }

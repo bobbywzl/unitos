@@ -12,8 +12,15 @@
 // license, and what it exercises: Apache POI's, LibreOffice's, pandas', csvkit's,
 // xlsx2csv's, and tablib's test files, csv-spectrum, real data sets, a few real
 // files saved the way other spreadsheet programs save them (derived: another
-// encoding, delimiter, or decimal comma), and three synthetic workbooks for
-// sizes no public file has. The files are other people's: the first run fetches
+// encoding, delimiter, or decimal comma), and synthetic workbooks for sizes
+// and layouts no public file has. Round 2 added workbooks as people make
+// them, from umya-spreadsheet's, readxl's, roo's, excelize's, agate-excel's,
+// and pyexcel-xlsx's tests: ledgers and sales tables people attached to bug
+// reports (Chinese, Japanese, Russian, German, Italian), wide and long
+// sheets, merged headers, accounting formats, pivot tables and charts, and
+// files saved by Google Sheets, LibreOffice, WPS, ONLYOFFICE, and Excel for
+// Mac. Every URL names a commit, a tag, or a released package. The files
+// are other people's: the first run fetches
 // them into .bench/sheets/files (gitignored), and only numbers are committed.
 //
 // The reference never comes from the code under test. A workbook is read by
