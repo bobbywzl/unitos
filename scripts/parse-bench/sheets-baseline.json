@@ -1,14 +1,14 @@
 {
  "total": {
-  "score": 0.962,
+  "score": 0.965,
   "sheets": 0.981,
-  "text": 0.952,
-  "cells": 0.945,
+  "text": 0.956,
+  "cells": 0.95,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 77984,
-  "dom": 1,
+  "lost": 77982,
+  "dom": 3,
   "errors": 1
  },
  "files": {
@@ -760,7 +760,7 @@
    "merges": null,
    "frozen": null,
    "lost": 9364,
-   "dom": 0
+   "dom": 1
   },
   "lo-tdf129985": {
    "score": 1,
@@ -1183,14 +1183,14 @@
    "dom": 0
   },
   "csvkit-mac-newlines": {
-   "score": 0.543,
-   "text": 0.476,
-   "cells": 0.154,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 4,
-   "dom": 0
+   "lost": 1,
+   "dom": 1
   },
   "csvkit-test-header-newline": {
    "score": 1,
@@ -1333,13 +1333,13 @@
    "dom": 0
   },
   "lo-fdo48621-broken-quotes": {
-   "score": 0.522,
+   "score": 0.521,
    "text": 0.55,
-   "cells": 0.016,
+   "cells": 0.013,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 286,
+   "lost": 287,
    "dom": 0
   },
   "lo-numberformat": {

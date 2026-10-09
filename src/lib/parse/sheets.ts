@@ -338,11 +338,14 @@ function parseDelimitedText(text: string, sep: Delimiter, maxRows = Infinity): s
       i++;
       continue;
     }
-    if (ch === "\r") {
+    // A record ends at LF, CR LF, or a CR alone (a classic Mac file, and
+    // some exports that mix them). Sheets benchmark finding: a CR-only file
+    // read as one row.
+    if (ch === "\r" && text[i + 1] === "\n") {
       i++;
       continue;
     }
-    if (ch === "\n") {
+    if (ch === "\n" || ch === "\r") {
       row.push(field);
       rows.push(row);
       if (rows.length >= maxRows) return rows;
