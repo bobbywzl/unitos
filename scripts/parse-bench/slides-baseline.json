@@ -1,7 +1,7 @@
 {
  "total": {
   "composite": 1,
-  "words": 0.999,
+  "words": 1,
   "order": 0.999,
   "bullets": 1,
   "tables": 1,
@@ -3381,8 +3381,8 @@
    "lost": 0
   },
   "oxpt-CU018-Chart-Cached-Data-41": {
-   "composite": 0.974,
-   "words": 0.923,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,

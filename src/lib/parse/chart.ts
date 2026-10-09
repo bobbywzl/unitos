@@ -134,7 +134,9 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
 
 function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalette): Series {
   const tx = child(ser, "tx");
-  const name = tx ? cacheValues(tx, palette).text[0] ?? richText(tx) : "";
+  // The name: a cached reference, a rich text, or a literal (c:v). Slides
+  // benchmark finding: a chart that names its series in c:v lost the names.
+  const name = tx ? cacheValues(tx, palette).text[0] ?? (richText(tx) || cleanText(child(tx, "v")?.textContent ?? "").trim()) : "";
   const catEl = child(ser, "cat") ?? child(ser, "xVal");
   const cat = cacheValues(catEl, palette);
   const val = cacheValues(child(ser, "val") ?? child(ser, "yVal"), palette);
