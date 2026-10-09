@@ -231,6 +231,14 @@ def math_text(el):
         name = local(c)
         if name == "r":
             out.append("".join(t.text or "" for t in kids(c, "t")))
+        elif name == "acc":
+            # An accent the slide draws over its base (m:chr, a combining
+            # mark: the dot of ẏ, the arrow of x⃗) is part of the letter.
+            ch = kid(c, "accPr", "chr")
+            mark = lattr(ch, "val") or "\u0302"
+            base = math_text(kid(c, "e")) if kid(c, "e") is not None else ""
+            combining = re.fullmatch(r"[\u0300-\u036f\u20d0-\u20ff]", mark)
+            out.append(" " + base.strip() + (mark if combining else "") + " ")
         elif not name.endswith("Pr"):
             out.append(" " + math_text(c) + " ")
     return "".join(out)

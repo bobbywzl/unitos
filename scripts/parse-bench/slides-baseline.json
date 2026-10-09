@@ -1522,8 +1522,8 @@
    "lost": 0
   },
   "ais-05Framework-02AutoDiff-03-GradMode": {
-   "composite": 0.998,
-   "words": 0.988,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -1643,8 +1643,8 @@
    "lost": 0
   },
   "aii-01AICluster-04Performance-05Training": {
-   "composite": 0.998,
-   "words": 0.99,
+   "composite": 0.999,
+   "words": 0.994,
    "order": 1,
    "bullets": 1,
    "tables": 1,

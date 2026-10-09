@@ -169,9 +169,10 @@ if (stale.length > 0) {
 // compared in its compatibility form (NFKC): an equation's math italic 𝑎 is
 // the letter a, a full-width Ａ is A. A math letter (U+1D400–U+1D7FF) is
 // one variable, a token of its own: "𝜋𝑟²" is π, r, 2 on both sides, however
-// an equation's parts are spaced. An underscore joins the words of a name
-// (snake_case is one token) but is no word alone: a linear equation's
-// subscript mark ("𝑥_𝐾") is notation, as "^" is. A private-use character
+// an equation's parts are spaced; an accent drawn over it (x⃗) stays with
+// it. An underscore joins the words of a name (snake_case is one token) but
+// is no word's edge: a linear equation's subscript mark ("𝑥_𝐾", "ẏ_𝑗") is
+// notation, as "^" is. A private-use character
 // (U+E000-U+F8FF) is a token of its own: a symbol font's code the reader
 // has no font for, a box where the slide shows ☺ or ⇒.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
@@ -180,11 +181,13 @@ function tokens(text: string): string[] {
   return (
     lines
       .join("\n")
-      .replace(/[\u{1D400}-\u{1D7FF}]/gu, " $& ")
+      .replace(/[\u{1D400}-\u{1D7FF}]\p{M}*/gu, " $& ")
       .normalize("NFKC")
       .toLowerCase()
       .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\u{E000}-\u{F8FF}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
-  ).filter((t) => !/^_+$/.test(t));
+  )
+    .map((t) => t.replace(/^_+|_+$/g, ""))
+    .filter((t) => t.length > 0);
 }
 type Counts = { tp: number; fp: number; fn: number };
 function bag(ts: string[]): Map<string, number> {
