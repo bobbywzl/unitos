@@ -377,33 +377,44 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
       }
     }
 
-    // Bullets: each paragraph's first line found as a line of the body.
+    // Bullets: each paragraph's first line found as a line of the body, the
+    // line's start before it a list label or nothing. Lines with the same
+    // words go first to the paragraphs whose label they carry, then to the
+    // rest: a slide of "nnn" lines, some with "•", pairs each line once.
     const lines = body.split("\n").map(norm);
     const used = new Set<number>();
+    const labelish = (pre: string) => pre === "" || /^(?:[^\p{L}\p{N}\s]{1,3}|\(?[\p{L}\p{N}]{1,6}[.)．、-]|\p{N}{1,4}) $/u.test(pre);
+    const wanted: { first: string; want: string | null }[] = [];
     for (const s of slide.shapes) {
       if (s.kind !== "text") continue;
       for (const p of s.paras) {
         const first = norm(p.text.split("\n")[0]);
-        if (!first) continue;
-        let found = -1;
-        let prefix = "";
-        for (let i = 0; i < lines.length; i++) {
-          if (used.has(i) || !lines[i].endsWith(first)) continue;
-          const pre = lines[i].slice(0, lines[i].length - first.length);
-          if (pre === "" || /^\S{1,8} $/u.test(pre)) {
-            found = i;
-            prefix = pre.trimEnd();
-            break;
-          }
-        }
-        if (found < 0) continue;
-        used.add(found);
-        bulletAll++;
-        const want = p.bullet;
-        const ok = want === null ? /^[^\p{L}\p{N}]$/u.test(prefix) : prefix === want;
-        if (ok) bulletOk++;
-        else say.push(`  bullet: want "${want ?? "a symbol"}" got "${prefix}" on "${first.slice(0, 60)}"`);
+        if (first) wanted.push({ first, want: p.bullet });
       }
+    }
+    const fits = (prefix: string, want: string | null) => (want === null ? /^[^\p{L}\p{N}]$/u.test(prefix) : prefix === want);
+    const take = (first: string, ok: (prefix: string) => boolean): string | null => {
+      for (let i = 0; i < lines.length; i++) {
+        if (used.has(i) || !lines[i].endsWith(first)) continue;
+        const pre = lines[i].slice(0, lines[i].length - first.length);
+        if (!labelish(pre) || !ok(pre.trimEnd())) continue;
+        used.add(i);
+        return pre.trimEnd();
+      }
+      return null;
+    };
+    const missed: typeof wanted = [];
+    for (const w of wanted) {
+      if (take(w.first, (pre) => fits(pre, w.want)) !== null) {
+        bulletAll++;
+        bulletOk++;
+      } else missed.push(w);
+    }
+    for (const w of missed) {
+      const prefix = take(w.first, () => true);
+      if (prefix === null) continue;
+      bulletAll++;
+      say.push(`  bullet: want "${w.want ?? "a symbol"}" got "${prefix}" on "${w.first.slice(0, 60)}"`);
     }
 
     // Tables: rows found whole.

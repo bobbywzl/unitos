@@ -1,9 +1,9 @@
 {
  "total": {
-  "composite": 0.998,
+  "composite": 0.999,
   "words": 0.997,
   "order": 1,
-  "bullets": 0.996,
+  "bullets": 1,
   "tables": 0.997,
   "notes": 1,
   "chartValues": 1,
@@ -719,10 +719,10 @@
    "lost": 0
   },
   "ox-typical": {
-   "composite": 0.998,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.988,
+   "bullets": 1,
    "tables": 1,
    "notes": 1,
    "chartValues": null,
@@ -1269,10 +1269,10 @@
    "lost": 0
   },
   "lo-tdf103477": {
-   "composite": 0.889,
+   "composite": 1,
    "words": 1,
    "order": null,
-   "bullets": 0.667,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
