@@ -19,6 +19,8 @@ import { runFormalize } from "@/lib/video/formalize-client";
 import { formatTimeRange, type Region } from "@/lib/video/types";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { useChatDraft, useKeptChat, writeChatDraft } from "@/lib/kept-chat";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
 
 // The assistant on the media pane (SPEC.md §11): a chat card under the tool
 // bar, document scope — the model reads the whole timed transcript. Facing
@@ -26,6 +28,10 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // article (stores on the attachment, shows under the player as the article
 // view) and Formalize into bullet-point notes (PENDING notes with time
 // sources). Typed commands go to /api/assistant/act like the reader's chat.
+// The conversation is kept for the account per document (lib/kept-chat.ts):
+// closing the card, leaving the page, or a reload keeps it; Clear
+// conversation removes it. The words typed in the box are kept in this
+// browser until they are sent.
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -59,21 +65,24 @@ export function MediaAssistant({
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
   const web = useWeb();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const kept = useKeptChat<ChatMessage>(notebookId, `media:${documentId}`);
+  const messages = kept.turns;
+  const busy = kept.busy;
+  const draftKey = `media:${notebookId}:${documentId}`;
+  const [input, setInputState] = useState("");
+  useChatDraft(draftKey, setInputState);
+  function setInput(text: string) {
+    setInputState(text);
+    writeChatDraft(draftKey, text);
+  }
   // Messages sent while an answer runs (SPEC.md §7): they go out in order.
   const [queue, setQueue] = useState<QueuedText[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // The running send() or skill, so Stop can abort it — the reply never
-  // lands, but the sent message stays in the transcript.
-  const sendAbortRef = useRef<AbortController | null>(null);
-  function stopSend() {
-    sendAbortRef.current?.abort();
-    sendAbortRef.current = null;
-    setBusy(false);
-  }
+  // The running send() or skill lives with the kept conversation, so Stop
+  // works from a card opened again: the reply never lands, but the sent
+  // message stays in the transcript.
+  const stopSend = kept.stop;
   // A cleared chip stays cleared until a new spot is circled.
   const [spotCleared, setSpotCleared] = useState(false);
   const spotKey = spot ? `${spot.startTime}-${spot.endTime}` : null;
@@ -89,8 +98,11 @@ export function MediaAssistant({
     if (box) box.scrollTop = box.scrollHeight;
   }, [messages, busy]);
 
+  // Kept, not component state: a reply that lands after the card closed
+  // still lands in the conversation.
+  const { setTurns } = kept;
   function push(message: ChatMessage) {
-    setMessages((m) => [...m, message]);
+    setTurns((m) => [...m, message]);
   }
 
   // One skill run: the chip label lands as the reader's turn, the outcome as
@@ -101,9 +113,7 @@ export function MediaAssistant({
       role: "user",
       content: t(format === "article" ? "video.skillArticle" : "video.skillNotes"),
     });
-    setBusy(true);
-    const controller = new AbortController();
-    sendAbortRef.current = controller;
+    const controller = kept.begin();
     try {
       const result = await runFormalize(
         {
@@ -136,8 +146,7 @@ export function MediaAssistant({
         content: err instanceof Error ? err.message : t("video.assistantFailed"),
       });
     } finally {
-      if (sendAbortRef.current === controller) sendAbortRef.current = null;
-      setBusy(false);
+      kept.end(controller);
     }
   }
 
@@ -155,9 +164,7 @@ export function MediaAssistant({
     if (queued) setQueue((list) => list.filter((q) => q.key !== queued.key));
     else setInput("");
     push({ role: "user", content: command });
-    setBusy(true);
-    const controller = new AbortController();
-    sendAbortRef.current = controller;
+    const controller = kept.begin();
     try {
       // The circled spot rides along: frame captured now, at the spot's start.
       let video: { startTime: number; endTime: number; region?: Region; frame?: string } | undefined;
@@ -194,8 +201,7 @@ export function MediaAssistant({
         content: err instanceof Error ? err.message : t("video.assistantFailed"),
       });
     } finally {
-      if (sendAbortRef.current === controller) sendAbortRef.current = null;
-      setBusy(false);
+      kept.end(controller);
       inputRef.current?.focus();
     }
   }
@@ -221,19 +227,17 @@ export function MediaAssistant({
           <SparkleIcon size={12} />
           {t("video.assistant")}
         </span>
+        {messages.length > 0 && (
+          <ClearConversation onClear={kept.clear} track="video-assistant-clear" className="ml-auto" />
+        )}
         <button
           data-track="video-assistant-close"
-          onClick={() => {
-            // A turn still in flight aborts too — closing the card means
-            // nobody will read the reply, so there is nothing left for it to
-            // finish for.
-            sendAbortRef.current?.abort();
-            sendAbortRef.current = null;
-            onClose();
-          }}
+          // A turn still in flight keeps running: its reply lands in the kept
+          // conversation, and the card shows it when it opens again.
+          onClick={onClose}
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+          className={`${messages.length > 0 ? "" : "ml-auto "}rounded-full px-1.5 text-sand-500 hover:text-clay-800`}
         >
           ✕
         </button>

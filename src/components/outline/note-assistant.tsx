@@ -13,6 +13,8 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
 
 // The note's assistant (SPEC.md §6): a panel docked at the bottom of an open
 // note, the way Gemini sits at the bottom of a Google Doc — a sparkle and a
@@ -28,18 +30,15 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 //
 // Closed, the panel folds to one Assistant chip; the choice is remembered in
 // this browser. The words typed in the box are kept in this browser until
-// they are sent, so a reload never loses them.
+// they are sent, so a reload never loses them. The conversation is kept for
+// the account per note (lib/kept-chat.ts): closing the note, leaving the
+// page, or a reload keeps it; Clear conversation removes it.
 const OPEN_KEY = "unitos-note-assistant";
 const DRAFT_KEY = "unitos-note-assistant-draft:";
 
-type Turn =
-  | { role: "user"; content: string }
-  | {
-      role: "assistant";
-      content: string;
-      // The change the answer proposes, and what became of it.
-      proposal?: { content: string; warnings: string[]; state: "open" | "applied" | "discarded"; before?: string };
-    };
+// The change an answer proposes, and what became of it.
+type Proposal = { content: string; warnings: string[]; state: "open" | "applied" | "discarded"; before?: string };
+type Turn = KeptTurn & { data?: { proposal?: Proposal } };
 
 function readOpen(): boolean {
   try {
@@ -84,11 +83,13 @@ function quotesLost(before: string, after: string): number {
 }
 
 export function NoteAssistant({
+  notebookId,
   noteId,
   draft,
   onApply,
   className = "",
 }: {
+  notebookId: string;
   noteId: string;
   /** The note as the editor holds it: title line and body. */
   draft: string;
@@ -100,11 +101,10 @@ export function NoteAssistant({
   const thinking = useThinking();
   const web = useWeb();
   const [open, setOpen] = useState(true);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const kept = useKeptChat<Turn>(notebookId, `note:${noteId}`);
+  const { turns, setTurns, busy } = kept;
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -116,8 +116,6 @@ export function NoteAssistant({
     setOpen(readOpen());
     setInput(readTyped(noteId));
   }, [noteId]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
 
   // The newest turn in view: the conversation scrolls to its end, and the
   // panel into the tray's view when the card runs past it.
@@ -142,12 +140,11 @@ export function NoteAssistant({
     const message = input.trim();
     if (!message || busy) return;
     setError(null);
-    setBusy(true);
     const history = turns.map((turn) => ({
       role: turn.role,
       content:
-        turn.role === "assistant" && turn.proposal
-          ? `${turn.content}\n\n(The note as proposed:)\n${turn.proposal.content}`
+        turn.role === "assistant" && turn.data?.proposal
+          ? `${turn.content}\n\n(The note as proposed:)\n${turn.data.proposal.content}`
           : turn.content,
     }));
     setTurns((prev) => [...prev, { role: "user", content: message }]);
@@ -155,8 +152,7 @@ export function NoteAssistant({
     // on the server.
     const documentId = new URLSearchParams(window.location.search).get("doc") ?? undefined;
     // The words leave the box only once the server has them.
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const controller = kept.begin();
     try {
       const answer = await api<NoteAssistantAnswer>(
         `/api/notes/${noteId}/assistant`,
@@ -171,29 +167,26 @@ export function NoteAssistant({
           role: "assistant",
           content: answer.reply,
           ...(answer.content !== null
-            ? { proposal: { content: answer.content, warnings: answer.warnings, state: "open" as const } }
+            ? { data: { proposal: { content: answer.content, warnings: answer.warnings, state: "open" as const } } }
             : {}),
         },
       ]);
       if (answer.content === null && answer.warnings.length > 0) setError(answer.warnings.join(" "));
     } catch (err) {
       // The message stays in the box: nothing was answered.
-      setTurns((prev) => prev.slice(0, -1));
+      setTurns((prev) => (prev[prev.length - 1]?.content === message ? prev.slice(0, -1) : prev));
       if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
-      abortRef.current = null;
+      kept.end(controller);
     }
   }
 
-  function stop() {
-    abortRef.current?.abort();
-  }
+  const stop = kept.stop;
 
   function settle(index: number, state: "applied" | "discarded" | "open") {
     const turn = turns[index];
-    if (!turn || turn.role !== "assistant" || !turn.proposal) return;
-    const proposal = turn.proposal;
+    const proposal = turn?.role === "assistant" ? turn.data?.proposal : undefined;
+    if (!proposal) return;
     let next: typeof proposal;
     if (state === "applied") {
       onApply(proposal.content);
@@ -203,7 +196,9 @@ export function NoteAssistant({
       if (state === "open" && proposal.before !== undefined) onApply(proposal.before);
       next = { ...proposal, state, before: undefined };
     }
-    setTurns((prev) => prev.map((t, i) => (i === index && t.role === "assistant" ? { ...t, proposal: next } : t)));
+    setTurns((prev) =>
+      prev.map((t, i) => (i === index && t.role === "assistant" ? { ...t, data: { ...t.data, proposal: next } } : t)),
+    );
   }
 
   if (!open) {
@@ -235,13 +230,16 @@ export function NoteAssistant({
       <div className="flex items-center gap-2 px-3 pt-2">
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />
         <span className="sr-only">{t("assistant.noteAssistant")}</span>
+        {turns.length > 0 && !busy && (
+          <ClearConversation onClear={kept.clear} track="note-assistant-clear" className="ml-auto" />
+        )}
         <button
           type="button"
           onClick={() => toggle(false)}
           data-track="note-assistant-close"
           aria-label={t("assistant.noteAssistantClose")}
           data-tip={t("assistant.noteAssistantClose")}
-          className="ml-auto rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          className={`${turns.length > 0 && !busy ? "" : "ml-auto "}rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800`}
         >
           ✕
         </button>
@@ -260,10 +258,10 @@ export function NoteAssistant({
             ) : (
               <div key={i} className="flex flex-col gap-2 text-sand-800">
                 {turn.content && <Markdown>{turn.content}</Markdown>}
-                {turn.proposal && (
-                  <Proposal
-                    proposal={turn.proposal}
-                    lost={quotesLost(turn.proposal.before ?? draft, turn.proposal.content)}
+                {turn.data?.proposal && (
+                  <ProposalCard
+                    proposal={turn.data.proposal}
+                    lost={quotesLost(turn.data.proposal.before ?? draft, turn.data.proposal.content)}
                     onApply={() => settle(i, "applied")}
                     onDiscard={() => settle(i, "discarded")}
                     onUndo={() => settle(i, "open")}
@@ -318,14 +316,14 @@ export function NoteAssistant({
   );
 }
 
-function Proposal({
+function ProposalCard({
   proposal,
   lost,
   onApply,
   onDiscard,
   onUndo,
 }: {
-  proposal: NonNullable<Extract<Turn, { role: "assistant" }>["proposal"]>;
+  proposal: Proposal;
   lost: number;
   onApply: () => void;
   onDiscard: () => void;
