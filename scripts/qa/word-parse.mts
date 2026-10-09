@@ -79,6 +79,14 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check('a "1-" list imports as a numbered list that draws "1-"', format === "%0-", JSON.stringify(found?.attrs ?? null));
 }
 {
+  // A list that starts deep in legal numbering: the numbers above print.
+  const blocks: ParsedBlock[] = [{ type: "LIST", text: "3.2.2.5.1.3. Rooms\n3.2.2.5.1.4. Names", html: "<ol></ol>" }];
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks });
+  const found = (richText.content ?? []).find((n) => n.type === "orderedList");
+  const format = found ? (JSON.parse(String(found.attrs?.listLevels ?? "[]")) as { format?: string }[])[0]?.format : undefined;
+  check('a list that starts at "3.2.2.5.1.3." is a numbered list that prints "3.2.2.5.1."', format === "3.2.2.5.1.%0." && found?.attrs?.start === 3, JSON.stringify(found?.attrs ?? null));
+}
+{
   // A level a tenth of an inch in from the level above it.
   const text = listText(await parse(docx(item("One", 1, 0) + item("Two", 1, 1) + item("Three", 1, 0), list(level(0, "bullet", "–", 142) + level(1, "bullet", "–", 284)))));
   check("a level under a tenth of an inch in stands a level deeper", text === "– One\n  – Two\n– Three", JSON.stringify(text));

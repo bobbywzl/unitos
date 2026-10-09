@@ -11,7 +11,7 @@
   "import.mark.bold": 15,
   "lost:body": 2,
   "list.kind": 4,
-  "import.list.missing": 68,
+  "import.list.depth": 2,
   "lost:note": 1,
   "list.missing": 3,
   "mark.italic": 1
@@ -271,7 +271,7 @@
   "poi-bug59058.docx": {},
   "poi-bug65649.docx": {
    "list.kind": 4,
-   "import.list.missing": 68
+   "import.list.depth": 2
   },
   "poi-bug65738.docx": {},
   "poi-capitalized.docx": {},
