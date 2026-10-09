@@ -222,6 +222,12 @@ function unitsFromBlocks(blocks: ParsedBlock[], title: string | null, refUrls: M
         units.push({ k: "code", l: 0, t: b.text, br: null });
         break;
       case "TABLE":
+        // A table's links and images are in its html: a block document
+        // draws the table from it.
+        for (const m of (b.html ?? "").matchAll(/<a\b[^>]*?\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
+          links.push([m[2].replace(/<[^>]*>/g, ""), m[1].replace(/&amp;/g, "&")]);
+        }
+        for (const m of (b.html ?? "").matchAll(/<img\b[^>]*?\bsrc="([^"]+)"/g)) figures.push(m[1].replace(/&amp;/g, "&"));
         text.split("\n").forEach((row, r) =>
           row.split("\t").forEach((cell, c) => {
             if (cell.trim()) units.push({ k: "cell", l: 0, t: cell.trim(), br: [], row: r + 1, col: c + 1 });
