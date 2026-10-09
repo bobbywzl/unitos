@@ -636,7 +636,12 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     // double-spaced with its wraps single-spaced (parse loop finding: the
     // DTIC Datcom's list of symbols, p. 13, read "a", "etab" and "Cc" as
     // one row, "airfoil chord chordwise length of trailing edge tab …").
-    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5;
+    // A letter alone set larger than the run's lines is a speck of the
+    // scan (a sideways label's letter), no symbol (parse loop finding: the
+    // DTIC Datcom p. 45, the "o" of "INCREASED ANGLE-OF-ATTACK" read down
+    // the margin opened a row over "(3) Stall Events" and split its cell).
+    const speck = cellsOf[k][0].text.trim().length === 1 && line.size > size * 1.3;
+    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5 && !speck;
     const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own && !spaced);
     const wrap =
       continues &&
@@ -1256,6 +1261,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     const left = Math.min(...members.map((k) => lines[k].x));
     let first = members[0];
     let absorbed = 0;
+    let rowAbove = false;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
       // A head of short cells right over the run's columns, one in each
@@ -1272,8 +1278,27 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev) || leadIn(prev.text)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
-      if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
+      // A row whose term and meaning fused into one cell (a scan's text
+      // layer sets one space between them), a word starting at the run's
+      // second column, is the run's row, and the lines over it a row's step
+      // up may be its rows too (parse loop finding: the DTIC Datcom's list
+      // of symbols, p. 14, read "MDD drag divergence Mach number, …" and
+      // "Mcrit critical Mach number; …" as paragraphs over the table, and
+      // MDD's second line in Mt's row).
+      // One baseline only: a line of two rows set close (a table's head over
+      // its first row, read as a matrix) is no fused row (the MML book's
+      // Table 8.1, p. 258, read "NameAditya | GenderM | …").
+      const oneBaseline = prev.items.every((it) => Math.abs(it.y - prev.y) < prev.size * 0.35);
+      if (gap >= 0 && gap <= prev.size * ctx.leading * 2.2 && oneBaseline && isFusedRowLine(prev, columns)) {
+        first--;
+        members.unshift(first);
+        absorbed = 0;
+        rowAbove = true;
+        continue;
+      }
+      if (gap < 0 || gap > prev.size * ctx.leading * (rowAbove ? 2.2 : 1.35)) break;
+      rowAbove = false;
       const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
       if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;

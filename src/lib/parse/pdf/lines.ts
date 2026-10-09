@@ -908,32 +908,54 @@ function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
 // The lines are the builder's copies, so a caller's change to an item
 // after the build is in no cached line: whoever changes an item clears
 // the memo (forgetLines).
+// Each line is kept too: the lists the column finder tests share most of
+// their lines (a side and the page it stands in), and a line is the same
+// line when it holds the same items in the same order. A cached line is
+// shared, so no one changes it: linesOf copies a line it moves.
 let memo: Map<string, Line[]> | null = null;
+let lineMemo: Map<string, Line> | null = null;
 const itemIds = new WeakMap<Item, number>();
 let nextItemId = 0;
 
-export function withLineMemo<T>(work: () => T): T {
-  const outer = memo;
-  memo = new Map();
-  try {
-    return work();
-  } finally {
-    memo = outer;
-  }
-}
-
-export function forgetLines() {
-  memo?.clear();
-}
-
-export function buildLines(items: Item[], page: number): Line[] {
-  if (!memo) return linesOf(items, page);
-  let key = String(page);
+function keyOf(head: string, items: Item[]): string {
+  let key = head;
   for (const item of items) {
     let id = itemIds.get(item);
     if (id === undefined) itemIds.set(item, (id = nextItemId++));
     key += `,${id}`;
   }
+  return key;
+}
+
+export function withLineMemo<T>(work: () => T): T {
+  const outer = memo;
+  const outerLines = lineMemo;
+  memo = new Map();
+  lineMemo = new Map();
+  try {
+    return work();
+  } finally {
+    memo = outer;
+    lineMemo = outerLines;
+  }
+}
+
+export function forgetLines() {
+  memo?.clear();
+  lineMemo?.clear();
+}
+
+function lineOf(items: Item[], page: number, rtlText: boolean): Line {
+  if (!lineMemo) return buildLine(items, page, rtlText);
+  const key = keyOf(`${page}${rtlText ? "r" : ""}`, items);
+  let line = lineMemo.get(key);
+  if (!line) lineMemo.set(key, (line = buildLine(items, page, rtlText)));
+  return line;
+}
+
+export function buildLines(items: Item[], page: number): Line[] {
+  if (!memo) return linesOf(items, page);
+  const key = keyOf(String(page), items);
   let lines = memo.get(key);
   if (!lines) memo.set(key, (lines = linesOf(items, page)));
   return [...lines];
@@ -1257,13 +1279,13 @@ function linesOf(items: Item[], page: number): Line[] {
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
   const rtlText = rightToLeft(items);
-  const lines = regrouped.map((g) => buildLine(g, page, rtlText)).filter((l) => l.text.length > 0);
+  const lines = regrouped.map((g) => lineOf(g, page, rtlText)).filter((l) => l.text.length > 0);
   // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {
-    const line = lines.find((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
-    if (line) {
-      line.x = x;
-      line.cells[0].x = x;
+    const k = lines.findIndex((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
+    if (k >= 0) {
+      const line = lines[k];
+      lines[k] = { ...line, x, cells: [{ ...line.cells[0], x }, ...line.cells.slice(1)] };
     }
   }
   return lines;

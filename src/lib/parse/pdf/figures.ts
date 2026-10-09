@@ -532,9 +532,21 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
   // column, on the box or within a line of it. A minus may stand a space
   // before its digits (parse loop finding: a Tufte textbook's plot of ψ(x)
-  // reads its ticks "− 4", "− 2", "2", "4", and was no figure).
+  // reads its ticks "− 4", "− 2", "2", "4", and was no figure). A tick
+  // drawn a glyph at a time reads as its glyphs put together (parse loop
+  // finding: the MML book p. 334, matplotlib's "2", ".", "5" made "2 . 5",
+  // no number, and Figure 10.8's two plots were no figure).
   const ticked = (box: Box) => {
-    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\s?\d[\d.,]*%?$/.test(textOf(r).trim()));
+    const numbers = runs.filter(
+      (r) =>
+        shareInside(r.box, grow(box, textSize)) >= 0.7 &&
+        /^[-−–+]?\s?\d[\d.,]*%?$/.test(
+          r.items
+            .map((i) => i.str)
+            .join("")
+            .trim(),
+        ),
+    );
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
@@ -621,7 +633,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // two line charts read as their ticks and their legends' words). A
     // drawing with no text over it at all, ten shapes or more, just under or
     // over a float's label, is that float's whatever its size (IEEE Access
-    // 3721067: Table 5, its words outlines between double rules).
+    // 3721067: Table 5, its words outlines between double rules). A chart
+    // with its ticks needs a figure's size only (parse loop finding: the
+    // MML book p. 334, two plots side by side, each 2.9% of the page: their
+    // ticks read into the margin caption's lines beside them).
     const ink = inside.reduce((n, r) => n + r.items.reduce((m, i) => m + i.w * i.size, 0), 0);
     const shapes = paths.filter((m) => !m.thin).length;
     const sized = area(box) >= pageArea * 0.03 || (w >= pageWidth * 0.5 && h >= textSize * 2);
@@ -662,7 +677,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       ink < area(box) * 0.12 &&
       !inside.some(isPageText);
     const drawn =
-      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && sized && ink < area(box) * 0.12) ||
+      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && (sized || (figureSized(box) && ticked(box))) && ink < area(box) * 0.12) ||
       sparse ||
       margin ||
       (shapes >= 10 && images.length === 0 && !meetsText(box) && nearLabel(box));
@@ -684,9 +699,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     (r.box.x1 >= graphic.x1 - r.size && r.box.x2 <= graphic.x2 + r.size) ||
     Math.min(r.box.x2, graphic.x2) - Math.max(r.box.x1, graphic.x1) >= (r.box.x2 - r.box.x1) * 0.6;
   const captionOf = (graphic: Box): TextRun[] => {
-    const under = runs
-      .filter((r) => !taken.has(r) && within(r, graphic) && r.box.y2 <= graphic.y1 + r.size * 0.5)
-      .sort((a, b) => b.box.y2 - a.box.y2);
+    // A caption's next lines start where its first does, though a short
+    // last line starts left of the graphic (parse loop finding: the MML
+    // book p. 298, "(c) Maximum likelihood esti-" took its panel and
+    // "mate." stood apart as a paragraph). Set smaller than the text, a
+    // caption runs to eight lines and 400 characters (p. 295: "(b)
+    // Regression solution: …" lost its fourth line, "the function value at
+    // the corresponding in-"; p. 319's "(b) The orange dots …" holds seven).
+    const under = runs.filter((r) => !taken.has(r) && r.box.y2 <= graphic.y1 + r.size * 0.5).sort((a, b) => b.box.y2 - a.box.y2);
+    const small = (r: TextRun) => r.size < textSize * 0.95;
     const out: TextRun[] = [];
     let bottom = graphic.y1;
     // A step's number, set larger, beside the first line under the graphic:
@@ -700,17 +721,23 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
         (i) => i.size >= textSize * 1.3 && /^\d{1,2}$/.test(i.str.trim()) && i.x + i.w <= first.box.x1 + i.size * 0.5 && i.y + i.size * 0.7 > first.box.y1 && i.y < first.box.y2,
       );
     for (const r of under) {
+      if (!within(r, graphic) && !(out.length > 0 && Math.abs(r.box.x1 - out[0].box.x1) < 1)) continue;
       if (out.length > 0 && besideNumber(out[0], r)) return [];
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
-      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
+      if (out.length >= (small(r) && out.every(small) ? 8 : 3) || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
       out.push(r);
       bottom = r.box.y1;
     }
     const chars = out.reduce((n, r) => n + r.chars, 0);
-    if (out.length === 0 || chars > 200) return [];
+    if (out.length === 0 || chars > (out.every(small) ? 400 : 200)) return [];
     // A caption is words: a row of numbers under a chart is its axis.
     const letters = out.reduce((n, r) => n + r.items.reduce((m, i) => m + (i.str.match(/\p{L}/gu)?.length ?? 0), 0), 0);
-    if (letters < 4 || letters < chars * 0.5) return [];
+    // A panel's caption is words whatever its letters ("(a) M = 0", its
+    // formula set in letters of its own: parse loop finding, the MML book
+    // p. 305, six panels' "(a) M = 0" … "(f) M = 9" read as their charts'
+    // labels and went into the crops).
+    const panel = isSubCaption(out.map(textOf).join(" "));
+    if (!panel && (letters < 4 || letters < chars * 0.5)) return [];
     const size = Math.max(...out.map((r) => r.size));
     const italic = out.reduce((n, r) => n + r.italic, 0) >= chars * 0.6;
     // Centered: each line as far in from both edges, give or take a fifth
@@ -806,7 +833,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // axis, and a statistics book's "−2 −1 0 1 2" stayed text).
   const axisOf = (plot: Box): TextRun[] =>
     runs.filter((r) => {
-      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
+      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
       // An equation's number at the column's edge is no tick of a drawing
       // in the margin beside it (parse loop finding: the MML book's p. 23
@@ -815,6 +842,12 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       // the notes read into the lines beside them).
       if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
       if (inEdgeLine(r)) return false;
+      // A line of a block of text is no tick: a run right over or under it,
+      // a line's step off, starts where it starts and is longer than a tick
+      // (parse loop finding: the MML book p. 179, the margin caption's lines
+      // "probability", "variables and" beside the mind map read as its
+      // y-axis's ticks, and the crop took the caption's lines).
+      if (runs.some((o) => o !== r && o.chars > 12 && Math.abs(o.box.x1 - r.box.x1) < 1 && Math.abs(o.size - r.size) < 0.5 && Math.max(o.box.y1 - r.box.y2, r.box.y1 - o.box.y2) < r.size * 0.6)) return false;
       const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
@@ -876,7 +909,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const under = Math.min(plot.y1, ...axis.filter((r) => r.box.y2 <= plot.y1 + r.size).map((r) => r.box.y1));
     const over = Math.max(plot.y2, ...axis.filter((r) => r.box.y1 >= plot.y2 - r.size).map((r) => r.box.y2));
     return runs.filter((r) => {
-      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r))) return false;
+      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       const face = faceOf(r);
       if (face === undefined || !faces.has(face) || bodyFaces.has(face)) return false;
       if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
@@ -1138,10 +1171,16 @@ export function attachFigureRegions(
   // takes one in.
   const inText = new Set(lines);
   const dropped = allLines.filter((l) => !inText.has(l)).map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }));
-  // Each graphic's caption, as a line of text.
+  // Each graphic's caption, as a line of text. Its formulas read as the
+  // page's lines' are: its items never were the page's lines, whose
+  // formulas resolveZones reads (parse loop finding: the MML book p. 136,
+  // the panel captions "(b) A1, σ1 ≈ 228, 052." under Figure 4.11's
+  // pictures, inline formulas as a paragraph, lost them as their row's
+  // caption).
   const captions = new Map(
     graphics.map((g) => {
       const lines = buildLines(g.caption, page);
+      resolveZones(lines, ctx.drawing);
       return [g, lines.length > 0 ? { ...captionPart(lines), size: lines[0].size } : null] as const;
     }),
   );
@@ -1237,7 +1276,11 @@ export function attachFigureRegions(
       return !lines.some((l) => l.y >= g.box.y1 && l.y <= g.box.y2 && l.x < b && l.xEnd > a);
     };
     return graphics.find((g) => {
-      if (g.caption.length > 0) return false;
+      // A panel's caption under the graphic is no caption of the float's:
+      // the caption beside it holds the panels (parse loop finding: the
+      // MML book p. 136, "(d) A3, σ3 ≈ 26, 125. …" under the second row
+      // of Figure 4.11 kept the caption in the margin from its pictures).
+      if (g.caption.length > 0 && !isSubCaption(captions.get(g)?.text ?? "")) return false;
       // Beside the caption's column, level with the graphic; or, where the
       // graphic reaches into the column, beside the caption itself and its
       // middle within the graphic's height (a caption under a picture's
@@ -1432,6 +1475,45 @@ export function attachFigureRegions(
     const table = tableSegment(tableRows, 0, rows[0].page, { box, lineSize: size, mathShare: 0 }, { size, columns: [px1 - x1, x2 - px2] });
     return { table, rows };
   };
+  // A caption's lines, or a panel's caption's, that words level with them
+  // (another panel's caption, a drawing's labels) cut into pieces go on
+  // with it: a piece set at its left edge, in its size, a line's step under
+  // it, with only words outside its width read between them (parse loop
+  // finding: the MML book p. 334, the captions under two plots side by side
+  // read a line of each in turn, "(a) Distances … for some x̃ = z1b ∈",
+  // "(b) The vector x̃ that minimizes the distance", "U = span[b]; see panel
+  // (b) …", each a paragraph of its own).
+  for (let c = 0; c < withMath.length; c++) {
+    const cap = withMath[c];
+    if (consumed.has(cap) || cap.type !== "PARAGRAPH" || !cap.box || cap.lineSize === undefined) continue;
+    if (!(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx) || isSubCaption(cap.text))) continue;
+    let between = 0;
+    for (let k = c + 1; k < withMath.length && between <= 12; k++) {
+      const s = withMath[k];
+      const capBox = cap.box;
+      if (consumed.has(s) || s.page !== cap.page || !s.box) continue;
+      if (s.box.x2 <= capBox.x1 || s.box.x1 >= capBox.x2) {
+        between++;
+        continue;
+      }
+      if (
+        between === 0 ||
+        s.type !== "PARAGRAPH" ||
+        s.lineSize === undefined ||
+        Math.abs(s.box.x1 - capBox.x1) > 1 ||
+        Math.abs(s.lineSize - cap.lineSize) >= 0.3 ||
+        capBox.y1 - s.box.y2 < -1 ||
+        capBox.y1 - s.box.y2 > cap.lineSize * ctx.leading * 0.9
+      )
+        break;
+      consumed.add(s);
+      const joined: { text: string; runs?: Run[] } = { text: cap.text, runs: cap.runs };
+      const offset = joinWrapped(joined, s.text);
+      cap.text = joined.text;
+      cap.runs = [...(joined.runs ?? []), ...(s.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
+      cap.box = unionBox(capBox, s.box);
+    }
+  }
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
@@ -1699,10 +1781,19 @@ export function attachFigureRegions(
       let end: number | undefined;
       // The note is the caption's words, and the band stops over it.
       let note: Segment | undefined;
+      const labelUnder = (b: Box) => {
+        const own = drawingIn(drawing, b.y1, cap.box!.y1, x1, x2);
+        return own !== null && b.y2 >= own.y1 - ctx.bodySize * 0.5;
+      };
       while (m < next.length && isFigureDebris(next[m], ctx)) {
         const s = next[m];
         if (onDrawing && s.box && floor - s.box.y2 > rowGap * 1.5) break;
-        if (marginal && s.box && !overlapsDrawing(s.box, drawing, cap.box)) break;
+        // A label set right under its drawing, within half an em of the
+        // drawing between it and the caption, is the drawing's (parse loop
+        // finding: the MML book p. 77, "c ≤ a + b" under the triangle of
+        // Figure 3.2 stopped the walk, and the crop was a sliver of the
+        // triangle's top).
+        if (marginal && s.box && !overlapsDrawing(s.box, drawing, cap.box) && !labelUnder(s.box)) break;
         m++;
         if (s.box && s.box.y1 < floor) {
           floor = s.box.y1;
@@ -1759,7 +1850,9 @@ export function attachFigureRegions(
         // words it took. It never reaches the line the page dropped under it
         // (with none, 6% of the page). arXiv 2506.08209 p. 12: the band ran
         // to 6% of the page, and the crop showed half the page number.
-        if (open) {
+        // In a margin the next words may stand far under it (a margin note):
+        // the figure's foot is its own there too.
+        if (open || marginal) {
           const capFoot = cap.box.y1;
           const own = [drawnBelow, ...graphics.filter((g) => centeredIn(g.box, bottom, capFoot)).map(graphicExtent), ...next.slice(0, m).map((s) => s.box)];
           const feet = own.flatMap((b) => (b ? [b.y1] : []));
@@ -1945,6 +2038,7 @@ export function attachFigureRegions(
         mathShare: 0,
       };
       if (side?.box || caption) figure.captionBox = side?.box ?? caption?.box;
+      if (side && caption && isSubCaption(caption.text)) addPanel(figure, caption);
       own.add(figure);
       placed = [...placed];
       placed.splice(placeOf(placed, graphic, own), 0, figure);
@@ -2000,6 +2094,34 @@ export function attachFigureRegions(
       figure.box = { ...at, y1: rowTop + ctx.bodySize * 0.2 };
       figure.region = toRegion(figure.box);
     }
+  }
+  // Figures in a row, their captions level, read left to right: a scan's
+  // tilt sets the right one's caption a few points higher (parse loop
+  // finding: NACA Report 515 p. 9, Figures 11, 12, 13 side by side read
+  // 13, 12, 11).
+  const levelCaption = (a: Segment, b: Segment) =>
+    a.type === "FIGURE" &&
+    b.type === "FIGURE" &&
+    a.page === b.page &&
+    a.captionBox !== undefined &&
+    b.captionBox !== undefined &&
+    Math.min(a.captionBox.y2, b.captionBox.y2) - Math.max(a.captionBox.y1, b.captionBox.y1) >
+      Math.min(a.captionBox.y2 - a.captionBox.y1, b.captionBox.y2 - b.captionBox.y1) * 0.5;
+  for (let i = 0; i < kept.length; i++) {
+    let j = i;
+    while (j + 1 < kept.length && levelCaption(kept[i], kept[j + 1])) j++;
+    if (j > i) kept.splice(i, j - i + 1, ...kept.slice(i, j + 1).sort((a, b) => a.captionBox!.x1 - b.captionBox!.x1));
+    i = j;
+  }
+  // Two figures one over the other in a column read from the top: a
+  // caption beside the lower one, set from the top of the margin, placed
+  // it first (parse loop finding: the MML book p. 136, Figure 4.11's
+  // second row of pictures read before its first).
+  for (let i = 0; i + 1 < kept.length; i++) {
+    const [a, b] = [kept[i].box, kept[i + 1].box];
+    if (kept[i].type !== "FIGURE" || kept[i + 1].type !== "FIGURE" || kept[i].page !== kept[i + 1].page || !a || !b) continue;
+    const across = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+    if (across >= Math.min(a.x2 - a.x1, b.x2 - b.x1) * 0.8 && a.y2 <= b.y1) kept.splice(i, 2, kept[i + 1], kept[i]);
   }
   return kept;
 }
