@@ -685,7 +685,8 @@ const CHIP_REACH = 12;
 
 /** A tap in Editing on a touch screen (SPEC.md §29): a tap on a mark opens
     what the mark opens, as a click in Viewing does; a second tap on the same
-    mark, or a tap off the marks, places the caret. A tap next to a chip is
+    mark, or a tap off the marks, places the caret. Inside a suggestion the
+    first tap is the suggestion's. A tap next to a chip is
     the chip's. Returns true when the tap opened something. */
 function tapMark(view: EditorView, event: MouseEvent): boolean {
   if (!window.matchMedia("(pointer: coarse)").matches) return false;
@@ -710,6 +711,12 @@ function tapMark(view: EditorView, event: MouseEvent): boolean {
   const id = mark.dataset.sourceId ?? mark.dataset.noteId ?? mark.dataset.extractId ?? mark.dataset.linkId ?? "";
   if (id && tappedMark === id) {
     tappedMark = null;
+    return false;
+  }
+  // A first tap inside a suggestion opens the suggestion's card alone, so
+  // its ✓ is not under the mark's chooser; a second tap opens the mark.
+  if (id && target?.closest("[data-suggestion]") && tappedMark !== `suggestion:${id}`) {
+    tappedMark = `suggestion:${id}`;
     return false;
   }
   tappedMark = id || null;
