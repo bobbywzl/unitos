@@ -17,7 +17,7 @@ import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
-import { changeWindow } from "@/lib/assistant/diff-window";
+import { changedSpans } from "@/lib/assistant/diff-window";
 
 // The revise action (SPEC.md §7): a change to many blocks of a document
 // without rich text, the spelling or the grammar across it, its register, a
@@ -178,11 +178,16 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
     changes, else "Rewrite the paragraph that starts …"; never the pass's
     one why repeated on every edit, which names no block and no words. */
 function editDescription(t: TFunc, before: string, after: string): string {
-  const window = changeWindow(before, after, 0);
   const cut = (text: string, n = 60) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
-  const changed = window.before.length;
-  if (window.before && window.after && changed <= Math.max(60, before.length * 0.6)) {
-    return t("api.editChange", { from: cut(window.before), to: cut(window.after) });
+  // Every changed stretch, so an edit that changes three places names all
+  // three, and two edits of one kind read differently on the card.
+  const spans = changedSpans(before, after).filter((s) => s.before && s.after);
+  const changed = spans.reduce((sum, s) => sum + s.before.length, 0);
+  const small = spans.length > 0 && spans.length === changedSpans(before, after).length && changed <= Math.max(60, before.length * 0.6);
+  if (small && spans.length === 1) return t("api.editChange", { from: cut(spans[0].before), to: cut(spans[0].after) });
+  if (small && spans.length === 2) return t("api.editChangeTwo", { a: cut(spans[0].before, 40), b: cut(spans[0].after, 40), c: cut(spans[1].before, 40), d: cut(spans[1].after, 40) });
+  if (small && spans.length === 3) {
+    return t("api.editChangeThree", { a: cut(spans[0].before, 30), b: cut(spans[0].after, 30), c: cut(spans[1].before, 30), d: cut(spans[1].after, 30), e: cut(spans[2].before, 30), f: cut(spans[2].after, 30) });
   }
   return t("api.editRewrite", { start: cut(before.replace(/\s+/g, " ").trim(), 40) });
 }

@@ -39,3 +39,60 @@ export function changeWindow(before: string, after: string, radius = 36): Change
     whole: leftStart === 0 && rightEnd === a.length,
   };
 }
+
+export type ChangedSpan = { before: string; after: string };
+
+/** Every stretch of words that differs between `before` and `after`, in
+    order, as the old words and the new (either side "" for words only added
+    or only removed); stretches a word or two apart are one. Texts past
+    `maxWords` on either side give one span, their whole difference. */
+export function changedSpans(before: string, after: string, maxWords = 400): ChangedSpan[] {
+  const a = before.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const b = after.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (a.join(" ") === b.join(" ")) return [];
+  if (a.length > maxWords || b.length > maxWords) {
+    const w = changeWindow(before, after, 0);
+    return [{ before: w.before, after: w.after }];
+  }
+  // The longest common subsequence of the words, then the gaps between
+  // common words are the changes.
+  const n = a.length;
+  const m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  }
+  const spans: { from: number; to: number; fromB: number; toB: number }[] = [];
+  let i = 0;
+  let j = 0;
+  let open: { from: number; to: number; fromB: number; toB: number } | null = null;
+  const close = () => {
+    if (open) spans.push(open);
+    open = null;
+  };
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      close();
+      i++;
+      j++;
+      continue;
+    }
+    if (!open) open = { from: i, to: i, fromB: j, toB: j };
+    if (j < m && (i >= n || lcs[i][j + 1] >= lcs[i + 1][j])) {
+      open.toB = ++j;
+    } else {
+      open.to = ++i;
+    }
+  }
+  close();
+  // Spans a word or two apart read as one change.
+  const merged: typeof spans = [];
+  for (const span of spans) {
+    const last = merged[merged.length - 1];
+    if (last && span.from - last.to <= 2 && span.fromB - last.toB <= 2) {
+      last.to = span.to;
+      last.toB = span.toB;
+    } else merged.push({ ...span });
+  }
+  return merged.map((s) => ({ before: a.slice(s.from, s.to).join(" "), after: b.slice(s.fromB, s.toB).join(" ") }));
+}
