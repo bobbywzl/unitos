@@ -15,6 +15,10 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     if (brand.startsWith("qt")) return "video/quicktime";
     // M4A/M4B brands mark an audio-only MPEG-4 container.
     if (brand.startsWith("M4A") || brand.startsWith("M4B")) return "audio/mp4";
+    // Other brands (isom, mp42, iso5, 3GPP) carry audio alone as often as
+    // video: the tracks decide when the moov box is in the bytes.
+    const handlers = mp4Handlers(bytes);
+    if (handlers && !handlers.includes("vide") && handlers.includes("soun")) return "audio/mp4";
     return "video/mp4";
   }
   if (
@@ -44,6 +48,45 @@ export function sniffMedia(bytes: Uint8Array): string | null {
   if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
   if (bytes.length >= 4 && ascii(0, 4) === "fLaC") return "audio/flac";
   return null;
+}
+
+// The handler type of every track (moov/trak/mdia/hdlr): "vide", "soun",
+// "text", ... Null when no whole moov box is in the bytes (a file whose moov
+// sits at its end).
+function mp4Handlers(bytes: Uint8Array): string[] | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ascii = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
+  // The child boxes of [from, to): [type, body start, box end].
+  const boxes = (from: number, to: number): [string, number, number][] | null => {
+    const out: [string, number, number][] = [];
+    let at = from;
+    while (at + 8 <= to) {
+      let size = view.getUint32(at);
+      let header = 8;
+      if (size === 1) {
+        if (at + 16 > to) return out;
+        size = Number(view.getBigUint64(at + 8));
+        header = 16;
+      } else if (size === 0) {
+        size = to - at;
+      }
+      if (size < header) return null;
+      out.push([ascii(at + 4), at + header, at + size]);
+      at += size;
+    }
+    return out;
+  };
+  const moov = boxes(0, bytes.length)?.find(([type, , end]) => type === "moov" && end <= bytes.length);
+  if (!moov) return null;
+  const handlers: string[] = [];
+  for (const [type, start, end] of boxes(moov[1], moov[2]) ?? []) {
+    if (type !== "trak") continue;
+    const mdia = boxes(start, end)?.find(([t]) => t === "mdia");
+    const hdlr = mdia && boxes(mdia[1], mdia[2])?.find(([t]) => t === "hdlr");
+    // hdlr: version and flags (4), pre_defined (4), then handler_type.
+    if (hdlr && hdlr[1] + 12 <= hdlr[2]) handlers.push(ascii(hdlr[1] + 8));
+  }
+  return handlers;
 }
 
 export type ByteRange =
