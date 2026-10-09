@@ -340,6 +340,16 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   check("the import draws the cell's formula as math", JSON.stringify(richText).includes('"type":"inlineMath"'), JSON.stringify(richText).slice(0, 300));
 }
 
+// ── A backslash typed in an equation ends its command with a space ──────────
+
+{
+  const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+  const math = `<w:p><m:oMathPara ${M}><m:oMath><m:r><m:t>\\in</m:t></m:r><m:sSub><m:e><m:r><m:t>t</m:t></m:r></m:e><m:sub><m:r><m:t>0</m:t></m:r></m:sub></m:sSub><m:r><m:t>&lt;5</m:t></m:r></m:oMath></m:oMathPara></w:p>`;
+  const blocks = await parse(docx(para("Linear Format with lt") + math));
+  const equation = blocks.find((b) => b.type === "EQUATION");
+  check("a half-built \\int stays an equation, \\backslash then its letters", equation?.text === "\\backslash int_{0}<5", JSON.stringify(blocks.map((b) => `${b.type}:${b.text}`)));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
