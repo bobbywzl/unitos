@@ -89,7 +89,10 @@ export function parseXml(body: string): TranscriptSegment[] | null {
   const segments: TranscriptSegment[] = [];
   for (const m of cues.matchAll(/<p\b([^>]*)>([\s\S]*?)<\/p>/g)) {
     const start = attrNumber(m[1], "t");
-    const text = plainText(m[2]);
+    // A line break between two elements is the file's layout (a
+    // pretty-printed file puts each <s> on a line of its own), not a word
+    // break: Japanese words carry no spaces.
+    const text = plainText(m[2].replace(/>[ \t\r]*\n\s*</g, "><"));
     if (start === null || text === "") continue;
     segments.push({ start: start / 1000, end: (start + (attrNumber(m[1], "d") ?? 2000)) / 1000, text });
   }
