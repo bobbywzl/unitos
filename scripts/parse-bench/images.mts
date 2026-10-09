@@ -358,7 +358,7 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
   const pages = pagesOf(file, count);
   const parsed = await quiet(() => parsePdf(bytes, { pages: file.pages ? pages : undefined }));
   const parseMs = performance.now() - t0;
-  const verdict = textLayerVerdict(parsed.blocks, pages.length);
+  const verdict = textLayerVerdict(parsed.blocks, pages.length, parsed.layerChars);
   // What the reader gets: an article of no text is an empty document, so
   // such a PDF's right outcome is its pages.
   const holdsText = parsed.blocks.some((b) => b.text.trim() !== "");

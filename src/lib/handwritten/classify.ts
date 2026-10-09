@@ -55,16 +55,26 @@ export function textLayerEmpty(blocks: ParsedBlock[], pageCount: number): boolea
 
 /** What the text layer decides before any model call: "article" when the
     yield reads like language at article scale, else null — the model
-    judges — with the kind the yield gives alone (no key, a failed call). */
+    judges — with the kind the yield gives alone (no key, a failed call).
+    layerChars: the characters the text layer holds (ParsedDocument
+    layerChars), the words the parse set inside its figures among them.
+    The yield the model is told and the fallback count them, so a CAD plot
+    of 1066 characters is not told it has none, nor taken for handwriting
+    without a key. The article gate counts the parse's text alone: an
+    article reads its blocks. Images benchmark finding: an AutoCAD plot's
+    prompt said 0 characters. */
 export function textLayerVerdict(
   blocks: ParsedBlock[],
   pageCount: number,
+  layerChars = 0,
 ): { kind: "article" | null; fallback: PdfKind; perPage: number; junk: boolean; textChars: number } {
-  const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
-  const perPage = textChars / Math.max(1, pageCount);
+  const blockChars = blocks.reduce((n, b) => n + b.text.length, 0);
+  const textChars = Math.max(blockChars, layerChars);
+  const perPage = blockChars / Math.max(1, pageCount);
+  const layerPerPage = textChars / Math.max(1, pageCount);
   const junk = junkTextLayer(blocks);
   const fallback: PdfKind =
-    junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
+    junk || layerPerPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
   return { kind: perPage >= ARTICLE_CHARS_PER_PAGE && !junk ? "article" : null, fallback, perPage, junk, textChars };
 }
 
@@ -92,9 +102,10 @@ export async function classifyPdf(
   blocks: ParsedBlock[],
   pages: number[],
   userId: string | null,
+  layerChars = 0,
 ): Promise<PdfKind> {
   const pageCount = pages.length;
-  const { kind, fallback, textChars, junk } = textLayerVerdict(blocks, pageCount);
+  const { kind, fallback, textChars, junk } = textLayerVerdict(blocks, pageCount, layerChars);
   if (kind) return kind;
   if (!(await featureConfigured("classify")) || pageCount === 0) return fallback;
 

@@ -1,8 +1,8 @@
 {
  "total": {
-  "a": 0.943,
+  "a": 0.948,
   "b": 0.988,
-  "all": 0.966
+  "all": 0.968
  },
  "files": {
   "a-tracemonkey": 1,
@@ -21,7 +21,7 @@
   "a-toc": 0.75,
   "a-word-link": 0.75,
   "a-japanese-short": 1,
-  "a-rotation": 0.75,
+  "a-rotation": 1,
   "a-word-math": 1,
   "a-cheatsheet": 1,
   "a-nics-table": 1,
@@ -139,7 +139,7 @@
   "b-avif-hopper": 1,
   "b-png-exif-chunk": 1,
   "a-cad-plans": 1,
-  "a-cad-autocad": 0.9,
+  "a-cad-autocad": 1,
   "a-cad-simple": 1,
   "a-vector-drawing": 1,
   "a-drawing-tutorial": 1,

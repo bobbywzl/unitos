@@ -647,7 +647,7 @@ export async function ingestPdf(
   // An article whose parse holds no text adds as its pages (pdfShape).
   const kind = opts.pages
     ? "handwritten"
-    : pdfShape(await classifyPdf(bytes, parsed.blocks, pages, userId), parsed.blocks);
+    : pdfShape(await classifyPdf(bytes, parsed.blocks, pages, userId, parsed.layerChars), parsed.blocks);
   // A scan of print reads off its page images into text, and goes on as an
   // article (SPEC.md §16). A read that fails leaves the PDF as its pages,
   // the reason on the strip under them and in the box.
