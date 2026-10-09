@@ -23,6 +23,11 @@
 //      words in order. YouTube's auto captions in WebVTT repeat every line
 //      (a rolling two-line caption); their reference is each word once, at
 //      the time the file stamps it, and they score by words and word times.
+//      TTML files whose corpus entry names ttconv (the IMSC reference
+//      implementation, `python3 -m pip install ttconv`) score the same way:
+//      what the document shows at each of its significant times (seq and
+//      par timing, timed spans, display, visibility), each word once at the
+//      time it first shows.
 //   c. Transcript lines and paragraphs (segments.ts, tidy.ts transcriptLines,
 //      speakers.ts nameSpeakers, types.ts transcriptParagraphs): Earnings-21's
 //      word-timed, diarized ASR outputs taken through the Deepgram rung's
@@ -31,7 +36,9 @@
 //      lines keep every word once and in order (fillers may go), each line's
 //      time covers its words, and the paragraphs break where the human
 //      transcript (Earnings-21's reference) changes speaker, and never inside
-//      a sentence.
+//      a sentence. Recorded provider answers (Deepgram's responses through
+//      deepgramSegments, a Whisper response through whisperSegments) score
+//      the same way against the provider's own paragraphs and voices.
 //
 // Model passes in the path: transcript cleanup (tidy.ts) runs the model when
 // a key is set; the bench has no key, so the rules pass runs, which is the
@@ -64,6 +71,7 @@ const { splitFmp4 } = await import("@/lib/video/fmp4");
 const { parsePastedTranscript } = await import("@/lib/video/paste");
 const { parseJson3, parseXml } = await import("@/lib/video/captions");
 const { deepgramSegments } = await import("@/lib/video/deepgram");
+const { whisperSegments } = await import("@/lib/video/transcribe");
 const { transcriptLines, lineIsSound } = await import("@/lib/video/tidy");
 const { nameSpeakers } = await import("@/lib/video/speakers");
 const { transcriptParagraphs } = await import("@/lib/video/types");
@@ -429,6 +437,24 @@ function datCases(raw: string): { data: string; expected: string }[] {
   });
 }
 
+/** A TTML document read by ttconv as what it shows over time: each word
+    once, at the time it first shows. The words of a state that the state
+    before it did not show (aligned in order) are new at that state's time;
+    a word that stays on screen across states is one word. */
+function shownWords(states: [number, string][]): [number, string][] {
+  const words: [number, string][] = [];
+  let before: string[] = [];
+  for (const [t, text] of states) {
+    const now = tokens(text);
+    const map = align(now.map(norm), before.map(norm));
+    now.forEach((w, i) => {
+      if (map[i] < 0) words.push([t, w]);
+    });
+    before = now;
+  }
+  return words;
+}
+
 function bReference(file: CorpusFile, raw: string): BRef | null {
   if (file.format === "vtt-cuetext") return { cues: [], cases: datCases(raw) };
   if (file.format === "vtt") {
@@ -439,7 +465,11 @@ function bReference(file: CorpusFile, raw: string): BRef | null {
     return { cues: cues.map((c) => ({ start: c.start, end: c.end, text: collapse(c.text), voice: c.voice })).filter((c) => c.text !== "") };
   }
   const path = join(REFS, `${file.id}.json`);
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as BRef) : null;
+  if (!existsSync(path)) return null;
+  const ref = JSON.parse(readFileSync(path, "utf8")) as BRef & { states?: [number, string][]; error?: string };
+  if (ref.error) throw new Error(`reference: ${ref.error}`);
+  if (ref.states) return { cues: [], rolling: true, ...{ words: shownWords(ref.states) } } as BRef & { words: [number, string][] };
+  return ref;
 }
 
 /** The code under test: the path a caption file takes into segments. */
@@ -500,13 +530,16 @@ function scoreB(file: CorpusFile, raw: string, ref: BRef): Result {
       const t = words[j][0];
       if (t >= seg.start - 0.25 && t <= seg.end + 0.25) timed++;
     });
-    const wordTime = matched === 0 ? 0 : timed / matched;
+    // Nothing to show and nothing kept: every word (none) is on time.
+    const wordTime = matched === 0 ? (words.length === 0 && outTokens.length === 0 ? 1 : 0) : timed / matched;
     metrics.wordF1 = round(order.f1);
     metrics.wordP = round(order.p);
     metrics.wordR = round(order.r);
     metrics.wordTime = round(wordTime);
     metrics.extraWords = Math.max(0, outTokens.length - order.matched);
-    if (order.p < 0.9) notes.push(`${outTokens.length} words kept for ${words.length} spoken: lines repeated`);
+    if (order.p < 0.9) notes.push(`${outTokens.length} words kept for ${words.length} shown: words the file does not show, or shows once, kept`);
+    else if (order.r < 0.9) notes.push(`${order.matched} of ${words.length} shown words kept`);
+    if (wordTime < 0.9 && matched > 0) notes.push(`${matched - timed} of ${matched} words kept outside their time`);
     return { id: file.id, section: "b", score: mean([order.f1, wordTime]), metrics, ms, notes };
   }
 
@@ -653,12 +686,13 @@ function guardCatches(lines: Line[]): number {
   return judged === 0 ? 1 : caught / judged;
 }
 
+type AsrWord = { word: string; punctuated_word: string; start: number; end: number; speaker?: number };
+
 async function scoreEarnings(file: CorpusFile): Promise<Result> {
-  const notes: string[] = [];
   const asr = readNlp(readFileSync(fileOf(file.id), "utf8")).filter((t) => t.start !== null && t.end !== null);
   const human = readNlp(readFileSync(referenceOf(file.id), "utf8"));
   const speakerIds = new Map<string, number>();
-  const words = asr.map((t) => {
+  const words: AsrWord[] = asr.map((t) => {
     if (!speakerIds.has(t.speaker)) speakerIds.set(t.speaker, speakerIds.size);
     return { word: t.token.toLowerCase(), punctuated_word: `${t.token}${t.punct}`, start: t.start!, end: t.end!, speaker: speakerIds.get(t.speaker)! };
   });
@@ -666,9 +700,49 @@ async function scoreEarnings(file: CorpusFile): Promise<Result> {
   const body = { results: { channels: [{ alternatives: [{ words }] }] } };
   const t0 = performance.now();
   const segments = deepgramSegments(body);
+  return scoreWords(file, words, segments, human, performance.now() - t0);
+}
+
+/** A recorded provider answer (section c): a Deepgram response through the
+    Deepgram rung's reading, a Whisper response through the Whisper rungs'.
+    The turns are the provider's own: the paragraphs Deepgram answers, each
+    with its voice (Deepgram's paragraphs are made apart from its words'
+    voices); an answer without paragraphs is one voice. */
+async function scoreProvider(file: CorpusFile): Promise<Result> {
+  const body = JSON.parse(readFileSync(fileOf(file.id), "utf8")) as {
+    results?: { channels: { alternatives: { words: (AsrWord & { punctuated_word?: string })[]; paragraphs?: { paragraphs: { speaker?: number; start: number; end: number }[] } }[] }[] };
+    segments?: { words?: { text: string; start: number; end: number }[] }[];
+  };
+  let words: AsrWord[];
+  let segments: Segment[];
+  let speakerAt: (w: AsrWord) => number = () => 0;
+  const t0 = performance.now();
+  if (file.format === "deepgram") {
+    segments = deepgramSegments(body);
+    const alt = body.results!.channels[0].alternatives[0];
+    words = alt.words.map((w) => ({ ...w, punctuated_word: w.punctuated_word ?? w.word }));
+    const paragraphs = alt.paragraphs?.paragraphs ?? [];
+    if (paragraphs.some((p) => p.speaker !== undefined)) {
+      speakerAt = (w) => paragraphs.find((p) => w.start >= p.start - 0.001 && w.start < p.end + 0.001)?.speaker ?? -1;
+    }
+  } else {
+    segments = whisperSegments(body);
+    words = (body.segments ?? []).flatMap((s) => s.words ?? []).map((w) => ({ word: w.text.trim(), punctuated_word: w.text.trim(), start: w.start, end: w.end }));
+  }
   const parseMs = performance.now() - t0;
+  const human: NlpToken[] = words.map((w) => {
+    const m = /^(.*?)([.,?!;:]*)$/.exec(w.punctuated_word)!;
+    return { token: m[1], speaker: String(speakerAt(w)), start: w.start, end: w.end, punct: m[2] };
+  });
+  return scoreWords(file, words, segments, human, parseMs);
+}
+
+/** Word-timed ASR through the lines and the pane's paragraphs, against a
+    transcript that says who speaks each word and where sentences end. */
+async function scoreWords(file: CorpusFile, words: AsrWord[], segments: Segment[], human: NlpToken[], parseMs: number): Promise<Result> {
+  const notes: string[] = [];
   const out = await linesAndParagraphs(segments);
-  const input: TimedWord[] = words.map((w) => ({ w: w.punctuated_word, start: w.start, end: w.end, speaker: String(w.speaker) }));
+  const input: TimedWord[] = words.map((w) => ({ w: w.punctuated_word, start: w.start, end: w.end, speaker: w.speaker === undefined ? undefined : String(w.speaker) }));
   const k = keptAndTimed(out, input);
 
   // Paragraph breaks against the human transcript: the ASR word a paragraph
@@ -808,6 +882,8 @@ for (const file of corpus.files.filter(pick)) {
         const lines = await scoreCaptionLines(file, raw, ref);
         if (lines) results.push(lines);
       }
+    } else if (file.section === "c" && file.format !== "nlp") {
+      results.push(await scoreProvider(file));
     } else if (file.section === "c") {
       if (!existsSync(referenceOf(file.id))) {
         missing.push(file.id);

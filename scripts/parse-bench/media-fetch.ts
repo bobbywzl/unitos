@@ -6,8 +6,10 @@
 //   npx tsx scripts/parse-bench/media-fetch.ts [--force]
 //
 // A raw source is a URL prefix; a pypi source is a member of the package's
-// source archive (the test data ships in it). A derived file is made here
-// from a fetched one with ffmpeg; the corpus says how.
+// source archive (the test data ships in it). A file with `const` is the
+// string a test fixture function of that member returns (read with Python's
+// ast, never run). A derived file is made here from a fetched one with
+// ffmpeg, or by joining fetched files end to end; the corpus says how.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,7 +25,13 @@ export type CorpusFile = {
   path?: string;
   format?: string;
   reference?: string;
-  derived?: { from: string; args: string[]; output?: string; how: string };
+  // The fixture function of a pypi member whose returned string is the file.
+  const?: string;
+  // The reference reader, when the format has more than one (TTML: ttconv).
+  reader?: string;
+  // ffmpeg with args ("{file:<id>}" names another corpus file), or concat:
+  // the files `from` and `then` joined end to end.
+  derived?: { from: string; args?: string[]; then?: string[]; output?: string; how: string };
   exercises: string;
 };
 type Source = { from: string; root?: string; license: string; home: string };
@@ -61,10 +69,27 @@ function member(archive: string, path: string, out: string) {
   rmSync(tmp, { recursive: true, force: true });
 }
 
+// The string a fixture function returns: `def name(): return """..."""`.
+const FIXTURE = [
+  "import ast, sys",
+  "tree = ast.parse(open(sys.argv[1], encoding='utf-8').read())",
+  "for node in ast.walk(tree):",
+  "    if isinstance(node, ast.FunctionDef) and node.name == sys.argv[2]:",
+  "        for ret in ast.walk(node):",
+  "            if isinstance(ret, ast.Return) and isinstance(ret.value, ast.Constant) and isinstance(ret.value.value, str):",
+  "                sys.stdout.write(ret.value.value)",
+  "                sys.exit(0)",
+  "sys.exit('no string fixture ' + sys.argv[2])",
+].join("\n");
+
 function fetchOne(file: CorpusFile, path: string, out: string) {
   const source = corpus.sources[file.source!];
   if (source.from.startsWith("pypi:")) member(sdist(source.from), `${source.root}${path}`, out);
   else curl(`${source.from}${path.split("/").map(encodeURIComponent).join("/")}`, out);
+  if (file.const && path === file.path) {
+    const text = execFileSync("python3", ["-I", "-c", FIXTURE, out, file.const], { encoding: "utf8" });
+    writeFileSync(out, text);
+  }
 }
 
 export function fetchAll(force = false) {
@@ -94,12 +119,18 @@ export function fetchAll(force = false) {
 function derive(file: CorpusFile, out: string) {
   const from = fileOf(file.derived!.from);
   if (!existsSync(from)) throw new Error(`${file.derived!.from} is not fetched`);
+  if (file.derived!.then) {
+    const parts = [from, ...file.derived!.then.map(fileOf)];
+    writeFileSync(out, Buffer.concat(parts.map((p) => readFileSync(p))));
+    return;
+  }
   const dir = join(MEDIA_ROOT, "derive");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
+  const args = (file.derived!.args ?? []).map((a) => a.replace(/\{file:([\w-]+)\}/g, (_, id: string) => fileOf(id)));
   execFileSync(
     "ffmpeg",
-    ["-loglevel", "error", "-i", from, ...file.derived!.args, join(dir, file.derived!.output ?? "out.mpd")],
+    ["-loglevel", "error", "-i", from, ...args, join(dir, file.derived!.output ?? "out.mpd")],
     { stdio: "inherit" },
   );
   const made = file.derived!.output ??

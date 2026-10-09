@@ -4,7 +4,10 @@ other code than the code under test:
   section a: ffprobe (FFmpeg) for the container, its streams, and every audio
              packet's byte position and time; mutagen for a second reading of
              the length and the type.
-  section b: pysubs2 for SRT and TTML; YouTube's json3, srv3, and legacy
+  section b: pysubs2 for SRT and TTML, and ttconv (the IMSC reference
+             implementation) for the TTML files whose corpus entry names it:
+             what the document shows at each of its significant times;
+             YouTube's json3, srv3, and legacy
              timedtext XML read here from the format's own structure (events
              and segs, p and s, text). WebVTT is read in media.mts by the W3C
              webvtt-parser (webvtt-parser on npm), which passes the WPT tests.
@@ -184,8 +187,65 @@ def pysubs(path, fmt):
         text = line.plaintext
         if clean(text) == "":
             continue
+        # A cue that ends where it starts, or before, is never drawn: a
+        # player shows a cue while start <= t < end. (The SubRip capability
+        # tester hides "data" this way: "Don't show this text".)
+        if fmt == "srt" and line.end <= line.start:
+            continue
         cues.append(cue(line.start / 1000, line.end / 1000, text))
     return cues
+
+
+# The TTML 1.0 draft namespace older tools write (DFXP); ttconv reads the
+# Recommendation's, and the elements are the same.
+DRAFT_NS = re.compile(r"http://www\.w3\.org/2006/(?:10|04)/ttaf1")
+
+
+def ttconv_states(path):
+    """What a TTML document shows over time, by ttconv (the IMSC reference
+    implementation): every intermediate synchronic document, its time and its
+    visible text, one line per p and br. A display none element is not in
+    the document at that time; a visibility hidden span is there but shows no
+    text."""
+    import logging  # noqa: PLC0415
+
+    import ttconv.isd as isd  # noqa: PLC0415
+    import ttconv.imsc.reader as reader  # noqa: PLC0415
+    import ttconv.model as model  # noqa: PLC0415
+    import ttconv.style_properties as sp  # noqa: PLC0415
+
+    logging.disable(logging.CRITICAL)
+    raw = open(path, encoding="utf-8-sig").read()
+    raw = DRAFT_NS.sub("http://www.w3.org/ns/ttml", raw).lstrip()
+    doc = reader.to_model(ET.ElementTree(ET.fromstring(raw)))
+    if doc is None:
+        raise ValueError("ttconv read no document")
+
+    def texts(el, out, hidden):
+        vis = el.get_style(sp.StyleProperties.Visibility)
+        if vis is not None:
+            hidden = vis == sp.VisibilityType.hidden
+        if isinstance(el, model.Text):
+            if not hidden:
+                out.append(el.get_text())
+            return
+        if isinstance(el, model.Br):
+            out.append("\n")
+            return
+        for child in el:
+            texts(child, out, hidden)
+        if isinstance(el, model.P):
+            out.append("\n")
+
+    states = []
+    for t, state in isd.ISD.generate_isd_sequence(doc):
+        out = []
+        for region in state.iter_regions():
+            for body in region:
+                texts(body, out, False)
+        lines = [clean(x) for x in "".join(out).split("\n")]
+        states.append([round(float(t), 3), "\n".join(x for x in lines if x)])
+    return states
 
 
 def section_b(path, file):
@@ -199,6 +259,8 @@ def section_b(path, file):
         return {"cues": timedtext(raw)}
     if fmt == "srt":
         return {"cues": pysubs(path, "srt")}
+    if fmt == "ttml" and file.get("reader") == "ttconv":
+        return {"cues": [], "states": ttconv_states(path)}
     if fmt == "ttml":
         return {"cues": pysubs(path, "ttml")}
     return None
