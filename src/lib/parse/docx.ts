@@ -2334,7 +2334,11 @@ class DocxReader {
             const images = piece.pictures.map((pic) => `<img src="${escapeHtml(pic.url)}" alt="${escapeHtml(pic.alt)}" width="${Math.max(1, Math.min(4000, Math.round(pic.widthEmu / EMU_PER_PX)))}">`);
             add({ text: "", html: images.join("") });
           } else if (piece.kind === "math") {
-            add({ text: piece.text, html: escapeHtml(piece.text) });
+            // A display equation in a cell: the cell's formula, its TeX a
+            // math span over its readable characters, as an inline formula
+            // in a cell has it (Word benchmark finding: dl-table_with_equations'
+            // "A=πr²" read as plain words).
+            add({ text: piece.text, html: `<span data-type="inline-math" data-latex="${escapeHtml(piece.latex)}">${escapeHtml(piece.text)}</span>` });
           } else if (piece.kind === "words" && !piece.line.empty) {
             if (marker) piece.line.prepend(`${marker} `);
             marker = null;

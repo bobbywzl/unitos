@@ -1,7 +1,7 @@
 {
  "total": {
-  "math.missing": 3,
-  "import.math.missing": 3,
+  "math.missing": 1,
+  "import.math.missing": 1,
   "words": 186,
   "lost:label": 59,
   "import.words": 188,
@@ -396,10 +396,7 @@
   "dl-docx_sdt_table_cells.docx": {},
   "dl-equations.docx": {},
   "dl-omml_multi_equation_paragraph.docx": {},
-  "dl-table_with_equations.docx": {
-   "math.missing": 2,
-   "import.math.missing": 2
-  },
+  "dl-table_with_equations.docx": {},
   "dl-textbox.docx": {},
   "dl-unit_test_headers_numbered.docx": {},
   "dl-word_sample.docx": {},

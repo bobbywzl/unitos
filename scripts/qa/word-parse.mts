@@ -327,6 +327,19 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   check("a 1x1 spacer picture after words draws no figure", lines === "PARAGRAPH:Determining font script in DrawingML", JSON.stringify(lines));
 }
 
+// ── A display equation in a table cell stays math ───────────────────────────
+
+{
+  const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+  const math = `<m:oMathPara ${M}><m:oMath><m:r><m:t>A=π</m:t></m:r><m:sSup><m:e><m:r><m:t>r</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath></m:oMathPara>`;
+  const cell = (inner: string) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${inner}</w:tc>`;
+  const table = `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell(para("The next cell has an equation"))}${cell(`<w:p>${math}</w:p>`)}</w:tr><w:tr>${cell(para("Area"))}${cell(para("Circle"))}</w:tr></w:tbl>`;
+  const block = (await parse(docx(table))).find((b) => b.type === "TABLE");
+  check("a display equation in a cell is the cell's formula, a math span", /<span data-type="inline-math" data-latex="[^"]+">/.test(block?.html ?? ""), block?.html ?? "no table");
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: block ? [block] : [] });
+  check("the import draws the cell's formula as math", JSON.stringify(richText).includes('"type":"inlineMath"'), JSON.stringify(richText).slice(0, 300));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
