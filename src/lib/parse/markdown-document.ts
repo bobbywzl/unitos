@@ -687,12 +687,13 @@ function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
 //    benchmark finding: five RFCs, 3 to 260 headings each, none found).
 // 5. A line that stands alone and opens with a chapter's word and its
 //    number ("CHAPTER II. The Pool of Tears", "Letter 4", "BOOK I",
-//    "Chapitre XII") is a heading at level 2, though it ends on a period.
+//    "Chapitre XII", "SCÈNE 2e": a French ordinal's ending is the number's)
+//    is a heading at level 2, though it ends on a period.
 //    Before, a novel's chapters read as paragraphs: the capitals rule
 //    takes no small letter, and no line ending on a period (Markdown
 //    benchmark finding: every Gutenberg novel of the set).
 const CHAPTER_RX =
-  /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
+  /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|scène|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+(?:e|er|re|ère|ème)?|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
 const TEXT_INDENTED_SHARE_MIN = 0.5;
 const TEXT_MARGIN_WORDS_MAX = 12;
 const INDENTED_SECTION_RX = /^(\d+(?:\.\d+)*)\.?\s+(\S.*)$/;
