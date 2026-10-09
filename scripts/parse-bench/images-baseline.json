@@ -1,8 +1,8 @@
 {
  "total": {
   "a": 0.98,
-  "b": 0.985,
-  "all": 0.982
+  "b": 0.982,
+  "all": 0.981
  },
  "files": {
   "a-tracemonkey": 1,
@@ -107,7 +107,7 @@
   "b-png-rgb16": 1,
   "b-png-rgba16": 1,
   "b-png-l16": 1,
-  "b-png-exif-orientation": 0.75,
+  "b-png-exif-orientation": 1,
   "b-png-apng": 1,
   "b-png-truncated": 1,
   "b-png-tiny": 1,
@@ -136,6 +136,7 @@
   "b-tiff-g4": 1,
   "b-heic-pug": 1,
   "b-heic-xiaomi": 1,
-  "b-avif-hopper": 1
+  "b-avif-hopper": 1,
+  "b-png-exif-chunk": 0.5
  }
 }

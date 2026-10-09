@@ -145,6 +145,11 @@ def derive(f, out):
         im = Image.open(srcs[0]).convert("RGB")
         band = im.crop((0, im.height // 3, im.width, im.height // 3 + im.width // 9))
         band.resize((9000, 1000), Image.LANCZOS).save(out, "JPEG", quality=88)
+    elif op == "png-exif":
+        im = Image.open(srcs[0])
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        im.save(out, "PNG", exif=exif.tobytes())
     elif op == "webp-lossless":
         Image.open(srcs[0]).save(out, "WEBP", lossless=True)
     else:
@@ -183,7 +188,13 @@ def image_ref(path):
         finally:
             ImageFile.LOAD_TRUNCATED_IMAGES = True
         im.load()
-        up = ImageOps.exif_transpose(im)
+        # A PNG's orientation counts only from its eXIf chunk, the one a
+        # browser reads; ImageMagick's "Raw profile type exif" text chunk,
+        # which Pillow also reads, turns nothing in a browser.
+        standard = im.format != "PNG" or "exif" in im.info
+        up = ImageOps.exif_transpose(im) if standard else im
+        if not standard:
+            ref["orientation"] = None
         ref.update(uprightWidth=up.width, uprightHeight=up.height, thumb=thumb_rgb(up), opens=True)
     except Exception as e:  # noqa: BLE001 — the reference records what Pillow says
         ref["error"] = str(e)[:200]
