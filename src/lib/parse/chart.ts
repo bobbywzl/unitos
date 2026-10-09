@@ -338,7 +338,9 @@ function dataRows(plots: Plot[]): string[][] {
   if (scatter) {
     rows.push(["", ...series.map((s) => s.name)]);
     const longest = Math.max(...series.map((s) => s.vals.length));
-    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : "", ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]);
+    // An x value that is text (a scatter chart over named points) keeps
+    // its name: the chart places it by its position, the data says which.
+    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : (series[0].cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]);
     return rows;
   }
   if (categories.length > 0) {
