@@ -1850,7 +1850,7 @@ class DocxReader {
   /** A display equation: an EQUATION of its own. KaTeX's check keeps a
       wrong formula out: one it cannot draw stays its readable characters. */
   private displayMath(math: Element, sink: Sink) {
-    const latex = ommlLatex(math);
+    const latex = linearTex(math) ?? ommlLatex(math);
     const text = ommlText(math);
     if (latex && texError(latex) === null) sink.cut({ kind: "math", latex, text });
     else sink.line().add(text, PLAIN_LOOK, null);
@@ -1859,7 +1859,7 @@ class DocxReader {
   /** An inline equation: its readable characters in the words, its LaTeX a
       math span over them. */
   private inlineMath(math: Element, line: Line) {
-    const latex = ommlLatex(math);
+    const latex = linearTex(math) ?? ommlLatex(math);
     const text = ommlText(math);
     if (!text) return;
     const start = line.text.length;
@@ -2485,6 +2485,25 @@ function coreTitle(zip: OfficeZip): string | null {
   const core = parseXmlPart(zip, "docProps/core.xml");
   const title = core ? descendants(core, "title")[0]?.textContent?.trim() : "";
   return title ? cleanText(title) : null;
+}
+
+/** What an equation in Word's linear format holds beside its runs. */
+const LINEAR_EXTRAS = new Set(["ctrlPr", "argPr", "oMathParaPr", "bookmarkStart", "bookmarkEnd", "proofErr"]);
+
+/** An equation Word keeps in its linear format, typed as LaTeX: runs of
+    characters alone, no built structure, with a LaTeX command among them
+    ("\int_{0}^{1}x"). Its characters are the formula's LaTeX when KaTeX
+    draws them (Word benchmark finding: d2p-equations' linear format stayed
+    its source characters); else null, and the runs read one by one. */
+function linearTex(math: Element): string | null {
+  const kids = [...math.children];
+  if (kids.length === 0 || !kids.every((k) => k.localName === "r" || LINEAR_EXTRAS.has(k.localName))) return null;
+  const tex = kids
+    .filter((k) => k.localName === "r")
+    .flatMap((r) => children(r, "t").map((t) => t.textContent ?? ""))
+    .join("")
+    .trim();
+  return /\\[A-Za-z]{2,}/.test(tex) && texError(tex) === null ? tex : null;
 }
 
 const HIDDEN_PARTS = new Set(["del", "moveFrom", "Fallback"]);

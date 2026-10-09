@@ -120,6 +120,19 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("the prose keeps its bold", bold.join("|") === "Filed today", JSON.stringify(bold));
 }
 
+// ── An equation in Word's linear format, typed as LaTeX, is its LaTeX ───────
+
+{
+  const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+  const mr = (text: string) => `<m:r><m:t>${text}</m:t></m:r>`;
+  const body = `<w:p><m:oMathPara ${M}><m:oMath>${mr("\\int_{0}^{1}x")}</m:oMath></m:oMathPara></w:p><w:p><w:r><w:t xml:space="preserve">Set </w:t></w:r><m:oMath ${M}>${mr("A\\B")}</m:oMath></w:p>`;
+  const blocks = await parse(docx(body));
+  const kinds = blocks.map((b) => `${b.type}:${b.type === "EQUATION" ? b.text : b.text.trim()}`).join("|");
+  check("a linear-format equation with a LaTeX command is that LaTeX", kinds === "EQUATION:\\int_{0}^{1}x|PARAGRAPH:Set A\\B", JSON.stringify(kinds));
+  const raw = (blocks[1]?.math ?? []).some((m) => m.latex === "A\\B");
+  check("a backslash before one letter is no LaTeX command: the run is read as characters", !raw, JSON.stringify(blocks[1]?.math ?? []));
+}
+
 // ── A picture straight in the body is a figure ───────────────────────────────
 
 {

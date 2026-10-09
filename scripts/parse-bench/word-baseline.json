@@ -1,7 +1,7 @@
 {
  "total": {
-  "math.missing": 2,
-  "import.math.missing": 2,
+  "math.missing": 1,
+  "import.math.missing": 1,
   "words": 226,
   "lost:label": 70,
   "import.words": 232,
@@ -33,8 +33,8 @@
   "d2p-created-in-pages-bulleted-lists.docx": {},
   "d2p-created-in-pages-paragraphs-only.docx": {},
   "d2p-equations.docx": {
-   "math.missing": 2,
-   "import.math.missing": 2
+   "math.missing": 1,
+   "import.math.missing": 1
   },
   "d2p-example.docx": {},
   "d2p-example_numbering.docx": {},
