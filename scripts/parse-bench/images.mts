@@ -129,7 +129,7 @@ type PdfRef = { opens: boolean; pageCount: number; encrypted: boolean; pages: Pd
 type Result = { id: string; section: "a" | "b"; score: number; metrics: Record<string, number>; ms: number; notes: string[]; tag?: string };
 
 const { parsePdf } = await import("@/lib/parse/pdf");
-const { textLayerVerdict, classifySamplePages } = await import("@/lib/handwritten/classify");
+const { textLayerVerdict, classifySamplePages, pdfShape } = await import("@/lib/handwritten/classify");
 const { CLASSIFY_IMAGE_WIDTH, PAGE_IMAGE_WIDTH, pdfPageCount, pdfPageSizes, renderPdfPage, renderPdfPagesJpeg } = await import(
   "@/lib/handwritten/pages"
 );
@@ -288,8 +288,8 @@ function compare(render: Pixels, refThumb: Pixels): { sim: number; best: string;
 
 // ── Section a: the judgment ─────────────────────────────────────────────────
 
-// The shape the add gives a PDF the judgment named (ingest.ts ingestPdf).
-const shapeOf = (kind: Label): Label => kind;
+// The shape the add gives a PDF the judgment named (classify.ts pdfShape).
+const shapeOf = (kind: Label, blocks: Parameters<typeof pdfShape>[1]): Label => pdfShape(kind, blocks);
 
 function pagesOf(file: CorpusFile, count: number): number[] {
   const [from, to] = file.pages ?? [1, count];
@@ -364,8 +364,8 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
   const holdsText = parsed.blocks.some((b) => b.text.trim() !== "");
   const want: Label = label === "article" && !holdsText ? "handwritten" : label;
   // With a model that answers each label right, only the gate can be wrong.
-  const withModel: Label = shapeOf(verdict.kind ?? label);
-  const keyless: Label = shapeOf(verdict.kind ?? verdict.fallback);
+  const withModel: Label = shapeOf(verdict.kind ?? label, parsed.blocks);
+  const keyless: Label = shapeOf(verdict.kind ?? verdict.fallback, parsed.blocks);
   const keylessWant: Label = want === "article" ? "article" : "handwritten";
   const choice = withModel === want ? 1 : 0;
   const keylessOk = keyless === keylessWant ? 1 : 0;

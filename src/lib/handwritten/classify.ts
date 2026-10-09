@@ -68,6 +68,16 @@ export function textLayerVerdict(
   return { kind: perPage >= ARTICLE_CHARS_PER_PAGE && !junk ? "article" : null, fallback, perPage, junk, textChars };
 }
 
+/** The shape the add gives a PDF judged kind (SPEC.md §16). An article whose
+    parse holds no text — a CAD plot whose words the parse set inside its
+    figures, a drawing with no words — would be an empty document: it adds
+    as its pages instead, which show the drawing and convert to text.
+    Images benchmark finding: two AutoCAD plots judged article added a
+    figure and no text, or no block at all. */
+export function pdfShape(kind: PdfKind, blocks: ParsedBlock[]): PdfKind {
+  return kind === "article" && !blocks.some((b) => b.text.trim() !== "") ? "handwritten" : kind;
+}
+
 /** The pages the model sees: first, middle, last. */
 export function classifySamplePages(pages: number[]): number[] {
   const n = pages.length;

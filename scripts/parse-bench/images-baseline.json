@@ -1,8 +1,8 @@
 {
  "total": {
-  "a": 0.931,
+  "a": 0.943,
   "b": 0.988,
-  "all": 0.96
+  "all": 0.966
  },
  "files": {
   "a-tracemonkey": 1,
@@ -139,8 +139,8 @@
   "b-avif-hopper": 1,
   "b-png-exif-chunk": 1,
   "a-cad-plans": 1,
-  "a-cad-autocad": 0.5,
-  "a-cad-simple": 0.6,
+  "a-cad-autocad": 0.9,
+  "a-cad-simple": 1,
   "a-vector-drawing": 1,
   "a-drawing-tutorial": 1,
   "a-sketch-junk-ocr": 0.25,
