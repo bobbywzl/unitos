@@ -16,6 +16,10 @@
 // some part of the graph asks for them (provenance-want.ts). REV4-02: a rev
 // move moves the graph's generation before the fetch, so a 304 still has the
 // open link's passages and the part titles read again (graph-generation.ts).
+// COST9-05: a fetch that began with that rev bump bumps no second time on
+// its 200, so one change the graph shows reads the part titles and an open
+// link's passages once, not twice. The first open, the provenance switch
+// and Retry begin with no rev bump and keep their bump on the 200.
 
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { GraphData } from "@/lib/graph/data";
@@ -59,7 +63,12 @@ export function GraphOverlayLoader({
   useEffect(() => {
     const kept = lastData.get(notebookId);
     const at = `${notebookId}|${rev}|${attempt}`;
-    if (lastRev.has(notebookId) && lastRev.get(notebookId) !== rev) bumpGraphGeneration(notebookId);
+    // A rev move bumps the generation before the fetch (REV4-02). The
+    // titles and passages read after it already reflect the moved rev
+    // (neither comes from the graph's body), so this fetch's 200 bumps no
+    // second time (COST9-05).
+    const revMoved = lastRev.has(notebookId) && lastRev.get(notebookId) !== rev;
+    if (revMoved) bumpGraphGeneration(notebookId);
     lastRev.set(notebookId, rev);
     if (!wanted && kept?.provenance && fetchedAt.current === at) return;
     const provenance = wanted;
@@ -88,7 +97,7 @@ export function GraphOverlayLoader({
         const d = (await r.json()) as GraphData;
         const next = { data: d, at: Date.now(), etag: r.headers.get("etag"), provenance: d.provenance };
         lastData.set(notebookId, next);
-        bumpGraphGeneration(notebookId);
+        if (!revMoved) bumpGraphGeneration(notebookId);
         fetchedAt.current = at;
         setLoaded(next);
       })
