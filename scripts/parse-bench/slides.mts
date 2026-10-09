@@ -423,8 +423,9 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
       for (const row of s.rows) {
         if (!row.some((c) => c.trim())) continue;
         rowAll++;
-        const want = row.map((c) => c.split("\n").map(norm).join("\n")).join("\t");
-        const bodyNorm = body.split("\n").map((l) => l.split("\t").map(norm).join("\t")).join("\n");
+        const cellNorm = (l: string) => l.split("\t").map(norm).join("\t");
+        const want = row.map((c) => c.split("\n").map(cellNorm).join("\n")).join("\t");
+        const bodyNorm = body.split("\n").map(cellNorm).join("\n");
         if (bodyNorm.includes(want)) rowOk++;
         else say.push(`  table row: ${want.replace(/\t/g, " | ").replace(/\n/g, " / ").slice(0, 160)}`);
       }

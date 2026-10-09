@@ -4,7 +4,7 @@
   "words": 0.997,
   "order": 1,
   "bullets": 1,
-  "tables": 0.997,
+  "tables": 1,
   "notes": 1,
   "chartValues": 1,
   "replica": 1,
@@ -26,11 +26,11 @@
    "lost": 0
   },
   "poi-customGeo": {
-   "composite": 0.986,
+   "composite": 1,
    "words": 1,
    "order": 1,
    "bullets": 1,
-   "tables": 0.917,
+   "tables": 1,
    "notes": 1,
    "chartValues": null,
    "replica": 1,
