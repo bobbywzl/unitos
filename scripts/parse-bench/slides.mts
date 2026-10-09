@@ -28,8 +28,9 @@
 //   list label at a line's start is not a word on either side).
 // - order: the pairs of pieces whose order the slide fixes — a text shape's
 //   paragraphs in turn, the title before the rest, a shape wholly above
-//   another before it, and in one row the left before the right — the share
-//   in that order in the block's text.
+//   another before it, and in one row the left before the right (the right
+//   before the left on a slide in Hebrew or Arabic) — the share in that
+//   order in the block's text.
 // - bullets: each paragraph's bullet (none, its character as drawn, a number
 //   label of its scheme), the share right among the paragraphs found.
 // - tables: each table row, its cells joined by tabs, found whole.
@@ -408,6 +409,11 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
         else say.push(`  order inside a shape: a paragraph comes before the one ahead of it`);
       }
     }
+    // A slide in a right-to-left script (Hebrew or Arabic letters outnumber
+    // the others) reads a row right before left.
+    const refText = pieces.map((p) => p.text).join(" ");
+    const rtlLetters = (refText.match(/[\p{sc=Hebrew}\p{sc=Arabic}]/gu) ?? []).length;
+    const rtl = rtlLetters > (refText.match(/\p{L}/gu) ?? []).length - rtlLetters;
     const shapes = [...firstOfShape.keys()];
     for (const a of shapes) {
       for (const b of shapes) {
@@ -418,10 +424,10 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
         if (A.title !== B.title) before = A.title;
         else if (!A.title && A.box && B.box) {
           const [ax, ay, aw, ah] = A.box;
-          const [bx, by, , bh] = B.box;
+          const [bx, by, bw, bh] = B.box;
           const overlap = Math.min(ay + ah, by + bh) - Math.max(ay, by);
           if (ay + ah <= by) before = true;
-          else if (overlap > 0.5 * Math.min(ah, bh) && ax + aw <= bx) before = true;
+          else if (overlap > 0.5 * Math.min(ah, bh) && (rtl ? bx + bw <= ax : ax + aw <= bx)) before = true;
         }
         if (!before) continue;
         orderAll++;
