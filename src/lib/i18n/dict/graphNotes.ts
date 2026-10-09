@@ -26,7 +26,7 @@ const en = {
   keyCurveNotes: "Notes that quote both documents",
   keyPending: "Pending notes, awaiting Accept",
   keyNotesGroup: "Notes and comments",
-  keyFar: "Zoomed out, link counts and notes show on a lit curve and in the cards; replies always show, and a document with a comment waiting on you draws its ring in the comment color.",
+  keyFar: "Zoomed out, link counts and notes show on a lit curve and in the cards; replies always show. A comment waiting on you draws the ring in comment blue.",
   noteCurveLabelOne: "1 note quotes {a} and {b}",
   noteCurveLabel: "{n} notes quote {a} and {b}",
   showNote: "Show this note in the notes tray",
