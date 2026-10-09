@@ -155,7 +155,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
       ? ["The conversation so far:", ...ctx.history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`)]
       : []),
     "",
-    "Ops:",
+    "Ops (each an object whose \"op\" is its name, with the fields its line names):",
     ...(plan ? PLAN_OP_LINES : OP_LINES),
     "",
     "Rules:",

@@ -100,6 +100,11 @@ export function readOps(items: unknown[]): ReadOps {
         value === null && key !== "afterBlockId" ? [] : [[key, key === "why" && typeof value === "string" ? clip(value.trim(), WHY_MAX) : value]],
       ),
     );
+    // A model that names the op under another key ("type", "kind", "action").
+    if (typeof lenient.op !== "string") {
+      const named = ["type", "kind", "action"].map((key) => lenient[key]).find((v): v is string => typeof v === "string");
+      if (named) lenient.op = named;
+    }
     const parsed = suggestOpSchema.safeParse(lenient);
     if (!parsed.success) read.unreadable.push(typeof fields.why === "string" && fields.why.trim() ? clip(fields.why.trim(), WHY_MAX) : String(fields.op ?? "?"));
     else if (read.ops.length < SUGGEST_MAX_OPS) read.ops.push(parsed.data);

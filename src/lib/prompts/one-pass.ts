@@ -60,7 +60,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     "The answer:",
     '- document: every block id of the scope, once each, in order: the new order when the command asks for one (group, organize, put in order), else the order as it stands. A block that stays as it is: its id alone, "<id>". A block whose words change: {"id": "<id>", "text": "<the block\'s whole new words>"}. New blocks: {"new": "<markdown>"} where they go.',
     "- remove: the ids of the blocks the command asks to take away. Leave them out of document.",
-    "- formats: the changes that are no words of a block's own, as ops, each with its why; an empty list when the command asks none:",
+    "- formats: the changes that are no words of a block's own, as ops (each an object whose \"op\" is its name, with the fields its line names), each with its why; an empty list when the command asks none:",
     ...(ctx.plan ? PLAN_OP_LINES : OP_LINES).filter((line) => FORMAT_OPS.test(line)).map((line) => `  ${line}`),
     "",
     "Rules:",
