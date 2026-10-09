@@ -284,14 +284,17 @@ export function asksContradictions(command: string): boolean {
 }
 
 /** True when the command asks about dates (ANS9-01): a date, a year, a
-    timeline, "when did", or a year written out. A cut then keeps the lines
-    that carry a year (YEAR_TERM), as it does for a contradictions command:
-    the notes' date errors are the contradictions a reader plants. */
+    timeline, "when did", "when X was printed" (ANS10-07: when … printed,
+    published, written, born, died, made, founded; 何年, 什么时候…印刷), or a
+    year written out. "When he says this" is not one. A cut then keeps the
+    lines that carry a year (YEAR_TERM), as it does for a contradictions
+    command: the notes' date errors are the contradictions a reader
+    plants. */
 export function asksDates(command: string): boolean {
   const c = command.toLowerCase();
   return (
-    /\b(?:dates?|dated|years?|chronolog\w*|timeline)\b|\bwhen\s+(?:did|was|were|is|are|does|do|had|has|will|would)\b|\b(?:1[0-9]{3}|20[0-9]{2})\b/.test(c) ||
-    /哪一年|哪年|何时|日期|年份|什么时候|时间线|年代/.test(command)
+    /\b(?:dates?|dated|years?|chronolog\w*|timeline)\b|\bwhen\s+(?:did|was|were|is|are|does|do|had|has|will|would)\b|\bwhen\b.*\b(?:printed|published|written|born|died|made|founded)\b|\b(?:1[0-9]{3}|20[0-9]{2})\b/.test(c) ||
+    /哪一年|哪年|何时|何年|日期|年份|什么时候|时间线|年代/.test(command)
   );
 }
 

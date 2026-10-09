@@ -27,6 +27,11 @@ export const STOP_WORDS = new Set(
     lines into the cut though no command says a year. */
 export const YEAR_TERM = "#year";
 const YEAR = /^(?:1[0-9]{3}|20[0-9]{2})$/;
+// A footnote line ("[Footnote 1: …", "[5] David Friedrich Strauss
+// (1808-74)…") never holds YEAR_TERM: its years are the translator's or
+// the editor's, not a claim of the document (ANS10-08: 119 footnote lines
+// in a 1,338-line dates cut). Its own words still rank it.
+const FOOTNOTE = /^\s*\[(?:footnote|\d)/i;
 
 export type RankOptions = {
   // Drop the query's function words (STOP_WORDS).
@@ -61,8 +66,9 @@ export function rank<T>(items: T[], textOf: (item: T) => string, query: string, 
   if (terms.size === 0 || items.length === 0) return items.map((item) => ({ item, score: 0 }));
   const years = terms.has(YEAR_TERM);
   const docs = items.map((item) => {
-    const d = tokenize(textOf(item));
-    if (years) {
+    const text = textOf(item);
+    const d = tokenize(text);
+    if (years && !FOOTNOTE.test(text)) {
       const n = d.length;
       for (let i = 0; i < n; i++) if (YEAR.test(d[i])) d.push(YEAR_TERM);
     }
