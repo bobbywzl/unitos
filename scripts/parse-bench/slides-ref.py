@@ -240,6 +240,63 @@ def clean(s):
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s or "")
 
 
+# What a symbol font draws for each code 0x20-0xFF (a letter typed in the
+# font, or the private-use code U+F020-U+F0FF PowerPoint writes for a symbol
+# inserted from it): the Symbol font's Adobe encoding (Greek, math), and
+# Wingdings as Unicode maps it. "\0" = no glyph known.
+SYMBOL_FONT = (
+    " !∀#∃%&∋()∗+,−./0123456789:;<=>?"
+    "≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_"
+    "‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼\0"
+    + "\0" * 32
+    + "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵"
+    "ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓"
+    "◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\0"
+)
+WINGDINGS_FONT = list(
+    " ✏✂✁👓🕭🕮🕯🕿✆🖂🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍"
+    "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉"
+    "♊♋♌♍♎♏♐♑♒♓🙰🙵●🔾■□🞐❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0"
+    "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•"
+    "▪⚪🞆🞈◉◎🔿▪◻🟂✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘"
+    "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘⮚⮙⮛⮈⮊⮉⮋🡨"
+    "🡪🡩🡫🡬🡭🡯🡮🡸🡺🡹🡻🡼🡽🡿🡾⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂▭▫✗✓☒☑\0"
+)
+assert len(SYMBOL_FONT) == 224 and len(WINGDINGS_FONT) == 224
+# The parse draws a few Wingdings codes with the common glyph of the same
+# shape (its bullets do too): a font without the newer arrows and shapes
+# still draws them.
+for code, glyph in {0x6D: "❍", 0x70: "◻", 0xA1: "○", 0xA8: "◻", 0xD8: "➢", 0xE0: "➔", 0xE8: "➔"}.items():
+    WINGDINGS_FONT[code - 0x20] = glyph
+
+
+def symbol_text(text, font, whole):
+    """A run's text as a symbol font draws it: every character when the run
+    is set in the font (whole), else only the private-use codes U+F020-F0FF
+    (a:sym, the font for symbols)."""
+    f = (font or "").lower()
+    table = SYMBOL_FONT if f == "symbol" else WINGDINGS_FONT if f == "wingdings" else None
+    if table is None:
+        return text
+    out = []
+    for ch in text:
+        c = ord(ch)
+        code = c - 0xF000 if 0xF020 <= c <= 0xF0FF else c if whole and 0x20 <= c <= 0xFF else None
+        g = table[code - 0x20] if code is not None else "\0"
+        out.append(ch if g == "\0" else g)
+    return "".join(out)
+
+
+def run_text(r):
+    t = clean(kid(r, "t").text if kid(r, "t") is not None else "")
+    rpr = kid(r, "rPr")
+    latin = lattr(kid(rpr, "latin"), "typeface")
+    sym = lattr(kid(rpr, "sym"), "typeface")
+    if latin and latin.lower() in ("symbol", "wingdings"):
+        return symbol_text(t, latin, True)
+    return symbol_text(t, sym, False) if sym else t
+
+
 def para_text(p):
     out = []
     for node in p:
@@ -247,7 +304,7 @@ def para_text(p):
             continue
         name = local(node)
         if name in ("r", "fld"):
-            out.append(clean(kid(node, "t").text if kid(node, "t") is not None else ""))
+            out.append(run_text(node))
         elif name == "br":
             out.append("\n")
         elif name == "m":
@@ -259,7 +316,7 @@ def para_text(p):
                     if isinstance(c.tag, str) and local(c) == "m":
                         out.append(math_text(c))
                     elif isinstance(c.tag, str) and local(c) == "r":
-                        out.append(clean(kid(c, "t").text if kid(c, "t") is not None else ""))
+                        out.append(run_text(c))
     return "".join(out)
 
 

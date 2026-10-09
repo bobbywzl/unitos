@@ -170,7 +170,7 @@
   },
   "poi-ae-ac-uaeu-faculty-nafaachbili-GeomLec1": {
    "composite": 1,
-   "words": 1,
+   "words": 0.999,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -1632,8 +1632,8 @@
    "lost": 0
   },
   "ais-PPT-Template": {
-   "composite": 1,
-   "words": 1,
+   "composite": 0.998,
+   "words": 0.99,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -1945,7 +1945,7 @@
    "order": 0.998,
    "bullets": 1,
    "tables": 1,
-   "notes": 1,
+   "notes": 0.999,
    "chartValues": null,
    "replica": 1,
    "lost": 0
@@ -1984,12 +1984,12 @@
    "lost": 0
   },
   "wth-000-HowToHack-WTH-Template": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.995,
    "chartValues": null,
    "replica": 1,
    "lost": 0
@@ -2006,45 +2006,45 @@
    "lost": 0
   },
   "wth-056-CosmicTroubleshooting": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.997,
    "chartValues": null,
    "replica": 1,
    "lost": 0
   },
   "wth-057-AzureRouteServer": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.997,
    "chartValues": null,
    "replica": 1,
    "lost": 0
   },
   "wth-068-AzureOpenAIApps": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.997,
    "chartValues": null,
    "replica": 1,
    "lost": 0
   },
   "wth-075-MongoDB2DocumentDB": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.995,
    "chartValues": null,
    "replica": 1,
    "lost": 0
@@ -2105,12 +2105,12 @@
    "lost": 0
   },
   "wth-073-NewRelicAgentObservability": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 0.999,
    "order": 1,
    "bullets": 1,
    "tables": null,
-   "notes": 1,
+   "notes": 0.994,
    "chartValues": null,
    "replica": 1,
    "lost": 0
@@ -2150,7 +2150,7 @@
   },
   "wth-011-InfraAsCode-ARM-DSC-WTH-IaC-ARM": {
    "composite": 1,
-   "words": 1,
+   "words": 0.999,
    "order": 1,
    "bullets": 1,
    "tables": null,
