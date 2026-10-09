@@ -73,7 +73,7 @@ const FILES = join(BENCH, "files");
 const SDISTS = join(BENCH, "sdist");
 const JARS = join(BENCH, "jars");
 // Bump when the reference builders change: references are rebuilt.
-const REF_VERSION = 6;
+const REF_VERSION = 7;
 const REFS = join(BENCH, `ref-v${REF_VERSION}`);
 const CORPUS = join(import.meta.dirname, "sheets-corpus.json");
 const BASELINE = join(import.meta.dirname, "sheets-baseline.json");
@@ -332,12 +332,15 @@ const norm = (s: string) => s.replace(/[   ]/g, " ").replace(/ {2,}/g, " ")
     never show a CR. A number format's double quotes mark literal text and
     never show (ECMA-376 §18.8.31); POI's DataFormatter keeps them after a
     date code (dd"-"mm"-"yyyy" "hh:mm:ss shows as 03"-"08"-"2017" "14:35:00),
-    so a formatted number matches with them dropped. */
+    so a formatted number matches with them dropped. A date Excel cannot
+    show is a row of "#" as wide as the cell: the reference writes one "#",
+    and any row of "#" matches it. */
 function cellRight(ref: RefCell, got: string | undefined): boolean {
   const g = (got ?? "").replace(/\r\n?/g, "\n");
   if (!ref) return g === "";
   const t = ref.t.replace(/\r\n?/g, "\n");
   if (ref.k !== "n") return g === t;
+  if (t === "#") return /^#+$/.test(g.trim());
   if (norm(g) === norm(t) || (!ref.g && t.includes('"') && norm(g) === norm(t.replace(/"/g, "")))) return true;
   if (ref.g && ref.v !== undefined && NUMBER.test(g.trim())) {
     const n = Number(g.trim());

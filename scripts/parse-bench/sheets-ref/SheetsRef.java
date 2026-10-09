@@ -39,6 +39,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 public class SheetsRef {
   static final int MAX_ROWS = 10_000;
   static final int MAX_COLS = 256;
+  // 9999-12-31, the last day Excel shows.
+  static final double MAX_DATE_SERIAL = 2958465;
 
   public static void main(String[] args) throws Exception {
     for (int i = 0; i + 1 < args.length; i += 2) {
@@ -216,6 +218,16 @@ public class SheetsRef {
         return new RefCell(cell.getCellType() == CellType.FORMULA ? cell.getRichStringCellValue().getString() : formatter.formatCellValue(cell), "s", general, null);
       case NUMERIC: {
         double value = cell.getNumericCellValue();
+        boolean date1904 = cell.getSheet().getWorkbook() instanceof XSSFWorkbook x && x.isDate1904();
+        // Excel shows a date or a time below 0 or past 9999-12-31 as a row
+        // of "#" across the cell (in the 1904 date system a negative one
+        // shows with its sign). DataFormatter showed a year past 9999 (1E+20
+        // read August 3, 5881510). The cell's width sets how many "#"
+        // Excel draws; the reference writes one, and the comparison takes
+        // any row of "#" for it.
+        if (DateUtil.isCellDateFormatted(cell) && (value > (date1904 ? MAX_DATE_SERIAL - 1462 : MAX_DATE_SERIAL) || (value < 0 && !date1904))) {
+          return new RefCell("#", "n", general, value);
+        }
         long step = timeStep(format);
         // Excel rounds a time to the second (or to the tenths, hundredths,
         // or thousandths "ss.0" shows) before it shows the hours and
@@ -225,7 +237,6 @@ public class SheetsRef {
         // 08:45, 00:00 for 0.999999, and 01:00.0 for 59.99 seconds.
         if (step > 0 && value >= 0 && DateUtil.isCellDateFormatted(cell)) {
           double rounded = Math.round(value * step) / (double) step;
-          boolean date1904 = cell.getSheet().getWorkbook() instanceof XSSFWorkbook x && x.isDate1904();
           return new RefCell(formatter.formatRawCellContents(rounded, cell.getCellStyle().getDataFormat(), format, date1904), "n", general, value);
         }
         return new RefCell(formatter.formatCellValue(cell), "n", general, value);
