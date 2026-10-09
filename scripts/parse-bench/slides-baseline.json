@@ -3150,8 +3150,8 @@
    "lost": 0
   },
   "lo-tdf127393": {
-   "composite": 0.99,
-   "words": 0.971,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
@@ -3161,8 +3161,8 @@
    "lost": 0
   },
   "lo-tdf127811": {
-   "composite": 0.994,
-   "words": 0.983,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,

@@ -179,7 +179,9 @@ if (stale.length > 0) {
 // has no font for, a box where the slide shows ☺ or ⇒.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
 function tokens(text: string): string[] {
-  const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
+  // A table cell starts a line too: a chart's data table writes series
+  // names "1. Column", "2. Column" in one row, the reference one per line.
+  const lines = text.split(/[\n\t]/).map((l) => l.replace(LABEL, ""));
   return (
     lines
       .join("\n")
