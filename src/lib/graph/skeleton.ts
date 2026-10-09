@@ -778,7 +778,7 @@ async function staleIn(docs: Prisma.Sql): Promise<string[]> {
     .map((r) => r.id);
 }
 
-const warmed = new Map<string, { key: string; at: number }>();
+const warmed = new Map<string, { rev: number | null; key: string; at: number }>();
 
 /** The graph opened: every document of a project that reads skeletons gets
     its missing or stale skeleton built now, so the first command does not
@@ -789,16 +789,23 @@ const warmed = new Map<string, { key: string; at: number }>();
     already running is not started again (buildLocked). */
 export async function warmSkeletons(notebookId: string, userId: string | null): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
+  // The project's rev first (COST9-07): a project at the rev it was warmed
+  // at under SKELETON_QUIET_MS ago has no new edit to build for, so the
+  // sum over every block's text below (10M characters, 64 ms at 200
+  // documents) is not run on every open. An edit that reaches the blocks
+  // without a rev move builds at the command (ensureSkeleton).
+  const last = warmed.get(notebookId);
+  const rev = (await db.notebook.findUnique({ where: { id: notebookId }, select: { rev: true } }))?.rev ?? null;
+  if (last && rev !== null && last.rev === rev && Date.now() - last.at < SKELETON_QUIET_MS) return;
   const [text] = await projectText({ notebookId });
   if (!text || !readsSkeletons(text)) return;
   // The same project text warmed under SKELETON_QUIET_MS ago is not
   // checked again: a graph opened twice reads no block twice. An edit that
   // keeps the length builds at the command (ensureSkeleton).
   const key = `${text.chars ?? 0}:${text.cjk ?? 0}:${text.blocks ?? 0}`;
-  const last = warmed.get(notebookId);
   if (last && last.key === key && Date.now() - last.at < SKELETON_QUIET_MS) return;
   if (warmed.size > 500) warmed.clear();
-  warmed.set(notebookId, { key, at: Date.now() });
+  warmed.set(notebookId, { rev, key, at: Date.now() });
   const stale = await staleSkeletonDocuments(notebookId);
   await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { needed: true, sqlStale: true }).catch(() => {}));
 }

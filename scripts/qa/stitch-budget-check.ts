@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import {
   answerMessages,
   asksContradictions,
+  asksDates,
   assignSources,
   byDocument,
   cjkExpansion,
@@ -50,10 +51,14 @@ import {
   skeletonGroups,
   skeletonSystem,
   namePicks,
+  textMatches,
   trimmedHistory,
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
+import { fuseRanks, rank, YEAR_TERM } from "../../src/lib/graph/rank";
+import { searchQuery } from "../../src/lib/graph/search";
+import { commandIntent } from "../../src/lib/graph/intent";
 import { asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
@@ -1064,6 +1069,51 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("currentSkeleton: an edit past the 600th character of a long paragraph is in its line", line8.endsWith("Correction: he calls suicide a mistake, not a crime.") && line8.startsWith("The will is blind") && line8.includes(" … ") && line8.length <= 610, `${line8.length}: ${line8.slice(-80)}`);
 }
 
+// ── Round 9 (RETRIEVAL9, STITCH_INDEX): the targeted path's pure functions ──
+{
+  const k28 = "讲义里有哪些说法与其他文档不符？";
+  check("asksContradictions: 不符 is a contradiction; the command is a links command (K28)", asksContradictions(k28) && commandKind(k28) === "links");
+  // searchQuery: the index's query, the ranker's tokens.
+  check("searchQuery: Latin words OR'ed as lexemes, the command's function words dropped", searchQuery("Why did Nietzsche break with Wagner?") === "'nietzsche' | 'break' | 'wagner'", searchQuery("Why did Nietzsche break with Wagner?") ?? "null");
+  check(
+    "searchQuery: a CJK bigram is a phrase; a single character only when there is no bigram",
+    searchQuery("尼采") === "('尼' <-> '采')" && searchQuery("采") === "'采'" && searchQuery("Wagner 尼采") === "'wagner' | ('尼' <-> '采')",
+    `${searchQuery("尼采")} / ${searchQuery("采")} / ${searchQuery("Wagner 尼采")}`,
+  );
+  check("searchQuery: nothing to search is null", searchQuery("?") === null && searchQuery("a") === null);
+  // fuseRanks: reciprocal rank fusion.
+  const fused = fuseRanks([["A1", "A2", "A3"], ["A3", "B1"]]).map((f) => f.key);
+  check("fuseRanks: a key high in both lists comes first; a key in one list still places; one list's order is kept", fused[0] === "A3" && fused.includes("B1") && fused.indexOf("A1") < fused.indexOf("A2"), fused.join(","));
+  // textMatches: the blocks' full text ranked.
+  const blocks9 = [
+    { id: "1", alias: "A1", text: "The will is blind and strives without end." },
+    { id: "2", alias: "A2", text: `${"Of life and living. ".repeat(30)}Pity thwarts the whole law of evolution, which is the law of natural selection.` },
+    { id: "3", alias: "B1", text: "Pity is the practice of nihilism." },
+  ];
+  const m9 = textMatches(blocks9, "What does pity do to natural selection?", 25);
+  check("textMatches: the blocks whose text shares the command's words, best first; one sharing none is left out", m9[0] === "A2" && m9.includes("B1") && !m9.includes("A1"), m9.join(","));
+  check("textMatches: the index's candidates narrow the pool", textMatches(blocks9, "pity", 25, new Set(["3"])).join(",") === "B1");
+  check("textMatches: the top is a cut", textMatches(blocks9, "pity", 1).length === 1);
+  // commandIntent: the route a command needs.
+  check("commandIntent: an overview is holistic", commandIntent("Give me an overview of the project: what does each document argue, one line per document?", false, "question") === "holistic");
+  check("commandIntent: each document on a topic is a fact", commandIntent("What does each document say about Wagner?", false, "question") === "fact" && commandIntent("What does Schopenhauer say pity does?", false, "question") === "fact");
+  check("commandIntent: contradictions are links; which claims disagree, in Chinese, too", commandIntent("Find the contradictions between the documents.", false, "links") === "links" && commandIntent(k28, false, commandKind(k28)) === "links");
+  check("commandIntent: whether another document disagrees with the second point is a fact", commandIntent("Does any other document disagree with the second point?", true, "links") === "fact");
+  check(
+    "commandIntent: a page is a page; the second link's passages are a followup; my reply on a link is meta",
+    commandIntent("Write a page comparing what Mencken and Förster-Nietzsche say about Wagner.", false, "page") === "page" &&
+      commandIntent("Quote both passages of the second link in full.", true, commandKind("Quote both passages of the second link in full.")) === "followup" &&
+      commandIntent("What did I reply on the link about when The Antichrist was printed?", false, "question") === "meta",
+  );
+  // stitchSelectPrompt: the matches line, and nothing else changed without it.
+  const sel9 = { documents: [], command: "What does pity do?", continued: false, earlier: [], cited: [], maxBlocks: 150, partial: false };
+  check(
+    "stitchSelectPrompt: the matches line names the blocks, best first; without matches the prompt is as before",
+    stitchSelectPrompt({ ...sel9, matches: ["A2", "B1"] }).includes("Blocks whose full text shares the most words with the command, best first, though their skeleton line may not: A2, B1. Check each of them.") &&
+      stitchSelectPrompt({ ...sel9, matches: [] }) === stitchSelectPrompt(sel9),
+  );
+}
+
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──
 void (async () => {
   const view = (letter: string, n: number) =>
@@ -1080,6 +1130,113 @@ void (async () => {
   check("cutLines: no line matches → every line read, not the first documents", shown.size === total && last.lines.every((l) => shown.has(l.alias)), `${shown.size} of ${total}`);
   const match = await cutLines(views, null, async () => "line 5 words", 20_000);
   check("cutLines: a query that matches still cuts", match.size < total, `${match.size} of ${total}`);
+  // Round 9 (STITCH_INDEX): the softer fallback (COST9-01) and the fused cut.
+  let retried = 0;
+  const retryHit = await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, {
+    retry: async () => {
+      retried++;
+      return "line 5 words";
+    },
+    cap: 60_000,
+  });
+  check("cutLines: no line matches → the expansion is asked for once more, and a match then cuts as usual", retried === 1 && retryHit.size === match.size, `${retried} retry, ${retryHit.size} of ${total}`);
+  const capped = await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, { retry: async () => "尼采", cap: 60_000 });
+  const perDoc = new Map<string, number>();
+  for (const a of capped) perDoc.set(a.replace(/\d+$/, ""), (perDoc.get(a.replace(/\d+$/, "")) ?? 0) + 1);
+  check(
+    "cutLines: no match even then → every document's opening lines up to the cap, not every line",
+    capped.size < total && capped.size > match.size && perDoc.size === views.length && Math.max(...perDoc.values()) - Math.min(...perDoc.values()) <= 1,
+    `${capped.size} of ${total} lines over ${perDoc.size} documents`,
+  );
+  check("cutLines: without a cap every line is read, as before", (await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, { retry: async () => "尼采" })).size === total);
+  const fusedCut = await cutLines(views, null, async () => "line 5 words", 20_000, { matches: ["DA100", "A99"] });
+  check("cutLines: the text matches' lines are kept in the cut", fusedCut.has("DA100") && fusedCut.has("A99") && !match.has("DA100") && fusedCut.size <= match.size + 2, `${fusedCut.size} of ${total}`);
+  check("cutLines: empty options cut as no options (STITCH_INDEX=0: today's cut)", [...(await cutLines(views, null, async () => "line 5 words", 20_000, {}))].join(",") === [...match].join(","));
+
+  // Round 9 (ANS9-05): the query's function words, and the fill within the routed documents.
+  const lines5 = [
+    { alias: "A1", text: "the will is blind" },
+    { alias: "A2", text: "these are the reasons" },
+    { alias: "A3", text: "pity is nihilism" },
+  ];
+  const r5 = rank(lines5, (l) => l.text, "what are these about pity");
+  const r5s = rank(lines5, (l) => l.text, "what are these about pity", { stop: true });
+  check(
+    "rank: with stop the function words rank nothing; without, 'these are' outranks 'pity' as before",
+    r5[0].item.alias === "A2" && r5s[0].item.alias === "A3" && r5s.find((r) => r.item.alias === "A2")!.score === 0,
+    `${r5.map((r) => r.item.alias).join(",")} / ${r5s.map((r) => `${r.item.alias}:${r.score.toFixed(2)}`).join(",")}`,
+  );
+  check("rank: 'when' and 'not' stay in the query", rank(lines5.concat([{ alias: "A4", text: "when not blind" }]), (l) => l.text, "when is it not", { stop: true })[0].item.alias === "A4");
+  const routedViews = Array.from({ length: 10 }, (_, i) => {
+    const letter = String.fromCharCode(65 + i);
+    const v = view(letter, 100);
+    v.parts.push({ alias: `${letter}1`, title: "", summary: "", opening: false } as unknown as SkeletonView["parts"][number]);
+    for (const l of v.lines) {
+      l.partAlias = `${letter}1`;
+      if (i >= 5) l.text = `${l.text} bonus`;
+    }
+    return v;
+  });
+  const routed5 = new Set(["A1", "B1", "C1", "D1", "E1"]);
+  const unrouted = (set: Set<string>) => [...set].filter((a) => a.charCodeAt(0) >= 70).length;
+  const fillOff = await cutLines(routedViews, routed5, async () => "line 5 words bonus", 4_000);
+  const fillOn = await cutLines(routedViews, routed5, async () => "line 5 words bonus", 4_000, { withinRouted: true });
+  check(
+    "cutLines: withinRouted → past the shares the routed documents' lines fill the budget; a document the route pass left out keeps its share",
+    unrouted(fillOn) < unrouted(fillOff) && fillOn.size - unrouted(fillOn) > fillOff.size - unrouted(fillOff) && ["F", "G", "H", "I", "J"].every((l) => [...fillOn].some((a) => a.startsWith(l))),
+    `unrouted lines ${unrouted(fillOff)} → ${unrouted(fillOn)}, routed ${fillOff.size - unrouted(fillOff)} → ${fillOn.size - unrouted(fillOn)}`,
+  );
+  check("cutLines: without withinRouted the fill is as before", unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000, { withinRouted: true })) === unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000)));
+  // The fill's order: the routed documents' lines that share a word, then
+  // the other documents' lines that share one, then the routed documents'
+  // lines that share none.
+  const orderViews = Array.from({ length: 10 }, (_, i) => {
+    const letter = String.fromCharCode(65 + i);
+    const v = view(letter, 100);
+    v.parts.push({ alias: `${letter}1`, title: "", summary: "", opening: false } as unknown as SkeletonView["parts"][number]);
+    v.lines.forEach((l, j) => {
+      l.partAlias = `${letter}1`;
+      if (i < 5 && j % 10 !== 0) l.text = "nothing here at all, said no one ".repeat(4);
+      if (i >= 5) l.text = `${l.text} bonus`;
+    });
+    return v;
+  });
+  const ordered = await cutLines(orderViews, routed5, async () => "line 5 words", 4_000, { withinRouted: true });
+  const routedShown = [...ordered].filter((a) => a.charCodeAt(0) < 70);
+  const routedZero = routedShown.filter((a) => (Number(a.slice(1)) - 1) % 10 !== 0).length;
+  check(
+    "cutLines: withinRouted → every routed line that shares a word, then the other documents' lines that share one, before a routed line that shares none",
+    routedShown.length - routedZero === 50 && routedZero === 0 && unrouted(ordered) > 10,
+    `routed lines sharing a word ${routedShown.length - routedZero} of 50, sharing none ${routedZero}, unrouted lines ${unrouted(ordered)}`,
+  );
+
+  // Round 9 (ANS9-01): the dated lines of a contradictions or date command, and the named document whole.
+  const dated = [
+    { alias: "A1", text: "Published in 1895, after the collapse." },
+    { alias: "A2", text: "Printed early, he said." },
+  ];
+  const r1 = rank(dated, (l) => l.text, "when was it printed", { stop: true });
+  const r1y = rank(dated, (l) => l.text, "when was it printed", { stop: true, extra: [YEAR_TERM] });
+  check("rank: YEAR_TERM matches a line that carries a year; without it the line scores 0", r1.find((r) => r.item.alias === "A1")!.score === 0 && r1y.find((r) => r.item.alias === "A1")!.score > 0 && r1y.find((r) => r.item.alias === "A2")!.score > 0);
+  check(
+    "asksDates: a date, a year, 'when was', a year written, 哪一年; not a question about pity",
+    asksDates("Do the documents agree on the dates?") && asksDates("When was The Antichrist printed?") && asksDates("What happened in 1883?") && asksDates("尼采哪一年写了《查拉图斯特拉》？") && !asksDates("What does pity do to natural selection?") && !asksDates("What does he mean when he says God is dead?"),
+  );
+  // The dated line costs as much as the others, so it is not a small line
+  // that fits the budget's slack.
+  const datedViews = views.map((v) => ({ ...v, lines: v.lines.map((l) => ({ ...l })) })) as SkeletonView[];
+  datedViews[datedViews.length - 1].lines[50].text = "in 1883 he wrote it, and nothing else is said of it ".repeat(3);
+  const datedAlias = datedViews[datedViews.length - 1].lines[50].alias;
+  const cutPlain = await cutLines(datedViews, null, async () => "line 5 words", 20_000, { stop: true });
+  const cutYears = await cutLines(datedViews, null, async () => "line 5 words", 20_000, { stop: true, terms: [YEAR_TERM] });
+  check("cutLines: terms [YEAR_TERM] → the dated line is in the cut though it shares no word with the command", !cutPlain.has(datedAlias) && cutYears.has(datedAlias), `${datedAlias}`);
+  // A named document of 40 lines (about 1,400 tokens) reads whole; the
+  // same document unnamed had its share.
+  const namedViews = [...views.slice(0, -1), view("DA", 40)];
+  const daLines = (set: Set<string>) => [...set].filter((a) => /^DA\d+$/.test(a)).length;
+  const unnamedCut = await cutLines(namedViews, null, async () => "line 5 words", 20_000);
+  const namedCut = await cutLines(namedViews, null, async () => "line 5 words", 20_000, { named: new Set(["DA"]) });
+  check("cutLines: a named document under STITCH_CUT_NAMED_MAX reads whole; unnamed it had its share", daLines(namedCut) === 40 && daLines(unnamedCut) < 40 && namedCut.size <= unnamedCut.size + 40, `DA lines ${daLines(unnamedCut)} → ${daLines(namedCut)}`);
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();
