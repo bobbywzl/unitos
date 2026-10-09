@@ -64,7 +64,7 @@ import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
-import type { ReaderViewKind } from "@/components/reader/reader-panes";
+import { useDrawnView, type ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -267,6 +267,9 @@ export function Workspace({
   // are never saved. The inline restore script (lib/reading-position.ts)
   // folds the tray before the first paint; these set the state after it.
   const trayStoreKey = trayStateKey(notebook.id);
+  // Back to Normal draws at the press (reader-panes.tsx): the tray takes its
+  // place in the same frame as the panes.
+  const drawnView = useDrawnView(readerView);
   const rememberTray = useCallback(
     (next: { collapsed: boolean; tab: Tab }) => {
       try {
@@ -287,8 +290,8 @@ export function Workspace({
   }, [trayStoreKey, canEdit]);
   useLayoutEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(readerView !== "normal"));
-  }, [trayStoreKey, canEdit, activeDocumentId, readerView]);
+    if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(drawnView !== "normal"));
+  }, [trayStoreKey, canEdit, activeDocumentId, drawnView]);
   // The script's style rules leave once React owns the tray and the entrance
   // fades are past: the tray can then slide, and the fade cannot start late.
   useEffect(() => {
@@ -393,7 +396,7 @@ export function Workspace({
   // two rests, the documents or the tray. Opening a tab scrolls to the tray;
   // the edge buttons and a sideways scroll move between the two; folding the
   // tray scrolls back to the documents first, then the column closes.
-  const split = readerView !== "normal";
+  const split = drawnView !== "normal";
   const stripRef = useRef<HTMLDivElement>(null);
   const trayColumnRef = useRef<HTMLDivElement>(null);
   // Which edge the strip rests at; the edge buttons show for the other one.

@@ -72,6 +72,31 @@ export function viewHref(
   return `/n/${notebookId}?${params.toString()}`;
 }
 
+// The view a press picked, until the URL brings it (one per tab). Normal
+// draws at once: the panes and the tray take their widths in the frame of
+// the press, where a layout move is the press's own answer, instead of
+// 0.6-1.8 s later when the server's page lands. A split waits for its
+// second pane from the server; only the menu's glyph and check answer at once.
+type ViewPick = { from: ReaderViewKind; to: ReaderViewKind };
+let viewPick: ViewPick | null = null;
+const viewPickListeners = new Set<() => void>();
+function subscribeViewPick(listener: () => void) {
+  viewPickListeners.add(listener);
+  return () => viewPickListeners.delete(listener);
+}
+const readViewPick = () => viewPick;
+function setViewPick(next: ViewPick | null) {
+  if (viewPick === next) return;
+  viewPick = next;
+  for (const l of viewPickListeners) l();
+}
+/** The view to draw for the server's `view`: Normal from the press that
+    picked it, else `view`. */
+export function useDrawnView(view: ReaderViewKind): ReaderViewKind {
+  const pick = useSyncExternalStore(subscribeViewPick, readViewPick, () => null);
+  return pick && pick.from === view && pick.to === "normal" ? "normal" : view;
+}
+
 // The pane header of a split view: one row at the top of the pane. The
 // reader renders it — for a video document too, through the video pane —
 // and adds its article menu and Extract to the row for an article; on an
@@ -408,12 +433,21 @@ export function ReaderPanes({
   useEscapeLayer(menu, () => setMenu(false));
 
   // The view a row picked, until the URL brings it: the glyph and the check
-  // answer the press at once, while the split loads.
-  const [picked, setPicked] = useState<{ from: ReaderViewKind; to: ReaderViewKind } | null>(null);
+  // answer the press at once, while the split loads; Normal draws at once
+  // (useDrawnView). The URL's arrival ends the pick.
+  const picked = useSyncExternalStore(subscribeViewPick, readViewPick, () => null);
   const shownView = picked && picked.from === view ? picked.to : view;
+  const drawn = useDrawnView(view);
+  useEffect(() => {
+    if (picked && picked.to === view) setViewPick(null);
+  }, [picked, view]);
   function go(next: ReaderViewKind) {
     setMenu(false);
-    setPicked({ from: view, to: next });
+    if (next === view) {
+      setViewPick(null);
+      return;
+    }
+    setViewPick({ from: view, to: next });
     router.push(
       viewHref(
         notebookId,
@@ -508,9 +542,9 @@ export function ReaderPanes({
       // .reader-column). Side by Side panes are narrower than the column, so
       // they keep their place and the first pane peeks from under the edge.
       style={
-        { "--reader-cut": view === "stack" ? "var(--strip-cut, 0px)" : "0px" } as React.CSSProperties
+        { "--reader-cut": drawn === "stack" ? "var(--strip-cut, 0px)" : "0px" } as React.CSSProperties
       }
-      className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
+      className={`relative flex h-full min-h-0 min-w-0 ${drawn === "stack" ? "flex-col" : "flex-row"}`}
     >
       {!placed
         ? null
@@ -562,19 +596,19 @@ export function ReaderPanes({
       <div
         ref={paneOneRef}
         className={`relative flex min-h-0 min-w-0 flex-col ${
-          view === "normal" ? "flex-1" : resizing ? "shrink-0" : "pane-split shrink-0"
+          drawn === "normal" ? "flex-1" : resizing ? "shrink-0" : "pane-split shrink-0"
         }`}
         style={
-          view === "side"
+          drawn === "side"
             ? { width: `${split * 100}%` }
-            : view === "stack"
+            : drawn === "stack"
               ? { height: `${split * 100}%` }
               : undefined
         }
       >
         {paneOne}
       </div>
-      {view !== "normal" && paneTwo && (
+      {drawn !== "normal" && paneTwo && (
         <>
           {/* The bar between the panes: drag to resize, arrow keys nudge,
               double-click resets. It floats over the divider line, so the
