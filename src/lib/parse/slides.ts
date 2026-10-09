@@ -1571,6 +1571,7 @@ function boldStyle(): ListStyle {
 function renderChart(scope: SlideScope, chartPath: string, box: Box): RenderedText | null {
   const doc = parseXmlPart(scope.ctx.zip, chartPath);
   if (!doc) return null;
+  if (child(doc.documentElement, "chartData")) return renderChartExTable(doc);
   const drawn = drawChart(doc, { width: box.w, height: box.h }, {
     accents: themeAccents(scope.master.theme.colors),
     resolveColor: (el) => colorCss(el, scope.palette),
@@ -1627,6 +1628,68 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
     const longest = Math.max(...series.map((s) => s.vals.length));
     for (let i = 0; i < longest; i++) rows.push(series.map((s) => s.vals[i] ?? ""));
   }
+  const pieces: RenderedText[] = [];
+  if (titleText) pieces.push({ html: `<div class="sct">${escapeHtml(titleText)}</div>`, text: titleText });
+  if (rows.length > 0) pieces.push(dataTable(rows));
+  if (pieces.length === 0) return null;
+  return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
+}
+
+/** An Office 2016 chart (cx:chartSpace: a waterfall, a box and whisker, a
+    sunburst, a treemap, a histogram, a funnel) as a small visible table
+    with its title. Its data sits in cx:chartData, one cx:data per series:
+    string dimensions hold the categories, a level per column with the first
+    level innermost, and number dimensions hold the values. The table reads
+    as the sheet does: the category columns outermost first, then one value
+    column per series. A title element without words shows "Chart Title",
+    as PowerPoint draws it. Slides benchmark finding: such a chart lost
+    every word and number (four files at 0.333). */
+function renderChartExTable(doc: XMLDocument): RenderedText | null {
+  const root = doc.documentElement;
+  const data = new Map<string, Element>();
+  for (const d of descendants(child(root, "chartData"), "data")) data.set(attr(d, "id") ?? "", d);
+  const chart = child(root, "chart");
+  const titleEl = child(chart, "title");
+  let titleText = "";
+  if (titleEl) {
+    const rich = descendants(titleEl, "rich")[0];
+    titleText = cleanText(
+      rich
+        ? descendants(rich, "p").map((p) => descendants(p, "t").map((t) => t.textContent ?? "").join("")).join("\n")
+        : descendants(titleEl, "v").map((v) => v.textContent ?? "").join(" "),
+    ).trim();
+    if (!titleText) titleText = "Chart Title";
+  }
+  const points = (lvl: Element | null): string[] => {
+    const pts = children(lvl, "pt");
+    const out: string[] = new Array(Math.max(intAttr(lvl, "ptCount") ?? 0, pts.length)).fill("");
+    pts.forEach((pt, i) => {
+      const idx = intAttr(pt, "idx") ?? i;
+      if (idx >= 0 && idx < out.length) out[idx] = cleanText(pt.textContent ?? "");
+    });
+    return out;
+  };
+  let categories: string[][] = [];
+  const series: { name: string; vals: string[] }[] = [];
+  for (const ser of descendants(chart, "series")) {
+    if (attr(ser, "hidden") === "1") continue;
+    const name = cleanText(descendants(child(ser, "tx"), "v")[0]?.textContent ?? "").trim();
+    const d = data.get(attr(child(ser, "dataId"), "val") ?? "");
+    if (!d) continue;
+    if (categories.length === 0) {
+      const dim = children(d, "strDim")[0];
+      if (dim) categories = children(dim, "lvl").map(points).reverse();
+    }
+    const lvls = children(d, "numDim").map((dim) => children(dim, "lvl")[0]).filter((l): l is Element => !!l);
+    for (const lvl of lvls) {
+      const code = attr(lvl, "formatCode")?.trim() || "General";
+      series.push({ name, vals: points(lvl).map((v) => shownNumber(v, code)) });
+    }
+  }
+  const rows: string[][] = [];
+  const count = Math.max(0, ...categories.map((c) => c.length), ...series.map((s) => s.vals.length));
+  if (series.some((s) => s.name)) rows.push([...categories.map(() => ""), ...series.map((s) => s.name)]);
+  for (let i = 0; i < count; i++) rows.push([...categories.map((c) => c[i] ?? ""), ...series.map((s) => s.vals[i] ?? "")]);
   const pieces: RenderedText[] = [];
   if (titleText) pieces.push({ html: `<div class="sct">${escapeHtml(titleText)}</div>`, text: titleText });
   if (rows.length > 0) pieces.push(dataTable(rows));
