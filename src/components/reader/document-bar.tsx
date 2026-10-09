@@ -1560,7 +1560,7 @@ export function DocumentBar({
           {listOpen && (
             <div
               ref={placeList}
-              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 sm:max-h-[calc(100dvh-96px)] max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[calc(100dvh-160px)] w-80 md:max-h-[calc(100dvh-96px)] max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
               <DocumentTree
                 header={<DocumentsSort sort={documentSort} onSort={setDocumentSort} />}

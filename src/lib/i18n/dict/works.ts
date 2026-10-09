@@ -207,6 +207,8 @@ const en = {
   dismiss: "Dismiss",
   dismissAll: "Dismiss all",
   notificationCount: "{n} of {total}",
+  // The not-found page under a project's URL (SPEC.md §12)
+  projectNotFoundBody: "This project was deleted, or it is no longer shared with you.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -391,6 +393,7 @@ const zh: Record<keyof typeof en, string> = {
   dismiss: "关闭",
   dismissAll: "全部关闭",
   notificationCount: "第 {n} 条，共 {total} 条",
+  projectNotFoundBody: "此项目已删除，或已不再与你共享。",
 };
 
 export const works = { en, zh } as const;

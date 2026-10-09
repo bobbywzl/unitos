@@ -229,8 +229,8 @@ const FLYOUT_FOOT = '[data-track="folder-new-file"], [data-track="folder-new"]';
 
 // A folder's list beside its row: a fixed panel in a portal (the root list
 // scrolls and would clip it), placed off the row's top and the panel's right
-// edge, or its left edge when the right has no room. It follows the panel's
-// scroll and the window's size.
+// edge, or, from the project's list only, its left edge when the right has
+// no room (roomBeside). It follows the panel's scroll and the window's size.
 // By keys: ← or Escape in a fly-out closes it and puts the focus back on
 // its folder's row, one level at a time.
 function Flyout({
@@ -312,10 +312,14 @@ function Flyout({
   );
 }
 
-/** Whether a fly-out fits beside the panel, on its right or its left. */
+/** Whether a fly-out fits beside the panel: on its right, or, for the
+    project's list only, on its left. A fly-out's own left holds the list it
+    opened from, so a list opened from a fly-out with no room on its right
+    opens under its row instead and never covers an earlier list. */
 function roomBeside(panelEl: HTMLElement): boolean {
   const panel = panelEl.getBoundingClientRect();
-  return panel.right + FLYOUT_WIDTH + 8 <= window.innerWidth || panel.left - FLYOUT_WIDTH - 8 >= 0;
+  if (panel.right + FLYOUT_WIDTH + 8 <= window.innerWidth) return true;
+  return !panelEl.closest("[data-document-flyout]") && panel.left - FLYOUT_WIDTH - 8 >= 0;
 }
 
 // The name box for a new folder or a rename. Enter keeps it, Escape drops
@@ -676,8 +680,16 @@ function FolderRow({
             // Under the row (a phone, a narrow panel) a click toggles.
             onClick={() => (flyout ? tree.openFolder(folder) : tree.toggleFolder(folder))}
             // By keys, a fly-out is a submenu: Enter, Space or → opens the
-            // folder's list and moves into it.
+            // folder's list and moves into it. A list under its row opens on
+            // → as well and takes the focus (Enter and Space toggle it).
             onKeyDown={(e) => {
+              if (!flyout && e.key === "ArrowRight") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!open) tree.toggleFolder(folder);
+                focusWhenDrawn(`[data-tree-parent="${folder.id}"] :is(${LIST_ROWS}, ${FLYOUT_FOOT})`);
+                return;
+              }
               if (!flyout || (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowRight")) return;
               e.preventDefault();
               e.stopPropagation();
@@ -1057,14 +1069,33 @@ export function DocumentTree<
     for (let i = 0; at && gone.has(at) && i < 64; i++) at = gone.get(at) ?? null;
     return at;
   };
+  // Under Custom order a deleted folder's rows take the folder's place in
+  // the parent's list, in their own order (folder id → the parent's list
+  // and each row's new position). It stands while the folder is gone and
+  // the server's rows still hold it; once they drop it, their positions are
+  // the same order.
+  const [splices, setSplices] = useState<
+    ReadonlyMap<string, { parentId: string | null; order: ReadonlyMap<string, number> }>
+  >(new Map());
+  const splice = new Map<string, { parentId: string | null; position: number }>();
+  for (const [id, s] of splices) {
+    if (!gone.has(id) || !storedFolders.some((f) => f.id === id)) continue;
+    for (const [key, position] of s.order) splice.set(key, { parentId: s.parentId, position });
+  }
+  const splicedAt = (key: string, parentId: string | null): number | undefined => {
+    const s = splice.get(key);
+    return s && s.parentId === parentId ? s.position : undefined;
+  };
   const placedFolders = storedFolders
     .filter((f) => !gone.has(f.id))
     .map((f) => {
       const p = placement("folder", f.id);
       const parentId = p ? p.parentId : f.parentId;
       const lifted = lift(parentId);
-      if (lifted !== parentId) return { ...f, parentId: lifted, position: null };
-      return p ? { ...f, parentId: p.parentId, position: p.position } : f;
+      if (lifted !== parentId) return { ...f, parentId: lifted, position: splicedAt(`folder:${f.id}`, lifted) ?? null };
+      if (p) return { ...f, parentId: p.parentId, position: p.position };
+      const spliced = splicedAt(`folder:${f.id}`, parentId);
+      return spliced === undefined ? f : { ...f, position: spliced };
     });
   const folders =
     newFolders.length === 0
@@ -1079,7 +1110,12 @@ export function DocumentTree<
     return {
       id: d.id,
       folderId: folderId && known.has(folderId) ? folderId : null,
-      position: folderId !== placedIn ? null : p ? p.position : d.position,
+      position:
+        folderId !== placedIn
+          ? (splicedAt(`document:${d.id}`, folderId) ?? null)
+          : p
+            ? p.position
+            : (splicedAt(`document:${d.id}`, folderId) ?? d.position),
       title: d.title,
       kind: d.kind,
       addedAt: d.addedAt,
@@ -1129,12 +1165,15 @@ export function DocumentTree<
   });
 
   // The screen crossed the width: the fly-outs close, or the open
-  // document's path opens under its rows. Adjust-during-render, the same
-  // pattern as presence.tsx.
-  const [wasFlyout, setWasFlyout] = useState(flyout);
-  if (wasFlyout !== flyout) {
-    setWasFlyout(flyout);
-    setOpenPath(flyout ? [] : activePath);
+  // document's path opens under its rows. The project's rows' own test
+  // decides (a fly-out where the list has room beside it), so wherever the
+  // lists open under their rows — a phone, or 820 px — the path opens on
+  // its own. Adjust-during-render, the same pattern as presence.tsx.
+  const beside = flyout && (!panelEl || roomBeside(panelEl));
+  const [wasBeside, setWasBeside] = useState(beside);
+  if (wasBeside !== beside) {
+    setWasBeside(beside);
+    setOpenPath(beside ? [] : activePath);
   }
 
   async function run(at: string, call: () => Promise<unknown>, after?: () => void, undo?: () => void) {
@@ -1536,18 +1575,43 @@ export function DocumentTree<
     // Undo; the route runs once the pill goes without Undo (its 12 s, ✕,
     // the next post, the page closing: keepalive). A refused delete puts
     // the folder back, with the error under the list.
+    // Under Custom order (a placed row in either list) the folder's rows
+    // take its place in the parent's list, in their own order; the route
+    // writes that order with the delete.
     deleteFolder: (folder) => {
       setMenu(null);
       setMoving(null);
       setError(null);
+      const parentId = folders.find((f) => f.id === folder.id)?.parentId ?? lift(folder.parentId);
+      const outer = sortByPosition(entriesOf(parentId));
+      const inner = sortByPosition(entriesOf(folder.id));
+      const order = [...outer, ...inner].some((e) => e.position !== null)
+        ? outer.flatMap((e) => (e.entry === "folder" && e.id === folder.id ? inner : [e])).map(itemOf)
+        : null;
       setOpenPath((path) => (path.includes(folder.id) ? path.slice(0, path.indexOf(folder.id)) : path));
       setGone((map) => new Map(map).set(folder.id, folder.parentId));
-      const back = () =>
+      if (order) {
+        setSplices((map) =>
+          new Map(map).set(folder.id, {
+            parentId,
+            order: new Map(order.map((e, position) => [`${e.kind}:${e.id}`, position])),
+          }),
+        );
+      }
+      const back = () => {
         setGone((map) => {
           const next = new Map(map);
           next.delete(folder.id);
           return next;
         });
+        setSplices((map) => {
+          if (!map.has(folder.id)) return map;
+          const next = new Map(map);
+          next.delete(folder.id);
+          return next;
+        });
+      };
+      const body = order ? JSON.stringify({ order }) : undefined;
       postUndoPill({
         message: t("panes.folderDeleted"),
         undo: back,
@@ -1556,8 +1620,14 @@ export function DocumentTree<
           try {
             const res = await fetch(`/api/notebooks/${notebookId}/folders/${folder.id}`, {
               method: "DELETE",
-              keepalive: true,
-              headers: account ? { [ACCOUNT_HEADER]: account } : undefined,
+              // A keepalive body is capped at 64 KB; a longer order goes
+              // without it.
+              keepalive: !body || body.length < 60000,
+              body,
+              headers: {
+                ...(account ? { [ACCOUNT_HEADER]: account } : {}),
+                ...(body ? { "Content-Type": "application/json" } : {}),
+              },
             });
             if (res.ok || res.status === 404) {
               router.refresh();

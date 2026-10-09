@@ -129,6 +129,19 @@ async function keepStatic(cache: Cache, url: string, cssMedia: Set<string>) {
   await cache.put(url, res);
 }
 
+// Run `fn` over `items`, `limit` at a time.
+async function eachLimit<T>(items: Iterable<T>, limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  const list = [...items];
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, list.length) }, async () => {
+      while (next < list.length) await fn(list[next++]);
+    }),
+  );
+}
+// Pages and files are fetched four at a time.
+const FETCH_LIMIT = 4;
+
 // Save progress (SPEC.md §17): two stages, pages then files — the images
 // the pages show, and the chunks and fonts they load. Real fetches counted
 // as they land, the same rule the ingest progress card follows (never a
@@ -152,7 +165,7 @@ export async function saveProject(
 
   let pagesDone = 0;
   onProgress?.({ stage: "pages", done: 0, total: pages.length });
-  for (const page of pages) {
+  await eachLimit(pages, FETCH_LIMIT, async (page) => {
     const res = await fetch(page);
     const html = res.headers.get("content-type")?.includes("text/html") ?? false;
     if (!res.ok || res.redirected || !html) throw new Error(`Page failed (${res.status})`);
@@ -161,7 +174,7 @@ export async function saveProject(
     collect(text, ASSET_RE, assets);
     collect(text, STATIC_RE, statics);
     onProgress?.({ stage: "pages", done: ++pagesDone, total: pages.length });
-  }
+  });
 
   // The chunks the pages load, and the fonts their stylesheets load, counted
   // with the images so one stage covers everything that is not a page.
@@ -170,7 +183,7 @@ export async function saveProject(
   const filesTotal = assets.size + statics.size;
   onProgress?.({ stage: "files", done: 0, total: filesTotal });
 
-  for (const url of assets) {
+  await eachLimit(assets, FETCH_LIMIT, async (url) => {
     if (!(await cache.match(url))) {
       try {
         const res = await fetch(url);
@@ -180,23 +193,23 @@ export async function saveProject(
       }
     }
     onProgress?.({ stage: "files", done: ++filesDone, total: filesTotal });
-  }
+  });
 
-  for (const url of statics) {
+  await eachLimit(statics, FETCH_LIMIT, async (url) => {
     try {
       await keepStatic(staticCache, url, cssMedia);
     } catch {
       // A chunk that fails to fetch is retried on the next refresh.
     }
     onProgress?.({ stage: "files", done: ++filesDone, total: filesTotal });
-  }
-  for (const url of cssMedia) {
+  });
+  await eachLimit(cssMedia, FETCH_LIMIT, async (url) => {
     try {
       await keepStatic(staticCache, url, new Set());
     } catch {
       // Same.
     }
-  }
+  });
 
   const keep = new Set([...pages, ...assets].map((u) => new URL(u, location.origin).href));
   for (const req of await cache.keys()) {
@@ -214,6 +227,46 @@ export async function saveProject(
   await tx(SAVED, "readwrite", (s) => s.put(row));
   notify();
   return row;
+}
+
+// The saves under way in this tab, one per project. The dashboard's card
+// and the project's header read the same one: a save started on the
+// dashboard shows its progress in the project when the reader opens it, and
+// a second press joins the save under way instead of starting another.
+export type RunningSave = { progress: SaveProgress; promise: Promise<SavedProject> };
+const NO_SAVES: ReadonlyMap<string, RunningSave> = new Map();
+let running: ReadonlyMap<string, RunningSave> = NO_SAVES;
+const runningListeners = new Set<() => void>();
+export function subscribeRunning(listener: () => void): () => void {
+  runningListeners.add(listener);
+  return () => runningListeners.delete(listener);
+}
+/** The saves under way, by project id; the same map until one changes. */
+export function runningSaves(): ReadonlyMap<string, RunningSave> {
+  return running;
+}
+/** No save under way: the server's snapshot. */
+export function noSaves(): ReadonlyMap<string, RunningSave> {
+  return NO_SAVES;
+}
+function setRunning(id: string, save: RunningSave | null) {
+  const next = new Map(running);
+  if (save) next.set(id, save);
+  else next.delete(id);
+  running = next;
+  for (const l of runningListeners) l();
+}
+
+/** Save a project for offline, or join the save of it already under way. */
+export function startSave(id: string): Promise<SavedProject> {
+  const now = running.get(id);
+  if (now) return now.promise;
+  const promise = saveProject(id, (progress) => {
+    const current = running.get(id);
+    if (current) setRunning(id, { ...current, progress });
+  }).finally(() => setRunning(id, null));
+  setRunning(id, { progress: { stage: "pages", done: 0, total: 0 }, promise });
+  return promise;
 }
 
 export async function removeSaved(id: string): Promise<void> {
