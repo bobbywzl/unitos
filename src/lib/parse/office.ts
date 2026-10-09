@@ -91,11 +91,13 @@ export function parseXml(text: string): XMLDocument | null {
   }
 }
 
+// The helpers walk the element siblings: jsdom builds a live collection
+// for every read of .children, a tenth of a large deck's parse.
+
 /** The direct children with this local name, in order. */
 export function children(el: Element | null | undefined, localName: string): Element[] {
-  if (!el) return [];
   const out: Element[] = [];
-  for (const child of el.children) if (child.localName === localName) out.push(child);
+  for (let c = el?.firstElementChild ?? null; c; c = c.nextElementSibling) if (c.localName === localName) out.push(c);
   return out;
 }
 
@@ -104,13 +106,8 @@ export function child(el: Element | null | undefined, ...path: string[]): Elemen
   let at: Element | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next: Element | null = null;
-    for (const c of at.children) {
-      if (c.localName === name) {
-        next = c;
-        break;
-      }
-    }
+    let next = at.firstElementChild;
+    while (next && next.localName !== name) next = next.nextElementSibling;
     at = next;
   }
   return at;
