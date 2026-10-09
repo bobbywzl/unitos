@@ -391,9 +391,7 @@ class Renderer {
 // rules read it. Each reads a line that stands alone: one line, a blank line
 // under it, and a blank line above it past the file's first line.
 //   1. The file's first line, when short, is the Title ("Imports audit 5").
-//   2. A short line in capitals is a heading ("THE REPLAY WINDOW"), and so
-//      is one that ends on a period, "!" or "?" ("SING A SONG OF
-//      SIXPENCE.": a text file's title line often ends on one).
+//   2. A short line in capitals is a heading ("THE REPLAY WINDOW").
 // A line that ends a sentence (a period, a comma, a colon, a semicolon) is
 // neither. A file with a heading of its own, or with front matter, is
 // Markdown as written, and neither rule runs.
@@ -646,11 +644,9 @@ function shapeTextOutline(root: Root, source: string) {
       }
     }
     if (node.type !== "paragraph") return;
-    // A chapter's line, or a line in capitals that ends on a period ("SING
-    // A SONG OF SIXPENCE."): a heading, though it ends on a period.
+    // A chapter's line: a heading, though it ends on a period.
     const line = node.position && node.position.start.line === node.position.end.line && standsAlone(nodes, i) ? plainText(node.children) : "";
-    const capitalsWithStop = /[.!?]$/.test(line) && isCapitalsLine(line.slice(0, -1));
-    if (line && i > 0 && ((CHAPTER_RX.test(line) && words(line) <= TEXT_MARGIN_WORDS_MAX) || capitalsWithStop)) {
+    if (line && i > 0 && CHAPTER_RX.test(line) && words(line) <= TEXT_MARGIN_WORDS_MAX) {
       nodes[i] = { type: "heading", depth: 2, children: node.children, position: node.position };
       return;
     }
