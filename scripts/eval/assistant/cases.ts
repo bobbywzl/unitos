@@ -1,0 +1,728 @@
+// The cases of the assistant loop (SPEC.md §7, §25): one case is one message
+// to the sidebar assistant at This page scope, on one fixture, for one
+// reader, with the conversation so far when it continues one. The families
+// are what the assistant must do well: answer from the source (answer),
+// change an article's blocks (edit), change a document with rich text
+// through one suggest action (suggest), make notes, sections, and documents
+// (section), annotate the passages (annotate), change a recording's lines
+// and voices (transcript), carry a change through a conversation (confirm),
+// and say where a change runs when it cannot run here (scope). `expect`
+// is checked mechanically against the plan the plan module enriched and
+// the document the plan leaves; `good` is for the judge.
+import type { DocumentEdits } from "@/lib/assistant/plan";
+import type { BlockKind } from "@/lib/block-kind";
+import type { Lang } from "@/lib/i18n/config";
+import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import type { AssistantAction } from "@/lib/types";
+import { ANALYST, DEVELOPER, HOME_BUYER, LAWYER, ML_ENGINEER, NOVICE, SHOP_OWNER_ZH } from "../cases";
+import type { CaseNote } from "./digest";
+
+export type Family = "answer" | "edit" | "suggest" | "section" | "annotate" | "transcript" | "confirm" | "scope";
+
+/** The action types a plan may carry, and the one the loop adds. */
+export type ActionType = AssistantAction["type"] | "create_document";
+
+/** One action the plan must carry: its type, and what of it must hold.
+    Blocks are named by their order in the fixture (1-based); 0 names a
+    recording's VIDEO block. Text fields match case-insensitively. */
+export type ActionExpect = {
+  type: ActionType;
+  block?: number;
+  blockAny?: number[];
+  // insert_paragraph and move_block: the block it lands after; null = the start.
+  after?: number | null;
+  // highlight, comment, style, link, split_line, add_note's source: the anchor's words hold this.
+  quote?: string;
+  // edit_block's newText, insert_paragraph's text, add_note's content, comment's comment,
+  // suggest's and revise's instruction, add_section's and create_document's title: holds this.
+  text?: string;
+  kind?: BlockKind;
+  color?: string;
+  style?: string;
+  reorder?: boolean;
+  // suggest and revise: no blockIds (the whole document).
+  whole?: boolean;
+  name?: string;
+};
+
+export type Expect = {
+  // true: the message asks for a change, so the answer ends with actions;
+  // false: no actions block at all.
+  change: boolean;
+  actions?: ActionExpect[];
+  // The action types allowed; any other type is a stray.
+  only?: ActionType[];
+  min?: number;
+  max?: number;
+  // The blocks whose words, kind, or place may change; every other block of
+  // the document stays byte-identical and in its order. New blocks are
+  // allowed when an insert is expected or `fresh` is true.
+  touch?: number[];
+  fresh?: boolean;
+  after?: { block: number; includes?: string[]; excludes?: string[]; kind?: BlockKind }[];
+  // Pairs [a, b]: block a stands before block b after the plan.
+  order?: [number, number][];
+  removed?: number[];
+  kept?: number[];
+  annotations?: { block: number; quote?: string; min?: number }[];
+  notes?: { min?: number; includes?: string[]; sourced?: boolean; section?: string }[];
+  sections?: string[];
+  documents?: { title?: string; includes?: string[]; minBlocks?: number }[];
+  answer?: { includes?: string[]; excludes?: string[]; cites?: boolean; maxWords?: number };
+};
+
+export type AssistantCase = {
+  id: string;
+  family: Family;
+  fixture: string;
+  lang: Lang;
+  profile: ReaderProfileCtx;
+  // How the document changes (lib/assistant/plan.ts): the block actions
+  // (blocks, the default), one suggest action (a document with rich text),
+  // or not at all (an import another account's project holds).
+  edits?: DocumentEdits;
+  // Project scope: the message cannot change the page.
+  scope?: "document" | "notebook";
+  notes?: CaseNote[];
+  history?: { role: "user" | "assistant"; content: string }[];
+  // The block the caret stands in, by order.
+  caret?: number;
+  question: string;
+  expect: Expect;
+  good: string;
+};
+
+export const STUDENT: ReaderProfileCtx = {
+  background: "Second-year economics student.",
+  purpose: "Study for the midterm from this lecture.",
+  application: "",
+};
+export const PM: ReaderProfileCtx = {
+  background: "Product manager who missed the meeting.",
+  purpose: "Know what was decided and what I owe.",
+  application: "",
+};
+export const WRITER: ReaderProfileCtx = {
+  background: "Undergraduate working on an essay draft.",
+  purpose: "Get the draft ready to hand in.",
+  application: "",
+};
+
+export const CASES: AssistantCase[] = [
+  // ── answer: from the source ───────────────────────────────────────────
+  {
+    id: "answer-memo-margin",
+    family: "answer",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "Is the margin recovery real?",
+    expect: { change: false, answer: { includes: ["1.1", "1.7"], cites: true } },
+    good: "Splits the 2.8-point gain into about 1.1 structural and about 1.7 fuel; fuel is reversing (diesel up 9 percent); next quarter modeled at 7.6 percent; cites the fuel and recommendation blocks. No actions block.",
+  },
+  {
+    id: "answer-docs-limits-count",
+    family: "answer",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: LAWYER,
+    question: "How many separate limits are there, and what triggers a suspension?",
+    expect: { change: false, answer: { includes: ["15 minutes"], cites: true } },
+    good: "Counts the limits: the key's read bucket (600, 10 per second), the write bucket (120, 2 per second), the search cost of 5 tokens, and the refusal limit; 1,000 refusals in an hour suspend the key for 15 minutes. Each with its block.",
+  },
+  {
+    id: "answer-paper-absent",
+    family: "answer",
+    fixture: "paper-sparse-routing",
+    lang: "en",
+    profile: ML_ENGINEER,
+    question: "What GPU did they run the throughput numbers on?",
+    expect: { change: false, answer: { excludes: ["A100", "H100", "V100"], cites: true } },
+    good: "Says plainly that the document does not name the hardware, then gives what it does say: throughput 2.4 times dense at 256,000 tokens on the same hardware, memory 96 to 31 gigabytes. Nothing invented.",
+  },
+  {
+    id: "answer-news-followup",
+    family: "answer",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: HOME_BUYER,
+    history: [
+      { role: "user", content: "What did the dissenters argue?" },
+      {
+        role: "assistant",
+        content:
+          "Two of the nine members voted to cut because the labor market has already turned: unemployment rose to 4.4 percent from 3.9 percent, job openings are down 22 percent from their peak, and waiting for core inflation to reach 2 percent means easing too late [block news-rate-decision-b5].",
+      },
+    ],
+    question: "And how did the governor answer them?",
+    expect: { change: false, answer: { includes: ["4.8", "5.1"], cites: true } },
+    good: "Answers from the governor's rebuttal alone: wage growth of 4.8 percent is not consistent with 2 percent inflation, and services prices rose 5.1 percent; does not repeat the dissent's numbers the earlier answer gave; for a home buyer, may add in one sentence what it means for the December cut.",
+  },
+  {
+    id: "answer-law-apply",
+    family: "answer",
+    fixture: "law-contract-formation",
+    lang: "en",
+    profile: LAWYER,
+    question: "In the Alder and Birch example, when was the contract formed, and why does the revocation fail?",
+    expect: { change: false, answer: { includes: ["4 March", "6 March"], cites: true } },
+    good: "Formed on 4 March when Birch posted the acceptance (postal rule, Adams v Lindsell); the revocation takes effect only on receipt, 6 March (Byrne v Van Tienhoven), two days after the contract existed. Cites the mailbox rule block and the example block.",
+  },
+  {
+    id: "answer-history-count",
+    family: "answer",
+    fixture: "history-bretton-woods",
+    lang: "en",
+    profile: NOVICE,
+    question: "How many times does the document give a dollar figure for the size of the U.S. gold stock, and what are they?",
+    expect: { change: false, answer: { includes: ["25 billion", "10 billion"], cites: true } },
+    good: "Two figures, both in the Triffin block: about $25 billion in 1949 and about $10 billion by 1971; says the $35 and $40 an ounce figures are gold prices, not the stock. Answers the count.",
+  },
+  {
+    id: "answer-zh-regulation",
+    family: "answer",
+    fixture: "zh-platform-fees",
+    lang: "zh",
+    profile: SHOP_OWNER_ZH,
+    question: "作者认为监管应该用什么工具？",
+    expect: { change: false, answer: { includes: ["排他性补贴", "曝光"], cites: true } },
+    good: "用中文回答：限制平台把抽成收入用于排他性补贴，要求平台公开曝光分配的规则；抽成率上限是错误的工具，因为每单利润不是长尾商家的瓶颈。引用监管一段。",
+  },
+  {
+    id: "answer-essay-connection",
+    family: "answer",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    notes: [
+      { section: "Notes", content: "Highlights mark what seemed important, not what I understood. Try restating a passage instead.", quote: { block: 5, text: "not highlights, which mark what seemed important" } },
+      { section: "Open questions", content: "Does slow reading work for contracts too? The author says contracts are among the documents that matter." },
+    ],
+    question: "What does the author say makes slow reading possible?",
+    expect: { change: false, answer: { includes: ["[note note-1]"], cites: true } },
+    good: "Two habits: writing notes that restate the text in your words with the source beside them (not highlights), and asking one question of the whole document at a time. Ends with a Connection to your work paragraph naming the reader's note on highlights with its [note note-1] tag; the open question about contracts does not bear on this and is left out.",
+  },
+  {
+    id: "answer-podcast-where",
+    family: "answer",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "Where do they explain how a quote finds its place again after a re-parse?",
+    expect: { change: false, answer: { includes: ["[block transcript-podcast-b4]"], cites: true } },
+    good: "Points at the guest's line at 1:05 to 1:42: the span is stored by block and offsets and by the quoted text with context, so the quote finds its place again; cites that block. Short: a lookup.",
+  },
+
+  // ── scope: where a change runs ─────────────────────────────────────────
+  {
+    id: "scope-project-change",
+    family: "scope",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    scope: "notebook",
+    question: "Fix the typos in the memo.",
+    expect: { change: false, answer: { includes: ["This page"] } },
+    good: "No actions. Says in one sentence that changes run from the This page scope with the document open; may say what it found (the memo reads clean) without rewriting anything.",
+  },
+  {
+    id: "scope-shared-import",
+    family: "scope",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "none",
+    question: "Rewrite the first paragraph to be half as long.",
+    expect: { change: false },
+    good: "Proposes no change to the words: says in one sentence that the document cannot be changed because a project of another account holds it too. May offer what it can do instead (a note, a highlight) without doing it unasked.",
+  },
+
+  // ── edit: an article's blocks ──────────────────────────────────────────
+  {
+    id: "edit-memo-one-sentence",
+    family: "edit",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "In the risks section, change \"Volume is the risk the numbers hide.\" to \"Volume is the risk these numbers hide.\"",
+    expect: {
+      change: true,
+      actions: [{ type: "edit_block", block: 9, text: "these numbers hide" }],
+      only: ["edit_block"],
+      max: 1,
+      touch: [9],
+      after: [{ block: 9, includes: ["Volume is the risk these numbers hide.", "Losing either would cost about 4 percent of revenue."] }],
+    },
+    good: "One edit_block on the risks paragraph with the one word changed and every other word of the paragraph kept; the answer says what changed in one sentence.",
+  },
+  {
+    id: "edit-docs-heading-level",
+    family: "edit",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: DEVELOPER,
+    question: "Make \"Handling 429\" a top-level heading.",
+    expect: { change: true, actions: [{ type: "format_block", block: 4, kind: "h1" }], only: ["format_block"], max: 1, touch: [4] },
+    good: "One format_block on the Handling 429 heading to h1; nothing else changes.",
+  },
+  {
+    id: "edit-docs-to-numbered",
+    family: "edit",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: DEVELOPER,
+    question: "Turn the batching list into a numbered list.",
+    expect: {
+      change: true,
+      actions: [{ type: "format_block", block: 8, kind: "numbered" }],
+      only: ["format_block"],
+      max: 1,
+      touch: [8],
+      after: [{ block: 8, includes: ["1. A batch request", "Writes cannot be batched."] }],
+    },
+    good: "One format_block on the batching list to numbered; the lines keep their words.",
+  },
+  {
+    id: "edit-news-bold-term",
+    family: "edit",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: HOME_BUYER,
+    question: "Bold the words \"Core inflation\" where the article defines the term.",
+    expect: { change: true, actions: [{ type: "style", block: 2, quote: "Core inflation", style: "bold" }], only: ["style"], max: 1, touch: [] },
+    good: "One style action, bold, on the exact words in the second paragraph where core inflation is defined (strips out food and energy); no words change.",
+  },
+  {
+    id: "edit-paper-insert-after",
+    family: "edit",
+    fixture: "paper-sparse-routing",
+    lang: "en",
+    profile: ML_ENGINEER,
+    question: "Add a one-sentence reminder for our team after the Limitations paragraph: that inputs above 256,000 tokens were not tested.",
+    expect: {
+      change: true,
+      actions: [{ type: "insert_paragraph", after: 11, text: "256,000" }],
+      only: ["insert_paragraph"],
+      max: 1,
+      touch: [],
+      fresh: true,
+    },
+    good: "One insert_paragraph right after the Limitations paragraph (not after the heading, not at the end), one sentence, with the number as the paper prints it.",
+  },
+  {
+    id: "edit-memo-remove-block",
+    family: "edit",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "Delete the paragraph about the fleet cut removing capacity.",
+    expect: { change: true, actions: [{ type: "remove_block", block: 10 }], only: ["remove_block"], max: 1, removed: [10], touch: [10] },
+    good: "One remove_block on the capacity paragraph; the risks heading and the volume paragraph stay.",
+  },
+  {
+    id: "edit-history-move",
+    family: "edit",
+    fixture: "history-bretton-woods",
+    lang: "en",
+    profile: NOVICE,
+    question: "Move the paragraph that starts \"The dilemma played out\" to right after the Nixon shock paragraph.",
+    expect: { change: true, actions: [{ type: "move_block", block: 9, after: 11 }], only: ["move_block"], max: 1, touch: [9], order: [[11, 9], [9, 12]] },
+    good: "One move_block of the London Gold Pool paragraph to after the paragraph that starts On Sunday, 15 August 1971; before the To floating rates heading; no words change.",
+  },
+  {
+    id: "edit-news-move-dissent",
+    family: "edit",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: null,
+    question: "Put the paragraph about the two dissenters right after the governor's quote.",
+    expect: { change: true, actions: [{ type: "move_block", block: 5, after: 3 }], only: ["move_block"], max: 1, touch: [5], order: [[3, 5], [5, 4]] },
+    good: "One move_block: the dissent paragraph lands after the We are not there yet paragraph and before the markets paragraph. Not a revise.",
+  },
+  {
+    id: "edit-memo-shorten-two",
+    family: "edit",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "Shorten the two paragraphs under \"The numbers\" to one sentence each. Keep every figure.",
+    expect: {
+      change: true,
+      actions: [{ type: "edit_block", block: 3 }, { type: "edit_block", block: 4 }],
+      only: ["edit_block"],
+      max: 2,
+      touch: [3, 4],
+      after: [
+        { block: 3, includes: ["1.84", "9.1", "6.3", "142", "18", "2.1", "2.9"] },
+        { block: 4, includes: ["14 percent", "3.41", "4.02"] },
+      ],
+    },
+    good: "Two edit_block actions, one sentence each, every figure kept as printed (1.84 billion, 6 percent, 9.1 from 6.3, 142 million against a loss of 18 million, 2.1 from 2.9 times; 14 percent fleet cut, four depots, diesel 3.41 from 4.02). No other block.",
+  },
+  {
+    id: "edit-law-revise-section",
+    family: "edit",
+    fixture: "law-contract-formation",
+    lang: "en",
+    profile: NOVICE,
+    question: "Rewrite the Consideration section in plainer words for a first-year student. Keep the case name and the year.",
+    expect: {
+      change: true,
+      actions: [{ type: "edit_block", block: 8, text: "Chappell" }],
+      only: ["edit_block", "revise", "format_block", "insert_paragraph"],
+      touch: [7, 8],
+      fresh: true,
+      after: [{ block: 8, includes: ["Chappell", "1960"] }],
+    },
+    good: "The Consideration paragraph rewritten in plain words (a promise, an act, or holding back; the courts do not ask if the exchange is fair; the chocolate wrappers case kept as Chappell & Co v Nestlé (1960); past consideration is a gift). Only that section changes; whether through a revise action or one edit_block, the result is the same.",
+  },
+  {
+    id: "edit-docs-revise-whole",
+    family: "edit",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: DEVELOPER,
+    question: "Change \"token\" to \"credit\" everywhere in the prose, including \"token bucket\" to \"credit bucket\". Leave the code block alone.",
+    expect: {
+      change: true,
+      only: ["edit_block", "revise"],
+      touch: [1, 3, 5, 8, 10, 12],
+      after: [
+        { block: 1, includes: ["credit bucket", "one credit"], excludes: ["token"] },
+        { block: 3, includes: ["5 credits"], excludes: ["token"] },
+        { block: 8, includes: ["1 credit"], excludes: ["token"] },
+        { block: 10, includes: ["credits left"], excludes: ["token"] },
+        { block: 6, includes: ["Retry-After"] },
+      ],
+      kept: [6],
+    },
+    good: "A revise across the document (or edits of the blocks that hold the word) that changes every token to credit in the prose, plural kept plural, and leaves the code block and the headers' names as they are. Nothing else changes.",
+  },
+
+  // ── annotate: marks on the passages ────────────────────────────────────
+  {
+    id: "annotate-memo-dollars",
+    family: "annotate",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "Highlight every sentence in the numbers section that gives a dollar figure.",
+    expect: {
+      change: true,
+      only: ["highlight"],
+      touch: [],
+      annotations: [
+        { block: 3, quote: "1.84 billion dollars" },
+        { block: 3, quote: "142 million dollars" },
+        { block: 4, quote: "3.41 dollars" },
+      ],
+      max: 5,
+    },
+    good: "Three highlights, each an exact sentence: revenue 1.84 billion dollars, free cash flow 142 million dollars, diesel 3.41 dollars a gallon. Not the margin sentence (percent), not the net debt sentence (times).",
+  },
+  {
+    id: "annotate-news-comment",
+    family: "annotate",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: HOME_BUYER,
+    question: "Add a comment on the governor's wage-growth sentence noting that the dissent points to unemployment at 4.4 percent.",
+    expect: {
+      change: true,
+      actions: [{ type: "comment", block: 6, quote: "Wage growth of 4.8 percent", text: "4.4" }],
+      only: ["comment"],
+      max: 1,
+      touch: [],
+    },
+    good: "One comment anchored on the wage-growth sentence (exact words), whose text names the dissent's 4.4 percent unemployment; nothing else.",
+  },
+  {
+    id: "annotate-paper-limits",
+    family: "annotate",
+    fixture: "paper-sparse-routing",
+    lang: "en",
+    profile: ML_ENGINEER,
+    question: "Highlight the passages that say when sparse routing loses to dense attention.",
+    expect: {
+      change: true,
+      only: ["highlight"],
+      touch: [],
+      annotations: [{ block: 11, quote: "4.7 points" }],
+      max: 4,
+    },
+    good: "Highlights in the Limitations paragraph: evidence spread over more than 4,096 tokens (4.7 points behind on 8 percent of LongQA), a query block that mixes two questions; possibly the 3.1 points without the retention loss. Exact sentences, not the whole paragraph.",
+  },
+  {
+    id: "annotate-zh-highlight",
+    family: "annotate",
+    fixture: "zh-platform-fees",
+    lang: "zh",
+    profile: SHOP_OWNER_ZH,
+    question: "把说明长尾商家受损的句子高亮出来。",
+    expect: { change: true, only: ["highlight"], touch: [], annotations: [{ block: 6, quote: "长尾商家" }], max: 4 },
+    good: "高亮“受损的是依赖平台曝光的长尾商家：订单量下降 18%……”一句，可加结论中“让长尾商家少赚约 13%”一句；描述用中文。",
+  },
+  {
+    id: "annotate-law-comment-case",
+    family: "annotate",
+    fixture: "law-contract-formation",
+    lang: "en",
+    profile: LAWYER,
+    question: "Comment on the Hyde v Wrench sentence: note that a mere request for information does not kill the offer.",
+    expect: {
+      change: true,
+      actions: [{ type: "comment", block: 6, quote: "Hyde v Wrench", text: "request for information" }],
+      only: ["comment"],
+      max: 1,
+      touch: [],
+    },
+    good: "One comment anchored on the Hyde v Wrench sentence, saying that a mere request for information, unlike a counteroffer, leaves the offer open.",
+  },
+
+  // ── section: notes, sections, documents ────────────────────────────────
+  {
+    id: "section-memo-risk-notes",
+    family: "section",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "Create a section called \"Northwind risks\" and add a note for each risk the memo names, each quoting the memo.",
+    expect: {
+      change: true,
+      actions: [{ type: "add_section", text: "Northwind risks" }],
+      only: ["add_section", "add_note"],
+      notes: [{ min: 2, sourced: true }],
+      touch: [],
+    },
+    good: "One add_section Northwind risks, then one add_note per risk (volume moving to cheaper carriers, fuel reversing, capacity leased at 30 percent above cost), each in that section with a source quote from the risks or fuel blocks.",
+  },
+  {
+    id: "section-news-note-quote",
+    family: "section",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: HOME_BUYER,
+    question: "Save the governor's condition for a December cut as a note in Open questions, quoting her words.",
+    expect: {
+      change: true,
+      actions: [{ type: "add_note", quote: "if the next two readings confirm it" }],
+      only: ["add_note"],
+      max: 1,
+      notes: [{ min: 1, sourced: true, section: "Open questions" }],
+      touch: [],
+    },
+    good: "One add_note in the Open questions section with the governor's words as its source (if the next two readings confirm it, a cut in December is on the table).",
+  },
+  {
+    id: "section-paper-method-note",
+    family: "section",
+    fixture: "paper-sparse-routing",
+    lang: "en",
+    profile: ML_ENGINEER,
+    question: "Write a note that summarizes the method in three bullet points with the key numbers.",
+    expect: {
+      change: true,
+      actions: [{ type: "add_note", text: "4,096" }],
+      only: ["add_note", "add_section"],
+      max: 2,
+      notes: [{ min: 1, includes: ["retention"] }],
+      touch: [],
+    },
+    good: "One add_note, three bullets: the router (12 million parameters per layer, top 4,096 keys for a 512-token query block, the block's own 512 and the first 128 tokens always kept), the retention loss (3.1 points without it), the cost (linear scoring, 2.4 times throughput, 96 to 31 gigabytes). Numbers as printed; a source quote on the method block is good.",
+  },
+  {
+    id: "section-podcast-document",
+    family: "section",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "Make a new document in this project that summarizes this interview: the main claims, each with the quote that supports it.",
+    expect: {
+      change: true,
+      actions: [{ type: "create_document", text: "Provenance" }],
+      only: ["create_document"],
+      touch: [],
+      documents: [{ includes: ["Provenance is the product", "A wrong citation is worse than a missing one"], minBlocks: 4 }],
+    },
+    good: "A new document of the project (not a note, not lines added to the transcript): a title, one part per claim (provenance, two ways of storing a span, never guess a missing quote, the reader's background changes the words not the facts, no forced connections, nothing enters notes without a keystroke, measure the tools), each with the guest's words quoted exactly.",
+  },
+  {
+    id: "section-podcast-topic-notes",
+    family: "section",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "Add a note per topic of the interview in a new section \"Interview notes\", each with a quote from the guest.",
+    expect: {
+      change: true,
+      actions: [{ type: "add_section", text: "Interview notes" }],
+      only: ["add_section", "add_note"],
+      notes: [{ min: 3, sourced: true }],
+      touch: [],
+    },
+    good: "One add_section Interview notes and one add_note per topic (provenance, re-parse, missing quotes, reader background, forced connections, advice), each sourced on an exact span of a guest line.",
+  },
+
+  // ── transcript: a recording's lines ────────────────────────────────────
+  {
+    id: "transcript-edit-words",
+    family: "transcript",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "In the guest's line about storing spans, change \"a little context\" to \"some context\".",
+    expect: {
+      change: true,
+      actions: [{ type: "edit_block", block: 4, text: "some context" }],
+      only: ["edit_block"],
+      max: 1,
+      touch: [4],
+      after: [{ block: 4, includes: ["with some context on either side"], excludes: ["a little context"] }],
+    },
+    good: "One edit_block on the 1:05 line with the two words changed and the rest of the line kept; the times stay.",
+  },
+  {
+    id: "transcript-remove-line",
+    family: "transcript",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "Remove the host's line \"So every answer points back into the document.\"",
+    expect: { change: true, actions: [{ type: "remove_block", block: 3 }], only: ["remove_block"], max: 1, removed: [3], touch: [3] },
+    good: "One remove_block on the 0:48 host line; nothing else.",
+  },
+  {
+    id: "transcript-split-line",
+    family: "transcript",
+    fixture: "transcript-podcast",
+    lang: "en",
+    profile: null,
+    question: "Split the guest's first answer so that \"Provenance is the product.\" starts a line of its own.",
+    expect: {
+      change: true,
+      actions: [{ type: "split_line", block: 2, quote: "Provenance is the product." }],
+      only: ["split_line"],
+      max: 1,
+      touch: [2],
+    },
+    good: "One split_line on the 0:14 line at the words Provenance is the product.; the second line starts with those words and the first ends at the sentence before.",
+  },
+
+  // ── confirm: a change carried through the conversation ─────────────────
+  {
+    id: "confirm-memo-apply",
+    family: "confirm",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    history: [
+      { role: "user", content: "Could you bold the buy price in the recommendation?" },
+      { role: "assistant", content: "I can bold \"below 38 dollars a share\" in the recommendation paragraph. Say yes and I will.\n\nProposed actions: Bold the buy price in the recommendation." },
+    ],
+    question: "yes do it",
+    expect: { change: true, actions: [{ type: "style", block: 12, quote: "38 dollars a share", style: "bold" }], only: ["style"], max: 1, touch: [] },
+    good: "The confirmation yields the actions in full: one style action, bold, on the exact words in the recommendation paragraph; one sentence of answer.",
+  },
+  {
+    id: "confirm-docs-narrow",
+    family: "confirm",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: DEVELOPER,
+    history: [
+      { role: "user", content: "Make all the headings top-level." },
+      {
+        role: "assistant",
+        content:
+          "I can make the five headings (Limits by endpoint, Handling 429, Batching, Headers, Raising the limit) top-level h1 headings.\n\nProposed actions: Make Limits by endpoint h1; Make Handling 429 h1; Make Batching h1; Make Headers h1; Make Raising the limit h1.",
+      },
+    ],
+    question: "Only the first two, please.",
+    expect: {
+      change: true,
+      actions: [{ type: "format_block", block: 2, kind: "h1" }, { type: "format_block", block: 4, kind: "h1" }],
+      only: ["format_block"],
+      max: 2,
+      touch: [2, 4],
+    },
+    good: "Two format_block actions, Limits by endpoint and Handling 429 to h1, and no other heading; the answer confirms the narrowed change in one sentence.",
+  },
+  {
+    id: "confirm-news-decline",
+    family: "confirm",
+    fixture: "news-rate-decision",
+    lang: "en",
+    profile: null,
+    history: [
+      { role: "user", content: "Delete the last paragraph." },
+      { role: "assistant", content: "I can remove the last paragraph, where analysts are divided on the timing.\n\nProposed actions: Remove the analysts paragraph." },
+    ],
+    question: "Actually no, keep it. Instead, highlight the October 12 date.",
+    expect: {
+      change: true,
+      actions: [{ type: "highlight", block: 8, quote: "October 12" }],
+      only: ["highlight"],
+      max: 1,
+      kept: [8],
+      touch: [],
+    },
+    good: "No removal. One highlight on the words that hold October 12 in the last paragraph (a sentence or the date's clause).",
+  },
+
+  // ── suggest: a document with rich text ─────────────────────────────────
+  {
+    id: "suggest-essay-shorten",
+    family: "suggest",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "suggestions",
+    question: "Shorten the paragraph that starts \"The ordinary speed\" by about a third, keeping its point.",
+    expect: { change: true, actions: [{ type: "suggest", block: 3, text: "shorten" }], only: ["suggest"], max: 1, touch: [] },
+    good: "One suggest action naming the third paragraph's block id alone, reorder false, an instruction that says to shorten it by about a third and keep its point (the warning read twice); the answer is one sentence on what will change and holds no rewritten text.",
+  },
+  {
+    id: "suggest-essay-reorder",
+    family: "suggest",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "suggestions",
+    question: "Reorganize the essay: group the paragraphs by theme and add a heading for each group.",
+    expect: { change: true, actions: [{ type: "suggest", reorder: true, whole: true }], only: ["suggest"], max: 1, touch: [] },
+    good: "One suggest action over the whole document (no blockIds) with reorder true; the instruction names the groups it would make (the claim, the method, the cost, the objection) and asks no word changes; one sentence of answer.",
+  },
+  {
+    id: "suggest-essay-fix",
+    family: "suggest",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "suggestions",
+    question: "Fix spelling and grammar across the document.",
+    expect: { change: true, actions: [{ type: "suggest", whole: true }], only: ["suggest"], max: 1, touch: [] },
+    good: "One suggest action over the whole document, reorder false, instruction: fix spelling and grammar only, change nothing else.",
+  },
+  {
+    id: "suggest-essay-question",
+    family: "suggest",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "suggestions",
+    question: "What two habits does the author recommend?",
+    expect: { change: false, answer: { includes: ["one question"], cites: true } },
+    good: "An answer, no actions: writing notes that restate the text with the source beside them, and reading for one question at a time. Cites the fifth paragraph.",
+  },
+  {
+    id: "suggest-zh-translate",
+    family: "suggest",
+    fixture: "zh-platform-fees",
+    lang: "zh",
+    profile: SHOP_OWNER_ZH,
+    edits: "suggestions",
+    question: "把结论一段翻译成英文。",
+    expect: { change: true, actions: [{ type: "suggest", blockAny: [10, 11] }], only: ["suggest"], max: 1, touch: [] },
+    good: "一个 suggest 操作，blockIds 只指向结论段（或结论标题），不是整篇；说明用中文，说要把结论段译成英文；回答只有一句。",
+  },
+];
