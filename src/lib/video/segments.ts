@@ -62,7 +62,10 @@ export function groupSegments(segments: TranscriptSegment[]): TranscriptSegment[
       lines.push(open);
       open = null;
     }
-    open = open ? { ...open, end: segment.end, text: `${open.text} ${segment.text}` } : { ...segment };
+    const merged: TranscriptSegment = open
+      ? { ...open, end: segment.end, text: `${open.text} ${segment.text}` }
+      : { ...segment };
+    open = merged;
   }
   if (open) lines.push(open);
   return lines;

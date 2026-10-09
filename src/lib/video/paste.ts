@@ -41,7 +41,7 @@ type Open = { start: number; end: number | null; text: string[]; cue?: boolean; 
     text is empty, too long, or carries no times. */
 export function parsePastedTranscript(text: string): TranscriptSegment[] {
   if (text.length > MAX_PASTE_CHARS) throw new Error("the pasted text is too long");
-  const opens = isTtml(text)
+  const opens: Open[] = isTtml(text)
     ? ttmlCues(text).map((c) => ({ start: c.start, end: c.end, text: [c.text] }))
     : WEBVTT_SIGNATURE.test(text)
       ? webVttCues(text)
