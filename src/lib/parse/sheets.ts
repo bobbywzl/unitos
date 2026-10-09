@@ -136,6 +136,16 @@ export type SheetsParseOptions = {
 
 // ── Entry: a sheets file's bytes ─────────────────────────────────────────────
 
+/** A cell's words as the grid shows them: control characters dropped
+    (cleanText), and every line break LF. The html reads a CR LF or a CR as
+    LF, so a CR left in the block's text would break the rule that the
+    replica's DOM text equals it. Sheets benchmark finding: a quoted CSV
+    field written on Windows or a classic Mac, and a cell with an
+    _x000D_ escape. */
+function cellText(text: string): string {
+  return cleanText(text).replace(/\r\n?/g, "\n");
+}
+
 /** A sheets file as the add reads it (lib/parse/ingest.ts): a zip that is a
     workbook parses as one; anything else is delimited text, tabs for a .tsv
     and the delimiter sniffed otherwise. */
@@ -173,7 +183,7 @@ export async function parseDelimited(text: string, filename: string, delimiter?:
   const sep = delimiter ?? sniffDelimiter(text);
   const table = parseDelimitedText(text.replace(/^﻿/, ""), sep);
   const rows: Row[] = table.map((cells) => ({
-    cells: cells.map((value) => ({ text: cleanText(value), kind: valueKind(value), styleId: null })),
+    cells: cells.map((value) => ({ text: cellText(value), kind: valueKind(value), styleId: null })),
     heightPt: null,
   }));
   const title = sheetsTitle(filename);
@@ -630,7 +640,7 @@ function richText(el: Element): string {
     if (node.localName === "t") out += node.textContent ?? "";
     else if (node.localName === "r") out += child(node, "t")?.textContent ?? "";
   }
-  return cleanText(out);
+  return cellText(out);
 }
 
 type Styles = {
@@ -915,7 +925,7 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
       return { ...base, text, kind: text === "" ? "empty" : "text" };
     }
     case "str":
-      return { ...base, text: cleanText(v), kind: v === "" ? "empty" : "text" };
+      return { ...base, text: cellText(v), kind: v === "" ? "empty" : "text" };
     case "inlineStr": {
       const text = richText(child(c, "is") ?? c);
       return { ...base, text, kind: text === "" ? "empty" : "text" };

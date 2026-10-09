@@ -8,7 +8,7 @@
   "merges": 1,
   "frozen": 1,
   "lost": 77695,
-  "dom": 4,
+  "dom": 0,
   "errors": 1
  },
  "files": {
@@ -760,7 +760,7 @@
    "merges": null,
    "frozen": null,
    "lost": 9364,
-   "dom": 1
+   "dom": 0
   },
   "lo-tdf129985": {
    "score": 1,
@@ -1190,7 +1190,7 @@
    "merges": null,
    "frozen": null,
    "lost": 1,
-   "dom": 1
+   "dom": 0
   },
   "csvkit-test-header-newline": {
    "score": 1,
@@ -1200,7 +1200,7 @@
    "merges": null,
    "frozen": null,
    "lost": 1,
-   "dom": 1
+   "dom": 0
   },
   "csvkit-null-byte": {
    "score": 1,
@@ -1340,7 +1340,7 @@
    "merges": null,
    "frozen": null,
    "lost": 0,
-   "dom": 1
+   "dom": 0
   },
   "lo-numberformat": {
    "score": 1,
