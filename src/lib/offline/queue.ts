@@ -3,7 +3,7 @@
 import { ACCOUNT_HEADER, QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import { keepDroppedWords } from "@/lib/note-drafts";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
-import { tabAccount } from "@/lib/tab-account";
+import { readAccountCookie, tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 // Offline work (SPEC.md §17, Unitos Premium): writes and uploads made while
@@ -12,11 +12,16 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // note, section, annotation, and reply routes) and uploads (the file bytes,
 // replayed through the same single-request or chunked path an online upload
 // takes). Syncing is at-least-once: a record leaves the queue when the server
-// answers, drops with a warning on a 4xx other than 401 (stale by then), and
+// answers, drops with a warning on a 4xx other than 401 (stale by then; the
+// reader's words are kept: keepDroppedWords, lib/note-drafts.ts), and
 // stays for the next attempt on a network failure, a 401 (signed out: it
-// waits for the sign-in), or a 5xx — a 5xx drops only on its MAX_ATTEMPTS-th
-// try, so one bad record cannot hold the queue forever. One tab drains at a
-// time (a Web Lock), so two open tabs never send a record twice.
+// waits for the sign-in), a 409 that says another account signed in (it
+// waits for its own account), or a 5xx — a 5xx drops only on its
+// MAX_ATTEMPTS-th try, so one bad record cannot hold the queue forever.
+// Each record names the account that queued it and is sent only while that
+// account is signed in; records of other accounts wait, uncounted and not
+// drawn (REV9-01). One tab drains at a time (a Web Lock), so two open tabs
+// never send a record twice.
 
 const PREMIUM_KEY = "unitos-premium";
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
@@ -109,12 +114,47 @@ function notify() {
   for (const l of listeners) l();
 }
 
+/** The account signed in to the browser now; null with sign-in off, or
+    signed out (the server then answers 401 and the record waits). */
+function signedInAccount(): string | null {
+  return readAccountCookie();
+}
+
+/** True when the record belongs to the account signed in now: it is sent,
+    counted, and drawn. A record of another account waits for that account. */
+export function queuedForThisAccount(record: { account: string | null }): boolean {
+  const account = signedInAccount();
+  return record.account === null || account === null || record.account === account;
+}
+
+// The records in a store that wait for the sync: a record of another
+// account waits for that account, and stays in the queue all the same.
+function waitingIn(store: typeof WRITES | typeof UPLOADS): Promise<number> {
+  return openDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        let n = 0;
+        const t = db.transaction(store, "readonly");
+        const req = t.objectStore(store).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) {
+            resolve(n);
+            return;
+          }
+          if (queuedForThisAccount(cursor.value as QueuedWrite | QueuedUpload)) n++;
+          cursor.continue();
+        };
+        req.onerror = () => reject(req.error);
+        t.oncomplete = () => db.close();
+      }),
+  );
+}
+
+/** The records waiting for the sync, this account's: the offline pill's count. */
 export async function queuedCount(): Promise<number> {
   try {
-    const [writes, uploads] = await Promise.all([
-      tx<number>(WRITES, "readonly", (s) => s.count()),
-      tx<number>(UPLOADS, "readonly", (s) => s.count()),
-    ]);
+    const [writes, uploads] = await Promise.all([waitingIn(WRITES), waitingIn(UPLOADS)]);
     return writes + uploads;
   } catch {
     return 0;
@@ -122,7 +162,7 @@ export async function queuedCount(): Promise<number> {
 }
 
 export async function queueWrite(path: string, method: QueuedWrite["method"], body?: unknown): Promise<void> {
-  const record: QueuedWrite = { path, method, body, account: tabAccount(), queuedAt: Date.now() };
+  const record: QueuedWrite = { path, method, body, account: tabAccount() ?? signedInAccount(), queuedAt: Date.now() };
   await tx(WRITES, "readwrite", (s) => s.add(record));
   queuedSinceSync = true;
   notify();
@@ -169,13 +209,20 @@ export function takeQuotesKept(): number {
 }
 
 // One drained record's outcome: "done" leaves the queue (sent, or stale on a
-// 4xx), "wait" stops the drain and keeps it (no network, or a 401), "retry"
-// stops the drain and counts a 5xx against it.
+// 4xx), "wait" stops the drain and keeps it (no network, a 401, another
+// account signed in), "retry" stops the drain and counts a 5xx against it.
 type Sent = "done" | "wait" | "retry";
 
-function outcome(res: Response, record: QueuedWrite | QueuedUpload, label: string): Sent {
+/** A 409 from the middleware: the browser signed into another account. */
+async function accountChanged(res: Response): Promise<boolean> {
+  if (res.status !== 409) return false;
+  const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
+  return body?.code === "accountChanged";
+}
+
+async function outcome(res: Response, record: QueuedWrite | QueuedUpload, label: string): Promise<Sent> {
   if (res.ok) return "done";
-  if (res.status === 401) return "wait";
+  if (res.status === 401 || (await accountChanged(res))) return "wait";
   if (res.status >= 500 && (record.attempts ?? 0) + 1 < MAX_ATTEMPTS) return "retry";
   console.warn("Offline sync dropped a write:", label, res.status);
   return "done";
@@ -190,8 +237,11 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
     });
     const kept = Number(res.headers.get(QUOTES_KEPT_HEADER) ?? 0);
     if (res.ok && kept > 0) quotesKept += kept;
-    const sent = outcome(res, record, record.path);
-    if (sent === "done" && !res.ok && record.method === "POST") keepDroppedWords(record.account, record.path, record.body);
+    const sent = await outcome(res, record, record.path);
+    // Dropped (stale by then): the reader's words are kept all the same —
+    // in the box's draft, else in the not-saved list the pill offers to
+    // copy (REV8-01, REV9-03).
+    if (sent === "done" && !res.ok) keepDroppedWords(record.account, record.path, record.body, record.method, record.queuedAt);
     return sent;
   } catch {
     return "wait";
@@ -251,15 +301,24 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
   }
 }
 
-// The oldest record in a store, with its key — the next one to sync.
-function firstRecord<T>(store: string): Promise<{ key: IDBValidKey; record: T } | null> {
+// The oldest record in a store after the key `after` that belongs to the
+// account signed in now, with its key — the next one to sync. A record of
+// another account is passed over: it waits for that account.
+function nextRecord<T extends { account: string | null }>(
+  store: string,
+  after: IDBValidKey | null,
+): Promise<{ key: IDBValidKey; record: T } | null> {
   return openDb().then(
     (db) =>
       new Promise((resolve, reject) => {
         const t = db.transaction(store, "readonly");
-        const req = t.objectStore(store).openCursor();
+        const req = t.objectStore(store).openCursor(after === null ? null : IDBKeyRange.lowerBound(after, true));
         req.onsuccess = () => {
           const cursor = req.result;
+          if (cursor && !queuedForThisAccount(cursor.value as T)) {
+            cursor.continue();
+            return;
+          }
           resolve(cursor ? { key: cursor.primaryKey, record: cursor.value as T } : null);
         };
         req.onerror = () => reject(req.error);
@@ -281,9 +340,13 @@ export async function syncQueue(): Promise<void> {
   try {
     const drain = async () => {
       for (const store of [WRITES, UPLOADS] as const) {
+        let after: IDBValidKey | null = null;
         for (;;) {
-          const head = await firstRecord<QueuedWrite | QueuedUpload>(store);
+          const head: { key: IDBValidKey; record: QueuedWrite | QueuedUpload } | null = await nextRecord<
+            QueuedWrite | QueuedUpload
+          >(store, after);
           if (!head) break;
+          after = head.key;
           const result =
             store === WRITES
               ? await sendWrite(head.record as QueuedWrite)

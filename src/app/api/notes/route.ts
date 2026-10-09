@@ -7,10 +7,11 @@ import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
 import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
-import { QUOTES_KEPT_HEADER, REPLAY_HEADER, REPLAY_SKEW_MS } from "@/lib/constants";
+import { QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
+import { replayTime } from "@/lib/replay";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
@@ -347,14 +348,6 @@ export async function POST(req: Request) {
     status: 201,
     ...(quotesKept > 0 ? { headers: { [QUOTES_KEPT_HEADER]: String(quotesKept) } } : {}),
   });
-}
-
-// The time a replayed record was queued, from REPLAY_HEADER: null unless
-// it is a whole number of ms. The duplicate lookup starts there, or a
-// minute before now when the queuing clock ran ahead (REPLAY_SKEW_MS).
-function replayTime(header: string | null): Date | null {
-  if (!header || !/^\d{1,15}$/.test(header)) return null;
-  return new Date(Math.min(Number(header), Date.now() - REPLAY_SKEW_MS));
 }
 
 // A quote as the note's text shows it: blockquote lines, the boxed

@@ -4,7 +4,7 @@ import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN, TEXT_BODY, TEXT_MET
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
+import { DRAFT_KEPT_EVENT, linkNoteDraftKey, readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
@@ -85,6 +85,22 @@ export function LinkNoteComposer({
   }
   // [ui5] WALK5-14: one saved line at a time on the graph.
   useEffect(() => (saved ? onOtherSavedLine("link", () => setSaved(null)) : undefined), [saved]);
+  // The queue put a dropped Note on this link's words into this draft, after
+  // what is typed here (keepDroppedWords, REV9-02): the composer opens on
+  // the draft, so the next keystroke writes over nothing.
+  useEffect(() => {
+    const onKept = (e: Event) => {
+      if ((e as CustomEvent<{ key?: unknown }>).detail?.key !== linkNoteDraftKey(myId, linkId)) return;
+      const stored = readLinkNoteDraft(myId, linkId);
+      if (!stored) return;
+      setContent(stored.content);
+      setSectionId((prev) => prev ?? stored.sectionId);
+      setSaved(null);
+      setOpen(true);
+    };
+    window.addEventListener(DRAFT_KEPT_EVENT, onKept);
+    return () => window.removeEventListener(DRAFT_KEPT_EVENT, onKept);
+  }, [myId, linkId]);
 
   if (!ctx || !canEdit) return null;
   const choices = ctx.sectionChoices;

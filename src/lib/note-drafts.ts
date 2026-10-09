@@ -13,6 +13,10 @@
 // belongs to the composer of one section: a new note being written, with the
 // id of the note the composer created on the server once it has one.
 
+// A relative path: the QA checks import this module straight, outside the
+// app's path alias (scripts/qa/reply-drafts-check.ts).
+import { addNotSaved } from "./offline/not-saved";
+
 const NOTE_PREFIX = "unitos-note-draft:";
 const COMPOSE_PREFIX = "unitos-note-compose:";
 // A draft nobody replayed in this long is stale: the note was deleted, or the
@@ -103,8 +107,28 @@ export type LinkNoteDraft = { content: string; sectionId: string | null; savedAt
 
 // The account part of a key: the signed-in id, or "local" with sign-in off.
 const accountPart = (account: string) => account || "local";
-const replyKey = (account: string, target: string) => `${REPLY_PREFIX}${accountPart(account)}:${target}`;
-const linkNoteKey = (account: string, linkId: string) => `${LINK_NOTE_PREFIX}${accountPart(account)}:${linkId}`;
+/** The storage key of a reply box's draft: the account and the target. */
+export const replyDraftKey = (account: string, target: string) => `${REPLY_PREFIX}${accountPart(account)}:${target}`;
+/** The storage key of a Note on this link draft: the account and the link. */
+export const linkNoteDraftKey = (account: string, linkId: string) => `${LINK_NOTE_PREFIX}${accountPart(account)}:${linkId}`;
+
+/** Fired on window when the queue puts a dropped write's words back into a
+    draft (keepDroppedWords); detail.key is the draft's storage key. An open
+    box on that draft takes the words at once, so its next keystroke does not
+    write over them (REV9-02). */
+export const DRAFT_KEPT_EVENT = "unitos:draft-kept";
+
+/** Subscribe to DRAFT_KEPT_EVENT (useSyncExternalStore): a box reads its
+    draft again on every kept draft. */
+export function subscribeDraftKept(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(DRAFT_KEPT_EVENT, onChange);
+  return () => window.removeEventListener(DRAFT_KEPT_EVENT, onChange);
+}
+
+function announceKept(key: string) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DRAFT_KEPT_EVENT, { detail: { key } }));
+}
 
 /** A key from before drafts named their account. */
 function legacyKey(key: string): boolean {
@@ -116,8 +140,8 @@ function legacyKey(key: string): boolean {
 /** The key one account's copy of a legacy key moves to. */
 function claimedKey(key: string, account: string): string {
   return key.startsWith(REPLY_PREFIX)
-    ? replyKey(account, key.slice(REPLY_PREFIX.length))
-    : linkNoteKey(account, key.slice(LINK_NOTE_PREFIX.length));
+    ? replyDraftKey(account, key.slice(REPLY_PREFIX.length))
+    : linkNoteDraftKey(account, key.slice(LINK_NOTE_PREFIX.length));
 }
 
 /** Move one legacy key to the account. When the account has its own draft
@@ -158,48 +182,89 @@ export function claimLegacyDrafts(account: string) {
 /** The reply box's draft. target: "note:<id>", "edit:<id>", or "link:<id>". */
 export function readReplyDraft(account: string, target: string): string | null {
   claim(REPLY_PREFIX + target, account);
-  const draft = read<ReplyDraft>(replyKey(account, target));
+  const draft = read<ReplyDraft>(replyDraftKey(account, target));
   return draft && typeof draft.content === "string" && draft.content ? draft.content : null;
 }
 
 export function writeReplyDraft(account: string, target: string, content: string) {
-  if (content) write(replyKey(account, target), { content, savedAt: Date.now() } satisfies ReplyDraft);
-  else remove(replyKey(account, target));
+  if (content) write(replyDraftKey(account, target), { content, savedAt: Date.now() } satisfies ReplyDraft);
+  else remove(replyDraftKey(account, target));
 }
 
 /** Note on this link's draft: the text and the section picked. */
 export function readLinkNoteDraft(account: string, linkId: string): { content: string; sectionId: string | null } | null {
   claim(LINK_NOTE_PREFIX + linkId, account);
-  const draft = read<LinkNoteDraft>(linkNoteKey(account, linkId));
+  const draft = read<LinkNoteDraft>(linkNoteDraftKey(account, linkId));
   if (!draft || typeof draft.content !== "string" || !draft.content) return null;
   return { content: draft.content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null };
 }
 
 export function writeLinkNoteDraft(account: string, linkId: string, content: string, sectionId: string | null) {
-  if (content) write(linkNoteKey(account, linkId), { content, sectionId, savedAt: Date.now() } satisfies LinkNoteDraft);
-  else remove(linkNoteKey(account, linkId));
+  if (content) write(linkNoteDraftKey(account, linkId), { content, sectionId, savedAt: Date.now() } satisfies LinkNoteDraft);
+  else remove(linkNoteDraftKey(account, linkId));
 }
 
-/** A queued reply or Note on this link that the server refused on replay
-    (a 4xx: the note, the edit, or the link left the project, or the role
-    changed): its words go back into the box's draft, after any words typed
-    there since, so the box opens on them (REV8-01, rule zero 6). Other
-    writes are not put back: their box is gone with the 4xx. */
-export function keepDroppedWords(account: string | null, path: string, body: unknown) {
+/** A queued write that the server refused on replay (a 4xx: the note, the
+    edit, the section, or the link left the project, the words left the
+    block, or the role changed): the reader's words are kept. A reply or a
+    Note on this link goes back into its box's draft, after any words typed
+    there since, so the box opens on them (REV8-01, rule zero 6). Every
+    other write with words — a comment, a note's edit, a gathered note, a
+    block's edit — goes to the account's not-saved list with its quotes,
+    which the offline pill offers to copy (lib/offline/not-saved.ts,
+    REV9-03). A write without words (a delete, an order) has nothing to
+    keep. */
+export function keepDroppedWords(
+  account: string | null,
+  path: string,
+  body: unknown,
+  method: "POST" | "PATCH" | "DELETE" = "POST",
+  queuedAt: number = Date.now(),
+) {
   if (!body || typeof body !== "object") return;
   const b = body as Record<string, unknown>;
   const words = typeof b.content === "string" ? b.content.trim() : "";
-  if (!words) return;
   const id = account ?? "";
   const join = (kept?: string) => (!kept?.trim() ? words : kept.includes(words) ? kept : `${kept.trimEnd()}\n\n${words}`);
-  if (path === "/api/replies") {
+  if (words && path === "/api/replies") {
     const target =
       typeof b.noteId === "string" ? `note:${b.noteId}` : typeof b.blockEditId === "string" ? `edit:${b.blockEditId}` : typeof b.docLinkId === "string" ? `link:${b.docLinkId}` : null;
-    if (target) writeReplyDraft(id, target, join(readReplyDraft(id, target) ?? undefined));
-  } else if (path === "/api/notes" && typeof b.fromLinkId === "string") {
+    if (!target) return;
+    writeReplyDraft(id, target, join(readReplyDraft(id, target) ?? undefined));
+    announceKept(replyDraftKey(id, target));
+    return;
+  }
+  if (words && path === "/api/notes" && typeof b.fromLinkId === "string") {
     const kept = readLinkNoteDraft(id, b.fromLinkId);
     writeLinkNoteDraft(id, b.fromLinkId, join(kept?.content), kept?.sectionId ?? (typeof b.sectionId === "string" ? b.sectionId : null));
+    announceKept(linkNoteDraftKey(id, b.fromLinkId));
+    return;
   }
+  const text = droppedWords(b);
+  if (text) addNotSaved(account, { at: queuedAt, path, method, words: text });
+}
+
+/** The reader's words in a dropped write's body — `content` (a note), `comment`
+    (a comment), `text` (a block's edit), or `title` (a section) — with its
+    quotes under them as quote lines: the comment's anchor, a gathered
+    note's quotes. */
+function droppedWords(b: Record<string, unknown>): string {
+  const own = [b.content, b.comment, b.text, b.title].find((v): v is string => typeof v === "string" && v.trim() !== "")?.trim() ?? "";
+  const quotes: string[] = [];
+  const anchor = b.anchor;
+  if (anchor && typeof anchor === "object" && typeof (anchor as Record<string, unknown>).quotedText === "string") {
+    quotes.push((anchor as Record<string, string>).quotedText);
+  }
+  if (Array.isArray(b.quotes)) {
+    for (const q of b.quotes) {
+      if (!q || typeof q !== "object") continue;
+      const v = q as Record<string, unknown>;
+      const quote = typeof v.quotedText === "string" ? v.quotedText : typeof v.text === "string" ? v.text : null;
+      if (quote) quotes.push(quote);
+    }
+  }
+  const lines = quotes.filter((q) => q.trim()).map((q) => q.split("\n").map((l) => (l ? `> ${l}` : ">")).join("\n"));
+  return [own, ...lines].filter(Boolean).join("\n\n");
 }
 
 // [ui5] WALK5-13: whether this browser holds unsent words on a link for the
@@ -218,8 +283,8 @@ function hasContent(key: string): boolean {
 export function hasLinkDraft(account: string, linkId: string): boolean {
   if (typeof window === "undefined") return false;
   return (
-    hasContent(linkNoteKey(account, linkId)) ||
-    hasContent(replyKey(account, `link:${linkId}`)) ||
+    hasContent(linkNoteDraftKey(account, linkId)) ||
+    hasContent(replyDraftKey(account, `link:${linkId}`)) ||
     hasContent(LINK_NOTE_PREFIX + linkId) ||
     hasContent(`${REPLY_PREFIX}link:${linkId}`)
   );

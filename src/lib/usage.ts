@@ -91,6 +91,16 @@ export function priceFor(model: string): Price {
   return price(3, 15); // unknown model — count it at a mid tier, never $0
 }
 
+/** Rows from this time keep the uncached input alone in inputTokens
+    (sdkTokens, COST8-02); rows before hold every prompt token there, the
+    cached ones too, with the cache columns filled as well. The admin usage
+    page adds the cached tokens of rows since this time back into its input
+    and token sums, so Input tokens and Tokens count every prompt token on
+    every row (REV9-06); no row is rewritten. The time is the deploy of the
+    fix: a row between it and the deploy would count its cache twice on the
+    page, on the page alone. */
+export const CACHE_COUNTED_APART_SINCE = new Date("2026-10-08T00:00:00Z");
+
 export type TokenCounts = {
   // The input tokens billed at the full price: the cached ones are
   // cacheReadTokens and cacheWriteTokens, never counted here too (COST8-02).
