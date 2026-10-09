@@ -6,6 +6,8 @@
   "lost:label": 59,
   "import.words": 188,
   "import.lost:label": 59,
+  "split": 5,
+  "import.split": 5,
   "import.mark.bold": 210,
   "mark.bold": 98,
   "import.list.depth": 2,
@@ -153,7 +155,10 @@
   "pandoc-image_with_textbox_caption.docx": {},
   "pandoc-inline_code.docx": {},
   "pandoc-inline_formatting.docx": {},
-  "pandoc-inline_images.docx": {},
+  "pandoc-inline_images.docx": {
+   "split": 2,
+   "import.split": 2
+  },
   "pandoc-instrText_hyperlink.docx": {},
   "pandoc-link_in_notes.docx": {},
   "pandoc-link_tooltips.docx": {},
@@ -415,7 +420,9 @@
   "lo-tdf149089.docx": {},
   "lo-tdf155707.docx": {},
   "lo-tdf163575.docx": {
+   "split": 1,
    "image.missing": 2,
+   "import.split": 1,
    "import.image.missing": 2
   },
   "lo-tdf49073.docx": {},
@@ -447,7 +454,10 @@
   "tika-017097.docx": {},
   "tika-018367.docx": {},
   "tika-testWORD_2006ml.docx": {},
-  "tika-testWORD_embedded_pics.docx": {},
+  "tika-testWORD_embedded_pics.docx": {
+   "split": 2,
+   "import.split": 2
+  },
   "tika-testWORD_template.docx": {},
   "uns-category-level.docx": {},
   "uns-docx-shapes.docx": {},

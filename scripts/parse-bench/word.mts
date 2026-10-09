@@ -34,6 +34,8 @@
 //   lost:<kind>      a paragraph whose words are not in the output (kind:
 //                    body, heading, list, cell, note, box, label, caption)
 //   words            words of the reference missing from the output
+//   split            a body paragraph whose words are kept, but in no one
+//                    block (a sentence cut in two around a picture)
 //   heading.missing  a heading's words kept but not as a heading
 //   heading.level    a heading at another level
 //   title.missing    a Title paragraph neither the title nor a heading
@@ -570,6 +572,8 @@ type Reading = {
   images: number;
   /** Words that stand as a paragraph of their own, not a figure's or a table's caption. */
   paragraphs: Set<string>;
+  /** Each block's words (a parse block, an import paragraph index row), compacted. */
+  rows: string[];
   marks: Record<MarkKind, string>;
 };
 
@@ -621,7 +625,7 @@ function keptAround(u: Unit, all: string): boolean {
 }
 
 function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont, titleStyles?: StyleSpan[]): Reading {
-  const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
+  const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), rows: [], marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // The title's look (ParsedDocument.titleFont) is its words' marks: the
   // import's Title style takes it.
   if (title && titleFont?.bold) r.marks.bold += ` ${title}`;
@@ -632,6 +636,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
     if (title && k) r.marks[k] += ` ${title.slice(st.start, st.end)}`;
   }
   const texts: string[] = [title ?? ""];
+  r.rows.push(compact(title ?? ""));
   const links: string[] = [];
   for (const b of blocks) {
     // A note's label the parse raises in the words is no word of the file.
@@ -641,6 +646,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
     const cuts = [...(b.footnoteRefs ?? []).map((f) => ({ ...f, by: "" })), ...(b.math ?? []).map((m) => ({ start: m.start, end: m.end, by: " " }))];
     for (const f of cuts.sort((x, y) => y.start - x.start)) words = `${words.slice(0, f.start)}${f.by}${words.slice(f.end)}`;
     texts.push(b.type === "EQUATION" ? "" : words);
+    r.rows.push(compact(b.type === "EQUATION" ? "" : words));
     if (b.footnote) r.notes++;
     if (b.type === "EQUATION") r.math++;
     r.math += b.math?.length ?? 0;
@@ -691,7 +697,7 @@ const RICH_MARKS: Record<string, MarkKind> = { bold: "bold", italic: "italic", u
 
 function readImport(doc: RichNode, figures: { html: string | null }[] = []): Reading {
   const rows = deriveBlocks(doc);
-  const r: Reading = { text: "", headings: [], title: "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
+  const r: Reading = { text: "", headings: [], title: "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), rows: [], marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // An inline formula reads as its TeX between dollar signs (mathWords): no
   // words of the file, which keep a formula out of the words too.
   const formulas = new Set<string>();
@@ -700,10 +706,9 @@ function readImport(doc: RichNode, figures: { html: string | null }[] = []): Rea
     for (const c of node.content ?? []) findMath(c);
   };
   findMath(doc);
-  r.text = rows
-    .filter((row) => row.type !== "EQUATION")
-    .map((row) => [...formulas].reduce((text, f) => (f ? text.split(f).join(" ") : text), row.text))
-    .join("\n");
+  const texts = rows.filter((row) => row.type !== "EQUATION").map((row) => [...formulas].reduce((text, f) => (f ? text.split(f).join(" ") : text), row.text));
+  r.text = texts.join("\n");
+  r.rows = texts.map(compact);
   for (const row of rows) {
     if (row.type === "HEADING") r.headings.push({ level: Number(/^<h([1-6])/.exec(row.html ?? "")?.[1] ?? 1), text: compact(row.text) });
     if (row.type === "PARAGRAPH" && !row.cell) r.paragraphs.add(compact(row.text));
@@ -835,6 +840,8 @@ function compare(ref: Reference, got: Reading, side: "parse" | "import"): Findin
     // draws as its own counter: the words after it are the line's.
     const words = compact(u.text.replace(TYPED, ""));
     if (c.length >= 3 && !all.includes(c) && !(words.length >= 3 && all.includes(words)) && !keptAround(u, all)) bump(`lost:${u.kind}`, u.text);
+    // A body paragraph whose words are kept but in no one block: split.
+    else if (u.kind === "body" && words.length >= 12 && all.includes(words) && !got.rows.some((row) => row.includes(words))) bump("split", u.text);
   }
   // Headings, the title.
   for (const u of ref.units) {
