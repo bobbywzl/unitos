@@ -5,6 +5,7 @@
 // Run: npx tsx --tsconfig tsconfig.json scripts/qa/word-parse.mts
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { richTextFromImport } from "@/lib/docs/import";
+import { tableFromHtml } from "@/lib/docs/import-table";
 import type { RichNode } from "@/lib/docs/schema";
 import { parseDocx } from "@/lib/parse/docx";
 import type { ParsedBlock } from "@/lib/parse/types";
@@ -361,6 +362,21 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   const beside = await parse(docx(`<w:p>${words("Objective")}${box("paragraph", "<wp:posOffset>0</wp:posOffset>", "A note beside it.")}</w:p>${para("Getting the perfect job.")}`));
   const besideLines = beside.map((b) => b.text).join("|");
   check("a text box set against its paragraph reads after it", besideLines === "Objective|A note beside it.|Getting the perfect job.", JSON.stringify(besideLines));
+}
+
+// ── The import reads a Word table's html without jsdom ──────────────────────
+
+{
+  const html = '<table><colgroup><col style="width:100pt"><col style="width:200pt"></colgroup><tbody><tr><td style="background-color:#eeeeee">Rate<sup>1</sup><span class="cell-gap">\t</span></td><td><strong>5%</strong></td></tr><tr><td colspan="2"><p style="text-align:center">Fee</p><p>none</p></td></tr></tbody></table>';
+  const text = "Rate1\t5%Feenone";
+  const built = tableFromHtml(html, 624, { text, refs: [{ start: 4, end: 5, footnoteId: "n1" }] });
+  const json = JSON.stringify(built?.table ?? null);
+  const rows = built?.table.content ?? [];
+  check(
+    "a Word table reads its fill, its marks, its merged row, and the note it cites",
+    rows.length === 2 && json.includes('"backgroundColor":"#eeeeee"') && json.includes('{"type":"footnoteReference","attrs":{"footnoteId":"n1"}}') && json.includes('"marks":[{"type":"bold"}]') && json.includes('"colspan":2') && json.includes('"textAlign":"center"'),
+    json.slice(0, 400),
+  );
 }
 
 if (failed > 0) {

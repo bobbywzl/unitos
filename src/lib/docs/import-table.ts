@@ -1,12 +1,12 @@
-import { JSDOM } from "jsdom";
+import { type DefaultTreeAdapterTypes, defaultTreeAdapter, html as parse5Html, parseFragment } from "parse5";
 import { newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
 import { normalizeText, separateBlocks } from "@/lib/parse/dom-text";
 
 // The converter's tables (lib/docs/import.ts): a TABLE block's html becomes a
 // page editor table (SPEC.md §29): its rows, header cells, merged cells, and
-// a paragraph for each paragraph of a cell. It reads html with jsdom, so it
-// loads with the parse chain only (lib/parse/ingest.ts), never with a route
-// module. The inline helpers below are the converter's too: every text run of
+// a paragraph for each paragraph of a cell. It reads html with parse5 into a
+// light tree (below), and loads with the parse chain only
+// (lib/parse/ingest.ts), never with a route module. The inline helpers below are the converter's too: every text run of
 // an import is made here, marks in the editor's order.
 
 /** A piece of a line: words with their marks, or an inline node (a line
@@ -109,6 +109,232 @@ export function paragraphNode(content: RichNode[], attrs: Record<string, unknown
   return node;
 }
 
+// ── The html tree ───────────────────────────────────────────────────────────
+// A table's html is read with parse5, the parser jsdom runs, into a light
+// tree: the tree jsdom builds, without a DOM object for every tag (Word
+// benchmark finding: jsdom took 7 s of an 18 MB Word file's 8 s import, its
+// 660 tables and 24,848 cells). The tree answers what the reader asks of a
+// DOM, under the DOM's names, and nothing more.
+
+/** A selector the tree answers: "*", a tag name, ".class", or a list of
+    them ("td, th"). */
+function matcherOf(selector: string): (el: TreeElement) => boolean {
+  const tests = selector.split(",").map((part) => {
+    const s = part.trim();
+    if (s === "*") return () => true;
+    if (/^\.[\w-]+$/.test(s)) return (el: TreeElement) => el.classList.contains(s.slice(1));
+    if (/^[a-z][a-z0-9]*$/.test(s)) return (el: TreeElement) => el.localName === s;
+    throw new Error(`The html tree answers no selector "${selector}"`);
+  });
+  return (el) => tests.some((test) => test(el));
+}
+
+abstract class TreeNode {
+  parentNode: TreeElement | null = null;
+  abstract readonly nodeType: number;
+  abstract readonly textContent: string;
+  abstract cloneNode(deep: boolean): TreeNode;
+
+  get ownerDocument(): typeof TREE_DOCUMENT {
+    return TREE_DOCUMENT;
+  }
+
+  get parentElement(): TreeElement | null {
+    return this.parentNode;
+  }
+
+  get previousSibling(): TreeNode | null {
+    const siblings = this.parentNode?.childNodes ?? [];
+    const at = siblings.indexOf(this);
+    return at > 0 ? siblings[at - 1] : null;
+  }
+
+  before(node: TreeNode) {
+    this.parentNode?.insert(node, this, 0);
+  }
+
+  after(node: TreeNode) {
+    this.parentNode?.insert(node, this, 1);
+  }
+
+  replaceWith(node: TreeNode) {
+    const parent = this.parentNode;
+    if (!parent) return;
+    parent.insert(node, this, 0);
+    parent.childNodes.splice(parent.childNodes.indexOf(this), 1);
+    this.parentNode = null;
+  }
+}
+
+class TreeText extends TreeNode {
+  readonly nodeType = 3;
+  constructor(public data: string) {
+    super();
+  }
+
+  get textContent(): string {
+    return this.data;
+  }
+
+  get length(): number {
+    return this.data.length;
+  }
+
+  cloneNode(): TreeText {
+    return new TreeText(this.data);
+  }
+
+  /** The words from `offset` on as a text node of their own after this one. */
+  splitText(offset: number): TreeText {
+    const rest = new TreeText(this.data.slice(offset));
+    this.data = this.data.slice(0, offset);
+    this.after(rest);
+    return rest;
+  }
+}
+
+class TreeComment extends TreeNode {
+  readonly nodeType = 8;
+  constructor(readonly data: string) {
+    super();
+  }
+
+  get textContent(): string {
+    return this.data;
+  }
+
+  cloneNode(): TreeComment {
+    return new TreeComment(this.data);
+  }
+}
+
+class TreeElement extends TreeNode {
+  readonly nodeType = 1;
+  readonly childNodes: TreeNode[] = [];
+  constructor(
+    readonly localName: string,
+    readonly namespaceURI: string,
+    private readonly attrs: { name: string; value: string }[],
+  ) {
+    super();
+  }
+
+  /** The tag's name as the DOM gives it: upper case for an html element. */
+  get tagName(): string {
+    return this.namespaceURI === parse5Html.NS.HTML ? this.localName.toUpperCase() : this.localName;
+  }
+
+  get children(): TreeElement[] {
+    return this.childNodes.filter((n): n is TreeElement => n instanceof TreeElement);
+  }
+
+  /** The words of every text node inside, comments left out. */
+  get textContent(): string {
+    let out = "";
+    const walk = (node: TreeNode) => {
+      if (node instanceof TreeText) out += node.data;
+      else if (node instanceof TreeElement) node.childNodes.forEach(walk);
+    };
+    walk(this);
+    return out;
+  }
+
+  get classList(): { contains(name: string): boolean } {
+    const names = (this.getAttribute("class") ?? "").split(/[\t\n\f\r ]+/);
+    return { contains: (name) => names.includes(name) };
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attrs.find((a) => a.name === name)?.value ?? null;
+  }
+
+  setAttribute(name: string, value: string) {
+    const attr = this.attrs.find((a) => a.name === name);
+    if (attr) attr.value = value;
+    else this.attrs.push({ name, value });
+  }
+
+  append(node: TreeNode) {
+    this.insert(node, null, 0);
+  }
+
+  /** The node `offset` places after `ref` (0: before it), or last. */
+  insert(node: TreeNode, ref: TreeNode | null, offset: 0 | 1) {
+    if (node.parentNode) node.parentNode.childNodes.splice(node.parentNode.childNodes.indexOf(node), 1);
+    const at = ref ? this.childNodes.indexOf(ref) + offset : this.childNodes.length;
+    this.childNodes.splice(at, 0, node);
+    node.parentNode = this;
+  }
+
+  cloneNode(deep: boolean): TreeElement {
+    const copy = new TreeElement(this.localName, this.namespaceURI, this.attrs.map((a) => ({ ...a })));
+    if (deep) for (const child of this.childNodes) copy.append(child.cloneNode(true));
+    return copy;
+  }
+
+  closest(selector: string): TreeElement | null {
+    const matches = matcherOf(selector);
+    if (matches(this)) return this;
+    for (let at = this.parentNode; at; at = at.parentNode) if (matches(at)) return at;
+    return null;
+  }
+
+  /** The elements inside that match, in document order. */
+  querySelectorAll(selector: string): TreeElement[] {
+    const matches = matcherOf(selector);
+    const out: TreeElement[] = [];
+    const walk = (el: TreeElement) => {
+      for (const child of el.childNodes) {
+        if (!(child instanceof TreeElement)) continue;
+        if (matches(child)) out.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return out;
+  }
+
+  querySelector(selector: string): TreeElement | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
+}
+
+/** The nodes the reader makes: a space, a footnote's number. */
+const TREE_DOCUMENT = {
+  createTextNode: (data: string) => new TreeText(data),
+  createElement: (localName: string) => new TreeElement(localName, parse5Html.NS.HTML, []),
+};
+
+/** The tree of parse5's node and the nodes under it. */
+function treeOf(node: DefaultTreeAdapterTypes.ChildNode): TreeNode | null {
+  if (defaultTreeAdapter.isTextNode(node)) return new TreeText(node.value);
+  if (defaultTreeAdapter.isCommentNode(node)) return new TreeComment(node.data);
+  if (!defaultTreeAdapter.isElementNode(node)) return null;
+  const el = new TreeElement(
+    node.tagName,
+    node.namespaceURI,
+    node.attrs.map((a) => ({ name: a.prefix ? `${a.prefix}:${a.name}` : a.name, value: a.value })),
+  );
+  for (const child of node.childNodes) {
+    const tree = treeOf(child);
+    if (tree) el.append(tree);
+  }
+  return el;
+}
+
+/** Html as the children of a div, as a div's innerHTML reads it in a
+    document jsdom makes (scripting off). */
+function htmlTree(html: string): TreeElement {
+  const context = defaultTreeAdapter.createElement("div", parse5Html.NS.HTML, []);
+  const fragment = parseFragment(context, html, { scriptingEnabled: false });
+  const host = new TreeElement("div", parse5Html.NS.HTML, []);
+  for (const child of fragment.childNodes) {
+    const tree = treeOf(child);
+    if (tree) host.append(tree);
+  }
+  return host;
+}
+
 // ── A cell's content ────────────────────────────────────────────────────────
 
 /** Words with their marks, a line break, or an inline node the converter
@@ -188,20 +414,11 @@ function collapsed(line: Inline[]): Piece[] {
 const MAX_LATEX = 2000;
 const HEX = /^#[0-9a-f]{6}$/;
 
-/** The name a style attribute is read under. jsdom parses every style
-    attribute into a CSS declaration as it builds an element, a large
-    Word table's most expensive step (Word benchmark finding: 6 s of an
-    18 MB file's 16 s import); the look is read from the attribute's
-    words alone, so tableFromHtml renames the attribute in the start tags
-    before jsdom reads them. */
-const LOOK = "data-unitos-look";
-const lookAttribute = (el: Element) => el.getAttribute(LOOK) ?? el.getAttribute("style");
-/** A start tag's style attribute name: the tag and its attributes before
-    it, each name with its value whole, so words inside a value never match. */
-const STYLE_NAME = /(<[a-zA-Z][\w:-]*(?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>=`]+))?)*\s+)style=/g;
+/** The look is read from a style attribute's words alone. */
+const lookAttribute = (el: TreeElement) => el.getAttribute("style");
 
 /** One property of an element's style attribute, lower case. */
-function styleOf(el: Element, name: string): string | null {
+function styleOf(el: TreeElement, name: string): string | null {
   for (const part of (lookAttribute(el) ?? "").split(";")) {
     const at = part.indexOf(":");
     if (at > 0 && part.slice(0, at).trim().toLowerCase() === name) return part.slice(at + 1).trim().toLowerCase();
@@ -210,13 +427,13 @@ function styleOf(el: Element, name: string): string | null {
 }
 
 /** A span's face: a plain font name (letters, digits, spaces, hyphens). */
-function faceOf(el: Element): string | null {
+function faceOf(el: TreeElement): string | null {
   const raw = (lookAttribute(el) ?? "").split(";").find((part) => part.split(":")[0]?.trim().toLowerCase() === "font-family");
   const value = raw?.slice(raw.indexOf(":") + 1).trim() ?? "";
   return /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/.test(value) ? value : null;
 }
 
-function colorOf(el: Element, name: "color" | "background-color"): string | null {
+function colorOf(el: TreeElement, name: "color" | "background-color"): string | null {
   const value = styleOf(el, name);
   return value && HEX.test(value) ? value : null;
 }
@@ -231,7 +448,7 @@ function pointsOf(value: string | null, max: number): number | null {
 /** A cell's side from its style ("border-top:0.13pt solid #b6bece", a
     Word table's) as the page editor stores one ("0.13 solid #b6bece"; a
     width of 0 hides the side). */
-function sideOf(el: Element, side: "top" | "right" | "bottom" | "left"): string | null {
+function sideOf(el: TreeElement, side: "top" | "right" | "bottom" | "left"): string | null {
   const m = /^(\d{1,2}(?:\.\d{1,2})?)pt (solid|dotted|dashed) (#[0-9a-f]{6})$/.exec(styleOf(el, `border-${side}`) ?? "");
   return m ? `${Number(m[1])} ${m[2]} ${m[3]}` : null;
 }
@@ -239,7 +456,7 @@ function sideOf(el: Element, side: "top" | "right" | "bottom" | "left"): string 
 const CELL_SIDES = { borderTop: "top", borderRight: "right", borderBottom: "bottom", borderLeft: "left" } as const;
 
 /** A paragraph's alignment and left indent (points), from a <p> or a cell. */
-function paragraphAttrs(el: Element): Record<string, unknown> {
+function paragraphAttrs(el: TreeElement): Record<string, unknown> {
   const attrs: Record<string, unknown> = {};
   const align = styleOf(el, "text-align");
   if (align === "center" || align === "right") attrs.textAlign = align;
@@ -264,7 +481,7 @@ class CellReader {
   /** attrs: the alignment and indent of the paragraphs read (a cell's own). */
   constructor(private attrs: Record<string, unknown> = {}) {}
 
-  read(el: Element, marks: RichMark[]) {
+  read(el: TreeElement, marks: RichMark[]) {
     for (const child of el.childNodes) this.node(child, marks);
   }
 
@@ -274,13 +491,13 @@ class CellReader {
     if (content.length > 0) this.blocks.push(paragraphNode(content, this.attrs));
   }
 
-  private node(node: Node, marks: RichMark[]) {
-    if (node.nodeType === 3) {
-      this.line.push({ text: node.textContent ?? "", marks });
+  private node(node: TreeNode, marks: RichMark[]) {
+    if (node instanceof TreeText) {
+      this.line.push({ text: node.textContent, marks });
       return;
     }
-    if (node.nodeType !== 1) return;
-    const el = node as Element;
+    if (!(node instanceof TreeElement)) return;
+    const el = node;
     const tag = el.tagName.toLowerCase();
     if (SKIPPED.has(tag) || el.classList.contains("cell-gap")) return;
     if (tag === "br") {
@@ -364,7 +581,7 @@ class CellReader {
   }
 }
 
-function imageNode(el: Element): RichNode | null {
+function imageNode(el: TreeElement): RichNode | null {
   const src = keptSrc(el.getAttribute("src"));
   if (!src) return null;
   const attrs: Record<string, unknown> = { src, alt: clip(el.getAttribute("alt") ?? "", 2000), blockId: newBlockId() };
@@ -377,7 +594,7 @@ function imageNode(el: Element): RichNode | null {
 
 /** A list inside a cell: a list item's first block is a paragraph, as the
     editor's list item needs. */
-function listNode(el: Element, marks: RichMark[]): RichNode | null {
+function listNode(el: TreeElement, marks: RichMark[]): RichNode | null {
   const ordered = el.tagName.toLowerCase() === "ol";
   const items: RichNode[] = [];
   for (const li of el.children) {
@@ -395,14 +612,14 @@ function listNode(el: Element, marks: RichMark[]): RichNode | null {
   return { type: ordered ? "orderedList" : "bulletList", ...(attrs ? { attrs } : {}), content: items };
 }
 
-function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
+function cellBlocks(cell: TreeElement, gapped: boolean): RichNode[] {
   // A space at every block boundary, as the parse's table text reads it
   // (lib/parse/dom-text.ts), so a cell's words are the parse's words. A
   // table whose cells end in their gaps (gapped: a PDF's, a Word file's)
   // has its text as its DOM text already: a raised "4" after a bold "g"
   // reads "g4", never "g 4".
   // The reader changes nothing: only the spaces go into a copy.
-  const source = gapped ? cell : (cell.cloneNode(true) as Element);
+  const source = gapped ? cell : cell.cloneNode(true);
   if (!gapped) separateBlocks(source);
   const reader = new CellReader(paragraphAttrs(cell));
   reader.read(source, []);
@@ -423,13 +640,6 @@ export type ImportTable = {
       where a page that begins at the row puts its page start. */
   rowStarts: (RichNode | null)[];
 };
-
-let shared: Document | null = null;
-
-function scratchDocument(): Document {
-  shared ??= new JSDOM("<!doctype html><body></body>").window.document;
-  return shared;
-}
 
 type GridCell = { node: RichNode; col: number };
 
@@ -702,7 +912,7 @@ function tableNode(
   return { table: { type: "table", content }, rowStarts };
 }
 
-const spanOf = (el: Element, name: string, max: number) => {
+const spanOf = (el: TreeElement, name: string, max: number) => {
   const n = Number(el.getAttribute(name) ?? "1");
   // rowspan="0" runs to the table's end.
   if (name === "rowspan" && n === 0) return max;
@@ -719,15 +929,15 @@ export type CellNotes = { text: string; refs: { start: number; end: number; foot
     table html's DOM text (SPEC.md §5: a cell ends in its gap); a table whose
     DOM text differs, or a label outside a cell's words (a caption), keeps
     its label as words. */
-function placeNotes(table: Element, notes: CellNotes) {
+function placeNotes(table: TreeElement, notes: CellNotes) {
   if (table.textContent !== notes.text) return;
-  const texts: { node: Text; start: number }[] = [];
+  const texts: { node: TreeText; start: number }[] = [];
   let at = 0;
-  const collect = (node: Node) => {
-    if (node.nodeType === 3) {
-      texts.push({ node: node as Text, start: at });
-      at += (node as Text).length;
-    } else node.childNodes.forEach(collect);
+  const collect = (node: TreeNode) => {
+    if (node instanceof TreeText) {
+      texts.push({ node, start: at });
+      at += node.length;
+    } else if (node instanceof TreeElement) node.childNodes.forEach(collect);
   };
   collect(table);
   // From the last label back: splitting a text node keeps every offset before it.
@@ -747,16 +957,18 @@ function placeNotes(table: Element, notes: CellNotes) {
     text column `room` px wide, a footnote cited in a cell its number there;
     null when it holds no row. */
 export function tableFromHtml(html: string, room: number, notes?: CellNotes): ImportTable | null {
-  const host = scratchDocument().createElement("div");
-  host.innerHTML = html.replace(STYLE_NAME, `$1${LOOK}=`);
+  const host = htmlTree(html);
   const table = host.querySelector("table");
   if (!table) return null;
   if (notes && notes.refs.length > 0) placeNotes(table, notes);
   const trs = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   if (trs.length === 0) return null;
-  const cellsOf = (tr: Element) => [...tr.children].filter((c) => /^(td|th)$/i.test(c.tagName));
+  const cellsOf = (tr: TreeElement) => tr.children.filter((c) => /^(td|th)$/i.test(c.tagName));
   // The table's text size and its columns' widths on the page.
-  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
+  const cols = table.children
+    .filter((group) => group.localName === "colgroup")
+    .flatMap((group) => group.children.filter((col) => col.localName === "col"))
+    .map((col) => pointsOf(styleOf(col, "width"), 2000));
   // A colspan past the table's columns ("99" for a row the width of the
   // table) spans the table, never columns no row fills. The columns are the
   // colgroup's, or the most a row fills, each of its merged cells over the
@@ -801,10 +1013,10 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const built = tableNode(rows, room, look);
   if (!built) return null;
   // The caption's words keep their marks: the paragraphs it holds, one line.
-  const captionEl = [...table.children].find((c) => c.tagName.toLowerCase() === "caption");
+  const captionEl = table.children.find((c) => c.tagName.toLowerCase() === "caption");
   const reader = new CellReader();
   if (captionEl) {
-    const source = gapped ? captionEl : (captionEl.cloneNode(true) as Element);
+    const source = gapped ? captionEl : captionEl.cloneNode(true);
     if (!gapped) separateBlocks(source);
     reader.read(source, []);
     reader.flush();
