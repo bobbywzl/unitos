@@ -25,7 +25,6 @@ const en = {
   // [view10] VIEW10-03: the ? and the far-zoom ring are explained once, in graphCover.keyWaiting.
   keyCurveReplies: "Open replies on the links between two documents",
   keyCurveNotes: "Notes that quote both documents",
-  keyPending: "Pending notes, awaiting Accept",
   keyNotesGroup: "Notes and comments",
   keyFar: "Zoomed out, link counts and notes hide until a curve is lit; replies stay.",
   // [style10] WALK10-03: on a phone the waiting node keeps its comments chip, and its card is the way to the comments.
@@ -95,7 +94,6 @@ const zh: Record<keyof typeof en, string> = {
   keyCurveCount: "两个文档之间的链接数",
   keyCurveReplies: "两个文档之间链接上的未解决回复",
   keyCurveNotes: "同时引用这两个文档的笔记",
-  keyPending: "待定笔记，等待接受",
   keyNotesGroup: "笔记和评论",
   keyFar: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。",
   keyFarTouch: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。按节点查看它的评论。",
