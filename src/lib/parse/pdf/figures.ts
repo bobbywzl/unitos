@@ -732,7 +732,12 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     if (out.length === 0 || chars > (out.every(small) ? 400 : 200)) return [];
     // A caption is words: a row of numbers under a chart is its axis.
     const letters = out.reduce((n, r) => n + r.items.reduce((m, i) => m + (i.str.match(/\p{L}/gu)?.length ?? 0), 0), 0);
-    if (letters < 4 || letters < chars * 0.5) return [];
+    // A panel's caption is words whatever its letters ("(a) M = 0", its
+    // formula set in letters of its own: parse loop finding, the MML book
+    // p. 305, six panels' "(a) M = 0" … "(f) M = 9" read as their charts'
+    // labels and went into the crops).
+    const panel = isSubCaption(out.map(textOf).join(" "));
+    if (!panel && (letters < 4 || letters < chars * 0.5)) return [];
     const size = Math.max(...out.map((r) => r.size));
     const italic = out.reduce((n, r) => n + r.italic, 0) >= chars * 0.6;
     // Centered: each line as far in from both edges, give or take a fifth
@@ -828,7 +833,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // axis, and a statistics book's "−2 −1 0 1 2" stayed text).
   const axisOf = (plot: Box): TextRun[] =>
     runs.filter((r) => {
-      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
+      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
       // An equation's number at the column's edge is no tick of a drawing
       // in the margin beside it (parse loop finding: the MML book's p. 23
@@ -904,7 +909,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const under = Math.min(plot.y1, ...axis.filter((r) => r.box.y2 <= plot.y1 + r.size).map((r) => r.box.y1));
     const over = Math.max(plot.y2, ...axis.filter((r) => r.box.y1 >= plot.y2 - r.size).map((r) => r.box.y2));
     return runs.filter((r) => {
-      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r))) return false;
+      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       const face = faceOf(r);
       if (face === undefined || !faces.has(face) || bodyFaces.has(face)) return false;
       if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
