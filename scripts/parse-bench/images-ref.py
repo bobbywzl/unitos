@@ -156,7 +156,7 @@ def derive(f, out):
     elif op == "png-bomb":
         w, h = d["size"]
         with open(out, "wb") as fh:
-            fh.write(white_png(w, h))
+            fh.write(white_png(w, h, d.get("color", False)))
     elif op == "panorama":
         im = Image.open(srcs[0]).convert("RGB")
         band = im.crop((0, im.height // 3, im.width, im.height // 3 + im.width // 9))
@@ -224,9 +224,9 @@ def jbig2_page(src, w, h):
     return one_image_pdf(image, stream, w * 72 / 300, h * 72 / 300)
 
 
-def white_png(w, h):
-    """A white 8-bit gray PNG of w x h, written row by row: a small file that
-    decodes to w * h bytes and more."""
+def white_png(w, h, color=False):
+    """A white 8-bit gray PNG of w x h (RGB when color), written row by row:
+    a small file that decodes to w * h bytes and more."""
     import struct
     import zlib
 
@@ -234,10 +234,10 @@ def white_png(w, h):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
 
     z = zlib.compressobj(9)
-    row = b"\x00" + b"\xff" * w
+    row = b"\x00" + b"\xff" * (w * 3 if color else w)
     parts = [z.compress(row) for _ in range(h)]
     parts.append(z.flush())
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)) + chunk(b"IDAT", b"".join(parts)) + chunk(b"IEND", b"")
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2 if color else 0, 0, 0, 0)) + chunk(b"IDAT", b"".join(parts)) + chunk(b"IEND", b"")
 
 
 def thumb_rgb(im):

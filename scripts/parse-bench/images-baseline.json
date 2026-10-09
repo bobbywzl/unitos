@@ -1,8 +1,8 @@
 {
  "total": {
   "a": 0.975,
-  "b": 1,
-  "all": 0.988
+  "b": 0.99,
+  "all": 0.982
  },
  "files": {
   "a-tracemonkey": 1,
@@ -167,6 +167,7 @@
   "b-png-endless-screenshot": 0.995,
   "b-png-bomb": 1,
   "b-tiff-phototest": 1,
-  "b-tiff-eurotext": 1
+  "b-tiff-eurotext": 1,
+  "b-png-bomb-rgb": 0
  }
 }
