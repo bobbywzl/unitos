@@ -176,7 +176,10 @@ if (stale.length > 0) {
 // is no word's edge: a linear equation's subscript mark ("𝑥_𝐾", "ẏ_𝑗") is
 // notation, as "^" is. A private-use character
 // (U+E000-U+F8FF) is a token of its own: a symbol font's code the reader
-// has no font for, a box where the slide shows ☺ or ⇒.
+// has no font for, a box where the slide shows ☺ or ⇒. A run of subscript
+// characters and a run of superscript characters are each a token of their
+// own: "h₀" is h, 0 and "10¹²" is 10, 12, as the reference spaces a
+// script apart from its base.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
 function tokens(text: string): string[] {
   // A table cell starts a line too: a chart's data table writes series
@@ -186,6 +189,7 @@ function tokens(text: string): string[] {
     lines
       .join("\n")
       .replace(/[\u{1D400}-\u{1D7FF}]\p{M}*/gu, " $& ")
+      .replace(/[\u2070-\u207F\u00B9\u00B2\u00B3]+|[\u2080-\u209C]+/gu, " $& ")
       .normalize("NFKC")
       .toLowerCase()
       .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\u{E000}-\u{F8FF}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []

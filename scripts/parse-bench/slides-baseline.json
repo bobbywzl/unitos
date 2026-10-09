@@ -1644,7 +1644,7 @@
   },
   "aii-01AICluster-04Performance-05Training": {
    "composite": 0.999,
-   "words": 0.994,
+   "words": 0.997,
    "order": 1,
    "bullets": 1,
    "tables": 1,
@@ -2930,8 +2930,8 @@
    "lost": 0
   },
   "aii-06AlgoData-03NewArch-06Mamba": {
-   "composite": 0.999,
-   "words": 0.995,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -2941,8 +2941,8 @@
    "lost": 0
   },
   "aii-06AlgoData-08Special-01ChatGPT02": {
-   "composite": 0.998,
-   "words": 0.991,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
