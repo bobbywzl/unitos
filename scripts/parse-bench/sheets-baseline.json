@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.974,
+  "score": 0.98,
   "sheets": 0.987,
-  "text": 0.965,
-  "cells": 0.963,
+  "text": 0.977,
+  "cells": 0.976,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 27695,
+  "lost": 26990,
   "dom": 0,
   "errors": 0
  },
@@ -193,13 +193,13 @@
    "dom": 0
   },
   "poi-59746_NoRowNums": {
-   "score": 0.5,
-   "text": 0,
-   "cells": 0,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": 1,
-   "lost": 165,
+   "lost": 0,
    "dom": 0
   },
   "poi-1_NoIden": {
@@ -353,13 +353,13 @@
    "dom": 0
   },
   "poi-56278": {
-   "score": 0.532,
-   "text": 0.127,
-   "cells": 0,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": 1,
-   "lost": 540,
+   "lost": 0,
    "dom": 0
   },
   "poi-56702": {

@@ -855,14 +855,19 @@ function readSheet(
   // then follow the last one.
   const rows: Row[] = [];
   const hiddenRows = new Set<number>();
+  // The 0-based row a row without its reference takes: the one after the
+  // last. It was the last row itself, so a sheet whose rows carry no "r"
+  // drew every row over row 1 and kept only the last. Sheets benchmark
+  // finding (POI 56278, 59746).
   let rowCursor = 0;
   let cellCount = 0;
   let totalRows = 0;
   let cut = false;
   const sheetData = child(root, "sheetData");
   for (const rowEl of children(sheetData, "row")) {
-    const r = (intAttr(rowEl, "r") ?? rowCursor + 1) - 1;
-    rowCursor = r;
+    const ref = intAttr(rowEl, "r");
+    const r = ref !== null ? ref - 1 : rowCursor;
+    rowCursor = r + 1;
     totalRows = r + 1;
     if (cut) continue;
     if (r >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) {
