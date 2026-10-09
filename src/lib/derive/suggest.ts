@@ -95,7 +95,7 @@ export type SuggestRun = {
   // A command over blocks: this window's place (1 of n) and whether the command covers the whole document.
   window: { n: number; of: number; whole: boolean } | null;
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // The new text the command has left (SUGGEST_MAX_NEW_CHARS), shared by its windows.
   budget: { chars: number };
   signal?: AbortSignal;

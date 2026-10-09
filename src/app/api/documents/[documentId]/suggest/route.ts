@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { chatTurnSchema } from "@/lib/conversation";
 import { db } from "@/lib/db";
@@ -147,7 +147,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             material: data.material ?? null,
             history: data.history ?? [],
             caretBlockId: data.caretBlockId ?? null,
-            thinking: data.thinking ?? "deep",
+            thinking: resolvedThinking(data.thinking),
             plan: false,
             signal,
           });
@@ -174,7 +174,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               instruction: data.instruction ?? null,
               material: data.material ?? null,
               history: data.history ?? [],
-              thinking: data.thinking ?? "deep",
+              thinking: resolvedThinking(data.thinking),
               signal,
             }).catch((err: unknown) => err instanceof Error ? err : new Error(String(err)))
           : null;
@@ -205,7 +205,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               scope: { kind: "blocks", blockIds },
               window: { n: i + 1, of: windows.length, whole: whole && !targeted },
               caretBlockId: data.caretBlockId ?? null,
-              thinking: data.thinking ?? "deep",
+              thinking: resolvedThinking(data.thinking),
               budget,
               signal,
               reorder: data.reorder,

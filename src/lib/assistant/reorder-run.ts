@@ -76,7 +76,7 @@ export type OrderRun = {
   instruction: string | null;
   material: string | null;
   history: ChatTurn[];
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   signal?: AbortSignal;
 };
 

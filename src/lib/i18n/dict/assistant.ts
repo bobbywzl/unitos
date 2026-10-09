@@ -76,7 +76,10 @@ const en = {
   backToConversation: "Back",
   backToConversationTitle: "Back to the conversation this side chat came from.",
   sideChatOpened: "Side chat",
-  // Thinking control (SPEC.md §7): Fast Thinking, or Deep Thinking
+  // Thinking control (SPEC.md §7): Auto Thinking, Fast Thinking, or Deep Thinking
+  thinkingAuto: "Auto Thinking",
+  thinkingAutoHint:
+    "Auto Thinking: the assistant decides from the message how hard to think. A lookup, a one-place change, or a confirmation runs fast; a question of meaning runs deep; a change across the document, a comparison, or several asks at once run deepest.",
   thinkingFast: "Fast Thinking",
   thinkingFastHint:
     "Fast Thinking: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly.",
@@ -224,6 +227,8 @@ const zh: Record<keyof typeof en, string> = {
   backToConversation: "返回",
   backToConversationTitle: "返回这条支线对话所属的对话。",
   sideChatOpened: "支线对话",
+  thinkingAuto: "自动思考",
+  thinkingAutoHint: "自动思考：助手根据消息决定思考多深。查找、改一处、确认一项改动时快速作答；理解类问题深度思考；跨全文的改动、对比或一次多个要求时想得最深。",
   thinkingFast: "快速思考",
   thinkingFastHint: "快速思考：助手作答前尽量少推理。更快，适合材料能直接回答的问题。",
   thinkingDeep: "深度思考",

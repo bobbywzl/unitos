@@ -10,7 +10,7 @@ import {
   MAX_IMAGES_PER_CONVERSATION,
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
-import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
+import { depthNote, resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
@@ -141,7 +141,10 @@ async function handle(req: Request, t: TFunc) {
 
   const profile = await loadProfile(data.notebookId);
   const maxOutputTokens = MAX_OUTPUT_TOKENS.SYNTHESIS;
-  const effort = thinkingEffort(data.thinking);
+  // How hard this message runs (SPEC.md §7): the reader's choice, or Auto's
+  // reading of the message (lib/assistant/depth.ts).
+  const depthInput = { message: question, turns: data.history?.length ?? 0, attachments: images.length + files.length, scope: data.scope };
+  const effort = thinkingEffort(data.thinking, depthInput);
 
   // The digest is the scope context: deterministic until the content changes,
   // so the prompt prefix caches across questions (SPEC.md §2).
@@ -356,7 +359,7 @@ async function handle(req: Request, t: TFunc) {
       abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} thinking=${data.thinking ?? "deep"} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
@@ -435,7 +438,7 @@ async function handle(req: Request, t: TFunc) {
           blockIds: revise.blockIds,
           reorder: revise.reorder,
           caretBlockId: data.caretBlockId ?? null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           signal: AbortSignal.any([req.signal, deadline]),
           deadline,
         });

@@ -458,7 +458,7 @@ export type ReviseRun = {
   history: ChatTurn[];
   blockIds: string[] | undefined;
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // The change moves blocks too: the order pass runs beside the windows
   // (lib/assistant/reorder.ts), and its moves come first in the plan.
   reorder?: boolean;

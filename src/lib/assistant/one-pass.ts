@@ -86,7 +86,7 @@ export type OnePassRun = {
   material: string | null;
   history: ChatTurn[];
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // A document without rich text: its ops become the plan card's block actions.
   plan: boolean;
   signal?: AbortSignal;

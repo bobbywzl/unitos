@@ -1,7 +1,7 @@
 import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { annotationKind } from "@/lib/annotations/kind";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
@@ -448,9 +448,12 @@ async function handle(req: Request, t: TFunc) {
   // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
+  // How hard this command runs (SPEC.md §7): the reader's choice, or Auto's
+  // reading of the command (lib/assistant/depth.ts).
+  const depthInput = { message: data.command, turns: history.length, attachments: attachedImage ? 1 : 0, scope: "document" as const };
   const chatCall = await featureCall(
     web ? "web" : attachedImage ? await pictureFeature("act") : "act",
-    thinkingEffort(data.thinking),
+    thinkingEffort(data.thinking, depthInput),
   );
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
@@ -525,7 +528,7 @@ async function handle(req: Request, t: TFunc) {
       blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
       reorder: revise.reorder,
       caretBlockId: null,
-      thinking: data.thinking ?? "deep",
+      thinking: resolvedThinking(data.thinking, depthInput),
       signal: AbortSignal.any([req.signal, deadline]),
       deadline,
     });
@@ -598,7 +601,7 @@ async function handle(req: Request, t: TFunc) {
           material: null,
           history,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           plan: false,
           signal: req.signal,
         });
@@ -626,7 +629,7 @@ async function handle(req: Request, t: TFunc) {
             instruction: suggest.instruction,
             material: null,
             history,
-            thinking: data.thinking ?? "deep",
+            thinking: resolvedThinking(data.thinking, depthInput),
             signal: req.signal,
           }).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
         : null;
@@ -644,7 +647,7 @@ async function handle(req: Request, t: TFunc) {
           scope,
           window,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           budget: { chars: SUGGEST_MAX_NEW_CHARS },
           signal: req.signal,
           reorder: suggest?.reorder,
