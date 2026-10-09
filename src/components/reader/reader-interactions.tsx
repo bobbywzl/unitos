@@ -321,9 +321,11 @@ function overBlock(box: { blockHeight: number }, paneHeight: number): boolean {
 }
 
 /** The narrow reader's card over a tall block: under its words' last line,
-    from their left, at a card's width, inside the pane. */
+    from their left, at a card's width, inside the pane. On a phone, where
+    the strip beside such a card holds no readable line, at the pane's width,
+    as every other phone card. */
 function dockUnderWords(wordsLeft: number, cw: number) {
-  const width = Math.min(300, cw - 16);
+  const width = cw - 16 - 300 < 160 ? cw - 16 : 300;
   const left = Math.max(8, Math.min(wordsLeft - 12, cw - width - 8));
   return { left, width };
 }
@@ -4102,6 +4104,11 @@ export function ReaderInteractions({
   // On a phone, how far a card rose over its paragraph's words after the
   // passage to find room (below), by card kind, for the passage it is on.
   const narrowLiftRef = useRef(new Map<string, { at: number; lift: number }>());
+  // On a phone, the view's height each capped card was measured against: a
+  // view that grows after (the touch hint under the pane fades) lifts the cap
+  // and measures the card again, so no card keeps a scroll window while
+  // there is room under it.
+  const phoneCapViewRef = useRef(new Map<string, { key: string; view: number }>());
   const layoutNarrowCards = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -4150,6 +4157,7 @@ export function ReaderInteractions({
     const tops: Record<string, number> = {};
     const docks: Record<string, { left: number; width: number }> = {};
     const phoneCaps: Record<string, number> = {};
+    const recheck: string[] = [];
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
     );
@@ -4173,6 +4181,11 @@ export function ReaderInteractions({
       for (const card of cards) {
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         const held = narrowLiftRef.current.get(card.kind);
+        const capView = phoneCapViewRef.current.get(card.kind);
+        if (capView && (capView.key !== key || shownHeight > capView.view + 1)) {
+          phoneCapViewRef.current.delete(card.kind);
+          if (capView.key === key) recheck.push(card.kind);
+        }
         const lifted = !card.over && held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
         if (card.over) {
           overY = Math.max(overY, card.over.bottom + 8);
@@ -4211,12 +4224,20 @@ export function ReaderInteractions({
               tops[card.kind] -= lift;
               room += lift;
             }
-            if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
+            if (card.el.offsetHeight > room && room >= CAP_MIN) {
+              phoneCaps[card.kind] = room;
+              phoneCapViewRef.current.set(card.kind, { key, view: shownHeight });
+            }
           }
         }
       }
     }
     if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
+    if (recheck.length > 0) {
+      // The cap goes; the card, grown back, is measured again on its resize.
+      for (const kind of recheck) narrowShownRef.current.delete(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
+      setCardCaps((caps) => Object.fromEntries(Object.entries(caps).filter(([kind]) => !recheck.includes(kind))));
+    }
     const place = <T extends { top: number; left: number; width?: number }>(kind: string) => (c: T | null): T | null => {
       if (!c || tops[kind] === undefined) return c;
       const dock = docks[kind];
