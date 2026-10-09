@@ -45,11 +45,13 @@ import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
   listSaved,
+  noSaves,
   offlineSupported,
   removeSaved,
-  saveProject,
+  runningSaves,
+  startSave,
+  subscribeRunning,
   subscribeSaved,
-  type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
 import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
@@ -302,9 +304,27 @@ export function Workspace({
   // icons beside it do not move when it appears.
   const [offlineOn, setOfflineOn] = useState<boolean | null>(null);
   const [offlineSaved, setOfflineSaved] = useState(false);
-  const [offlineSaving, setOfflineSaving] = useState(false);
-  const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
+  // The save under way for this project in this tab, started here or on the
+  // dashboard before the reader opened the project (lib/offline/saved.ts).
+  const offlineRun = useSyncExternalStore(subscribeRunning, runningSaves, noSaves).get(notebook.id);
+  const offlineSaving = offlineRun !== undefined;
+  const offlineProgress = offlineRun?.progress ?? null;
   const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
+  // The save's result, whoever started it: the one-line toast.
+  const offlinePromise = offlineRun?.promise;
+  useEffect(() => {
+    if (!offlinePromise) return;
+    offlinePromise.then(
+      () => setOfflineToast({ text: t("works.offlineSaved"), plans: false }),
+      (err: unknown) => {
+        const status = (err as { status?: number }).status;
+        setOfflineToast({
+          text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
+          plans: status === 403 && collab.billing,
+        });
+      },
+    );
+  }, [offlinePromise, t, collab.billing]);
   useEffect(() => {
     if (!offlineSupported()) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -334,21 +354,8 @@ export function Workspace({
       setOfflineToast({ text: t("works.offlineNeedsUltra"), plans: collab.billing });
       return;
     }
-    setOfflineSaving(true);
-    setOfflineProgress({ stage: "pages", done: 0, total: 0 });
-    try {
-      await saveProject(notebook.id, setOfflineProgress);
-      setOfflineToast({ text: t("works.offlineSaved"), plans: false });
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setOfflineToast({
-        text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
-        plans: status === 403 && collab.billing,
-      });
-    } finally {
-      setOfflineSaving(false);
-      setOfflineProgress(null);
-    }
+    // The toast comes from the effect on the running save.
+    await startSave(notebook.id).catch(() => undefined);
   }
   // The ? nudge for a new reader (the welcome flow points here): a pulsing
   // dot on the guide button until the guide is opened once on this browser.

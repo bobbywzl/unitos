@@ -1,16 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { api } from "@/lib/api";
 import {
   listSaved,
+  noSaves,
   offlineSupported,
   refreshSaved,
   removeSaved,
-  saveProject,
+  runningSaves,
+  startSave,
+  subscribeRunning,
   subscribeSaved,
-  type SaveProgress,
 } from "@/lib/offline/saved";
 import { useT } from "@/components/lang-provider";
 import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
@@ -52,9 +54,27 @@ export function WorksShelf({
   // is saving now, and the one-line toast a press answers with.
   const [supported, setSupported] = useState(false);
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [saveProgress, setSaveProgress] = useState<SaveProgress | null>(null);
+  // The save under way in this tab (lib/offline/saved.ts): one at a time
+  // from the dashboard; one the reader started in a project shows here too.
+  const runs = useSyncExternalStore(subscribeRunning, runningSaves, noSaves);
+  const [savingId, running] = [...runs][0] ?? [null, null];
+  const saveProgress = running?.progress ?? null;
   const [toast, setToast] = useState<{ text: string; plans: boolean } | null>(null);
+  // The save's result, wherever it started: the one-line toast.
+  const savePromise = running?.promise;
+  useEffect(() => {
+    if (!savePromise) return;
+    savePromise.then(
+      () => setToast({ text: t("works.offlineSaved"), plans: false }),
+      (err: unknown) => {
+        const status = (err as { status?: number }).status;
+        setToast({
+          text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
+          plans: status === 403 && billing,
+        });
+      },
+    );
+  }, [savePromise, t, billing]);
 
   useEffect(() => {
     if (!offlineSupported()) return;
@@ -85,21 +105,8 @@ export function WorksShelf({
       setToast({ text: t("works.offlineNeedsUltra"), plans: billing });
       return;
     }
-    setSavingId(id);
-    setSaveProgress({ stage: "pages", done: 0, total: 0 });
-    try {
-      await saveProject(id, setSaveProgress);
-      setToast({ text: t("works.offlineSaved"), plans: false });
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setToast({
-        text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
-        plans: status === 403 && billing,
-      });
-    } finally {
-      setSavingId(null);
-      setSaveProgress(null);
-    }
+    // The toast comes from the effect on the running save.
+    await startSave(id).catch(() => undefined);
   }
   const savingTitle = [...works, ...sharedWorks].find((w) => w.id === savingId)?.title ?? "";
 
