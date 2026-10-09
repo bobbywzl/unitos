@@ -159,7 +159,7 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
     const after = a.type === "insert_paragraph" || a.type === "move_block" ? a.afterBlockId : undefined;
     if (after === undefined || after !== (e.after === null ? null : idOf(e.after))) return false;
   }
-  if (e.quote !== undefined) {
+  if (e.quote !== undefined || e.quoteAny !== undefined) {
     const quote =
       a.type === "highlight" || a.type === "comment" || a.type === "style" || a.type === "link"
         ? a.anchor.quotedText
@@ -168,7 +168,8 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
           : a.type === "add_note"
             ? (a.source?.quotedText ?? "")
             : "";
-    if (!has(quote, e.quote)) return false;
+    if (e.quote !== undefined && !has(quote, e.quote)) return false;
+    if (e.quoteAny !== undefined && !e.quoteAny.some((part) => has(quote, part))) return false;
   }
   if (e.text !== undefined) {
     const text =

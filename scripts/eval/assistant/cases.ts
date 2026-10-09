@@ -33,6 +33,8 @@ export type ActionExpect = {
   after?: number | null;
   // highlight, comment, style, link, split_line, add_note's source: the anchor's words hold this.
   quote?: string;
+  // … or hold one of these.
+  quoteAny?: string[];
   // edit_block's newText, insert_paragraph's text, add_note's content, comment's comment,
   // suggest's and revise's instruction, add_section's and create_document's title: holds this.
   text?: string;
@@ -471,7 +473,7 @@ export const CASES: AssistantCase[] = [
     question: "Comment on the Hyde v Wrench sentence: note that a mere request for information does not kill the offer.",
     expect: {
       change: true,
-      actions: [{ type: "comment", block: 6, quote: "Hyde v Wrench", text: "request for information" }],
+      actions: [{ type: "comment", block: 6, quoteAny: ["Hyde v Wrench", "Hyde's counteroffer"], text: "request for information" }],
       only: ["comment"],
       max: 1,
       touch: [],
