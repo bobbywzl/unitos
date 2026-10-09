@@ -10331,8 +10331,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
       {/* On a narrow screen the running button is the spinner and Stop, so
-          it keeps its place in the row beside Extract. */}
-      <span className={collapseBusy ? "max-sm:sr-only" : undefined}>
+          it keeps its place in the row beside Extract; under 380 px the
+          button at rest is its icon, the label for screen readers, so the
+          band keeps one row. */}
+      <span className={collapseBusy ? "max-sm:sr-only" : "max-[380px]:sr-only"}>
         {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
       </span>
       {collapseBusy && <StopPill />}
