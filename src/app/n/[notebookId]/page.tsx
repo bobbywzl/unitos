@@ -1,6 +1,7 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { annotationKind } from "@/lib/annotations/kind";
+import { passageQuote } from "@/lib/annotations/passage";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
@@ -340,6 +341,7 @@ export default async function NotebookPage(props: {
       }
     }
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
+    const blockOrderOf = (blockId: string) => blockById.get(blockId)?.order;
     // Video anchors are time ranges, not text spans: they skip the text
     // highlight painting and render on the player overlay (SPEC.md §11).
     const sourceById = new Map(
@@ -551,7 +553,10 @@ export default async function NotebookPage(props: {
           gist: n.gist,
           color: n.color,
           sourceId: source.id,
-          quotedText: source.quotedText,
+          // A passage across blocks: its whole quote (lib/annotations/passage.ts).
+          quotedText:
+            passageQuote(n.content, n.sources.filter((src) => src.documentId === document.id), blockOrderOf) ??
+            source.quotedText,
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           layer: source.layer === "core" ? "core" : null,
@@ -568,23 +573,15 @@ export default async function NotebookPage(props: {
     // here carries the same card, so each block of the passage paints in
     // the kind's color and a click on any of them opens the card. Only the
     // first carries the tool's symbol (chipless).
-    // The quote of such a passage is every source's quote, one paragraph per
-    // block in the document's order: what a pure highlight stores as its
-    // content (the create route, cut at 5000). A highlight whose content is
-    // that quote, or one source's quote, holds no comment (SPEC.md §6).
+    // The passage's quote (lib/annotations/passage.ts): a highlight whose
+    // content is that quote holds no comment (SPEC.md §6).
     const otherSourcesByNote = new Map<string, string[]>();
     const passageQuoteByNote = new Map<string, string>();
     for (const n of notebook!.sections.filter((s) => s.hidden).flatMap((s) => s.notes)) {
       const here = n.sources.filter((src) => src.documentId === document.id);
       if (here.length < 2) continue;
       otherSourcesByNote.set(n.id, here.slice(1).map((src) => src.id));
-      const rank = (src: (typeof here)[number]) => blockById.get(src.blockId)?.order ?? here.indexOf(src);
-      const joined = [...here]
-        .sort((a, b) => rank(a) - rank(b) || a.startOffset - b.startOffset)
-        .map((src) => src.quotedText)
-        .join("\n\n");
-      const pure = n.content === joined.slice(0, 5000) || here.some((src) => src.quotedText === n.content);
-      passageQuoteByNote.set(n.id, pure ? n.content : joined);
+      passageQuoteByNote.set(n.id, passageQuote(n.content, here, blockOrderOf) ?? n.content);
     }
     const everySource = <T,>(a: AnnotationItem, value: T): [string, T][] => [
       [a.sourceId as string, value],
