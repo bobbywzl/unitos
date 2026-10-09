@@ -14,8 +14,8 @@
   "link.missing": 1,
   "mark.underline": 49,
   "import.mark.underline": 49,
-  "image.missing": 3,
-  "import.image.missing": 3
+  "image.missing": 2,
+  "import.image.missing": 2
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -388,10 +388,7 @@
    "import.mark.underline": 1
   },
   "d4j-invoice2013.docx": {},
-  "d4j-rFonts.docx": {
-   "image.missing": 1,
-   "import.image.missing": 1
-  },
+  "d4j-rFonts.docx": {},
   "dl-content_control_with_picture.docx": {},
   "dl-docx_checkboxes.docx": {},
   "dl-docx_comments.docx": {},

@@ -319,6 +319,14 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   check("a picture on a line of its own between words stays where it stands", /^PARAGRAPH:Before\s*\|FIGURE:\|PARAGRAPH:\s*After$/.test(ownLines), JSON.stringify(ownLines));
 }
 
+// ── A spacer picture after words draws nothing ──────────────────────────────
+
+{
+  const blocks = await parse(withPicture(`<w:p>${words("Determining font script in DrawingML ")}${picture(8255)}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a 1x1 spacer picture after words draws no figure", lines === "PARAGRAPH:Determining font script in DrawingML", JSON.stringify(lines));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

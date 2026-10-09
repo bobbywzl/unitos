@@ -512,7 +512,7 @@ function readReference(zip: OfficeZip): Reference {
       }
       case "blip": {
         const rel = rels.get(attr(node, "embed") ?? "");
-        if (rel && !rel.external && RASTER.test(rel.target) && !ctx.hidden && !ctx.note) {
+        if (rel && !rel.external && RASTER.test(rel.target) && !ctx.hidden && !ctx.note && !spacer(node)) {
           ref.images++;
           if (ctx.unit) ctx.unit.picture = true;
         }
@@ -529,6 +529,16 @@ function readReference(zip: OfficeZip): Reference {
       default:
         for (const c of node.children) walk(c, ctx);
     }
+  };
+  // A picture under 2pt each way is a spacer no reader sees (a web page's
+  // 1×1 trans.gif pasted into Word: d4j-rFonts), not a picture.
+  const spacer = (el: Element) => {
+    let frame = el.parentElement;
+    while (frame && frame.localName !== "inline" && frame.localName !== "anchor") frame = frame.parentElement;
+    const extent = frame ? [...frame.children].find((c) => c.localName === "extent") : undefined;
+    const cx = Number(attr(extent ?? null, "cx") ?? 0);
+    const cy = Number(attr(extent ?? null, "cy") ?? 0);
+    return cx > 0 && cy > 0 && cx < 25400 && cy < 25400;
   };
   const inside = (el: Element, names: string[]) => {
     for (let at = el.parentElement; at; at = at.parentElement) if (names.includes(at.localName)) return true;
