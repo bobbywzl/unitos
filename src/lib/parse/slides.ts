@@ -974,6 +974,7 @@ type SlideScope = {
 async function collectShapes(scope: SlideScope, tree: Element | null, transform: Transform, out: Placed[]): Promise<void> {
   if (!tree) return;
   for (const node of Array.from(tree.children)) {
+    if (hiddenShape(node)) continue;
     switch (node.localName) {
       case "sp":
         await placeShape(scope, node, transform, out);
@@ -997,6 +998,15 @@ async function collectShapes(scope: SlideScope, tree: Element | null, transform:
       }
     }
   }
+}
+
+/** A shape the file hides (cNvPr hidden="1", the selection pane's eye
+    closed): PowerPoint neither draws it nor shows its words. Slides
+    benchmark finding: a hidden chart's 13 category labels read as the
+    slide's words. */
+function hiddenShape(node: Element): boolean {
+  const nv = Array.from(node.children).find((c) => c.localName.startsWith("nv"));
+  return boolAttr(child(nv, "cNvPr"), "hidden");
 }
 
 function placeholderOf(sp: Element): { type: string; idx: string | null; raw: string | null } | null {
