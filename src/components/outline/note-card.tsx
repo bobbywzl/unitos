@@ -1227,7 +1227,17 @@ const NoteCardBody = memo(function NoteCardBody({
               highlight={hit}
               sources={note.sources}
               notebookId={notebookId}
-              onAnnotationReference={annotationSide ? annotationSide.open : undefined}
+              onAnnotationReference={
+                annotationSide
+                  ? (ref) => {
+                      // The row pressed (it has the focus), else the note: the
+                      // annotation opens level with it.
+                      const pressed = document.activeElement;
+                      const card = cardRef.current;
+                      annotationSide.open({ ...ref, anchor: pressed && card?.contains(pressed) ? pressed : card });
+                    }
+                  : undefined
+              }
               onToggleTask={
                 canEdit
                   ? (line, checked) =>
