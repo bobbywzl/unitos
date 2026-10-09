@@ -141,9 +141,11 @@ def srv3(raw):
         end = start + int(p.get("d", "0"))
         spans = list(p.iter("s"))
         if spans:
-            # Word spans: the text is the spans' own, the whitespace between
-            # the elements is the file's layout.
-            text = "".join((s.text or "") for s in spans)
+            # Word spans: the text is the spans' own and the text between
+            # them. Text between them that holds a line break is the file's
+            # layout (a pretty-printed file); a space alone is a word break.
+            layout = lambda t: "" if t is None or "\n" in t else t
+            text = layout(p.text) + "".join((s.text or "") + layout(s.tail) for s in spans)
             words = [[round((start + int(s.get("t", "0"))) / 1000, 3), clean(s.text or "")] for s in spans if clean(s.text or "")]
         else:
             text = "".join(p.itertext())
