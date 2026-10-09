@@ -268,9 +268,32 @@ function readSelection(el: HTMLElement): { text: string; selection: TextSelectio
 
 // Enter continues the line's structure: a list item starts the next item
 // ("- ", "+ ", "N. ", "- [ ] " with an empty box), a quote line the next quote
-// line, an indented line keeps its indent. Enter on an empty item ends the
-// list instead.
+// line, an indented line keeps its indent. Enter on an empty nested item
+// takes it out one level, an item of the list above it; Enter on an empty
+// item at the top level ends the list instead.
 const LINE_LEAD = /^(\s*)(?:([-*+])(\s\[[ xX]\])?|(\d{1,3})([.)])|(>))(\s+|$)/;
+
+/** The marker of the item after the one `lead` read. */
+function nextMarker(lead: RegExpExecArray): string {
+  return lead[2] ? `${lead[2]} ${lead[3] ? "[ ] " : ""}` : lead[6] ? "> " : `${Number(lead[4]) + 1}${lead[5]} `;
+}
+
+/** The list item a line indented by `indent` is nested in: the nearest line
+    above it, back from `lineStart`, that is an item indented less. Null when
+    a line indented less is no item, or there is none. */
+function parentItem(text: string, lineStart: number, indent: number): RegExpExecArray | null {
+  let end = lineStart - 1;
+  while (end > 0) {
+    const start = text.lastIndexOf("\n", end - 1) + 1;
+    const line = text.slice(start, end);
+    end = start - 1;
+    if (line.trim() === "") continue;
+    const own = /^\s*/.exec(line)![0].length;
+    if (own >= indent) continue;
+    return LINE_LEAD.exec(line);
+  }
+  return null;
+}
 
 export function newlineFor(text: string, caret: number): { insert: string; from: number } {
   const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
@@ -285,19 +308,18 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
     return { insert: `\n${indent.slice(0, Math.max(0, caret - lineStart))}`, from: caret };
   }
   if (line.slice(lead[0].length).trim() === "") {
-    // An empty item: the marker goes, the caret stays on a plain line. At
-    // the top level a blank line comes first: in Markdown a line right
-    // under a quote or a list item is part of it, so the next words would
-    // save inside the quote or the last item.
-    const blank = lead[1] === "" && lineStart > 0 && text[lineStart - 2] !== "\n" ? "\n" : "";
-    return { insert: `${blank}${lead[1]}`, from: lineStart };
+    // An empty nested item: an item of the list it is nested in, one level
+    // out, as the editor draws it and the note stores it.
+    const parent = lead[1] === "" ? null : parentItem(text, lineStart, lead[1].length);
+    if (parent) return { insert: `${parent[1]}${nextMarker(parent)}`, from: lineStart };
+    // An empty item at the top level: the marker goes, the caret stays on a
+    // plain line with no indent. A blank line comes first: in Markdown a
+    // line right under a quote or a list item is part of it, so the next
+    // words would save inside the quote or the last item.
+    const blank = lineStart > 0 && text[lineStart - 2] !== "\n" ? "\n" : "";
+    return { insert: blank, from: lineStart };
   }
-  const marker = lead[2]
-    ? `${lead[2]} ${lead[3] ? "[ ] " : ""}`
-    : lead[6]
-      ? "> "
-      : `${Number(lead[4]) + 1}${lead[5]} `;
-  return { insert: `\n${lead[1]}${marker}`, from: caret };
+  return { insert: `\n${lead[1]}${nextMarker(lead)}`, from: caret };
 }
 
 // "[ ] " or "[] " typed at the start of a line (after any list marker)
