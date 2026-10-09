@@ -6,13 +6,13 @@
   "lost:label": 59,
   "import.words": 188,
   "import.lost:label": 59,
-  "import.mark.bold": 213,
+  "import.mark.bold": 210,
   "mark.bold": 98,
   "import.list.depth": 2,
   "mark.underline": 51,
   "import.mark.underline": 51,
   "mark.italic": 26,
-  "import.mark.italic": 27,
+  "import.mark.italic": 26,
   "link.missing": 1,
   "image.missing": 3,
   "import.image.missing": 3,
@@ -292,9 +292,7 @@
   },
   "poi-stress011.docx": {},
   "poi-stress012.docx": {},
-  "poi-stress014.docx": {
-   "import.mark.bold": 1
-  },
+  "poi-stress014.docx": {},
   "poi-stress015.docx": {},
   "poi-stress016.docx": {},
   "poi-stress017.docx": {},
@@ -415,9 +413,7 @@
   },
   "dl-textbox.docx": {},
   "dl-unit_test_headers_numbered.docx": {},
-  "dl-word_sample.docx": {
-   "import.mark.italic": 1
-  },
+  "dl-word_sample.docx": {},
   "docxreply-sample.docx": {},
   "lo-tdf104649.docx": {},
   "lo-tdf129659.docx": {},
@@ -449,12 +445,8 @@
   "thesis-ucsd-1-title.docx": {},
   "thesis-ucsd-10-introduction.docx": {},
   "thesis-ucsd-11-chapter1.docx": {},
-  "thesis-ucsd-12-chapter2.docx": {
-   "import.mark.bold": 1
-  },
-  "thesis-ucsd-13-chapter3.docx": {
-   "import.mark.bold": 1
-  },
+  "thesis-ucsd-12-chapter2.docx": {},
+  "thesis-ucsd-13-chapter3.docx": {},
   "thesis-ucsd-5-toc.docx": {},
   "thesis-ucsd-6-figure-list.docx": {},
   "thesis-ucsd-8-vita.docx": {},

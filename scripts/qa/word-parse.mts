@@ -254,6 +254,15 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a one-line note that cites a section stays a list", oneKinds === "heading,bulletList", oneKinds);
 }
 
+// ── A Word figure's caption keeps its bold label in the import ──────────────
+
+{
+  const figure: ParsedBlock = { type: "FIGURE", text: "Figure 2.4. Simulated data.", html: '<figure><img src="/a.png" alt=""><figcaption><strong>Figure 2.4. </strong>Simulated data.</figcaption></figure>' };
+  const out = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: [figure] });
+  const html = out.figures[0]?.html ?? "";
+  check("a Word figure draws its figcaption, its bold label in <strong>", /<figcaption[^>]*><strong>Figure 2\.4\. <\/strong>/.test(html), html);
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

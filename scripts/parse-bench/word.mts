@@ -656,7 +656,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
 
 const RICH_MARKS: Record<string, MarkKind> = { bold: "bold", italic: "italic", underline: "underline", strike: "strike", superscript: "sup", subscript: "sub" };
 
-function readImport(doc: RichNode): Reading {
+function readImport(doc: RichNode, figures: { html: string | null }[] = []): Reading {
   const rows = deriveBlocks(doc);
   const r: Reading = { text: "", headings: [], title: "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // An inline formula reads as its TeX between dollar signs (mathWords): no
@@ -762,6 +762,13 @@ function readImport(doc: RichNode): Reading {
     for (const c of node.content ?? []) walk(c, list ? depth + 1 : depth, list ? node.type === "orderedList" : ordered, inCell || node.type === "tableCell" || node.type === "tableHeader", inNote || node.type === "footnote", own ?? levels);
   };
   walk(doc, 0, false, false, false);
+  // A Word figure draws its media's html (components/docs/insert/figure.ts,
+  // MediaHtml), its caption the figcaption the parse writes, in its runs'
+  // marks: those marks are the import's, as the parse reading reads them.
+  for (const f of figures) {
+    const caption = /<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/.exec(f.html ?? "")?.[1] ?? "";
+    for (const k of MARK_KINDS) for (const m of caption.matchAll(new RegExp(`<${MARK_TAGS[k]}>([\\s\\S]*?)</${MARK_TAGS[k]}>`, "g"))) r.marks[k] += ` ${stripTags(m[1])}`;
+  }
   r.links = compact(links.join(" | "));
   for (const k of MARK_KINDS) r.marks[k] = compact(r.marks[k]);
   return r;
@@ -943,7 +950,7 @@ for (const name of files) {
         titleStyles: parsed.titleStyles,
         titleLines: parsed.titleLines,
       });
-      const reading = readImport(out.richText);
+      const reading = readImport(out.richText, out.figures);
       if (!parsed.titleFromFile) reading.title = parsed.title ?? "";
       const i = compare(ref, reading, "import");
       for (const [k, v] of Object.entries(i.counts)) counts[`import.${k}`] = v;
