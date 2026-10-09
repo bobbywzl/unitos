@@ -1146,7 +1146,51 @@ type ListLine = {
   align: ParaProps["align"];
   /** The line's paragraph's tab stops. */
   tabs?: TabStop[];
+  /** The Word list (numId) and its level (ilvl) that number the line;
+      none for a marker typed before a tab. */
+  numbering?: { list: string; level: number };
 };
+/** Each list line's depth, and each depth's indent step in twips. A line's
+    depth is its indent's rank among the list's indents, as the page shows
+    the nesting: Word's second-level list styles (List Bullet 2) are a list
+    of their own at level 0, drawn one step in. Lines of one Word list at
+    one step but at different levels nest by their levels, deepest last:
+    a legal list sets "1.", "1.1", and "1.1.1" at one indent, and a level
+    may stand under a tenth of an inch in from the level above it (Word
+    benchmark finding: the levels read as one, and the import drew "1.1"
+    as a paragraph). The step's indent stays each such depth's. */
+function listDepths(lines: ListLine[]): { depths: number[]; steps: number[] } {
+  const stepIndents: number[] = [];
+  for (const indent of [...new Set(lines.map((l) => l.indent))].sort((a, b) => a - b)) {
+    if (stepIndents.length === 0 || indent - (stepIndents.at(-1) ?? 0) >= INDENT_SAME_TWIPS) stepIndents.push(indent);
+  }
+  const stepOf = (indent: number) => Math.max(0, stepIndents.findLastIndex((s) => s <= indent));
+  // At each step, each Word list's levels there, in order.
+  const levels = stepIndents.map(() => new Map<string, number[]>());
+  for (const line of lines) {
+    if (!line.numbering) continue;
+    const at = levels[stepOf(line.indent)];
+    const own = at.get(line.numbering.list) ?? [];
+    if (!own.includes(line.numbering.level)) own.push(line.numbering.level);
+    at.set(line.numbering.list, own);
+  }
+  for (const at of levels) for (const own of at.values()) own.sort((a, b) => a - b);
+  // A step holds as many depths as the most levels one list sets there.
+  const steps: number[] = [];
+  const first: number[] = [];
+  stepIndents.forEach((indent, s) => {
+    first.push(steps.length);
+    const n = Math.max(1, ...[...levels[s].values()].map((own) => own.length));
+    for (let k = 0; k < n; k++) steps.push(indent);
+  });
+  const depths = lines.map((line) => {
+    const s = stepOf(line.indent);
+    const sub = line.numbering ? Math.max(0, levels[s].get(line.numbering.list)?.indexOf(line.numbering.level) ?? 0) : 0;
+    return first[s] + sub;
+  });
+  return { depths, steps };
+}
+
 /** A list being read: its lines, whether it is a contents list, the notes
     its lines cite, its first line's paragraph (the space above the list),
     and the gap running on from its last line. */
@@ -1332,19 +1376,12 @@ class DocxReader {
     const list = this.list;
     this.list = null;
     if (!list || list.lines.length === 0) return;
-    // A line's depth is its indent's rank among the list's indents, as the
-    // page shows the nesting: Word's second-level list styles (List Bullet
-    // 2) are a list of their own at level 0, drawn one step in.
-    const steps: number[] = [];
-    for (const indent of [...new Set(list.lines.map((l) => l.indent))].sort((a, b) => a - b)) {
-      if (steps.length === 0 || indent - (steps.at(-1) ?? 0) >= INDENT_SAME_TWIPS) steps.push(indent);
-    }
-    const depthOf = (indent: number) => Math.max(0, steps.findLastIndex((s) => s <= indent));
+    const { depths, steps } = listDepths(list.lines);
     const joined = new Joined();
     const entries: Span[] = [];
     list.lines.forEach((line, i) => {
       if (i > 0) joined.add("\n");
-      joined.add("  ".repeat(depthOf(line.indent)));
+      joined.add("  ".repeat(depths[i]));
       if (line.marker) joined.add(`${line.marker} `);
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
@@ -1365,7 +1402,7 @@ class DocxReader {
     // Each depth's indent as Word sets it: its first line's words and marker.
     if (!list.contents) {
       const indents = steps.map((step, d) => {
-        const line = list.lines.find((l) => depthOf(l.indent) === d);
+        const line = list.lines.find((_, k) => depths[k] === d);
         const left = Math.max(0, Math.min(100_000, line?.indent ?? step));
         return { left: points(left), first: points(Math.max(-left, Math.min(100_000, line?.first ?? 0))) };
       });
@@ -1533,6 +1570,7 @@ class DocxReader {
           gap: this.listGap(props),
           align: props.align,
           tabs: props.tabs,
+          ...(numbered && props.numId ? { numbering: { list: props.numId, level: props.ilvl } } : {}),
         });
         this.list.first ??= props;
         this.list.trail = { props, blank: 0 };

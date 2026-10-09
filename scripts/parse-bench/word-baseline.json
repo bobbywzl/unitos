@@ -2,7 +2,6 @@
  "total": {
   "image.missing": 2,
   "link.missing": 2,
-  "list.depth": 26,
   "list.kind": 4,
   "list.missing": 3,
   "lost:body": 2,
@@ -18,7 +17,6 @@
   "import.caption.unjoined": 4,
   "import.image.missing": 2,
   "import.link.missing": 2,
-  "import.list.depth": 4,
   "import.list.kind": 53,
   "import.list.missing": 68,
   "import.lost:cell": 2,
@@ -169,10 +167,7 @@
   "pandoc-empty_field.docx": {},
   "pandoc-enumerated_headings.docx": {},
   "pandoc-german-reference.docx": {},
-  "pandoc-german_styled_lists.docx": {
-   "list.depth": 2,
-   "import.list.depth": 2
-  },
+  "pandoc-german_styled_lists.docx": {},
   "pandoc-hanging_indent.docx": {},
   "pandoc-headers.docx": {},
   "pandoc-i18n_blocks.docx": {},
@@ -303,9 +298,7 @@
   },
   "poi-bug59058.docx": {},
   "poi-bug65649.docx": {
-   "list.depth": 24,
    "list.kind": 4,
-   "import.list.depth": 2,
    "import.list.missing": 68
   },
   "poi-bug65738.docx": {},
