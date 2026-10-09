@@ -164,6 +164,19 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a group that links its boxes is a diagram: its labels stay out", chart === "Anchor", JSON.stringify(chart));
 }
 
+// ── A heading that repeats a Word file's title stands ───────────────────────
+
+{
+  const parsed = await parseDocx(
+    docx(para("Annual Report", '<w:pStyle w:val="Title"/>') + para("Written for the board.") + para("Annual Report", '<w:pStyle w:val="Heading1"/>') + para("The year in short.")),
+    "check.docx",
+    { storeImage: async () => "/api/images/check" },
+  );
+  const { richText } = richTextFromImport({ kind: "docx", title: parsed.title ?? "", titleFromOriginal: !parsed.titleFromFile, blocks: parsed.blocks });
+  const lines = (richText.content ?? []).map((n) => `${n.type === "heading" ? "h" : String(n.attrs?.docStyle ?? "p")}:${(n.content ?? []).map((c) => c.text ?? "").join("")}`).join("|");
+  check("a heading that repeats a Word file's title stands where it is", lines === "title:Annual Report|p:Written for the board.|h:Annual Report|p:The year in short.", JSON.stringify(lines));
+}
+
 // ── A picture straight in the body is a figure ───────────────────────────────
 
 {

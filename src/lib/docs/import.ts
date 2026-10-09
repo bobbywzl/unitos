@@ -1034,8 +1034,12 @@ class Converter {
     // A heading among the first blocks that repeats the title is the Title,
     // where it stands; else the Title opens its page (titleOn), after the
     // kicker: a scan's archive notice or a deck's first slide stands before it.
+    // A Word file's title is a line of its own that the parse lifted out of
+    // the blocks: a heading that repeats it is a second line the page
+    // prints, and stands (Word benchmark finding: pandoc-metadata_after_normal
+    // lost its first title).
     const first = this.titleOn;
-    const repeat = title
+    const repeat = title && this.input.kind !== "docx"
       ? blocks
           .slice(0, TITLE_REACH)
           .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))

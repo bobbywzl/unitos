@@ -4,7 +4,7 @@
   "import.math.missing": 1,
   "words": 188,
   "lost:label": 59,
-  "import.words": 194,
+  "import.words": 190,
   "import.lost:label": 59,
   "import.list.kind": 23,
   "import.mark.bold": 10,
@@ -170,9 +170,7 @@
   "pandoc-lists_sublist_reset.docx": {},
   "pandoc-mendeley_citations.docx": {},
   "pandoc-metadata.docx": {},
-  "pandoc-metadata_after_normal.docx": {
-   "import.words": 4
-  },
+  "pandoc-metadata_after_normal.docx": {},
   "pandoc-nested_anchors_in_header.docx": {},
   "pandoc-nested_instrText.docx": {},
   "pandoc-nested_sdt.docx": {},
