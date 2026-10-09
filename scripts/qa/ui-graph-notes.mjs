@@ -240,8 +240,9 @@ for (const lang of ["en", "zh"]) {
       // [lists7] WALK7-05: a one-link curve opens its panel at once; a curve with more links lists them.
       if (await list.locator('[data-track="graph-link-expand"]').count()) await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
+      // [lists9] WALK9-10: Note on this link fills the new note docked under the side list.
       await panelOf(page, LINK_AC).locator('[data-track="graph-link-note"]').click();
-      await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).fill("running cost and savings agree");
+      await page.locator("[data-graph-note-gather-words]").fill("running cost and savings agree");
       await page.waitForTimeout(200);
       // Reload mid-typing: the draft comes back.
       await openGraph(page);
@@ -249,13 +250,13 @@ for (const lang of ["en", "zh"]) {
       // [lists7] WALK7-05: a one-link curve opens its panel at once; a curve with more links lists them.
       if (await list.locator('[data-track="graph-link-expand"]').count()) await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
-      const restored = await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).inputValue().catch(() => "");
+      const restored = await page.locator("[data-graph-note-gather-words]").inputValue().catch(() => "");
       check(restored === "running cost and savings agree", "the draft comes back after a reload", restored);
       await page.screenshot({ path: `${OUT}/link-note-composer-${tag}.png` });
-      await panelOf(page, LINK_AC).locator('[data-track="graph-link-note-save"]').click();
+      await page.locator('[data-track="graph-note-gather-save"]').click();
       await page.waitForTimeout(1800);
-      const savedLine = await panelOf(page, LINK_AC).locator("[data-graph-link-note-saved]").innerText().catch(() => "");
-      check(/Note saved in/.test(savedLine), "the composer closes into Note saved in …", savedLine);
+      const savedLine = await page.locator("[data-graph-note-gather-saved]").innerText().catch(() => "");
+      check(/Saved in/.test(savedLine), "the new note closes into Saved in …", savedLine);
       const noteRow = sql(`select n.id || ',' || n.status || ',' || coalesce(n."documentId",'null') from "Note" n where n.content='running cost and savings agree' order by n."createdAt" desc limit 1`);
       const [noteId, status, documentId] = noteRow.split(",");
       const sources = sql(`select string_agg(s."documentId" || ':' || s."quotedText", ' | ' order by s."documentId") from "Source" s where s."noteId"='${noteId}'`);
@@ -266,7 +267,7 @@ for (const lang of ["en", "zh"]) {
       await page.screenshot({ path: `${OUT}/link-note-saved-${tag}.png` });
       // Show (VIEW5-10): the graph stays and its Notes list opens on the note;
       // the list's Open in notes closes the graph and the tray shows the note.
-      await panelOf(page, LINK_AC).locator('[data-track="graph-link-note-show"]').click();
+      await page.locator('[data-track="graph-note-gather-show"]').click();
       const notesList = page.locator('[data-graph-side-list="notes"]');
       await notesList.waitFor({ timeout: 5000 }).catch(() => {});
       await notesList.locator(`[data-graph-notes-row="${noteId}"], [data-graph-notes-note="${noteId}"]`).first().waitFor({ timeout: 8000 }).catch(() => {});

@@ -40,6 +40,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
+import { useNewComments } from "@/components/graph/link-replies"; // [lists9] WALK9-06
 
 type CoverageValue = {
   coverage: ProjectCoverage | null;
@@ -101,16 +102,28 @@ export function useDocumentCoverage(documentId: string): DocumentCoverage | null
   return useContext(CoverageContext).coverage?.documents[documentId] ?? null;
 }
 
-/** [layer5] waitsForReply for the account signed in. */
-export function useWaitsForReply(): (link: GraphEdgeLink) => boolean {
-  const { myId } = useCollab();
-  return useCallback((link: GraphEdgeLink) => waitsForReply(link, myId), [myId]);
+/** [lists9] The accounts a thread can wait on (the coverage answer's
+    members, WALK9-09); undefined on an answer from before the field. */
+function useMembers(): ReadonlySet<string> | undefined {
+  const list = useContext(CoverageContext).coverage?.members;
+  return useMemo(() => (list ? new Set(list) : undefined), [list]);
 }
 
-/** [lists8] commentWaits for the account signed in (WALK8-01). */
+/** [layer5] waitsForReply for the account signed in. [lists9] WALK9-02,
+    WALK9-09: nothing waits on an account that cannot reply (a viewer), and
+    no thread waits on words by an account outside the project. */
+export function useWaitsForReply(): (link: GraphEdgeLink) => boolean {
+  const { myId, canEdit } = useCollab();
+  const members = useMembers();
+  return useCallback((link: GraphEdgeLink) => canEdit && waitsForReply(link, myId, members), [myId, canEdit, members]);
+}
+
+/** [lists8] commentWaits for the account signed in (WALK8-01); [lists9] the
+    same two rules as useWaitsForReply (WALK9-02, WALK9-09). */
 export function useCommentWaits(): (c: GraphComment) => boolean {
-  const { myId } = useCollab();
-  return useCallback((c: GraphComment) => commentWaits(c, myId), [myId]);
+  const { myId, canEdit } = useCollab();
+  const members = useMembers();
+  return useCallback((c: GraphComment) => canEdit && commentWaits(c, myId, members), [myId, canEdit, members]);
 }
 
 /** What Gaps only keeps in the Documents list. Off, everything stays. */
@@ -418,6 +431,7 @@ export function useProjectCoverage(): ProjectCoverage | null {
 export function NodeComments({ documentId }: { documentId: string }) {
   const t = useT();
   const waits = useCommentWaits();
+  const isNew = useNewComments();
   const open = useDocumentComments(documentId).filter((c) => c.open);
   if (open.length === 0) return null;
   const label = open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length });
@@ -431,6 +445,8 @@ export function NodeComments({ documentId }: { documentId: string }) {
       <CommentIcon size={10} />
       {open.length}
       {open.some(waits) && "?"}
+      {/* [lists9] A comment or a reply another person wrote since this account's last visit (WALK9-06): the curve's dot. */}
+      {open.some(isNew) && <span data-graph-node-new aria-label={t("graphCover.newCommentTitle")} className="ml-px size-1.5 rounded-full bg-[var(--kind-comment)]" />}
     </span>
   );
 }

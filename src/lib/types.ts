@@ -467,6 +467,10 @@ export type GraphEdgeLink = {
   // withLinkReplies in lib/graph/view.ts; absent = none read.
   replies?: ReplyView[];
   createdById?: string | null;
+  // [lists9] When the link was made, ISO: a link another person made since
+  // this account's last visit draws the curve's new dot (WALK9-06,
+  // link-replies.tsx). Filled by lib/graph/view.ts; absent on an older answer.
+  createdAt?: string;
   crossAccount?: CrossAccountView;
 };
 

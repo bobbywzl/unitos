@@ -27,7 +27,7 @@ import { StitchBox } from "@/components/graph/stitch-box";
 // [graph-notes] The project's notes on the graph and the Notes list.
 import { GraphNotesProvider, type GraphNotesInput } from "@/components/graph/graph-notes";
 import { GraphNotesList, NotesListToggle } from "@/components/graph/graph-notes-list";
-import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+import { NoteOnLink } from "@/components/graph/link-note-composer";
 // [/graph-notes]
 // [view2] The node card, Find, and the last Stitch answer on the graph.
 import { GraphContentProvider, useGraphContentState } from "@/components/graph/graph-content";
@@ -294,7 +294,16 @@ export function GraphOverlay({
     if (!openLinkView) return undefined;
     const { fromDocumentId: a, toDocumentId: b } = openLinkView;
     const edge = edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
-    return edge?.links.filter((l) => showProvenance || !l.provenance);
+    const links = edge?.links.filter((l) => showProvenance || !l.provenance) ?? [];
+    if (links.some((l) => l.id === openLinkView.id)) return links;
+    // [lists9] WALK9-07: removed from its panel, its Undo line up
+    // (removedLink), the link keeps its slot — where the curve's order
+    // (accepted first, oldest first) holds it — so the step reads as before
+    // and › goes on to the next live link.
+    const after = (l: GraphEdgeLink) =>
+      Number(l.recommended) - Number(openLinkView.recommended) || (l.createdAt ?? "").localeCompare(openLinkView.createdAt ?? "");
+    const at = links.findIndex((l) => after(l) > 0);
+    return [...links.slice(0, at < 0 ? links.length : at), openLinkView, ...links.slice(at < 0 ? links.length : at)];
   }, [openLinkView, edges, showProvenance]);
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const listOpen = list === "recommended";
@@ -1236,7 +1245,7 @@ export function RecommendedLinkList({
           {open && (
             <div className="mt-2">
               <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
-              <LinkNoteComposer linkId={l.id} />
+              <NoteOnLink link={l} />
             </div>
           )}
           <div className="mt-1.5 flex min-w-0 items-center gap-1.5">

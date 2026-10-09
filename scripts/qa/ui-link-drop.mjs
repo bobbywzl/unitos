@@ -47,7 +47,8 @@ try {
   const page = await context.newPage();
   const card = page.locator(`[data-annotation-link-id="${LINK}"]:visible`).first();
   const panel = page.locator("[data-graph-link-panel]");
-  const form = panel.locator(`[data-graph-link-note-composer="${LINK}"]`);
+  // [lists9] WALK9-10: Note on this link fills the new note docked under the side list.
+  const words = page.locator("[data-graph-note-gather-words]");
   async function openPanel() {
     await page.goto(`${BASE}/n/rev3-p?doc=rev4-d3&link=${LINK}`, { waitUntil: "networkidle", timeout: 300000 });
     if (PHONE) {
@@ -68,13 +69,13 @@ try {
   await openPanel();
   await page.evaluate(() => localStorage.setItem("unitos-premium", "1"));
   await press(panel.getByRole("button", { name: zh ? "就此链接写笔记" : "Note on this link" }));
-  await form.waitFor({ timeout: 10000 });
-  await form.locator("textarea").fill(WORDS);
+  await words.waitFor({ timeout: 10000 });
+  await words.fill(WORDS);
   await context.setOffline(true);
   await page.waitForTimeout(300);
-  await press(form.locator('[data-track="graph-link-note-save"]'));
+  await press(page.locator('[data-track="graph-note-gather-save"]'));
   await page.waitForTimeout(1500);
-  const draftNow = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("graph-link-note:")).map((k) => localStorage.getItem(k)).join(" "));
+  const draftNow = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("graph-link-note:") || k.startsWith("unitos-note-gather:")).map((k) => localStorage.getItem(k)).join(" "));
   check("offline: Save queues the note and the box lets the draft go", !draftNow.includes("typed on the train"), draftNow.slice(0, 120));
   // Meanwhile the owner makes C a viewer: the replay answers 403.
   sql(`UPDATE "NotebookCollaborator" SET role='VIEWER' WHERE id='rev3-c1'`);
@@ -99,14 +100,15 @@ try {
   check("…and no note was saved", sql(`SELECT count(*) FROM "Note" WHERE content LIKE 'SAFE8 ${LINK}%'`) === "0");
   const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("graph-link-note:")).map((k) => localStorage.getItem(k)).join(" "));
   check("the words are back in the box's draft", kept.includes(WORDS), kept.slice(0, 160));
-  // C is an editor again and opens the link: the composer opens on the words.
+  // C is an editor again and opens the link: the new note opens on the words, with the link's two ends.
   sql(`UPDATE "NotebookCollaborator" SET role='EDITOR' WHERE id='rev3-c1'`);
   await openPanel();
-  const shown = (await form.count()) > 0 ? await form.locator("textarea").inputValue() : "";
-  check("Note on this link opens on the words", shown === WORDS, JSON.stringify(shown));
-  if ((await form.count()) > 0) await form.scrollIntoViewIfNeeded();
+  await words.waitFor({ timeout: 10000 }).catch(() => {});
+  const shown = (await words.count()) > 0 ? await words.inputValue() : "";
+  check("the new note opens on the words when the link opens", shown === WORDS && (await page.locator("[data-graph-note-gather-quote]").count()) === 2, JSON.stringify(shown));
+  if ((await words.count()) > 0) await words.scrollIntoViewIfNeeded();
   if (OUT) await page.screenshot({ path: `${OUT}/${SHOT}-${LANG}-${WIDTH}.png` });
-  if ((await form.count()) > 0) await form.locator("textarea").fill("");
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("unitos-note-gather:")) localStorage.removeItem(k); });
   await context.close();
 } finally {
   sql(`UPDATE "NotebookCollaborator" SET role='EDITOR' WHERE id='rev3-c1'`);

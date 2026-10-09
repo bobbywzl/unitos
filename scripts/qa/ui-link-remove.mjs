@@ -141,7 +141,9 @@ try {
     sql(`DELETE FROM "DocLinkHidden" WHERE "docLinkId"='${LINK}'`); // History is not on a phone's header
   }
 
-  // ── 3. Note on this link: Cancel keeps the words ─────────────────────────
+  // ── 3. Note on this link: the words typed are kept ───────────────────────
+  // [lists9] WALK9-10: Note on this link puts the link's two ends into the
+  // new note docked under the side list; its words are kept in the browser.
   {
     const { context, page } = await as("rev3-sa");
     await openCard(page);
@@ -152,29 +154,28 @@ try {
     const opener = panel.getByRole("button", { name: L.noteOnLink });
     await opener.scrollIntoViewIfNeeded();
     await press(opener);
-    const form = panel.locator(`[data-graph-link-note-composer="${LINK}"]`);
-    await form.waitFor({ timeout: 10000 });
+    const dock = page.locator('[data-graph-note-gather="open"]');
+    await dock.waitFor({ timeout: 10000 });
+    const quotes = await dock.locator("[data-graph-note-gather-quote]").count();
+    check("Note on this link puts the link's two ends into the new note", quotes === 2, String(quotes));
     const words = "SAFE5: a long thought typed with my thumb about the ground and the weakness";
-    await form.locator("textarea").fill(words);
-    const cancel = form.locator('[data-track="graph-link-note-cancel"]');
-    const save = form.locator('[data-track="graph-link-note-save"]');
-    await cancel.scrollIntoViewIfNeeded();
-    const cb = await cancel.boundingBox();
+    const box = dock.locator("[data-graph-note-gather-words]");
+    await box.fill(words);
+    const discard = dock.locator('[data-track="graph-note-gather-discard"]');
+    const save = dock.locator('[data-track="graph-note-gather-save"]');
+    await discard.scrollIntoViewIfNeeded();
+    const cb = await discard.boundingBox();
     const sb = await save.boundingBox();
-    console.log("   cancel", cb, "save", sb);
+    console.log("   discard", cb, "save", sb);
     if (PHONE) {
-      check("phone: Cancel and Save are 44 px tall", cb.height >= 44 && sb.height >= 44, `${cb.height} ${sb.height}`);
+      check("phone: Discard and Save are 44 px tall", cb.height >= 44 && sb.height >= 44, `${cb.height} ${sb.height}`);
       check("phone: 12 px between them", sb.x - (cb.x + cb.width) >= 12, String(sb.x - (cb.x + cb.width)));
     }
     await shot(page, "WALK5-02-after-composer");
-    await press(cancel);
     await page.waitForTimeout(500);
-    const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("graph-link-note:")).map((k) => localStorage.getItem(k)));
-    check("Cancel folds the box and keeps the draft in the browser", (await form.count()) === 0 && stored.some((v) => v?.includes("SAFE5: a long thought")), JSON.stringify(stored).slice(0, 200));
-    await press(panel.getByRole("button", { name: L.noteOnLink }));
-    await form.waitFor({ timeout: 10000 });
-    check("Note on this link opens on the words again", (await form.locator("textarea").inputValue()) === words);
-    await form.locator("textarea").fill(""); // the reader empties the box: the draft goes
+    const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unitos-note-gather:")).map((k) => localStorage.getItem(k)));
+    check("the words and the quotes are kept in the browser as typed", stored.some((v) => v?.includes("SAFE5: a long thought")), JSON.stringify(stored).slice(0, 200));
+    check("the new note keeps the words on screen", (await box.inputValue()) === words);
     await context.close();
   }
 } finally {

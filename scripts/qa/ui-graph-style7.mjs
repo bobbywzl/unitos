@@ -124,16 +124,19 @@ await graph();
       await page.mouse.move(5, H / 2);
     }
   }
-  // The note-on-link composer keeps round 6's sizes: Save and Cancel 44 px under a finger, 12 px apart (ui-link-remove).
+  // [lists9] WALK9-10: Note on this link fills the new note under the side list; its Save and Discard keep round 6's sizes: 44 px under a finger, 12 px apart (ui-link-remove).
   const noteBtn = panel.locator('[data-track="graph-link-note"]');
   if (await noteBtn.count()) {
     await noteBtn.first().click();
-    const cancel = page.locator('[data-track="graph-link-note-cancel"]');
-    await cancel.waitFor({ timeout: 10000 }).catch(() => {});
-    const [cb, sb] = [await box(cancel), await box(page.locator('[data-track="graph-link-note-save"]'))];
+    const discard = page.locator('[data-track="graph-note-gather-discard"]');
+    await discard.waitFor({ timeout: 10000 }).catch(() => {});
+    const [cb, sb] = [await box(discard), await box(page.locator('[data-track="graph-note-gather-save"]'))];
     const want = touch ? 44 : 24;
-    check("WALK6-09: the composer's Save and Cancel keep their size", !!cb && !!sb && cb.height >= want && sb.height >= want && (!touch || sb.x - (cb.x + cb.width) >= 12), `${cb?.height} ${sb?.height} gap ${sb && cb ? Math.round(sb.x - cb.x - cb.width) : "?"}`);
-    if (cb) await cancel.click();
+    check("WALK6-09: the new note's Save and Discard keep their size", !!cb && !!sb && cb.height >= want && sb.height >= want && (!touch || sb.x - (cb.x + cb.width) >= 12), `${cb?.height} ${sb?.height} gap ${sb && cb ? Math.round(sb.x - cb.x - cb.width) : "?"}`);
+    if (cb) {
+      page.once("dialog", (d) => d.accept());
+      await discard.click();
+    }
     await page.waitForTimeout(500);
   }
   // WALK7-10: Undo after Remove (writes: the link is hidden in this project, then Undo brings it back).

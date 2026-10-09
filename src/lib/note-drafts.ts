@@ -206,14 +206,16 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
 
 /** A queued write that the server refused on replay (a 4xx: the note, the
     edit, the section, or the link left the project, the words left the
-    block, or the role changed): the reader's words are kept. A reply or a
-    Note on this link goes back into its box's draft, after any words typed
-    there since, so the box opens on them (REV8-01, rule zero 6). Every
-    other write with words — a comment, a note's edit, a gathered note, a
-    block's edit — goes to the account's not-saved list with its quotes,
-    which the offline pill offers to copy (lib/offline/not-saved.ts,
-    REV9-03). A write without words (a delete, an order) has nothing to
-    keep. */
+    block, or the role changed): the reader's words are kept. A reply goes
+    back into its box's draft, after any words typed there since, so the
+    box opens on them (REV8-01, rule zero 6); a Note on this link's words go
+    into the link's draft, which the new note takes up, with the link's
+    ends, when the link opens again, or at once while the link is open
+    ([lists9] WALK9-10, link-note-composer.tsx; REV9-02). Every other write
+    with words — a comment, a note's edit, a gathered note, a block's edit —
+    goes to the account's not-saved list with its quotes, which the offline
+    pill offers to copy (lib/offline/not-saved.ts, REV9-03). A write without
+    words (a delete, an order) has nothing to keep. */
 export function keepDroppedWords(
   account: string | null,
   path: string,
@@ -305,6 +307,10 @@ export type GatherDraftQuote = {
   text: string;
   /** No quotedText goes to the server: it quotes the block's words (a part's start). */
   whole?: boolean;
+  /** [lists9] The link this quote is an end of (Note on this link, WALK9-10):
+      a note of a link's two ends alone sends `fromLinkId`, so the server
+      quotes the link's own anchors. */
+  linkId?: string;
 };
 export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
 
@@ -321,6 +327,7 @@ function gatherQuote(raw: unknown): GatherDraftQuote | null {
     text: q.text,
     ...(typeof q.blockId === "string" ? { blockId: q.blockId } : {}),
     ...(q.whole === true ? { whole: true } : {}),
+    ...(typeof q.linkId === "string" ? { linkId: q.linkId } : {}),
   };
 }
 

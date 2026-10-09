@@ -12,9 +12,11 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
   ACCOUNT_SAVE_SETTLE_MS,
+  ACCOUNT_SAVE_SHOWN_MS,
   applyReadingPosition,
   atReadingPosition,
   chooseReadingPosition,
+  firstBlockShown,
   LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
@@ -1335,6 +1337,31 @@ export function ReaderInteractions({
     const onVisibility = () => {
       if (document.visibilityState === "hidden") saveAccount(true);
     };
+    // [lists9] Shown for ACCOUNT_SAVE_SHOWN_MS with its first block in view,
+    // the document counts as opened (WALK9-05): the account's copy saves
+    // once, where the pane stands, so the graph marks the document opened
+    // for a reader who read its first screen and never scrolled. Only while
+    // the account has no copy. A hidden tab, a page over the article, or the
+    // hold restarts the clock; a pane scrolled off the first block saves by
+    // the scroll. The tab's copy does not change, and a position at the top
+    // of a document opens it at the top, as before.
+    let shownTimer: ReturnType<typeof setTimeout> | null = null;
+    const shown = () => {
+      shownTimer = null;
+      if (
+        document.visibilityState !== "visible" ||
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current
+      ) {
+        shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
+        return;
+      }
+      if (!firstBlockShown(container)) return;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, { ...position, at: Date.now() }, false);
+    };
+    if (keepsAccountCopy && accountAtOpen === null) shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
     container.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
@@ -1343,10 +1370,11 @@ export function ReaderInteractions({
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
+      if (shownTimer) clearTimeout(shownTimer);
       save();
       saveAccount(true);
     };
-  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId, accountAtOpen]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -3094,6 +3122,9 @@ export function ReaderInteractions({
   // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
   const annotationParam = searchParams.get(ANNOTATION_PARAM);
+  // [lists9] The kind rides along (lib/annotation-reference.ts): a comment
+  // opens in the Annotations tab (WALK9-04).
+  const commentParam = searchParams.get("kind") === "comment";
   // A jump in this pane flashes its mark at once (dissect:flash-source) and
   // puts ?src= in the address too: when the address lands, the pane moves
   // no more (a press made meanwhile would scroll away). A page opened with
@@ -3108,6 +3139,14 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
+      // A comment: the Annotations tab, its card expanded, where its replies
+      // read and Reply is one press away — the path ?link= takes
+      // (workspace.tsx onFocusAnnotation). The mark's own card shows the
+      // comment alone.
+      if (commentParam) {
+        window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail: { sourceId: src } }));
+        return;
+      }
       const el = containerRef.current?.querySelector<HTMLElement>(sourceMarkSelector(src));
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
@@ -3116,11 +3155,15 @@ export function ReaderInteractions({
         timer = setTimeout(tryOpen, 200);
       }
     };
-    tryOpen();
+    // The first try waits a tick: on a page opened at this address the
+    // listeners that answer (this pane's open-annotation below, the
+    // workspace's focus-annotation) register in effects that run after this
+    // one, and an event sent now reaches none of them.
+    timer = setTimeout(tryOpen, 0);
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [src, annotationParam, flashSource]);
+  }, [src, annotationParam, commentParam, flashSource]);
 
   // Arriving through a link's other end: ?link=<id> flashes the mark here,
   // and the tray turns to the Annotations tab on the link's card; a mark in

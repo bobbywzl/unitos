@@ -18,23 +18,26 @@ export { COVERAGE_COUNTS_ANNOTATIONS, COVERAGE_COUNTS_COMMENTS, notedShare, type
 // the account ever opened it. A document with no parts is one part, the
 // whole document (WALK5-06). [layer5] Each document's comments too, the
 // reader's own words beside the notes (VIEW5-01). Read only, never a model
-// call, stored rows only: the part titles' three queries, then one query
-// for the part starts, one for the sources, one for the opened documents,
-// and one for the comments (with [lists8] their authors and the author of
-// each one's last open reply, WALK8-01).
+// call, stored rows only: the part titles' three queries and the project's
+// owner and collaborators, then one query for the part starts, one for the
+// sources, one for the opened documents, one for the collaborators'
+// accounts, and one for the comments (with [lists8] their authors and
+// [lists9] each one's newest reply, WALK8-01, WALK9-01).
 
 export async function projectCoverage(notebookId: string, userId: string): Promise<ProjectCoverage> {
-  const [titles, attached] = await Promise.all([
+  const [titles, attached, project] = await Promise.all([
     projectPartTitles(notebookId),
     db.notebookDocument.findMany({
       where: { notebookId, document: { generatedCommand: null } },
       select: { documentId: true },
     }),
+    db.notebook.findUnique({ where: { id: notebookId }, select: { userId: true, collaborators: { select: { email: true } } } }),
   ]);
   const docIds = attached.map((a) => a.documentId);
   if (docIds.length === 0) return { documents: {} };
   const startIds = docIds.flatMap((id) => (titles.documents[id] ?? []).map((p) => p.blockId));
-  const [starts, sources, opened, commentRows] = await Promise.all([
+  const collaboratorEmails = project?.collaborators.map((c) => c.email) ?? [];
+  const [starts, sources, opened, collaboratorUsers, commentRows] = await Promise.all([
     startIds.length > 0
       ? db.block.findMany({ where: { id: { in: startIds } }, select: { id: true, order: true } })
       : Promise.resolve([]),
@@ -63,17 +66,30 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
       SELECT s."documentId" FROM "Source" s JOIN "Note" n ON n.id = s."noteId" JOIN "Section" sec ON sec.id = n."sectionId"
       WHERE sec."notebookId" = ${notebookId} AND n."createdById" = ${userId} AND s."documentId" = ANY(${docIds})
     `,
+    // [lists9] The collaborators' accounts (WALK9-09): with the owner, the
+    // accounts a thread can wait on. A collaborator with no account yet,
+    // and a removed collaborator, are not among them.
+    collaboratorEmails.length > 0
+      ? db.user.findMany({ where: { email: { in: collaboratorEmails } }, select: { id: true } })
+      : Promise.resolve([]),
     // [layer5] The comments of the project in its documents, one row per
     // comment at its first live source (VIEW5-01): an annotation with no
-    // tool and no highlight color, the rule of annotationKind.
+    // tool and no highlight color, the rule of annotationKind. [lists9] With
+    // each one's newest reply, resolved or not (WALK9-01, WALK9-04), and
+    // its open replies.
     db.$queryRaw<
       {
         id: string;
         content: string;
         open: boolean;
+        createdAt: Date;
         replies: number;
+        openReplies: number;
         authorId: string | null;
-        lastReplyBy: string | null;
+        newestBy: string | null;
+        newestResolved: boolean | null;
+        newestText: string | null;
+        newestAt: Date | null;
         sourceId: string;
         documentId: string;
         blockId: string;
@@ -81,15 +97,21 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
       }[]
     >`
       SELECT DISTINCT ON (n.id) n.id, left(n.content, 280) AS content, n."resolvedById" IS NULL AS open,
+        n."createdAt",
         (SELECT count(*)::int FROM "Reply" r WHERE r."noteId" = n.id) AS replies,
+        (SELECT count(*)::int FROM "Reply" r WHERE r."noteId" = n.id AND r."resolvedById" IS NULL) AS "openReplies",
         n."createdById" AS "authorId",
-        (SELECT r."userId" FROM "Reply" r WHERE r."noteId" = n.id AND r."resolvedById" IS NULL
-          ORDER BY r."createdAt" DESC, r.id DESC LIMIT 1) AS "lastReplyBy",
+        nr."userId" AS "newestBy", nr."resolvedById" IS NOT NULL AS "newestResolved",
+        left(nr.content, 140) AS "newestText", nr."createdAt" AS "newestAt",
         s.id AS "sourceId", s."documentId", s."blockId", b."order"
       FROM "Section" sec
       JOIN "Note" n ON n."sectionId" = sec.id
       JOIN "Source" s ON s."noteId" = n.id
       JOIN "Block" b ON b.id = s."blockId" AND b."documentId" = s."documentId"
+      LEFT JOIN LATERAL (
+        SELECT r."userId", r."resolvedById", r.content, r."createdAt" FROM "Reply" r
+        WHERE r."noteId" = n.id ORDER BY r."createdAt" DESC, r.id DESC LIMIT 1
+      ) nr ON true
       WHERE sec."notebookId" = ${notebookId} AND sec.hidden
         AND n."derivationType" IS NULL AND n.color IS NULL
         AND n.status <> 'REJECTED' AND n."sideChatOfId" IS NULL
@@ -97,11 +119,27 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
       ORDER BY n.id, b."order", s.id
     `,
   ]);
+  // [lists9] The accounts a thread can wait on (WALK9-09): the owner and
+  // the collaborators that have an account.
+  const members = new Set<string>([...(project ? [project.userId] : []), ...collaboratorUsers.map((u) => u.id)]);
   const commentsOf = new Map<string, GraphComment[]>();
   const commentOrder = new Map<string, number>();
   for (const c of commentRows) {
     const text = c.content.replace(/\s+/g, " ").trim();
     if (!text) continue;
+    const newest =
+      c.newestAt === null || c.newestBy === null
+        ? null
+        : {
+            userId: c.newestBy,
+            text: (c.newestText ?? "").replace(/\s+/g, " ").trim(),
+            createdAt: c.newestAt.toISOString(),
+            resolved: c.newestResolved === true,
+          };
+    // One waiting rule (WALK9-01, WALK9-09; commentWaits): the newest reply
+    // decides, resolved or not; a comment with no reply, its author; words
+    // by an account outside the project wait on no one.
+    const decides = newest === null ? c.authorId : newest.resolved ? null : newest.userId;
     const row: GraphComment = {
       id: c.id,
       sourceId: c.sourceId,
@@ -110,7 +148,10 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
       open: c.open,
       replies: c.replies,
       authorId: c.authorId,
-      lastById: c.lastReplyBy ?? c.authorId,
+      lastById: decides !== null && members.has(decides) ? decides : null,
+      newest,
+      openReplies: c.openReplies,
+      createdAt: c.createdAt.toISOString(),
     };
     commentOrder.set(c.id, c.order);
     commentsOf.set(c.documentId, [...(commentsOf.get(c.documentId) ?? []), row]);
@@ -156,5 +197,5 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
         .sort((a, b) => Number(b.open) - Number(a.open) || (commentOrder.get(a.id) ?? 0) - (commentOrder.get(b.id) ?? 0)),
     };
   }
-  return { documents };
+  return { documents, members: [...members].sort() };
 }

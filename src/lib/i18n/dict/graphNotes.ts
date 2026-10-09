@@ -32,19 +32,10 @@ const en = {
 
   // Note on this link (link-note-composer.tsx)
   noteOnLink: "Note on this link",
-  noteOnLinkTitle: "Write a note that quotes both ends of this link",
-  noteOnLinkPlaceholder: "What do these two passages say together?",
+  // [lists9] WALK9-10: the press puts both ends into the new note (note-gather.tsx).
+  noteOnLinkTitle: "Put both passages of this link into the new note",
   // [ui5] WALK5-13: unsent words on a link
   linkDraftTitle: "Draft: words on this link not sent yet, a reply or a note",
-  noteOnLinkSection: "Section",
-  noteOnLinkSave: "Save",
-  noteOnLinkSaving: "Saving…",
-  noteOnLinkCancel: "Cancel",
-  noteOnLinkCancelTitle: "Fold the box. Your words are kept",
-  noteOnLinkSaved: "Note saved in {section}",
-  noteOnLinkQueued: "Note saved offline in {section}. It syncs when you are back online.",
-  noteOnLinkShow: "Show",
-  noteOnLinkNoSection: "Add a section in the notes tray first.",
 
   // The Notes list beside the canvas (graph-notes-list.tsx)
   notes: "Notes",
@@ -107,19 +98,9 @@ const zh: Record<keyof typeof en, string> = {
   showNote: "在笔记栏中显示这条笔记",
 
   noteOnLink: "就此链接写笔记",
-  noteOnLinkTitle: "写一条引用这个链接两端的笔记",
-  noteOnLinkPlaceholder: "这两个片段放在一起说明了什么？",
+  noteOnLinkTitle: "把这个链接的两段都放进新笔记",
   // [ui5] WALK5-13
   linkDraftTitle: "草稿：这个链接上有还没发送的文字，一条回复或一条笔记",
-  noteOnLinkSection: "章节",
-  noteOnLinkSave: "保存",
-  noteOnLinkSaving: "正在保存…",
-  noteOnLinkCancel: "取消",
-  noteOnLinkCancelTitle: "收起输入框，你写的文字会保留",
-  noteOnLinkSaved: "笔记已保存到 {section}",
-  noteOnLinkQueued: "笔记已离线保存到 {section}，恢复联网后同步。",
-  noteOnLinkShow: "显示",
-  noteOnLinkNoSection: "请先在笔记栏中添加一个章节。",
 
   notes: "笔记",
   notesToggleTitle: "图谱上当前关注的笔记，以及按章节筛选",

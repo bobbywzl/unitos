@@ -248,16 +248,18 @@ if (want("esc")) {
   await page.locator("[data-graph-link-panel]").waitFor();
   const noteBtn = page.locator('[data-track="graph-link-note"]');
   if (await noteBtn.count()) {
+    // [lists9] WALK9-10: Note on this link puts the link's ends into the new note and gives its words box the focus.
     await noteBtn.click();
-    const ta = page.locator("[data-graph-link-note-composer] textarea");
-    await ta.fill("a draft to keep");
-    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    const words = page.locator("[data-graph-note-gather-words]");
+    check("Note on this link: the new note holds the link's two ends, the focus in its words box, the panel stays",
+      (await page.locator("[data-graph-note-gather-quote]").count()) === 2 && (await words.evaluate((el) => el === document.activeElement)) && (await page.locator("[data-graph-link-panel]").count()) === 1);
+    await words.fill("a draft to keep");
     await page.waitForTimeout(300);
-    check("Esc in Note on this link: folded, focus on its button, the panel stays",
-      (await active(page)) === "graph-link-note" && (await page.locator("[data-graph-link-panel]").count()) === 1, await active(page));
-    await page.locator('[data-track="graph-link-note"]').click();
-    check("the words are still there on reopen", (await page.locator("[data-graph-link-note-composer] textarea").inputValue()) === "a draft to keep");
-    await page.locator('[data-track="graph-link-note-cancel"]').click();
+    const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unitos-note-gather:")).map((k) => localStorage.getItem(k) ?? "").join(" "));
+    check("the words are kept in the browser as typed", kept.includes("a draft to keep"), kept.slice(0, 120));
+    page.once("dialog", (d) => d.accept());
+    await page.locator('[data-track="graph-note-gather-discard"]').click();
   } else check("Note on this link shown (canEdit)", false);
   await ctx.close();
 }
@@ -370,11 +372,13 @@ if (want("touch")) {
   await noteBtn.scrollIntoViewIfNeeded();
   await noteBtn.click();
   await page.waitForTimeout(600);
-  const save = await page.locator('[data-track="graph-link-note-save"]').boundingBox();
-  const panel = await page.locator("[data-graph-link-panel]").boundingBox();
-  check("WALK4-17: Save is in view when the composer opens", save && panel && save.y + save.height <= panel.y + panel.height && save.y >= panel.y, JSON.stringify({ save, panel }));
+  // [lists9] WALK9-10: Note on this link opens the new note under the side list; its Save is on screen.
+  const save = await page.locator('[data-track="graph-note-gather-save"]').boundingBox();
+  const vh = page.viewportSize()?.height ?? 900;
+  check("WALK4-17: Save is in view when the new note opens", save && save.y >= 0 && save.y + save.height <= vh, JSON.stringify({ save, vh }));
   await page.screenshot({ path: `${SHOT}/WALK4-17-after.png` });
-  await page.locator('[data-track="graph-link-note-cancel"]').click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator('[data-track="graph-note-gather-discard"]').click();
   await ctx.close();
 }
 
