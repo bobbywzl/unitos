@@ -446,9 +446,22 @@ function score(ref: Ref, ours: Ours, mode: "md" | "txt", refWords: string[], opt
   // Our units, and for a reference of lines, our units cut at their breaks.
   const ourUnits = ours.units.map((u) => (u.k === "code" ? { ...u, br: breaksOf(codeKey(u.t)) } : u));
   const lineMode = mode === "txt" && refUnits.some((u) => u.k === "line");
+  // A unit's lines: its text cut at its breaks (a paragraph's text has its
+  // whitespace collapsed; the breaks are word offsets), or at its newlines.
+  const linesOf = (u: Unit): string[] => {
+    if (!u.br?.length) return u.t.split("\n");
+    const ws = words(u.t);
+    const out: string[] = [];
+    let from = 0;
+    for (const b of [...u.br, ws.length]) {
+      out.push(ws.slice(from, b).join(" "));
+      from = b;
+    }
+    return out;
+  };
   const candidates: { unit: Unit; at: number }[] = [];
   ourUnits.forEach((u, i) => {
-    if (lineMode) for (const line of u.t.split("\n")) candidates.push({ unit: { ...u, t: line, br: [] }, at: i });
+    if (lineMode) for (const line of linesOf(u)) candidates.push({ unit: { ...u, t: line, br: [] }, at: i });
     else candidates.push({ unit: u, at: i });
   });
   const keyOf = (u: Unit) => (u.k === "hr" ? "<hr>" : mode === "md" && u.k === "code" ? `code:${codeKey(u.t)}` : key(u.t));
