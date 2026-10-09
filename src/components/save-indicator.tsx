@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
+import { queuedCount, subscribeQueue } from "@/lib/offline/queue";
 import { readSaveState, readSaveTouched, subscribeSaveState } from "@/lib/save-state";
 
 function subscribeOnline(listener: () => void) {
@@ -46,7 +47,10 @@ function subscribeStatusShown(listener: () => void) {
 // landed, "Not saved" when the last write failed. Offline with Unitos Premium,
 // a landed write is saved on this device and syncs later, and the line says
 // so. Nothing shows until the first write of the tab. While a page editor's
-// status carries this state, this line hides.
+// status carries this state, this line hides. While the offline queue holds
+// writes, the header's offline pill says it ("Syncing 2 changes…", or
+// Offline and the count): Saved and Not saved hide, so the header says one
+// thing; Saving… still shows while a save is on its way.
 export function SaveIndicator() {
   const t = useT();
   const { premium } = useCollab();
@@ -54,7 +58,19 @@ export function SaveIndicator() {
   const touched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const inPage = useSyncExternalStore(subscribeStatusShown, () => statusShown > 0, () => false);
+  const [queued, setQueued] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const read = () => void queuedCount().then((n) => alive && setQueued(n));
+    read();
+    const stop = subscribeQueue(read);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
   if (!touched || inPage) return null;
+  if (queued > 0 && state !== "saving") return null;
   const key =
     state === "saving"
       ? "outline.saving"

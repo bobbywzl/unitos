@@ -39,6 +39,30 @@ import {
 } from "@/lib/note-doc";
 
 export type TextSelection = { start: number; end: number };
+
+/** Where an offset of `before` stands in `after`: the same place when the
+    text before it, or after it, did not change; else after the same words
+    before it, found nearest its old place. */
+export function keptOffset(before: string, after: string, at: number): number {
+  if (before === after) return at;
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  if (at <= head) return at;
+  let tail = 0;
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  if (at > before.length - tail) return at + after.length - before.length;
+  for (const n of [40, 20, 10, 4, 2, 1]) {
+    const words = before.slice(Math.max(0, at - n), at);
+    if (!words) break;
+    let best = -1;
+    for (let i = after.indexOf(words); i >= 0; i = after.indexOf(words, i + 1)) {
+      const end = i + words.length;
+      if (best < 0 || Math.abs(end - at) < Math.abs(best - at)) best = end;
+    }
+    if (best >= 0) return best;
+  }
+  return Math.min(at, after.length);
+}
 // Bold, italic, underline, and the four text colors: a selection is styled
 // or unstyled; a bare caret styles what is typed next. One color at a time:
 // the color chosen replaces the one the text had.
@@ -839,7 +863,12 @@ export function attachNoteEditable(
       if (next === text && !selection) return;
       clearIntent();
       const focused = document.activeElement === el;
-      const keep = selection ?? (focused ? currentSelection() : null);
+      // Without a selection the caret keeps its place among the words: a
+      // text put together with words written elsewhere (a save that met
+      // another tab's or a collaborator's words) moves it with the words
+      // before it, never into the words that came in.
+      const at = focused && !selection ? currentSelection() : null;
+      const keep = selection ?? (at ? { start: keptOffset(text, next, at.start), end: keptOffset(text, next, at.end) } : null);
       text = next;
       paint(keep ? clamp(keep) : null);
       if (selection && !focused) el.focus({ preventScroll: true });

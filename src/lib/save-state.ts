@@ -68,6 +68,12 @@ export function settleQueuedWrites(): void {
   notify();
 }
 
+/** A failed write the reader took back (Undo of a queued delete): its path
+    waits for nothing now. */
+export function forgetFailedPath(path: string): void {
+  if (unconfirmed.delete(path)) notify();
+}
+
 /** True while a write that failed has not been confirmed by a later write to
     the same path. */
 export function readUnconfirmed(): boolean {

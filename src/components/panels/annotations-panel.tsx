@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -199,7 +200,8 @@ export function AnnotationsPanel({
     setErrorText(null);
     try {
       await run();
-      router.refresh();
+      // Offline the write is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {

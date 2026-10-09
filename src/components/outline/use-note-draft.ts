@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { isOffline } from "@/lib/offline/queue";
 import { clearDirty, markDirty } from "@/lib/save-state";
 import { ACCOUNT_HEADER } from "@/lib/constants";
@@ -31,7 +32,14 @@ import type { SaveState } from "@/components/outline/save-state";
 // together with the reader's text, never saved over; the editor then shows
 // the text as it was saved, and the save state says both versions were
 // kept when some lines are kept twice. One save at a time per editor, so
-// each save is made from the text the one before it left.
+// each save is made from the text the one before it left. A save of the
+// editor's words sends the words the editor holds when the save leaves,
+// never the words it held when the save was asked for: a save that waited
+// behind another one sends the text that save left, with the keys typed
+// since. The text a save brings back is in the editor before the next key
+// lands, the caret after the reader's own words (lib/note-editable.ts), so
+// every save is made from the text the editor shows. Done and the closing
+// flush wait for the save on its way, then send the same way.
 //
 // A merge reads the notes as they are stored, and an open editor may hold
 // words the auto-save has not sent yet. So every open editor registers
@@ -186,15 +194,28 @@ export function useNoteDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  /** Save `trimmed` after the saves before it; the editor takes the saved text. */
+  /** Save `content` after the saves before it; the editor takes the saved text. */
   const save = useCallback(
-    (trimmed: string): Promise<SavedText> => {
+    (content: string): Promise<SavedText> => {
+      // The editor's own words: the save sends the editor's words as they
+      // stand when it leaves. Other words (a quote put on the text the card
+      // shows): made from the text of the save on its way, else the last
+      // one, and put together with whatever the saves before it left.
+      const drafted = content === draftRef.current.trim();
+      const from = sendingRef.current ?? baseRef.current;
       const run = chainRef.current.then(async (): Promise<SavedText> => {
-        // The same text as the save before, which waits in the offline
-        // queue: it is queued already. One queued write per text (Done after
-        // the auto-save), never a second one made from the first.
-        if (queuedRef.current === trimmed && baseRef.current === trimmed) {
-          return { content: trimmed, changed: false, conflict: false, queued: true };
+        const trimmed = drafted
+          ? draftRef.current.trim() || content
+          : from === baseRef.current
+            ? content
+            : reconcileNoteText(from, baseRef.current, content, conflictLabels()).text;
+        if (lastSavedRef.current === content) lastSavedRef.current = trimmed;
+        // The text the server has: nothing to send. The same text as a save
+        // that waits in the offline queue is queued already: one queued
+        // write per text (Done after the auto-save), never a second one made
+        // from the first.
+        if (baseRef.current === trimmed) {
+          return { content: trimmed, changed: false, conflict: false, ...(queuedRef.current === trimmed ? { queued: true } : {}) };
         }
         sendingRef.current = trimmed;
         try {
@@ -210,6 +231,7 @@ export function useNoteDraft({
             writeNoteDraft(noteId, local?.content ?? trimmed, confirmedRef.current, saved.content);
           } else {
             confirmedRef.current = saved.content;
+            confirmNoteDraft(noteId, content);
             confirmNoteDraft(noteId, trimmed);
             confirmNoteDraft(noteId, saved.content);
             // Words typed since stay in the local draft, made from this save now.
@@ -218,13 +240,15 @@ export function useNoteDraft({
           }
           if (saved.changed) {
             // The note changed elsewhere: the editor shows the text as saved,
-            // with what the reader typed since put on top of it.
+            // with what the reader typed since put on top of it — painted
+            // now, before another key reaches the editor, so the next save is
+            // made from it.
             const typed = draftRef.current;
             const next =
               typed.trim() === trimmed ? saved.content : reconcileNoteText(trimmed, saved.content, typed.trim(), conflictLabels()).text;
             if (lastSavedRef.current === trimmed) lastSavedRef.current = saved.content;
             draftRef.current = next;
-            setDraft(next);
+            flushSync(() => setDraft(next));
           }
           // Queued with the browser online: the server did not take the
           // words (an error, a dropped connection). The queue tries again;
@@ -309,7 +333,12 @@ export function useNoteDraft({
     };
     openDrafts.set(noteId, handle);
     return () => {
-      if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
+      // A closed editor whose saves are still on their way stays the note's
+      // one sender until they answer: the notes' retry leaves the note to
+      // it, and a save asked for meanwhile goes after them.
+      void chainRef.current.then(() => {
+        if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
+      });
     };
   }, [active, canEdit, noteId, save]);
 
@@ -356,21 +385,27 @@ export function useNoteDraft({
       );
     };
     // The editor closes: the last words save after the saves before them,
-    // and the sources of the quotes the sitting removed go with them.
+    // and the sources of the quotes the sitting removed go with them. The
+    // words sent are the ones the editor holds once those saves answered:
+    // the text they brought back, with the reader's words on top.
     const close = () => {
       const trimmed = draftRef.current.trim();
       const typed = Boolean(trimmed) && trimmed !== lastSavedRef.current;
       if (typed) lastSavedRef.current = trimmed;
       else if (lastSavedRef.current.trim() === openedRef.current) return;
       const opened = openedRef.current;
-      void chainRef.current.then(() =>
-        send(
-          typed
-            ? { content: trimmed, baseContent: baseRef.current, onConflict: "keep", pruneSourcesFrom: opened }
+      void chainRef.current.then(() => {
+        const words = draftRef.current.trim() || trimmed;
+        if (typed) lastSavedRef.current = words;
+        const changed = typed && words !== baseRef.current;
+        if (!changed && lastSavedRef.current.trim() === opened) return;
+        return send(
+          changed
+            ? { content: words, baseContent: baseRef.current, onConflict: "keep", pruneSourcesFrom: opened }
             : { pruneSourcesFrom: opened },
-          typed ? trimmed : null,
-        ),
-      );
+          changed ? words : null,
+        );
+      });
     };
     window.addEventListener("pagehide", flush);
     window.addEventListener("beforeunload", flush);

@@ -147,6 +147,12 @@ export function overlayQueuedNotes(
   return sections.map(walk);
 }
 
+/** What the notes draw of the queued writes: each write's note, body, and
+    whether the server refused it. */
+function drawnAs(writes: QueuedWrite[]): string {
+  return JSON.stringify(writes.map((w) => [w.path, w.method, w.body, (w.attempts ?? 0) > 0, w.queuedAt]));
+}
+
 /** The queued note writes, read again whenever the queue changes; and the
     notes whose create just synced, until the refresh brings them. */
 export function useQueuedNoteWrites(): { writes: QueuedWrite[]; landed: ReadonlyMap<string, QueuedCreated> } {
@@ -167,7 +173,9 @@ export function useQueuedNoteWrites(): { writes: QueuedWrite[]; landed: Readonly
             if (!now.has(id)) landed.set(id, { ...c, note: { ...c.note, queued: false } });
           }
           for (const [id, c] of prev.landed) if (!now.has(id) && !landed.has(id)) landed.set(id, c);
-          if (prev.writes.length === 0 && writes.length === 0 && landed.size === prev.landed.size) return prev;
+          // The same writes drawn the same way (a try that failed again):
+          // nothing new to draw.
+          if (drawnAs(prev.writes) === drawnAs(writes) && landed.size === prev.landed.size) return prev;
           return { writes, landed };
         });
       });

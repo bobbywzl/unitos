@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { dropQueuedWrite, landedDelete } from "@/lib/offline/queue";
 import type { NoteView } from "@/lib/types";
 
 // The notes' Undo pill, posted from outside the notes (SPEC.md §6): a delete
@@ -53,16 +54,33 @@ export async function deleteNoteWithUndo(noteId: string, message: string, onBack
     throw err;
   }
   const { eventId, notebookId } = answer ?? {};
-  // Queued offline: no event yet, so no Undo; History has it once it lands.
+  const restore = async (event: unknown, notebook: unknown) => {
+    if (typeof event !== "string" || typeof notebook !== "string") return;
+    const back = await api<unknown>(`/api/notebooks/${notebook}/history/${event}`, "POST");
+    tellNoteBack(back, noteId);
+    onBack?.();
+  };
+  // Queued (offline, or the server failing): the same pill. Undo takes the
+  // delete out of the queue before it is sent; once it landed, Undo is
+  // History's Restore of its event, as online.
+  if ((answer as { queued?: unknown } | null)?.queued === true) {
+    const path = `/api/notes/${noteId}`;
+    postUndoPill({
+      message,
+      undo: async () => {
+        // Never sent: the server still has it, and the marks come back.
+        if (await dropQueuedWrite(path, "DELETE")) {
+          tell("dissect:note-restored", noteId);
+          return;
+        }
+        const landed = landedDelete(path) as { eventId?: unknown; notebookId?: unknown } | null | undefined;
+        await restore(landed?.eventId, landed?.notebookId);
+      },
+    });
+    return;
+  }
   if (typeof eventId !== "string" || typeof notebookId !== "string") return;
-  postUndoPill({
-    message,
-    undo: async () => {
-      const back = await api<unknown>(`/api/notebooks/${notebookId}/history/${eventId}`, "POST");
-      tellNoteBack(back, noteId);
-      onBack?.();
-    },
-  });
+  postUndoPill({ message, undo: () => restore(eventId, notebookId) });
 }
 
 /** A note History's Restore put back: the outline takes it at once

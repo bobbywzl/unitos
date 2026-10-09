@@ -6,9 +6,14 @@
 // - lines only one side changed take that side's change;
 // - lines both sides changed the same way are kept once;
 // - lines both sides added at the same place are all kept, theirs first;
-// - lines both sides changed differently are kept twice, the other version
-//   first, each under a marker line that says what it is, so the reader
-//   sees both and deletes the one they do not want.
+// - lines both sides changed, at different words, take both changes (two
+//   people typing in one paragraph at once); words both sides put in at the
+//   same place are all kept, the reader's first;
+// - lines both sides changed at the same words are kept twice, the other
+//   version first, each under a marker line that says what it is, so the
+//   reader sees both and deletes the one they do not want. A text that
+//   already holds marker lines takes the new version into that block,
+//   never a block inside a block.
 //
 // Line by line, a three-way merge of the text both saves started from (base),
 // the stored text (theirs), and the reader's text (mine). Pure: the note
@@ -66,7 +71,90 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((lin
 
 function both(theirs: string[], mine: string[], labels: ConflictLabels): string[] {
   const block = (lines: string[]) => (lines.length > 0 ? [...lines, ""] : []);
-  return [`**${labels.other}**`, "", ...block(theirs), `**${labels.yours}**`, "", ...block(mine), `**${labels.end}**`];
+  // One side's lines already hold a block of versions: the other side's
+  // version goes into it, before its end line, never a block inside a block.
+  const end = `**${labels.end}**`;
+  const at = theirs.lastIndexOf(end);
+  if (at >= 0) return [...theirs.slice(0, at), `**${labels.yours}**`, "", ...block(mine), ...theirs.slice(at)];
+  const mineAt = mine.lastIndexOf(end);
+  if (mineAt >= 0) return [...mine.slice(0, mineAt), `**${labels.other}**`, "", ...block(theirs), ...mine.slice(mineAt)];
+  return [`**${labels.other}**`, "", ...block(theirs), `**${labels.yours}**`, "", ...block(mine), end];
+}
+
+// A word, a run of spaces, a line break, or one other character; each
+// Chinese or Japanese character is a word of its own.
+const WORD = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[\p{L}\p{N}\p{M}_'’]+|[^\S\n]+|\n|[^]/gu;
+// Past this many word pairs the word match is too slow for a save.
+const MAX_WORD_CELLS = 1_000_000;
+
+type Change = { start: number; end: number; words: string[] };
+
+/** The changes that make `to` from `from`, by word: each replaces the words
+    from..end of `from` (none, for words put in) with `words`. */
+function changes(from: string[], to: string[]): Change[] | null {
+  const match = matchLines(from, to);
+  if (!match) return null;
+  const out: Change[] = [];
+  let i = 0;
+  let j = 0;
+  for (let at = 0; at <= from.length; at++) {
+    if (at < from.length && match[at] === -1) continue;
+    const toEnd = at < from.length ? match[at] : to.length;
+    if (at > i || toEnd > j) out.push({ start: i, end: at, words: to.slice(j, toEnd) });
+    i = at + 1;
+    j = toEnd + 1;
+  }
+  return out;
+}
+
+/** True when the words of `part` stand in `whole` in a row, spaces aside. */
+function within(part: string[], whole: string[]): boolean {
+  const words = (run: string[]) => run.filter((w) => w.trim() !== "");
+  const a = words(part);
+  const b = words(whole);
+  if (a.length === 0) return false;
+  for (let i = 0; i + a.length <= b.length; i++) if (a.every((w, k) => w === b[i + k])) return true;
+  return false;
+}
+
+/** Both sides' changes to the same lines put together word by word, when
+    they change different words: the text, or null when both change the
+    same words (the lines are then kept twice). */
+function mergeWords(base: string, theirs: string, mine: string): string | null {
+  const b = base.match(WORD) ?? [];
+  const t = theirs.match(WORD) ?? [];
+  const m = mine.match(WORD) ?? [];
+  if (b.length * Math.max(t.length, m.length) > MAX_WORD_CELLS) return null;
+  const ours = changes(b, m);
+  const other = changes(b, t);
+  if (!ours || !other) return null;
+  const all = [...ours.map((c) => ({ ...c, mine: true })), ...other.map((c) => ({ ...c, mine: false }))];
+  // In the order of the base; at one place, words put in come before a
+  // replacement there, and the reader's words before the other side's.
+  all.sort((x, y) => x.start - y.start || (x.end - x.start) - (y.end - y.start) || (x.mine === y.mine ? 0 : x.mine ? -1 : 1));
+  const out: string[] = [];
+  let at = 0;
+  let last: (Change & { mine: boolean }) | null = null;
+  for (const c of all) {
+    // The same change on both sides counts once; words both sides put in at
+    // one place, one side's among the other's (the same typing saved twice,
+    // once from an older text), are kept once, the longer run.
+    if (last && last.mine !== c.mine && last.start === c.start && last.end === c.end) {
+      if (same(last.words, c.words) || (c.start === c.end && within(c.words, last.words))) continue;
+      if (c.start === c.end && within(last.words, c.words)) {
+        out.splice(out.length - last.words.length, last.words.length, ...c.words);
+        last = c;
+        continue;
+      }
+    }
+    // Two changes of the same words: no word merge.
+    if (c.start < at || (last && c.start === last.start && c.end > c.start && last.end > last.start)) return null;
+    out.push(...b.slice(at, c.start), ...c.words);
+    at = c.end;
+    last = c;
+  }
+  out.push(...b.slice(at));
+  return out.join("");
 }
 
 /** `text` as `base` with one run of words put in at one place: where, and
@@ -108,6 +196,13 @@ export function reconcileNoteText(base: string, theirs: string, mine: string, la
     // Both sides only added lines at the same place: both stay, theirs first.
     else if (cb.length === 0) out.push(...ct, ...cm);
     else {
+      // Both sides changed these lines: their words put together when they
+      // changed different words.
+      const words = mergeWords(cb.join("\n"), ct.join("\n"), cm.join("\n"));
+      if (words !== null) {
+        out.push(...words.split("\n"));
+        return;
+      }
       conflict = true;
       // Kept apart from the lines around them, so each marker reads as its own line.
       if (out.length > 0 && out[out.length - 1] !== "") out.push("");
