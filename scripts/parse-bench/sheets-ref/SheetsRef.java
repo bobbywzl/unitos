@@ -113,11 +113,22 @@ public class SheetsRef {
           RefCell rc = cellOf(cell, formatter);
           if (rc == null) continue;
           cells[c] = rc;
-          if (!rc.text.isEmpty()) maxCol = Math.max(maxCol, c);
         }
       }
       grid.add(cells);
     }
+    // A merged-away cell shows nothing in Excel, whatever words the file
+    // keeps in it: only the merge's first cell is shown.
+    List<CellRangeAddress> merges = new ArrayList<>(sheet.getMergedRegions());
+    for (CellRangeAddress m : merges) {
+      for (int r = m.getFirstRow(); r <= m.getLastRow() && r < grid.size(); r++) {
+        RefCell[] cells = grid.get(r);
+        for (int c = m.getFirstColumn(); c <= m.getLastColumn() && c < cells.length; c++) {
+          if (r != m.getFirstRow() || c != m.getFirstColumn()) cells[c] = null;
+        }
+      }
+    }
+    for (RefCell[] cells : grid) for (int c = 0; c < cells.length; c++) if (cells[c] != null && !cells[c].text.isEmpty()) maxCol = Math.max(maxCol, c);
     boolean[] hiddenRow = new boolean[grid.size()];
     for (int r = 0; r < grid.size(); r++) {
       Row row = sheet.getRow(r);
@@ -127,7 +138,6 @@ public class SheetsRef {
     // origin has words.
     int usedRow = -1;
     for (int r = 0; r < grid.size(); r++) for (RefCell c : grid.get(r)) if (c != null && !c.text.isEmpty()) usedRow = r;
-    List<CellRangeAddress> merges = new ArrayList<>(sheet.getMergedRegions());
     for (CellRangeAddress m : merges) {
       int r0 = m.getFirstRow(), c0 = m.getFirstColumn();
       if (r0 < grid.size() && c0 < grid.get(r0).length && grid.get(r0)[c0] != null && !grid.get(r0)[c0].text.isEmpty()) {
