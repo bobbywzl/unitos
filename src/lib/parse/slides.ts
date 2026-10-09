@@ -1062,8 +1062,16 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   const rendered = renderTextBody(txBody, settings);
   const furniture = ph !== null && FURNITURE_PH.has(ph.raw ?? "");
   const decoration = scope.decoration || furniture;
+  // A SmartArt drawing's shape sets its words in a box of their own
+  // (dsp:txXfrm): the text layer takes that box, in shares of the shape's.
+  const txBox = parseXfrm(child(sp, "txXfrm"));
+  let txPlace = "";
+  if (txBox && box.w > 0 && box.h > 0) {
+    const t = applyTransform(txBox, transform);
+    txPlace = `left:${pct(t.x - box.x, box.w)};top:${pct(t.y - box.y, box.h)};width:${pct(t.w, box.w)};height:${pct(t.h, box.h)};right:auto;bottom:auto;`;
+  }
   const textLayer = rendered.html
-    ? `<div class="st" style="${bodyStyle(bodyPr, ctx.slideW, false)}"${decoration ? " data-anchor-skip" : ""}>${rendered.html}</div>`
+    ? `<div class="st" style="${txPlace}${bodyStyle(bodyPr, ctx.slideW, false)}"${decoration ? " data-anchor-skip" : ""}>${rendered.html}</div>`
     : "";
   if (!fillLayer && !textLayer) return;
   out.push({
@@ -1275,8 +1283,16 @@ async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: T
     }
     return;
   }
-  // Another embedded object (a diagram, an OLE object): its picture, when
-  // the frame carries one as a fallback.
+  const relIds = child(data, "relIds");
+  if (relIds) {
+    const diagram = await renderDiagram(scope, relIds, placed, transform, out.length + scope.zBase);
+    if (diagram) {
+      out.push({ html: diagram.html, text: scope.decoration || !diagram.text ? null : diagram.text, box: placed, z: out.length + scope.zBase, title: false });
+      return;
+    }
+  }
+  // Another embedded object (an OLE object): its picture, when the frame
+  // carries one as a fallback.
   const fallbackBlip = descendants(frame, "blipFill")[0];
   if (fallbackBlip) {
     const url = await blipUrl(fallbackBlip, scope.ctx, scope.part.rels);
@@ -1290,6 +1306,95 @@ async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: T
       });
     }
   }
+}
+
+// ── SmartArt ─────────────────────────────────────────────────────────────────
+
+/** A SmartArt diagram (dgm:relIds). PowerPoint saves the drawing it laid
+    out beside the diagram's data (the data part's dsp:dataModelExt names it
+    among the slide's relationships): its shapes draw like the slide's own,
+    their place measured from the frame, in a layer as large as the slide
+    that keeps their stacking among themselves, and their words read in
+    reading order. A file with no drawing, or a drawing without words (a
+    file another program wrote), shows the data's words in the frame, one
+    paragraph per node in the diagram's outline order, deeper nodes
+    indented. Slides benchmark finding: every SmartArt node's words were
+    lost before (419 of the 421 pieces lost on 127 files). */
+async function renderDiagram(scope: SlideScope, relIds: Element, box: Box, transform: Transform, z: number): Promise<RenderedText | null> {
+  const { ctx } = scope;
+  const dataRel = scope.part.rels.get(attr(relIds, "dm") ?? "");
+  const data = dataRel && !dataRel.external ? parseXmlPart(ctx.zip, dataRel.target) : null;
+  const ext = data ? descendants(data, "dataModelExt")[0] : null;
+  const drawingRel = ext ? scope.part.rels.get(attr(ext, "relId") ?? "") : undefined;
+  const drawing = drawingRel && !drawingRel.external ? loadPart(ctx.zip, drawingRel.target) : null;
+  if (drawing) {
+    const inner: Placed[] = [];
+    const at: Transform = { ox: box.x, oy: box.y, sx: transform.sx, sy: transform.sy, cx: 0, cy: 0 };
+    await collectShapes({ ...scope, part: drawing, zBase: z }, descendants(drawing.doc, "spTree")[0] ?? null, at, inner);
+    if (inner.some((p) => p.text)) {
+      // pointer-events: the layer covers the slide, its shapes take the
+      // pointer as the slide's own do.
+      const shapes = readingOrder(inner, ctx).map((p) => ({ ...p, html: p.html.replace(/^<div class="([^"]*)" style="/, '<div class="$1" style="pointer-events:auto;') }));
+      const joined = joinPlaced(shapes);
+      return { html: `<div class="sh sd" style="left:0;top:0;width:100%;height:100%;pointer-events:none">${joined.html}</div>`, text: joined.text };
+    }
+  }
+  return data ? diagramOutline(scope, data, box) : null;
+}
+
+/** The diagram's words in its outline order (the parent-of connections,
+    each child by its source order), deeper nodes indented; nodes the
+    outline does not reach follow in the data's order. */
+function diagramOutline(scope: SlideScope, data: XMLDocument, box: Box): RenderedText | null {
+  const points = descendants(data, "pt");
+  const byId = new Map(points.map((pt) => [attr(pt, "modelId") ?? "", pt]));
+  const kids = new Map<string, { id: string; ord: number }[]>();
+  for (const cxn of descendants(data, "cxn")) {
+    const type = attr(cxn, "type");
+    if (type && type !== "parOf") continue;
+    const src = attr(cxn, "srcId") ?? "";
+    const list = kids.get(src) ?? [];
+    list.push({ id: attr(cxn, "destId") ?? "", ord: intAttr(cxn, "srcOrd") ?? 0 });
+    kids.set(src, list);
+  }
+  const order: { pt: Element; depth: number }[] = [];
+  const seen = new Set<string>();
+  const visit = (id: string, depth: number) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const pt = byId.get(id);
+    if (pt && (attr(pt, "type") ?? "node") === "node") order.push({ pt, depth });
+    for (const k of (kids.get(id) ?? []).sort((a, b) => a.ord - b.ord)) visit(k.id, pt && attr(pt, "type") === "doc" ? depth : depth + 1);
+  };
+  for (const pt of points) if (attr(pt, "type") === "doc") visit(attr(pt, "modelId") ?? "", 0);
+  for (const pt of points) if ((attr(pt, "type") ?? "node") === "node" && !seen.has(attr(pt, "modelId") ?? "")) order.push({ pt, depth: 0 });
+
+  const settings: TextSettings = {
+    palette: scope.palette,
+    chain: [scope.master.otherStyle],
+    fontScale: 1,
+    lnSpcReduction: 0,
+    defaultColor: defaultTextColor(scope.palette),
+    defaultFont: "+mn-lt",
+    major: scope.master.theme.major,
+    minor: scope.master.theme.minor,
+    slideW: scope.ctx.slideW,
+    rels: scope.part.rels,
+    fonts: scope.ctx.fonts,
+  };
+  const rows: RenderedText[] = [];
+  for (const { pt, depth } of order) {
+    const rendered = renderTextBody(child(pt, "t"), settings);
+    if (!rendered.text) continue;
+    const indent = depth > 0 ? `margin-left:${cqw(342900 * depth, scope.ctx.slideW)};` : "";
+    rows.push({ html: indent ? rendered.html.replace(/<p class="([^"]*)" style="/g, `<p class="$1" style="${indent}`) : rendered.html, text: rendered.text });
+  }
+  if (rows.length === 0) return null;
+  const html = rows.map((r) => r.html).join(textGap("\n"));
+  return {
+    html: `<div class="sh sd" style="${boxStyle(box, scope.ctx)}"><div class="st" style="${bodyStyle(null, scope.ctx.slideW, false)};justify-content:center">${html}</div></div>`,
+    text: rows.map((r) => r.text).join("\n"),
+  };
 }
 
 // ── Tables ───────────────────────────────────────────────────────────────────
@@ -1529,26 +1634,10 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
   // then the rest top to bottom, left to right. The z-index keeps the
   // slide's own stacking whatever the order.
   const decoration = placed.slice(0, decorationCount);
-  const own = placed.slice(decorationCount);
-  const band = ctx.slideH * 0.04;
-  const ordered = [...own].sort((a, b) => {
-    if (a.title !== b.title) return a.title ? -1 : 1;
-    const ay = Math.round(a.box.y / band);
-    const by = Math.round(b.box.y / band);
-    if (ay !== by) return ay - by;
-    return a.box.x - b.box.x;
-  });
-
-  const pieces: string[] = [];
-  const htmlParts: string[] = [];
-  for (const shape of [...decoration, ...ordered]) {
-    const withZ = shape.html.replace(/^<div class="([^"]*)" style="/, `<div class="$1" style="z-index:${shape.z};`);
-    if (shape.text !== null && shape.text.length > 0) {
-      if (pieces.length > 0) htmlParts.push(textGap("\n"));
-      pieces.push(shape.text);
-    }
-    htmlParts.push(withZ);
-  }
+  const ordered = readingOrder(placed.slice(decorationCount), ctx);
+  const joined = joinPlaced([...decoration, ...ordered]);
+  const pieces = joined.text ? [joined.text] : [];
+  const htmlParts = [joined.html];
 
   // Speaker notes: the notes slide's body placeholder.
   const notesRel = relsOfType(slide.rels, "notesSlide")[0];
@@ -1568,6 +1657,35 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
     html: slideShell(ctx, n, htmlParts.join(""), notesHtml, picture, background),
     page: n,
   };
+}
+
+/** Shapes in reading order: the title first, then top to bottom, left to
+    right (a 4% band decides "same row"). */
+function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
+  const band = ctx.slideH * 0.04;
+  return [...shapes].sort((a, b) => {
+    if (a.title !== b.title) return a.title ? -1 : 1;
+    const ay = Math.round(a.box.y / band);
+    const by = Math.round(b.box.y / band);
+    if (ay !== by) return ay - by;
+    return a.box.x - b.box.x;
+  });
+}
+
+/** Shapes' markup in the order given, each with its z-index, and their
+    words joined by newlines: a gap between every two shapes with words. */
+function joinPlaced(shapes: Placed[]): RenderedText {
+  const pieces: string[] = [];
+  const htmlParts: string[] = [];
+  for (const shape of shapes) {
+    const withZ = shape.html.replace(/^<div class="([^"]*)" style="/, `<div class="$1" style="z-index:${shape.z};`);
+    if (shape.text !== null && shape.text.length > 0) {
+      if (pieces.length > 0) htmlParts.push(textGap("\n"));
+      pieces.push(shape.text);
+    }
+    htmlParts.push(withZ);
+  }
+  return { html: htmlParts.join(""), text: pieces.join("\n") };
 }
 
 function notesText(ctx: Ctx, path: string, master: MasterCtx, palette: Palette): RenderedText | null {

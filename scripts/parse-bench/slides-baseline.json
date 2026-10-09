@@ -1,14 +1,14 @@
 {
  "total": {
-  "composite": 0.899,
-  "words": 0.822,
+  "composite": 0.964,
+  "words": 0.959,
   "order": 0.97,
   "bullets": 0.914,
   "tables": 0.958,
   "notes": 1,
   "chartValues": 1,
   "replica": 1,
-  "lost": 421,
+  "lost": 2,
   "files": 127,
   "slides": 700,
   "errors": 0
@@ -26,15 +26,15 @@
    "lost": 0
   },
   "poi-customGeo": {
-   "composite": 0.961,
-   "words": 0.859,
+   "composite": 0.985,
+   "words": 1,
    "order": 0.991,
    "bullets": 1,
    "tables": 0.917,
    "notes": 1,
    "chartValues": null,
    "replica": 1,
-   "lost": 192
+   "lost": 0
   },
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
    "composite": 0.986,
@@ -59,15 +59,15 @@
    "lost": 0
   },
   "poi-60810": {
-   "composite": 0.982,
-   "words": 0.914,
+   "composite": 0.999,
+   "words": 1,
    "order": 0.995,
    "bullets": 1,
    "tables": null,
    "notes": 1,
    "chartValues": null,
    "replica": 1,
-   "lost": 33
+   "lost": 0
   },
   "poi-ca-ubc-cs-people-emhill-presentations-Ho": {
    "composite": 0.999,
@@ -169,15 +169,15 @@
    "lost": 0
   },
   "poi-ae-ac-uaeu-faculty-nafaachbili-GeomLec1": {
-   "composite": 0.988,
-   "words": 0.953,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 4
+   "lost": 0
   },
   "poi-45541-Footer": {
    "composite": 0.873,
@@ -565,15 +565,15 @@
    "lost": 0
   },
   "pp-shp-shapes": {
-   "composite": 0.989,
-   "words": 0.935,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": null,
    "chartValues": 1,
    "replica": 1,
-   "lost": 1
+   "lost": 0
   },
   "pp-shp-groupshape": {
    "composite": 1,
@@ -631,26 +631,26 @@
    "lost": 0
   },
   "tika-testPPT-various2": {
-   "composite": 0.998,
-   "words": 0.984,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
    "chartValues": 1,
    "replica": 1,
-   "lost": 2
+   "lost": 0
   },
   "tika-testPPT-groups": {
-   "composite": 0.97,
-   "words": 0.878,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 5
+   "lost": 0
   },
   "tika-testPPT-embedded-two-slides": {
    "composite": 1,
@@ -708,15 +708,15 @@
    "lost": 0
   },
   "ox-Bug571679-Brownbag": {
-   "composite": 0.983,
-   "words": 0.915,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
    "chartValues": null,
    "replica": 1,
-   "lost": 15
+   "lost": 0
   },
   "ox-typical": {
    "composite": 0.96,
@@ -730,15 +730,15 @@
    "lost": 0
   },
   "ox-O12Typical": {
-   "composite": 0.997,
-   "words": 0.981,
+   "composite": 1,
+   "words": 0.998,
    "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": null,
    "chartValues": 1,
    "replica": 1,
-   "lost": 12
+   "lost": 0
   },
   "ox-o09-Performance-typical": {
    "composite": 0.985,
@@ -796,15 +796,15 @@
    "lost": 0
   },
   "ox-SmartArt-OrgChart1": {
-   "composite": 0.792,
-   "words": 0.167,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": 1,
    "tables": null,
    "notes": 1,
    "chartValues": null,
    "replica": 1,
-   "lost": 6
+   "lost": 0
   },
   "ox-Table-Large": {
    "composite": 1,
@@ -895,169 +895,169 @@
    "lost": 0
   },
   "lo-smartart-org-chart": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 5
+   "lost": 0
   },
   "lo-smartart-vertical-block-list": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 7
+   "lost": 0
   },
   "lo-smartart-cycle-matrix": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 11
+   "lost": 0
   },
   "lo-smartart-autoTxRot": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 48
+   "lost": 0
   },
   "lo-smartart-bullet-list": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 3
+   "lost": 0
   },
   "lo-smartart-chevron": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 3
+   "lost": 0
   },
   "lo-smartart-pyramid-1child": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 1
+   "lost": 0
   },
   "lo-smartart-rightoleftblockdiagram": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 5
+   "lost": 0
   },
   "lo-smartart-recursion": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 6
+   "lost": 0
   },
   "lo-smartart-groupshape": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 2
+   "lost": 0
   },
   "lo-smartart-text": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 1
+   "lost": 0
   },
   "lo-tdf141058-1": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 18
+   "lost": 0
   },
   "lo-tdf145528-SmartArt-Matrix": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 4
+   "lost": 0
   },
   "lo-tdf149551-SmartArt-Venn": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 3
+   "lost": 0
   },
   "lo-smartart-autofit-sync": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 29
+   "lost": 0
   },
   "lo-import-characters": {
    "composite": 0.5,
@@ -1313,15 +1313,15 @@
    "lost": 0
   },
   "lo-table-list": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 3
+   "lost": 0
   },
   "lo-tcPr-vert-roundtrip": {
    "composite": 1,
