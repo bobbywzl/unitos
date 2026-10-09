@@ -27,6 +27,7 @@ import { useRouter } from "next/navigation";
 import type { GraphEdge, GraphEdgeLink, ReplyView } from "@/lib/types";
 import {
   commentWaits,
+  expandCoverage,
   gapReasons,
   notedShare,
   openComments,
@@ -35,7 +36,9 @@ import {
   type DocumentCoverage,
   type GraphComment,
   type ProjectCoverage,
+  type ProjectCoverageWire,
 } from "@/lib/graph/coverage-view";
+import { usePartIds } from "@/components/graph/part-ids"; // [cost10] COST10-03
 import { annotationReferenceHref } from "@/lib/annotation-reference";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { CommentIcon } from "@/components/icons";
@@ -57,7 +60,10 @@ const CoverageContext = createContext<CoverageValue>({
   setGapsOnly: () => undefined,
 });
 // The last answer per project, so a reopened graph draws at once.
-const kept = new Map<string, ProjectCoverage>();
+const kept = new Map<string, ProjectCoverageWire>();
+// [cost10] The full answer read for a compact one whose ids did not pair
+// (expandCoverage's mismatched), per project.
+const keptFull = new Map<string, { wire: ProjectCoverageWire; full: ProjectCoverage }>();
 
 /** The notes' sources as one short key: it moves when a note is added,
     removed, accepted, or gets a new source, so the coverage is read again. */
@@ -76,19 +82,22 @@ function useNotesKey(): string {
 }
 
 export function GraphCoverageProvider({ notebookId, children }: { notebookId: string; children: React.ReactNode }) {
-  const [coverage, setCoverage] = useState<ProjectCoverage | null>(() => kept.get(notebookId) ?? null);
+  const [wire, setWire] = useState<ProjectCoverageWire | null>(() => kept.get(notebookId) ?? null);
+  const [full, setFull] = useState(() => keptFull.get(notebookId) ?? null);
   const [gapsOnly, setGapsOnly] = useState(false);
   const key = useNotesKey();
   useEffect(() => {
     const controller = new AbortController();
     // A beat after the notes change: a burst of edits reads once.
     const timer = window.setTimeout(() => {
-      fetch(`/api/notebooks/${notebookId}/graph/coverage`, { signal: controller.signal })
-        .then((r) => (r.ok ? (r.json() as Promise<ProjectCoverage>) : null))
+      // [cost10] COST10-03: the compact form, counts in the part titles'
+      // order; the ids come from the lists that read them (part-ids.ts).
+      fetch(`/api/notebooks/${notebookId}/graph/coverage?parts=counts`, { signal: controller.signal })
+        .then((r) => (r.ok ? (r.json() as Promise<ProjectCoverageWire>) : null))
         .then((data) => {
           if (!data) return;
           kept.set(notebookId, data);
-          setCoverage(data);
+          setWire(data);
         })
         .catch(() => undefined);
     }, 150);
@@ -97,6 +106,26 @@ export function GraphCoverageProvider({ notebookId, children }: { notebookId: st
       controller.abort();
     };
   }, [notebookId, key]);
+  const ids = usePartIds(notebookId);
+  const expanded = useMemo(() => (wire ? expandCoverage(wire, (id) => ids.get(id)) : null), [wire, ids]);
+  // A document whose known ids are another list than the answer's (the
+  // titles older or newer than it): one full answer for this compact one.
+  const mismatched = wire !== null && expanded !== null && expanded.mismatched.length > 0 && full?.wire !== wire;
+  useEffect(() => {
+    if (!mismatched || !wire) return;
+    const controller = new AbortController();
+    fetch(`/api/notebooks/${notebookId}/graph/coverage`, { signal: controller.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<ProjectCoverage>) : null))
+      .then((data) => {
+        if (!data) return;
+        const next = { wire, full: data };
+        keptFull.set(notebookId, next);
+        setFull(next);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [mismatched, wire, notebookId]);
+  const coverage = full !== null && full.wire === wire ? full.full : (expanded?.coverage ?? null);
   const value = useMemo(() => ({ coverage, gapsOnly, setGapsOnly }), [coverage, gapsOnly]);
   return <CoverageContext.Provider value={value}>{children}</CoverageContext.Provider>;
 }

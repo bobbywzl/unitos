@@ -71,8 +71,102 @@ export type ProjectCoverage = {
   members?: string[];
 };
 
+/** [cost10] A document's coverage as GET …/graph/coverage?parts=counts
+    answers it (COST10-03): the counts in the part titles' order and the
+    hash of the parts' block ids, no ids — the titles answer carries them
+    in the same order. `parts` as before for a document with no parts (one
+    part, the whole document) and when the titles' order is not known. */
+export type DocumentCoverageWire = Omit<DocumentCoverage, "parts"> & {
+  parts?: PartCoverage[];
+  /** [noted, annotated] per part, in the titles' order. */
+  p?: [number, number][];
+  /** partIdsHash of the parts' block ids, in the same order. */
+  h?: string;
+  /** [noted, annotated] of a document with no parts: its one part, the
+      whole document. */
+  w?: [number, number];
+};
+export type ProjectCoverageWire = Omit<ProjectCoverage, "documents"> & { documents: Record<string, DocumentCoverageWire> };
+
 /** A reply as waitsForReply reads it. */
 type ReplyLike = { userId: string; resolvedById: string | null; createdAt: string };
+
+/** [cost10] The key that says two lists of part ids are one list
+    (COST10-03): their count and FNV-1a (32 bits) of the ids joined, base
+    36. The server writes it (compactCoverage), the browser checks it
+    against the titles' ids (expandCoverage). */
+export function partIdsHash(ids: readonly string[]): string {
+  let h = 0x811c9dc5;
+  const s = ids.join("\n");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${ids.length}.${h.toString(36)}`;
+}
+
+/** [cost10] The compact form of a coverage answer (COST10-03). idsOf: a
+    document's part ids in the titles' order. A document with no parts
+    carries its one part's counts (`w`); a document keeps today's `parts`
+    when its titles' ids and its parts' ids are not one list. */
+export function compactCoverage(full: ProjectCoverage, idsOf: (documentId: string) => readonly string[] | undefined): ProjectCoverageWire {
+  const documents: Record<string, DocumentCoverageWire> = {};
+  for (const [id, d] of Object.entries(full.documents)) {
+    const { parts, ...rest } = d;
+    if (parts.length === 1 && parts[0].whole) {
+      documents[id] = { ...rest, w: [parts[0].noted, parts[0].annotated] };
+      continue;
+    }
+    const byId = new Map(parts.map((p) => [p.blockId, p]));
+    const ids = (idsOf(id) ?? []).filter((x) => byId.has(x));
+    const oneList = !parts.some((p) => p.whole) && ids.length === parts.length && new Set(ids).size === parts.length;
+    documents[id] = oneList
+      ? {
+          ...rest,
+          p: ids.map((x) => {
+            const part = byId.get(x);
+            return [part?.noted ?? 0, part?.annotated ?? 0];
+          }),
+          h: partIdsHash(ids),
+        }
+      : { ...rest, parts };
+  }
+  return { ...full, documents };
+}
+
+/** [cost10] Today's shape from the compact one (COST10-03): a document's
+    counts paired with its part ids when their hash is `h`. A document whose
+    known ids are another list (the titles answer older or newer than this
+    one) is in `mismatched`: its parts come from a full answer; until then,
+    and for a document whose ids are not known yet, its counts carry no id
+    (blockId ""), so the head, the row and the ring draw and the dots wait. */
+export function expandCoverage(
+  wire: ProjectCoverageWire,
+  idsOf: (documentId: string) => readonly string[] | undefined,
+): { coverage: ProjectCoverage; mismatched: string[] } {
+  const documents: Record<string, DocumentCoverage> = {};
+  const mismatched: string[] = [];
+  for (const [id, d] of Object.entries(wire.documents)) {
+    const { p, h, w, parts, ...rest } = d;
+    if (parts) {
+      documents[id] = { parts, ...rest };
+      continue;
+    }
+    if (w) {
+      documents[id] = { parts: [{ blockId: "", noted: w[0], annotated: w[1], whole: true }], ...rest };
+      continue;
+    }
+    const counts = p ?? [];
+    const ids = idsOf(id);
+    const paired = ids !== undefined && ids.length === counts.length && partIdsHash(ids) === h;
+    if (ids !== undefined && !paired) mismatched.push(id);
+    documents[id] = {
+      parts: counts.map(([noted, annotated], i) => ({ blockId: paired ? ids[i] : "", noted, annotated })),
+      ...rest,
+    };
+  }
+  return { coverage: { ...wire, documents }, mismatched };
+}
 
 
 /** A document's share of parts noted, 0..1; for a document with no parts

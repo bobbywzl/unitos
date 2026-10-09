@@ -4,9 +4,11 @@ import { projectPartTitles } from "@/lib/graph/outline-titles";
 import {
   COVERAGE_COUNTS_ANNOTATIONS,
   COVERAGE_COUNTS_COMMENTS,
+  compactCoverage,
   type DocumentCoverage,
   type GraphComment,
   type ProjectCoverage,
+  type ProjectCoverageWire,
 } from "@/lib/graph/coverage-view";
 
 export { COVERAGE_COUNTS_ANNOTATIONS, COVERAGE_COUNTS_COMMENTS, notedShare, type DocumentCoverage, type PartCoverage, type ProjectCoverage } from "@/lib/graph/coverage-view";
@@ -22,9 +24,27 @@ export { COVERAGE_COUNTS_ANNOTATIONS, COVERAGE_COUNTS_COMMENTS, notedShare, type
 // owner and collaborators, then one query for the part starts, one for the
 // sources, one for the opened documents, one for the collaborators'
 // accounts, and one for the comments (with [lists8] their authors and
-// [lists9] each one's newest reply, WALK8-01, WALK9-01).
+// [lists9] each one's newest reply, WALK8-01, WALK9-01). [cost10] The route
+// answers the compact form (projectCoverageWire, COST10-03): the counts in
+// the part titles' order and no block ids, which the titles answer carries.
 
 export async function projectCoverage(notebookId: string, userId: string): Promise<ProjectCoverage> {
+  return (await buildCoverage(notebookId, userId)).coverage;
+}
+
+/** [cost10] The compact form (COST10-03, coverage-view.ts compactCoverage):
+    the same rows, each document's counts in its part titles' order. */
+export async function projectCoverageWire(notebookId: string, userId: string): Promise<ProjectCoverageWire> {
+  const { coverage, titleIds } = await buildCoverage(notebookId, userId);
+  return compactCoverage(coverage, (id) => titleIds.get(id));
+}
+
+/** The coverage, and each document's part ids in the titles' order (the
+    order the compact form counts in). */
+async function buildCoverage(
+  notebookId: string,
+  userId: string,
+): Promise<{ coverage: ProjectCoverage; titleIds: Map<string, string[]> }> {
   const [titles, attached, project] = await Promise.all([
     projectPartTitles(notebookId),
     db.notebookDocument.findMany({
@@ -34,7 +54,8 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
     db.notebook.findUnique({ where: { id: notebookId }, select: { userId: true, collaborators: { select: { email: true } } } }),
   ]);
   const docIds = attached.map((a) => a.documentId);
-  if (docIds.length === 0) return { documents: {} };
+  const titleIds = new Map(docIds.map((id) => [id, (titles.documents[id] ?? []).map((p) => p.blockId)]));
+  if (docIds.length === 0) return { coverage: { documents: {} }, titleIds };
   const startIds = docIds.flatMap((id) => (titles.documents[id] ?? []).map((p) => p.blockId));
   const collaboratorEmails = project?.collaborators.map((c) => c.email) ?? [];
   const [starts, sources, opened, collaboratorUsers, commentRows] = await Promise.all([
@@ -197,5 +218,5 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
         .sort((a, b) => Number(b.open) - Number(a.open) || (commentOrder.get(a.id) ?? 0) - (commentOrder.get(b.id) ?? 0)),
     };
   }
-  return { documents, members: [...members].sort() };
+  return { coverage: { documents, members: [...members].sort() }, titleIds };
 }

@@ -44,6 +44,7 @@ import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps, useDocume
 // [layer5] The reader's layer: comments, gap reasons, the reader's documents first.
 import { DocumentComments, GapReasons, gapReasonLines, useProjectCoverage } from "@/components/graph/coverage";
 import { AllComments, useCommentWaits, type DocumentsListing } from "@/components/graph/coverage"; // [lists8]
+import { rememberPartTitles } from "@/components/graph/part-ids"; // [cost10]
 import { ListName } from "@/components/graph/list-name";
 import { openComments } from "@/lib/graph/coverage-view";
 
@@ -78,6 +79,7 @@ function usePartTitles(notebookId: string): ProjectPartTitles | null {
       .then((r) => (r.ok ? (r.json() as Promise<ProjectPartTitles>) : null))
       .then((data) => {
         if (!data) return;
+        rememberPartTitles(notebookId, data); // [cost10] COST10-03: the coverage pairs its counts with these ids
         titlesKept.set(notebookId, { titles: data, gen });
         setTitles(data);
       })
