@@ -103,9 +103,12 @@ export function planOrder(
     placed.add(u);
     sequence.push({ unit: u });
   }
-  if (placed.size === 0) return null;
   // A new heading at the end has nothing under it.
   while (sequence.length > 0 && "heading" in sequence[sequence.length - 1]) sequence.pop();
+  // No unit placed and no new block: no order to make. New blocks alone (a
+  // merge takes the scope's blocks away and writes one in their place) still
+  // land where the scope was.
+  if (placed.size === 0 && !sequence.some((item) => "markdown" in item)) return null;
   const dropped = new Set(answer.removeHeadings.map((id) => unitOfRow.get(id)).filter((u): u is number => u !== undefined && inScope.has(u) && !placed.has(u) && canRemove(units[u])));
   // The units left out, in document order: each right after the unit it
   // followed (the last one before it that is placed), else at the start.
