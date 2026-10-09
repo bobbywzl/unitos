@@ -9,7 +9,9 @@
 // and by annotations and conversations (DELETE /api/notes/:id, which keeps
 // the note for History's Restore).
 
+import { api, ApiError } from "@/lib/api";
 import { postUndoPill } from "@/lib/notes/undo-pill";
+import { isOffline } from "@/lib/offline/queue";
 
 // A delete whose pill is up is written down in sessionStorage until it lands
 // or Undo takes it back: a reload while the pill shows sends the request on
@@ -55,20 +57,37 @@ function forget(key: string) {
 
 async function send(p: Omit<Pending, "key" | "ids">, keepalive: boolean): Promise<boolean> {
   const { url, method, body } = p;
+  let reached = !isOffline();
   try {
-    const res = await fetch(url, {
-      method,
-      ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
-      keepalive,
-    });
-    // A DELETE of a row already gone has nothing left to do.
-    if (res.ok || (method === "DELETE" && res.status === 404)) return true;
-    const json = (await res.json().catch(() => null)) as { error?: string } | null;
-    console.error("delete", url, res.status, json?.error);
+    if (reached) {
+      const res = await fetch(url, {
+        method,
+        ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+        keepalive,
+      });
+      // A DELETE of a row already gone has nothing left to do.
+      if (res.ok || (method === "DELETE" && res.status === 404)) return true;
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      console.error("delete", url, res.status, json?.error);
+      return false;
+    }
   } catch (err) {
+    reached = false;
     console.error("delete", url, err);
   }
-  return false;
+  if (reached) return false;
+  // No network: the delete goes in the offline queue, as a delete from the
+  // Annotations tab does (lib/api.ts, lib/offline/queue.ts), and lands when
+  // the network is back; the row stays hidden. A write the queue does not
+  // take fails as before.
+  try {
+    await api(url, method, body ?? undefined);
+    return true;
+  } catch (err) {
+    if (method === "DELETE" && err instanceof ApiError && err.status === 404) return true;
+    console.error("delete", url, err);
+    return false;
+  }
 }
 
 /** The ids of deletes a page before this one left pending, to the urls

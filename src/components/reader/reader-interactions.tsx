@@ -321,9 +321,11 @@ function overBlock(box: { blockHeight: number }, paneHeight: number): boolean {
 }
 
 /** The narrow reader's card over a tall block: under its words' last line,
-    from their left, at a card's width, inside the pane. */
+    from their left, at a card's width, inside the pane. On a phone, where
+    the strip beside such a card holds no readable line, at the pane's width,
+    as every other phone card. */
 function dockUnderWords(wordsLeft: number, cw: number) {
-  const width = Math.min(300, cw - 16);
+  const width = cw - 16 - 300 < 160 ? cw - 16 : 300;
   const left = Math.max(8, Math.min(wordsLeft - 12, cw - width - 8));
   return { left, width };
 }
@@ -4102,6 +4104,11 @@ export function ReaderInteractions({
   // On a phone, how far a card rose over its paragraph's words after the
   // passage to find room (below), by card kind, for the passage it is on.
   const narrowLiftRef = useRef(new Map<string, { at: number; lift: number }>());
+  // On a phone, the view's height each capped card was measured against: a
+  // view that grows after (the touch hint under the pane fades) lifts the cap
+  // and measures the card again, so no card keeps a scroll window while
+  // there is room under it.
+  const phoneCapViewRef = useRef(new Map<string, { key: string; view: number }>());
   const layoutNarrowCards = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -4150,6 +4157,7 @@ export function ReaderInteractions({
     const tops: Record<string, number> = {};
     const docks: Record<string, { left: number; width: number }> = {};
     const phoneCaps: Record<string, number> = {};
+    const recheck: string[] = [];
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
     );
@@ -4173,6 +4181,11 @@ export function ReaderInteractions({
       for (const card of cards) {
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         const held = narrowLiftRef.current.get(card.kind);
+        const capView = phoneCapViewRef.current.get(card.kind);
+        if (capView && (capView.key !== key || shownHeight > capView.view + 1)) {
+          phoneCapViewRef.current.delete(card.kind);
+          if (capView.key === key) recheck.push(card.kind);
+        }
         const lifted = !card.over && held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
         if (card.over) {
           overY = Math.max(overY, card.over.bottom + 8);
@@ -4211,12 +4224,20 @@ export function ReaderInteractions({
               tops[card.kind] -= lift;
               room += lift;
             }
-            if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
+            if (card.el.offsetHeight > room && room >= CAP_MIN) {
+              phoneCaps[card.kind] = room;
+              phoneCapViewRef.current.set(card.kind, { key, view: shownHeight });
+            }
           }
         }
       }
     }
     if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
+    if (recheck.length > 0) {
+      // The cap goes; the card, grown back, is measured again on its resize.
+      for (const kind of recheck) narrowShownRef.current.delete(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
+      setCardCaps((caps) => Object.fromEntries(Object.entries(caps).filter(([kind]) => !recheck.includes(kind))));
+    }
     const place = <T extends { top: number; left: number; width?: number }>(kind: string) => (c: T | null): T | null => {
       if (!c || tops[kind] === undefined) return c;
       const dock = docks[kind];
@@ -5392,7 +5413,10 @@ export function ReaderInteractions({
   }, [collapseView]);
   // Collapse on or off keeps the reader's place: the block at the reading
   // line stays there, cut at the same share (lib/reading-position.ts), read
-  // just before the article changes view and put back once it has.
+  // just before the article changes view and put back once it has. A
+  // collapsed article too short to bring the block to the line gets that
+  // much room under its end, so the block still lands there, and Collapse
+  // off reads the same block back; the room goes with the collapsed view.
   const collapsePlaceRef = useRef<ReturnType<typeof readReadingPosition> | null>(null);
   function keepCollapsePlace() {
     const container = containerRef.current;
@@ -5402,8 +5426,26 @@ export function ReaderInteractions({
     const place = collapsePlaceRef.current;
     const container = containerRef.current;
     collapsePlaceRef.current = null;
-    if (place && container) applyReadingPosition(container, place, false);
-  }, [collapseView]);
+    if (!container) return;
+    if (!collapseOn) container.style.paddingBottom = "";
+    if (!place) return;
+    applyReadingPosition(container, place, false);
+    const want = collapseOn ? readingPositionScroll(container, place, false) : null;
+    if (want !== null && want > container.scrollTop + 1) {
+      const base = parseFloat(getComputedStyle(container).paddingBottom) || 0;
+      // The hint row under the pane goes in a while, and the pane grows by
+      // its height: the room covers that too.
+      const under = container.parentElement ? container.parentElement.clientHeight - container.offsetHeight : 0;
+      container.style.paddingBottom = `${base + want - container.scrollTop + Math.max(0, under)}px`;
+      container.scrollTop = want;
+    }
+  }, [collapseView, collapseOn]);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    return () => {
+      if (container) container.style.paddingBottom = "";
+    };
+  }, [documentId]);
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
   // for them: coresComingRef).

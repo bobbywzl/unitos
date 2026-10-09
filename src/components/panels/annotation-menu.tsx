@@ -14,6 +14,7 @@ import { NOTE_ABSORBED_EVENT } from "@/components/outline/use-outline";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
 import { postUndoPill } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { flatSections, menuRowClass as item, NotePicker } from "@/components/reader/note-picker";
 import { annotationReferenceOf, annotationSummary, jumpToAnnotation } from "@/components/panels/annotation-card";
 
@@ -94,7 +95,8 @@ export function AnnotationMenu({
       const message = await action();
       close();
       if (message) setDone(message);
-      router.refresh();
+      // Offline the write is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -151,7 +153,7 @@ export function AnnotationMenu({
                   baseContent: after,
                   ...(added.length > 0 ? { removeSources: added } : {}),
                 });
-                router.refresh();
+                refreshWhenOnline(router);
               },
             })
           : false;
