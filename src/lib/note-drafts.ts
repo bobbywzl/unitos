@@ -38,7 +38,16 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export type NoteDraft = { content: string; savedAt: number; base?: string; sent?: string; account?: string };
 // createId: the id the composer's create carries (lib/notes/client-id.ts),
 // written before the create leaves, so a reload adopts the note it made.
-export type ComposeDraft = { content: string; noteId: string | null; savedAt: number; createId?: string };
+// account: the account that typed it. legacy: read from a draft written
+// before compose drafts named their account (never stored).
+export type ComposeDraft = {
+  content: string;
+  noteId: string | null;
+  savedAt: number;
+  createId?: string;
+  account?: string;
+  legacy?: boolean;
+};
 
 function read<T>(key: string): T | null {
   try {
@@ -182,28 +191,57 @@ export function confirmNoteDraft(noteId: string, content: string) {
   if (draft && draft.content.trim() === content.trim()) clearNoteDraft(noteId);
 }
 
-export function readComposeDraft(sectionId: string): ComposeDraft | null {
-  const draft = read<ComposeDraft>(COMPOSE_PREFIX + sectionId);
+// A compose draft is kept per section and per account (SPEC.md §6): each
+// account's composer reads and writes its own key, so one account's words
+// are never shown to, saved as, or written over by another account in the
+// same browser. Drafts written before the key named the account sit at the
+// section's plain key, with no account: the first composer of the section
+// to open takes such a draft into its own key (as before, it shows the
+// words; it does not save them until the reader types). A draft at the
+// plain key that names another account stays where it is.
+function composeKey(sectionId: string, account: string | null): string {
+  return account ? `${COMPOSE_PREFIX}${sectionId}@${encodeURIComponent(account)}` : COMPOSE_PREFIX + sectionId;
+}
+
+function composeFrom(draft: (Partial<ComposeDraft> & { savedAt: number }) | null): ComposeDraft | null {
   if (!draft || typeof draft.content !== "string") return null;
   return {
     content: draft.content,
     savedAt: draft.savedAt,
     noteId: typeof draft.noteId === "string" ? draft.noteId : null,
     ...(typeof draft.createId === "string" ? { createId: draft.createId } : {}),
+    ...(typeof draft.account === "string" ? { account: draft.account } : {}),
   };
 }
 
+export function readComposeDraft(sectionId: string): ComposeDraft | null {
+  const account = currentAccount();
+  const own = composeFrom(read<ComposeDraft>(composeKey(sectionId, account)));
+  if (own && !foreign(own)) return own;
+  if (!account) return null;
+  // A draft from before compose drafts named their account: taken into
+  // this account's key, so it is shown once and cleared from one place.
+  const plain = composeFrom(read<ComposeDraft>(composeKey(sectionId, null)));
+  if (!plain || plain.account !== undefined) return null;
+  write(composeKey(sectionId, account), { ...plain, account } satisfies ComposeDraft);
+  remove(composeKey(sectionId, null));
+  return { ...plain, account, legacy: true };
+}
+
 export function writeComposeDraft(sectionId: string, content: string, noteId: string | null, createId?: string) {
-  write(COMPOSE_PREFIX + sectionId, {
+  const account = currentAccount();
+  write(composeKey(sectionId, account), {
     content,
     noteId,
     savedAt: Date.now(),
     ...(createId ? { createId } : {}),
+    ...(account ? { account } : {}),
   } satisfies ComposeDraft);
 }
 
+/** Clear this account's compose draft of the section; another account's stays. */
 export function clearComposeDraft(sectionId: string) {
-  remove(COMPOSE_PREFIX + sectionId);
+  remove(composeKey(sectionId, currentAccount()));
 }
 
 /** Drop drafts older than MAX_AGE_MS. Runs once per load (use-outline.ts). */

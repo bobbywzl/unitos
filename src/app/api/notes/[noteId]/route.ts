@@ -61,6 +61,9 @@ const patchSchema = z.object({
   // covered by a quote in this text (the note's text when the editor
   // opened), by none in the note's text after this write (SPEC.md §6).
   pruneSourcesFrom: z.string().max(MAX_CONTENT).optional(),
+  // An editor's Cancel (use-note-draft.ts): History starts a new entry for
+  // this write, so the text it replaces stays a version (SPEC.md §12).
+  newEdit: z.boolean().optional(),
   // A draft left of a note that is not in the project's notes on load
   // (use-outline.ts): its words go to a new note when the note is gone. A
   // note that still exists refuses the write; its own project's load saves
@@ -290,7 +293,7 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
         });
         // A changed text is the note's history (SPEC.md §12).
         if (content !== undefined && content !== stored) {
-          await recordNoteEdit(noteId, access.user.id || null, content, tx);
+          await recordNoteEdit(noteId, access.user.id || null, content, tx, { before: stored, fresh: data.newEdit === true });
           // A quote deleted from the note takes its source with it: the mark
           // in the reader no longer points at a note that lost the words
           // (SPEC.md §6). An append keeps every quote, so it leaves every

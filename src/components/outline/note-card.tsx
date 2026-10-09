@@ -495,7 +495,7 @@ const NoteCardBody = memo(function NoteCardBody({
     }
   }
   const dropShown = useContext(CardDropShown);
-  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop && dropShown);
+  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop, dropShown);
   const [wasMerging, setWasMerging] = useState(false);
   const [merged, setMerged] = useState(false);
   if (merging !== wasMerging) {
@@ -638,12 +638,13 @@ const NoteCardBody = memo(function NoteCardBody({
   // Cancel takes the quote's words back out, so it gives them up too.
   const sitting = useRef<string[]>([]);
 
-  // Cancel puts the note back to its text when the editor opened; the pill
-  // offers the typed words back (SPEC.md §6).
+  // Cancel takes the words typed in this editor out of the note; words
+  // another writer added meanwhile stay. The pill offers the typed words
+  // back (SPEC.md §6).
   function cancel() {
     const typed = draft.trim();
-    if (typed && typed !== getOriginal().trim()) commands.editCanceled(note.id, typed);
-    cancelDraft();
+    const back = cancelDraft();
+    if (typed && typed !== back.trim()) commands.editCanceled(note.id, typed, back);
     refocus.current = true;
     setEditing(false);
     const ids = sitting.current;
@@ -1226,7 +1227,17 @@ const NoteCardBody = memo(function NoteCardBody({
               highlight={hit}
               sources={note.sources}
               notebookId={notebookId}
-              onAnnotationReference={annotationSide ? annotationSide.open : undefined}
+              onAnnotationReference={
+                annotationSide
+                  ? (ref) => {
+                      // The row pressed (it has the focus), else the note: the
+                      // annotation opens level with it.
+                      const pressed = document.activeElement;
+                      const card = cardRef.current;
+                      annotationSide.open({ ...ref, anchor: pressed && card?.contains(pressed) ? pressed : card });
+                    }
+                  : undefined
+              }
               onToggleTask={
                 canEdit
                   ? (line, checked) =>

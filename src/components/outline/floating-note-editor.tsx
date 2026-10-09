@@ -385,8 +385,8 @@ export function FloatingNoteEditor({
   function cancelEdit() {
     // The pill offers the typed words back (SPEC.md §6).
     const typed = draft.trim();
-    if (note && typed && typed !== getOriginal().trim()) actions.editCanceled(note.id, typed);
-    cancel();
+    const back = cancel();
+    if (note && typed && typed !== back.trim()) actions.editCanceled(note.id, typed, back);
     setEditing(false);
     const ids = sitting.current;
     sitting.current = [];

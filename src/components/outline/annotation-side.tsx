@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -23,7 +23,9 @@ import { stripSimplifyMarkers } from "@/lib/sentences";
 // page frame does. One annotation open at a time; the next click takes its
 // place; ✕ closes it.
 
-export type AnnotationSideRef = ParsedAnnotationReference & { label: string };
+/** anchor: the row the reference was opened from; the annotation stands
+    level with it where it stands beside the notes. */
+export type AnnotationSideRef = ParsedAnnotationReference & { label: string; anchor?: Element | null };
 
 type AnnotationSide = {
   side: AnnotationSideRef | null;
@@ -60,7 +62,7 @@ export function NotesPageFrame({ children }: { children: React.ReactNode }) {
         <div className="relative">
           {children}
           {side && host === "page" && (
-            <SidePlace>
+            <SidePlace anchor={side.anchor}>
               <AnnotationSidePanel side={side} onClose={() => setSide(null)} />
             </SidePlace>
           )}
@@ -69,6 +71,9 @@ export function NotesPageFrame({ children }: { children: React.ReactNode }) {
     </AnnotationSideContext.Provider>
   );
 }
+
+/** Where the annotation sticks as the page scrolls (`top-6`). */
+const STICKY_TOP = 24;
 
 /** A window wide enough for the annotation beside the 760 px notes column. */
 const WIDE = "(min-width: 1400px)";
@@ -85,15 +90,37 @@ function useWide(): boolean {
 }
 
 /** Where the annotation stands. Wide: in the right gutter of the column it
-    sits in (that column is `relative`), sticky as the page scrolls. Narrow:
-    over the page at the bottom right, above the Undo pill. Either way
-    nothing on the page moves. */
-function SidePlace({ children }: { children: React.ReactNode }) {
+    sits in (that column is `relative`), its top level with the row it was
+    opened from, then sticky as the page scrolls. Narrow: over the page at
+    the bottom right, above the Undo pill. Either way nothing on the page
+    moves. */
+function SidePlace({ children, anchor }: { children: React.ReactNode; anchor?: Element | null }) {
   const wide = useWide();
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [level, setLevel] = useState(0);
+  useLayoutEffect(() => {
+    const gutter = gutterRef.current;
+    const panel = panelRef.current;
+    if (!wide || !gutter || !panel) return;
+    // Level with the row, and whole inside the window: a row near the
+    // window's bottom lifts the annotation as far as it takes.
+    const place = () => {
+      const want = anchor?.isConnected ? anchor.getBoundingClientRect().top : STICKY_TOP;
+      const top = Math.max(STICKY_TOP, Math.min(want, window.innerHeight - STICKY_TOP - panel.offsetHeight));
+      setLevel(Math.max(0, Math.round(top - gutter.getBoundingClientRect().top)));
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [wide, anchor]);
   if (wide) {
     return (
-      <div className="absolute top-0 left-[calc(100%+24px)] h-full w-[min(360px,calc(50vw-412px))]">
-        <div className="sticky top-6">{children}</div>
+      <div ref={gutterRef} className="absolute top-0 left-[calc(100%+24px)] h-full w-[min(360px,calc(50vw-412px))]">
+        <div ref={panelRef} className="sticky top-6" style={{ marginTop: level }}>
+          {children}
+        </div>
       </div>
     );
   }
@@ -118,11 +145,14 @@ export function AnnotationSideHost() {
   }, [setHost]);
   if (!ctx?.side) return null;
   return (
-    <SidePlace>
+    <SidePlace anchor={ctx.side.anchor}>
       <AnnotationSidePanel side={ctx.side} onClose={ctx.close} />
     </SidePlace>
   );
 }
+
+// The annotations the side loaded on this page, by annotation and document.
+const seen = new Map<string, ReferencedAnnotation>();
 
 /** The annotation itself: its kind, the words it is anchored to, its text,
     and the jump to it in the reader. */
@@ -133,9 +163,20 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
   // What the fetch answered, for the annotation it was asked for: another
   // reference's answer never shows under this one.
   const key = `${annotationId}:${documentId}`;
+  // An annotation shown before draws at once from the copy kept then, while
+  // the fetch brings it up to date.
   const [loaded, setLoaded] = useState<{ key: string; annotation?: ReferencedAnnotation; error?: string } | null>(
-    null,
+    () => {
+      const kept = seen.get(key);
+      return kept ? { key, annotation: kept } : null;
+    },
   );
+  const [shownKey, setShownKey] = useState(key);
+  if (shownKey !== key) {
+    setShownKey(key);
+    const kept = seen.get(key);
+    if (kept) setLoaded({ key, annotation: kept });
+  }
   const annotation = loaded?.key === key ? (loaded.annotation ?? null) : null;
   const error = loaded?.key === key ? (loaded.error ?? null) : null;
 
@@ -147,15 +188,18 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
         // Gone: deleted, and History keeps it (SPEC.md §12). A try again
         // would never load it, so the line says where it is.
         if (res.status === 404) {
+          seen.delete(key);
           if (!cancelled) setLoaded({ key, error: t("outline.annotationGone") });
           return;
         }
         if (!res.ok) throw new Error(`annotation ${annotationId}: ${res.status}`);
         const data = (await res.json()) as ReferencedAnnotation;
+        seen.set(key, data);
         if (!cancelled) setLoaded({ key, annotation: data });
       } catch (err) {
         console.error(err);
-        if (!cancelled) setLoaded({ key, error: t("common.notLoaded") });
+        // A copy shown before stays; nothing shown yet says so.
+        if (!cancelled && !seen.has(key)) setLoaded({ key, error: t("common.notLoaded") });
       }
     })();
     return () => {

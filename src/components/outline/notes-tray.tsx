@@ -13,7 +13,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableBoard, SortableGroup, SortableItem, useDropHeader } from "@/components/sortable";
-import { CardDropShown, useCardDropTarget } from "@/components/outline/use-card-drop";
+import { CardDropShown, shownStore, useCardDropTarget } from "@/components/outline/use-card-drop";
 import { quoteLanded } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
@@ -72,6 +72,10 @@ export function NotesTray({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
+  // Whether the tray is on screen, for its cards' drop count: a store the
+  // cards read, so showing or hiding the tray draws no card again.
+  const [onScreen] = useState(() => shownStore(visible));
+  useEffect(() => onScreen.set(visible), [onScreen, visible]);
   // The field takes every key at once; the list follows a moment later
   // (useDeferredValue), so typing never waits for the list.
   const [typed, setQuery] = useState("");
@@ -279,7 +283,7 @@ export function NotesTray({
     ) : null;
 
   return (
-    <CardDropShown.Provider value={visible}>
+    <CardDropShown.Provider value={onScreen}>
     <div
       className="flex min-h-full flex-col gap-3.5"
       {...quoteDrop}

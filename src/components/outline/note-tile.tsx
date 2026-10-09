@@ -8,7 +8,8 @@ import { CommentIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
-import { splitNote } from "@/lib/note-title";
+import { bodyLineOffset, splitNote } from "@/lib/note-title";
+import { setTaskChecked } from "@/lib/note-markup";
 import { NoteId } from "@/components/outline/note-id";
 import { sourcesTip } from "@/components/outline/sources-tip";
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
@@ -200,7 +201,21 @@ export function NoteTile({
       {parts.title && <h3 className="note-title mt-2 shrink-0">{parts.title}</h3>}
       <div ref={bodyRef} className={`note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden${cut ? " note-tile-cut" : ""}`}>
         {parts.body.trim() !== "" && (
-          <Markdown breaks sources={note.sources} notebookId={actions.notebookId}>
+          <Markdown
+            breaks
+            sources={note.sources}
+            notebookId={actions.notebookId}
+            // A checklist box ticks in one press, as on the note's card.
+            onToggleTask={
+              canEdit
+                ? (line, checked) =>
+                    void actions.saveNote(
+                      note.id,
+                      setTaskChecked(note.content, line + bodyLineOffset(note.content), checked),
+                    )
+                : undefined
+            }
+          >
             {parts.body}
           </Markdown>
         )}

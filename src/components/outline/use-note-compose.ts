@@ -214,7 +214,9 @@ function restore(s: Session, notes: NoteView[]) {
     failed: null,
     draft: owned && !stored.content.trim() ? owned.content : stored.content,
   });
-  schedule(s);
+  // A draft from before drafts named their account may be another
+  // account's: shown, saved only once the reader types.
+  if (!stored.legacy) schedule(s);
 }
 
 function createId(s: Session): string {
