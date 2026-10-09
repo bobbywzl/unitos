@@ -1,9 +1,9 @@
 {
  "total": {
   "a": 1,
-  "b": 0.914,
-  "c": 0.858,
-  "all": 0.924
+  "b": 0.961,
+  "c": 0.923,
+  "all": 0.961
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -122,12 +122,12 @@
   "b-webvttpy-youtube": 1,
   "b-webvttpy-srt": 1,
   "b-srt-ascii": 1,
-  "b-pysubs2-ttml": 0,
-  "b-pysubs2-ttml:lines": 0,
-  "b-pysubs2-ttml2": 0,
-  "b-pysubs2-ttml2:lines": 0,
-  "b-pysubs2-ttml-apple": 0,
-  "b-pysubs2-ttml-apple:lines": 0,
+  "b-pysubs2-ttml": 1,
+  "b-pysubs2-ttml:lines": 1,
+  "b-pysubs2-ttml2": 1,
+  "b-pysubs2-ttml2:lines": 1,
+  "b-pysubs2-ttml-apple": 1,
+  "b-pysubs2-ttml-apple:lines": 0.991,
   "b-yta-timedtext": 1,
   "b-yta-timedtext:lines": 1,
   "b-dualsubs-asr-ko": 1,

@@ -1,5 +1,6 @@
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 import { srtCueLine, webVttCueText } from "@/lib/video/cue-text";
+import { isTtml, ttmlCues } from "@/lib/video/ttml";
 import { parseTimeInput } from "@/lib/video/types";
 
 // A pasted transcript (SPEC.md §11): the last rung, and the one that never
@@ -12,7 +13,8 @@ import { parseTimeInput } from "@/lib/video/types";
 // A WebVTT file (its first line starts "WEBVTT") is read by the WebVTT
 // standard's block rules: a cue is an optional identifier, a timing line, and
 // text up to a blank line; NOTE, STYLE, and REGION blocks and cues with broken
-// timings are not captions.
+// timings are not captions. A TTML file (its root element is <tt>) is read
+// by lib/video/ttml.ts: one cue per <p>.
 
 const MAX_PASTE_CHARS = 2_000_000;
 const DEFAULT_SEGMENT_SECONDS = 4;
@@ -35,7 +37,11 @@ type Open = { start: number; end: number | null; text: string[]; cue?: boolean }
     text is empty, too long, or carries no times. */
 export function parsePastedTranscript(text: string): TranscriptSegment[] {
   if (text.length > MAX_PASTE_CHARS) throw new Error("the pasted text is too long");
-  const opens = WEBVTT_SIGNATURE.test(text) ? webVttCues(text) : looseCues(text);
+  const opens = isTtml(text)
+    ? ttmlCues(text).map((c) => ({ start: c.start, end: c.end, text: [c.text] }))
+    : WEBVTT_SIGNATURE.test(text)
+      ? webVttCues(text)
+      : looseCues(text);
   const timed = opens.filter((o) => o.text.length > 0);
   if (timed.length === 0) {
     throw new Error(
