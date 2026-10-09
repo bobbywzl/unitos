@@ -1,7 +1,7 @@
 // UI strings of what the notes cover on the graph and of Add to note
 // (SPEC.md §13; components/graph/coverage.tsx, note-gather.tsx): the parts
-// noted, Not opened, Gaps only, Waiting on you, and the note composer that
-// collects quotes from the graph. zh glossary: dict/common.ts — part 部分 ·
+// noted, Not opened, Gaps only, "N waiting on you", and the note composer
+// that collects quotes from the graph. zh glossary: dict/common.ts — part 部分 ·
 // note 笔记 · quote 引文 · section 章节 · link 链接 · reply 回复 ·
 // document 文档 · passage 片段.
 
@@ -33,9 +33,8 @@ const en = {
   gapsOnly: "Gaps only",
   gapsOnlyTitle: "Keep the documents you have not opened and the parts no note quotes. Each row says why it is kept.",
   gapsNone: "No gaps: every part is noted and every document is opened.",
-  noReply: "Waiting on you",
-  noReplyTitle: "Keep the links whose last open reply is another person's.",
-  noReplyNone: "No link is waiting on you.",
+  // [style9] VIEW9-05, WALK9-03: the head's "N waiting on you", a press.
+  waitingAllTitle: "List every link and comment waiting on you, under its document, newest first. Press again for the documents.",
 
   // [layer5] The reader's comments on the graph (coverage.tsx; VIEW5-01/02).
   commentsOpenOne: "1 open comment",
@@ -114,9 +113,7 @@ const zh: Record<keyof typeof en, string> = {
   gapsOnly: "只看空缺",
   gapsOnlyTitle: "只留下你未打开的文档和没有笔记引用的部分。每行写明留下的原因。",
   gapsNone: "没有空缺：每个部分都有笔记，每个文档都已打开。",
-  noReply: "待你回复",
-  noReplyTitle: "只留下最后一条未解决的回复是别人写的链接。",
-  noReplyNone: "没有待你回复的链接。",
+  waitingAllTitle: "按文档列出每条待你回复的链接和评论，最新的在前。再按一次回到文档。",
 
   commentsOpenOne: "1 条未解决的评论",
   commentsOpenMany: "{n} 条未解决的评论",

@@ -4,37 +4,40 @@
 // dot before each part in the Documents list (sage when a note quotes the
 // part, empty when none does), "N of M parts noted" and "Not opened" on each
 // document's row, the head's counts with Gaps only, a ring around each
-// node's dot filled by the share of its parts noted, and No reply on the
-// Links list. Stored rows only, no model call: GET .../graph/coverage
+// node's dot filled by the share of its parts noted, and "N waiting on you"
+// in the head. Stored rows only, no model call: GET .../graph/coverage
 // (lib/graph/coverage.ts), fetched when the graph opens and again when the
 // project's notes change. The pieces are small so a list hooks them in at a
 // few points: CoverageHead, DocumentCoverageLine, PartDot, CoverageRing,
-// useCoverageGaps, NoReplyToggle.
+// useCoverageGaps, AllComments.
 //
 // [layer5] The reader's layer (VIEW5-01/02, WALK5-06/07): the comments on
 // each document (a small mark on the node, one line in the card and the
 // row that opens into them, the count in the head text), a document with
 // no parts as one part,
 // the whole document, Gaps only as "no note here" with the reason on each
-// row, and No reply as "waiting for your reply" (the last open reply is
-// another person's). NodeComments, NodeCommentsLine, DocumentComments,
-// GapReasons, useWaitsForReply.
+// row, and "waiting on you" (the last open words are another person's).
+// NodeComments, NodeCommentsLine, DocumentComments, GapReasons,
+// useWaitsForReply. [style9] VIEW9-05, WALK9-03: "N waiting on you" is a
+// press that lists every waiting link and comment (AllComments, waitingOnly).
 
 import { ACTION, ACTION_ON, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { GraphEdgeLink } from "@/lib/types";
+import type { GraphEdge, GraphEdgeLink, ReplyView } from "@/lib/types";
 import {
   commentWaits,
   gapReasons,
   notedShare,
   openComments,
+  waitingReply,
   waitsForReply,
   type DocumentCoverage,
   type GraphComment,
   type ProjectCoverage,
 } from "@/lib/graph/coverage-view";
 import { annotationReferenceHref } from "@/lib/annotation-reference";
+import { LinkReplyCount } from "@/components/graph/link-replies";
 import { CommentIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -139,37 +142,48 @@ export function useCoverageGaps() {
 }
 
 
+/** What the Documents list shows: its rows, [lists8] every open comment
+    (WALK8-02), or [style9] every thread waiting on you (VIEW9-05, WALK9-03). */
+export type DocumentsListing = "rows" | "comments" | "waiting";
+
 /** The Documents list's head: the parts noted, the documents not opened,
     [lists8] the open comments (a press lists them all, WALK8-02), what waits
-    on this account (links and comments, WALK8-01), and the Gaps only switch. */
+    on this account (links and comments, WALK8-01; [style9] a press lists
+    them all, VIEW9-05), and the Gaps only switch. */
 export function CoverageHead({
   documentIds,
   links,
-  commentsOn = false,
-  onToggleComments,
+  listing = "rows",
+  onListing,
 }: {
   documentIds: string[];
   links: GraphEdgeLink[];
-  /** [lists8] The list shows every open comment in place of the rows. */
-  commentsOn?: boolean;
-  onToggleComments?: () => void;
+  /** What the list shows in place of the rows. */
+  listing?: DocumentsListing;
+  onListing?: (next: DocumentsListing) => void;
 }) {
   const t = useT();
   const { coverage, gapsOnly, setGapsOnly } = useContext(CoverageContext);
   const waits = useWaitsForReply();
   const commentWaitsOn = useCommentWaits();
-  if (!coverage) return null;
-  const docs = documentIds.flatMap((id) => (coverage.documents[id] ? [coverage.documents[id]] : []));
-  if (docs.length === 0) return null;
-  const parts = docs.reduce((n, d) => n + d.parts.length, 0);
-  const noted = docs.reduce((n, d) => n + d.parts.filter((p) => p.noted > 0).length, 0);
-  const unopened = docs.filter((d) => !d.opened).length;
+  const docs = documentIds.flatMap((id) => (coverage?.documents[id] ? [coverage.documents[id]] : []));
   const accepted = links.filter((l) => !l.recommended && !l.provenance);
   const linksWaiting = accepted.filter(waits).length;
   // [lists8] WALK8-01: one rule for links and comments.
   const open = docs.flatMap((d) => openComments(d));
   const commentsWaiting = open.filter(commentWaitsOn).length;
   const noReply = linksWaiting + commentsWaiting;
+  // [style9] VIEW9-05: a listing whose count fell to none (the last comment
+  // resolved, the last answer sent) has no press left; the rows come back.
+  const listingGone = coverage !== null && ((listing === "comments" && open.length === 0) || (listing === "waiting" && noReply === 0));
+  useEffect(() => {
+    if (listingGone) onListing?.("rows");
+  }, [listingGone, onListing]);
+  if (!coverage || docs.length === 0) return null;
+  const parts = docs.reduce((n, d) => n + d.parts.length, 0);
+  const noted = docs.reduce((n, d) => n + d.parts.filter((p) => p.noted > 0).length, 0);
+  const unopened = docs.filter((d) => !d.opened).length;
+  const press = (which: DocumentsListing) => onListing?.(listing === which ? "rows" : which);
   // [panel6] VIEW6-07: the counts are text, "·" between them; Gaps only is the one pill.
   const counts = [
     parts > 0 && (
@@ -188,25 +202,31 @@ export function CoverageHead({
     open.length > 0 && (
       <button
         key="comments"
-        onClick={onToggleComments}
-        aria-pressed={commentsOn}
+        onClick={() => press("comments")}
+        aria-pressed={listing === "comments"}
         data-graph-coverage-comments-all={open.length}
         data-track="graph-documents-comments-all"
         data-tip={t("graphCover.commentsAllTitle")}
-        className={`${TEXT_HIT} font-semibold text-[var(--kind-comment)] hover:underline ${commentsOn ? "underline" : ""}`}
+        className={`${TEXT_HIT} font-semibold text-[var(--kind-comment)] hover:underline ${listing === "comments" ? "underline" : ""}`}
       >
         {open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length })}
       </button>
     ),
-    // [lists7] WALK7-04: said only when something waits.
+    // [lists7] WALK7-04: said only when something waits. [style9] VIEW9-05,
+    // WALK9-03: a press that lists every waiting link and comment (the Links
+    // list's Waiting on you switch found the links only).
     noReply > 0 && (
-      <span
-        key="noreply"
+      <button
+        key="waiting"
+        onClick={() => press("waiting")}
+        aria-pressed={listing === "waiting"}
         data-graph-coverage-noreply={`${noReply}/${accepted.length + open.length}`}
-        data-tip={t("graphCover.headNoReplyTitle", { l: linksWaiting, c: commentsWaiting })}
+        data-track="graph-documents-waiting"
+        data-tip={`${t("graphCover.headNoReplyTitle", { l: linksWaiting, c: commentsWaiting })} ${t("graphCover.waitingAllTitle")}`}
+        className={`${TEXT_HIT} font-semibold text-[var(--kind-comment)] hover:underline ${listing === "waiting" ? "underline" : ""}`}
       >
         {noReply === 1 ? t("graphCover.headNoReplyOne") : t("graphCover.headNoReply", { n: noReply })}
-      </span>
+      </button>
     ),
   ].filter(Boolean);
   return (
@@ -220,9 +240,12 @@ export function CoverageHead({
           </span>
         ))}
       </p>
+      {/* [style9] WALK9-08: Gaps only is about the rows; while a listing
+          shows in their place it is off (the rows come back with it). */}
       <button
         onClick={() => setGapsOnly(!gapsOnly)}
         aria-pressed={gapsOnly}
+        disabled={listing !== "rows"}
         data-track="graph-documents-gaps"
         data-graph-gaps-only
         data-tip={t("graphCover.gapsOnlyTitle")}
@@ -378,23 +401,6 @@ export function CoverageRing({ documentId, size }: { documentId: string; size: n
   );
 }
 
-/** The Links list's No reply switch. */
-export function NoReplyToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
-  const t = useT();
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      aria-pressed={on}
-      data-track="graph-links-no-reply"
-      data-graph-links-no-reply
-      data-tip={t("graphCover.noReplyTitle")}
-      className={on ? ACTION_ON : ACTION}
-    >
-      {t("graphCover.noReply")}
-    </button>
-  );
-}
-
 // [layer5] The reader's comments on the graph (VIEW5-01/02): a small mark
 // right of the node's notes chip, one line in the card and in the Documents
 // row that opens into the comments. Every row opens the comment in the reader, at the address an
@@ -451,14 +457,29 @@ export function nodeCommentsWidth(c: DocumentCoverage | null | undefined, myId: 
 }
 
 /** One comment as a row: [lists8] its author's badge (WALK8-02), its words
-    (three lines), a "?" when it waits on this account, its replies; a click
-    opens it in the reader. */
+    (three lines), [style9] WALK9-04: when it waits on this account, the
+    newest reply's words under them with their author's badge (the words
+    that wait; `newest` comes with the coverage answer, and a row from an
+    answer without it draws as before), a "?", its open replies and its
+    resolved ones apart (`openReplies`; absent: one count); a click opens it
+    in the reader. */
 function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { notebookId: string; documentId: string; comment: GraphComment; onOpenDocument: () => void }) {
   const t = useT();
   const router = useRouter();
   const { myId, people } = useCollab();
+  const commentWaitsOn = useCommentWaits();
   // The badge only when the project has another person: a reader alone wrote every comment.
   const author = c.authorId && Object.keys(people).some((id) => id !== myId) ? people[c.authorId] : undefined;
+  const waiting = commentWaitsOn(c);
+  const newest = waiting && c.newest ? c.newest : null;
+  const newestBy = newest?.userId ? people[newest.userId] : undefined;
+  const openReplies = c.openReplies ?? c.replies;
+  const resolvedReplies = c.openReplies === undefined ? 0 : c.replies - c.openReplies;
+  const meta = [
+    openReplies > 0 && (openReplies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: openReplies })),
+    resolvedReplies > 0 && (resolvedReplies === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolvedReplies })),
+    !c.open && t("graphCover.commentResolved"),
+  ].filter((x): x is string => typeof x === "string");
   return (
     <button
       data-graph-comment={c.id}
@@ -473,18 +494,73 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
       {author ? <PersonBadge person={author} size={16} /> : <CommentIcon size={12} className="mt-[3px] shrink-0 text-[var(--kind-comment)]" />}
       <span className="min-w-0 flex-1">
         <span className={`line-clamp-3 ${TEXT_BODY} leading-snug text-ink`}>{c.text}</span>
-        {(c.replies > 0 || !c.open) && (
+        {newest && (
+          <span data-graph-comment-newest className={`mt-1 flex items-start gap-1.5 ${TEXT_BODY} leading-snug text-ink`}>
+            {newestBy && <PersonBadge person={newestBy} size={16} />}
+            <span className="line-clamp-2 min-w-0">{newest.text}</span>
+          </span>
+        )}
+        {meta.length > 0 && (
           <span className={`mt-0.5 flex items-center gap-1.5 ${TEXT_META} text-sand-600`}>
-            {c.replies > 0 && <span>{c.replies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: c.replies })}</span>}
-            {!c.open && <span>{t("graphCover.commentResolved")}</span>}
+            {meta.map((m, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-sand-400">·</span>}
+                {m}
+              </span>
+            ))}
           </span>
         )}
       </span>
-      {commentWaits(c, myId) && (
+      {waiting && (
         <span className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 ${TEXT_META} text-[var(--kind-comment)]`}>
           <WaitsMark />
         </span>
       )}
+    </button>
+  );
+}
+
+/** [style9] VIEW9-05: a link waiting on this account, as a row of the
+    waiting list: the badge of the person whose reply waits, that reply's
+    words (three lines), the other document, its replies, a "?"; a click
+    opens the link panel. */
+function LinkWaitingRow({
+  link: l,
+  reply: r,
+  hereId,
+  open,
+  onOpen,
+}: {
+  link: GraphEdgeLink;
+  reply: ReplyView;
+  /** The document whose group the row is in. */
+  hereId: string;
+  open: boolean;
+  onOpen: (linkId: string) => void;
+}) {
+  const t = useT();
+  const { people } = useCollab();
+  const asker = people[r.userId];
+  const loop = l.fromDocumentId === l.toDocumentId;
+  const otherTitle = l.fromDocumentId === hereId ? l.toTitle : l.fromTitle;
+  return (
+    <button
+      onClick={() => onOpen(l.id)}
+      data-track="graph-documents-link-waiting"
+      data-graph-link-waiting={l.id}
+      aria-expanded={open}
+      data-tip={t("panes.graphDocumentsLinkTitle")}
+      className={`flex w-full items-start gap-1.5 rounded-xl px-2 py-1.5 text-left pointer-coarse:min-h-11 hover:bg-[color-mix(in_srgb,var(--kind-comment)_8%,transparent)] ${open ? "bg-clay-100/50" : ""}`}
+    >
+      {asker ? <PersonBadge person={asker} size={16} /> : <CommentIcon size={12} className="mt-[3px] shrink-0 text-[var(--kind-comment)]" />}
+      <span className="min-w-0 flex-1">
+        <span className={`line-clamp-3 ${TEXT_BODY} leading-snug text-ink`}>{r.content}</span>
+        <span className={`mt-0.5 block truncate ${TEXT_META} font-semibold text-clay-700`}>{loop ? t("graphView.cardWithin") : `⇄ ${otherTitle}`}</span>
+        <LinkReplyCount link={l} />
+      </span>
+      <span className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 ${TEXT_META} text-[var(--kind-comment)]`}>
+        <WaitsMark />
+      </span>
     </button>
   );
 }
@@ -570,34 +646,101 @@ export function DocumentComments({ notebookId, documentId, onOpenDocument }: { n
   );
 }
 
+/** A row of a listing: a comment, or [style9] a link waiting on you. `at`:
+    when its newest words were written, for newest first; null for a comment
+    from an answer without `newest` (it keeps the reading order, last). */
+type ListingRow = { key: string; at: string | null } & ({ comment: GraphComment; link?: undefined } | { link: GraphEdgeLink; reply: ReplyView; comment?: undefined });
+
 /** [lists8] WALK8-02: every open comment of the project, in place of the
     Documents rows (the head's count, pressed): under each document's title,
     in the list's order, each row with its author; the resolved ones counted
-    at the end (a node's card lists them). */
+    at the end (a node's card lists them).
+    [style9] VIEW9-05, WALK9-03: `waitingOnly` lists every thread waiting on
+    you instead, links and comments together under each document's title,
+    newest first (the document with the newest thread first; a link under
+    its from end, else its to end). A link's row quotes the reply that waits
+    with its author's badge and opens the link panel. */
 export function AllComments({
   notebookId,
   documents,
   onOpenDocument,
+  waitingOnly = false,
+  edges = [],
+  openLinkId = null,
+  onOpenLink,
+  filtered = false,
 }: {
   notebookId: string;
   documents: { id: string; title: string }[];
   onOpenDocument: () => void;
+  waitingOnly?: boolean;
+  /** The project's edges, for the links waiting on you. */
+  edges?: GraphEdge[];
+  openLinkId?: string | null;
+  onOpenLink?: (linkId: string) => void;
+  /** [style9] WALK9-08: the filter holds words: the list says how many rows it holds. */
+  filtered?: boolean;
 }) {
   const t = useT();
   const coverage = useProjectCoverage();
+  const { myId } = useCollab();
+  const commentWaitsOn = useCommentWaits();
+  const waits = useWaitsForReply();
+  const listed = new Set(documents.map((d) => d.id));
+  const linksOf = new Map<string, ListingRow[]>();
+  if (waitingOnly && onOpenLink) {
+    for (const e of edges) {
+      for (const l of e.links) {
+        if (l.recommended || l.provenance || !waits(l)) continue;
+        const reply = waitingReply(l, myId);
+        const under = listed.has(l.fromDocumentId) ? l.fromDocumentId : listed.has(l.toDocumentId) ? l.toDocumentId : null;
+        if (!reply || !under) continue;
+        linksOf.set(under, [...(linksOf.get(under) ?? []), { key: `link:${l.id}`, at: reply.createdAt, link: l, reply }]);
+      }
+    }
+  }
   const groups = documents.flatMap((d) => {
-    const open = openComments(coverage?.documents[d.id]);
-    return open.length > 0 ? [{ ...d, open }] : [];
+    const comments = openComments(coverage?.documents[d.id]).filter((c) => !waitingOnly || commentWaitsOn(c));
+    const rows: ListingRow[] = [
+      ...comments.map((c): ListingRow => ({ key: `comment:${c.id}`, at: c.newest?.createdAt ?? c.createdAt ?? null, comment: c })),
+      ...(linksOf.get(d.id) ?? []),
+    ];
+    if (rows.length === 0) return [];
+    if (waitingOnly) rows.sort((x, y) => (y.at ?? "").localeCompare(x.at ?? ""));
+    return [{ ...d, rows, newest: rows.reduce((m, r) => (r.at !== null && r.at > m ? r.at : m), "") }];
   });
-  const resolved = documents.reduce((n, d) => n + (coverage?.documents[d.id]?.comments ?? []).filter((c) => !c.open).length, 0);
+  if (waitingOnly) groups.sort((x, y) => y.newest.localeCompare(x.newest));
+  const total = groups.reduce((n, g) => n + g.rows.length, 0);
+  const resolved = waitingOnly ? 0 : documents.reduce((n, d) => n + (coverage?.documents[d.id]?.comments ?? []).filter((c) => !c.open).length, 0);
   return (
-    <div data-graph-documents-all-comments={groups.reduce((n, g) => n + g.open.length, 0)} className="flex flex-col gap-2">
+    <div
+      data-graph-documents-all-comments={waitingOnly ? undefined : total}
+      data-graph-documents-waiting={waitingOnly ? total : undefined}
+      className="flex flex-col gap-2"
+    >
+      {/* [style9] WALK9-08: with words in the filter, the found line counts the
+          rows listed, not the documents (no document matched: the list's own line says so). */}
+      {filtered && documents.length > 0 && (
+        <p role="status" data-graph-documents-found className={`${TEXT_META} text-sand-600`}>
+          {waitingOnly
+            ? total === 1
+              ? t("graphCover.headNoReplyOne")
+              : t("graphCover.headNoReply", { n: total })
+            : total === 1
+              ? t("graphCover.commentsOpenOne")
+              : t("graphCover.commentsOpenMany", { n: total })}
+        </p>
+      )}
       {groups.map((g) => (
         <div key={g.id} className="flex flex-col gap-0.5">
           <p className={`px-2 ${TEXT_META} font-semibold text-sage-700`}>{g.title}</p>
-          {g.open.map((c) => (
-            <CommentRow key={c.id} notebookId={notebookId} documentId={g.id} comment={c} onOpenDocument={onOpenDocument} />
-          ))}
+          {g.rows.map((r) =>
+            r.comment ? (
+              <CommentRow key={r.key} notebookId={notebookId} documentId={g.id} comment={r.comment} onOpenDocument={onOpenDocument} />
+            ) : (
+              <LinkWaitingRow key={r.key} link={r.link} reply={r.reply} hereId={g.id} open={openLinkId === r.link.id} onOpen={(id) => onOpenLink?.(id)} />
+            ),
+          )}
         </div>
       ))}
       {resolved > 0 && (

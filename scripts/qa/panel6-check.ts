@@ -42,8 +42,8 @@ for (const lang of ["en", "zh"] as const) {
   // Dismiss still asks on any reply: it deletes the row with the reader's own replies.
   ok(run(t, 1, "dismiss").asked !== null, `${lang}: Dismiss with a reply asks`);
   ok(run(t, 0, "dismiss").asked === null, `${lang}: Dismiss with no reply goes at once`);
-  // Waiting on you's words
-  ok(translate(lang, "graphCover.noReply") === (lang === "en" ? "Waiting on you" : "待你回复"), `${lang}: the filter reads ${translate(lang, "graphCover.noReply")}`);
+  // [style9] WALK9-03: the Links list's Waiting on you switch is gone; the Documents head's count is the press.
+  ok(translate(lang, "graphCover.headNoReplyOne") === (lang === "en" ? "1 waiting on you" : "1 条待你回复"), `${lang}: the head reads ${translate(lang, "graphCover.headNoReplyOne")}`);
 }
 
 // Which reply a link waits on

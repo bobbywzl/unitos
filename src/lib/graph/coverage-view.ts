@@ -32,6 +32,17 @@ export type GraphComment = {
   /** [lists8] Who wrote the thread's last open words: its last open reply's
       author, else the comment's (WALK8-01). commentWaits reads it. */
   lastById: string | null;
+  /** [lists9] The newest reply of the thread, resolved or not (WALK9-01,
+      WALK9-04): its author, its first 140 characters, when it was written,
+      whether it is resolved. null when the comment has no reply; absent in
+      an answer from before the field existed. */
+  newest?: { userId: string | null; text: string; createdAt: string; resolved: boolean } | null;
+  /** [lists9] Open replies (not resolved), so a row says open and resolved
+      apart (WALK9-04). Absent in an answer from before the field existed. */
+  openReplies?: number;
+  /** [lists9] When the comment was written (WALK9-06). Absent in an answer
+      from before the field existed. */
+  createdAt?: string;
 };
 
 /** blockId: the part's start block. whole: the document has no parts, and
