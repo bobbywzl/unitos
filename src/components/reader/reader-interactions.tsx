@@ -7782,7 +7782,7 @@ export function ReaderInteractions({
       // resend, unless the reader typed a new one meanwhile.
       if (!commandText && !aiTyped().trim()) setAiCommand(command);
       if (controller.signal.aborted) return;
-      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
+      const message = failureLine(err, t);
       // The error shows in the box that asked, once (not in the article's
       // error log as well); with that box gone, as a toast.
       if (popoverRef.current?.anchor === sent.anchor) {
@@ -8318,7 +8318,7 @@ export function ReaderInteractions({
         } else if ("error" in event) run.notes.push(event.error);
       }
     } catch (err) {
-      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("reader.assistantFailed"));
+      if (!controller.signal.aborted) run.notes.push(failureLine(err, t));
     } finally {
       run.running = false;
       run.controller = null;
@@ -8692,11 +8692,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped or failed: nothing was stored, so the words go back to the
       // box (Stop says nothing more; a failure says why).
-      const message = controller.signal.aborted
-        ? null
-        : err instanceof Error
-          ? err.message
-          : t("reader.assistantFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       returnChatWords(
         { noteId: chat.noteId, openKey, sideNoteId: open?.noteId ?? null },
         text,
@@ -8822,11 +8818,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped or failed: nothing was stored, so the words go back to the
       // box (Stop says nothing more; a failure says why).
-      const message = controller.signal.aborted
-        ? null
-        : err instanceof Error
-          ? err.message
-          : t("reader.assistantFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       returnToolWords(kind, noteId, text, message);
     } finally {
       if (toolChatAbortRef.current[kind] === controller) toolChatAbortRef.current[kind] = null;

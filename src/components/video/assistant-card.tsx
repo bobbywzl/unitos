@@ -469,7 +469,7 @@ export function useArticleActions({
     } catch (err) {
       // Stopped, not failed: no message.
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("video.assistantFailed"));
+      setError(failureLine(err, t));
     } finally {
       if (regenerateAbort.current === controller) regenerateAbort.current = null;
       setBusy(false);
