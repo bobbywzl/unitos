@@ -2,7 +2,7 @@
  "total": {
   "composite": 1,
   "words": 1,
-  "order": 0.999,
+  "order": 1,
   "bullets": 1,
   "tables": 1,
   "notes": 1,
@@ -39,7 +39,7 @@
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
    "composite": 0.999,
    "words": 1,
-   "order": 0.991,
+   "order": 0.996,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -1500,9 +1500,9 @@
    "lost": 0
   },
   "ais-04Inference-01Inference-07MindIEIntr": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.994,
+   "order": 0.999,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -1907,9 +1907,9 @@
    "lost": 0
   },
   "wl-learning-computer-vision-DeepLearning": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.997,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -1918,9 +1918,9 @@
    "lost": 0
   },
   "wth-016-AppMigration-04-ServerlessComput": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.994,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -1931,7 +1931,7 @@
   "wth-016-AppMigration-03-ContainerizingAn": {
    "composite": 0.999,
    "words": 1,
-   "order": 0.99,
+   "order": 0.994,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -1951,9 +1951,9 @@
    "lost": 0
   },
   "wth-006-AppModernization": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.993,
+   "order": 0.999,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -1975,7 +1975,7 @@
   "wth-022-AzureGovernance-AzureGovernance": {
    "composite": 1,
    "words": 1,
-   "order": 0.998,
+   "order": 0.999,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -2138,9 +2138,9 @@
    "lost": 0
   },
   "wth-047-TrafficControlWithDapr-Figures": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.997,
+   "order": 0.999,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -2171,9 +2171,9 @@
    "lost": 0
   },
   "wth-001-IntroToKubernetes": {
-   "composite": 0.995,
+   "composite": 0.998,
    "words": 1,
-   "order": 0.968,
+   "order": 0.988,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -2193,9 +2193,9 @@
    "lost": 0
   },
   "tc-OfficeAddin-02-Excel-02-Worksheets-Co": {
-   "composite": 0.997,
+   "composite": 1,
    "words": 1,
-   "order": 0.984,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -2259,9 +2259,9 @@
    "lost": 0
   },
   "tc-SharePoint-01-SharePoint-Lists-REST-S": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.996,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -2347,9 +2347,9 @@
    "lost": 0
   },
   "uns-science-exploration-369p": {
-   "composite": 0.998,
+   "composite": 0.999,
    "words": 1,
-   "order": 0.99,
+   "order": 0.995,
    "bullets": 1,
    "tables": 1,
    "notes": null,

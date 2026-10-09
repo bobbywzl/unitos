@@ -1837,6 +1837,18 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
     right then left) and read a left column's boxes in turn with the tall
     box beside them (Level 1, the text of all levels, Level 2, ...). */
 function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
+  // Shapes without words (pictures, lines, empty boxes) have no place in
+  // the reading; their z-index keeps their stacking. They follow the
+  // words, so they never tie the order of the shapes that have them.
+  // Slides benchmark finding: a picture right of a box and above a label
+  // left of the box closed a loop (box, picture, label, box) and the
+  // slide read its columns interleaved.
+  const worded = shapes.filter((p) => p.text);
+  if (worded.length < shapes.length) return [...readingOrderOf(worded, ctx), ...shapes.filter((p) => !p.text)];
+  return readingOrderOf(shapes, ctx);
+}
+
+function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
   const band = ctx.slideH * 0.04;
   const key = (a: Placed, b: Placed) => {
     if (a.title !== b.title) return a.title ? -1 : 1;
