@@ -13,7 +13,8 @@
     - TEXT_NAME 13.5: a name that heads a row or a list: a Documents row, a
       list's name, the hover card's title, a generated document's title.
     - TEXT_TITLE 16: a panel's title, and ✕.
-    The page title (18, display face) and the Stitch box keep theirs. */
+    The page title (18, display face) keeps its own; the Stitch box and the
+    reply thread take the four ([style10] VIEW10-07). */
 export const TEXT_META = "text-[11px]";
 export const TEXT_BODY = "text-[12.5px]";
 export const TEXT_NAME = "text-[13.5px]";

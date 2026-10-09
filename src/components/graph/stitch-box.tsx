@@ -54,6 +54,9 @@ type Turn = KeptTurn & {
   data?: { result?: StitchReply; savedNote?: { noteId: string; section: string } };
 };
 
+// [style10] VIEW10-07: the box's text takes the graph's four steps (graph-ui.ts):
+// the title 16, the turns and the pill 12.5, the suggestions, Send, and the
+// status lines 11.
 // The route's caps: a longer command is refused, a longer history turn cut.
 const COMMAND_MAX = 4_000;
 const HISTORY_TURN_MAX = 8_000;
@@ -397,7 +400,7 @@ export function StitchBox({
         data-track="stitch-expand"
         aria-label={t("stitch.stitchExpand")}
         data-tip={t("stitch.stitchTitle")}
-        className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
+        className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[12.5px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
       >
         <SparkleIcon size={14} />
         {t("stitch.stitch")}
@@ -437,7 +440,7 @@ export function StitchBox({
           tabIndex={-1}
           data-stitch-title
           data-tip={t("stitch.stitchHintDetail")}
-          className="font-display text-[15px] text-ink outline-none"
+          className="font-display text-[16px] text-ink outline-none"
         >
           {t("stitch.stitch")}
           <span className="sr-only">{`: ${t("stitch.stitchHint")}`}</span>
@@ -547,11 +550,11 @@ export function StitchBox({
         <div ref={bodyRef} role="log" aria-live="polite" className="flex max-h-[40vh] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pt-3">
           {turns.map((turn, i) =>
             turn.role === "user" ? (
-              <p key={i} className="ml-auto max-w-[85%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800">
+              <p key={i} className="ml-auto max-w-[85%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[12.5px] text-sand-800">
                 {turn.content}
               </p>
             ) : (
-              <div key={i} className="flex max-w-[92%] flex-col gap-1.5 text-[13px] text-sand-800">
+              <div key={i} className="flex max-w-[92%] flex-col gap-1.5 text-[12.5px] text-sand-800">
                 {turn.content && (
                   <Markdown renderBlockCitation={citationRenderer(turn.data?.result?.cited)}>{turn.content}</Markdown>
                 )}
@@ -585,14 +588,14 @@ export function StitchBox({
           {pending && (
             <div className="ml-auto flex max-w-[85%] flex-col items-end gap-1">
               <p
-                className={`rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800 ${pending.failed ? "opacity-60" : ""}`}
+                className={`rounded-2xl bg-sand-100 px-3.5 py-2 text-[12.5px] text-sand-800 ${pending.failed ? "opacity-60" : ""}`}
               >
                 {pending.text}
               </p>
               {pending.failed && (
                 // [style10] TOOL16-06: one failure line, never the raw diagnostic; the words are
                 // back in the text box (the catch above) and Retry sends them again.
-                <p className="flex items-center gap-2 text-xs text-red-500" data-stitch-failed>
+                <p className="flex items-center gap-2 text-[11px] text-red-500" data-stitch-failed>
                   <span>{t("assistant.failedServer")}</span>
                   <button
                     type="button"
@@ -630,7 +633,7 @@ export function StitchBox({
               onClick={() => suggest(suggestion)}
               disabled={running}
               data-track={`stitch-suggest:${suggestion.label.replace("stitch.stitchSuggest", "").toLowerCase()}`}
-              className="rounded-full bg-sand-100 px-3 py-1 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className="rounded-full bg-sand-100 px-3 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               {t(suggestion.label)}
             </button>
@@ -678,7 +681,7 @@ export function StitchBox({
               type="button"
               onClick={stop}
               data-track="stitch-stop"
-              className="flex h-[38px] items-center gap-1.5 rounded-full border border-line px-4 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className="flex h-[38px] items-center gap-1.5 rounded-full border border-line px-4 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
               <StopIcon size={12} />
               {t("stitch.stitchStop")}
@@ -690,18 +693,18 @@ export function StitchBox({
               data-track="stitch-send"
               disabled={!command.trim() || blocked !== null}
               data-tip={blocked ?? undefined}
-              className="h-[38px] rounded-full bg-clay px-5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              className="h-[38px] rounded-full bg-clay px-5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("stitch.stitchSend")}
             </button>
           )}
         </form>
       ) : (
-        <p className="px-4 py-3 text-xs text-sand-500">{t("stitch.stitchViewer")}</p>
+        <p className="px-4 py-3 text-[11px] text-sand-500">{t("stitch.stitchViewer")}</p>
       )}
       {canEdit && (
         // [ui5] WALK5-09: always there, so a new reason is read as it shows.
-        <p id={blockedId} role="status" data-stitch-blocked className={blocked ? "-mt-1 px-4 pb-3 text-xs text-red-500" : "sr-only"}>
+        <p id={blockedId} role="status" data-stitch-blocked className={blocked ? "-mt-1 px-4 pb-3 text-[11px] text-red-500" : "sr-only"}>
           {blocked && !hushBlocked ? blocked : ""}
         </p>
       )}
@@ -746,7 +749,7 @@ function ResultLine({
     </button>
   );
   return (
-    <div className="flex flex-col gap-1 text-xs text-sand-600">
+    <div className="flex flex-col gap-1 text-[11px] text-sand-600">
       {!ran && <p className="text-red-500">{t("stitch.stitchNotEnoughRead")}</p>}
       {ran && result.linkCount === 0 && !result.document && (
         <p className="flex items-center gap-2 text-sand-500">

@@ -236,7 +236,7 @@ export function ReplyThread({
               {/* [lists9] WALK9-09: an author with no account (deleted) is named, never "?", the waiting glyph. */}
               {person?.name ?? t("common.formerCollaborator")}
             </span>
-            <span suppressHydrationWarning className="text-[10px] text-sand-500">
+            <span suppressHydrationWarning className="text-[11px] text-sand-500">
               {replyTime(reply.createdAt, lang)}
             </span>
             {/* Under a finger, Resolve and Delete are 40px targets, 8px
@@ -249,7 +249,7 @@ export function ReplyThread({
                   disabled={inFlight.has(reply.id)}
                   data-track="reply-resolve"
                   data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
-                  className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-2.5"
+                  className="inline-flex min-h-6 items-center px-1 text-[11px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-2.5"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
                 </button>
@@ -329,7 +329,7 @@ export function ReplyThread({
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <span className="truncate text-[11px] font-semibold text-sand-700">{people[myId]?.name ?? "?"}</span>
-              <span suppressHydrationWarning className="text-[10px] text-sand-500">
+              <span suppressHydrationWarning className="text-[11px] text-sand-500">
                 {sent.done ? replyTime(sent.at, lang) : t("common.replySending")}
               </span>
             </div>
@@ -342,7 +342,7 @@ export function ReplyThread({
         <button
           onClick={() => setShowResolved(!showResolved)}
           data-track="reply-show-resolved"
-          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[11px] font-semibold text-sand-500 hover:text-clay-700"
         >
           {resolvedReplies.length === 1
             ? t("common.resolvedCountOne")
