@@ -16,6 +16,7 @@ import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-a
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
+import { carryNoteEditors } from "@/components/outline/use-note-draft";
 import { flattenNotes, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
 // How the notes are grouped (SPEC.md §6), on the tray and on the notes full
@@ -54,18 +55,30 @@ function write(key: string, value: string) {
 }
 
 function subscribe(onChange: () => void) {
+  // Another tab's Group by draws the notes anew here too: an open editor
+  // goes on in its note's new card.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === GROUPING_STORE) carryNoteEditors();
+    onChange();
+  };
   window.addEventListener(CHANGE_EVENT, onChange);
-  window.addEventListener("storage", onChange);
+  window.addEventListener("storage", onStorage);
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
+    window.removeEventListener("storage", onStorage);
   };
 }
 
 export function useNoteGrouping(): [NoteGrouping, (g: NoteGrouping) => void] {
   const stored = useSyncExternalStore(subscribe, () => read(GROUPING_STORE), () => null);
   const grouping = NOTE_GROUPINGS.includes(stored as NoteGrouping) ? (stored as NoteGrouping) : "edited";
-  return [grouping, useCallback((g: NoteGrouping) => write(GROUPING_STORE, g), [])];
+  // A new Group by draws the notes anew: an open editor goes on in its
+  // note's new card (use-note-draft.ts carryNoteEditors).
+  const choose = useCallback((g: NoteGrouping) => {
+    if (g !== read(GROUPING_STORE)) carryNoteEditors();
+    write(GROUPING_STORE, g);
+  }, []);
+  return [grouping, choose];
 }
 
 /** The tray's scope. The project's every note unless the reader picked the

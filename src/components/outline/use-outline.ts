@@ -208,6 +208,9 @@ export type OutlineActions = {
   focusedPendingId: string | null;
   /** Open a note's editor: the keyboard queue's `e`, or the floating card docking with its draft. */
   editRequest: { id: string; draft?: string } | null;
+  /** A card opened its editor on this request: it is done, so a card drawn
+      anew later (a new Group by) never opens it again on its old text. */
+  editTaken: (request: { id: string; draft?: string }) => void;
   // The ticker: accepted notes selected for a bulk delete, merge, or pin.
   selected: ReadonlySet<string>;
   toggleSelect: (id: string) => void;
@@ -1641,6 +1644,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     ]),
     focusedPendingId: focused?.id ?? null,
     editRequest,
+    editTaken(request) {
+      setEditRequest((r) => (r === request ? null : r));
+    },
     selected,
     toggleSelect(id) {
       setSelectedIds((prev) => {

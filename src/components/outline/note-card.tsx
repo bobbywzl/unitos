@@ -34,7 +34,7 @@ import { sourcesTip } from "@/components/outline/sources-tip";
 import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
-import { useNoteDraft } from "@/components/outline/use-note-draft";
+import { carriedNoteText, useNoteDraft } from "@/components/outline/use-note-draft";
 import { holdEditing } from "@/components/outline/editing-notes";
 import { NoteAssistant } from "@/components/outline/note-assistant";
 import { WordLine } from "@/components/outline/word-line";
@@ -251,6 +251,7 @@ type NoteCommands = Pick<
   | "rejectNote"
   | "removeNotes"
   | "editCanceled"
+  | "editTaken"
   | "nudgeNote"
 >;
 
@@ -280,6 +281,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
       rejectNote: (...args) => latest.current.rejectNote(...args),
       removeNotes: (...args) => latest.current.removeNotes(...args),
       editCanceled: (...args) => latest.current.editCanceled(...args),
+      editTaken: (...args) => latest.current.editTaken(...args),
       nudgeNote: (...args) => latest.current.nudgeNote(...args),
     }),
     [],
@@ -408,7 +410,10 @@ const NoteCardBody = memo(function NoteCardBody({
   // The notes full page: an annotation reference opens the annotation beside
   // the note (annotation-side.tsx). Elsewhere it opens the reader.
   const annotationSide = useAnnotationSide();
-  const [editing, setEditing] = useState(false);
+  // A new Group by drew this card in place of one whose editor was open:
+  // the editor goes on here, on its text (use-note-draft.ts carryNoteEditors).
+  const [carried] = useState(() => (canEdit && !floating ? carriedNoteText(note.id) : undefined));
+  const [editing, setEditing] = useState(carried !== undefined);
   // An open editor keeps its note in a list a search filters (editing-notes.ts).
   useEffect(() => (editing ? holdEditing(note.id) : undefined), [editing, note.id]);
   const [copied, setCopied] = useState(false);
@@ -559,7 +564,7 @@ const NoteCardBody = memo(function NoteCardBody({
   const { draft, setDraft, cancel: cancelDraft, markSaved, confirmSaved, saveState, getOriginal } = useNoteDraft({
     noteId: note.id,
     original: note.content,
-    initial: note.content,
+    initial: carried ?? note.content,
     active: editing,
     canEdit,
   });
@@ -579,6 +584,11 @@ const NoteCardBody = memo(function NoteCardBody({
       setEditing(true);
     }
   }
+  // Taken: the request goes, so this card drawn anew (a new Group by)
+  // never opens it again on the text it carried then.
+  useEffect(() => {
+    if (handledEdit) commands.editTaken(handledEdit);
+  }, [handledEdit, commands]);
 
   // The pending note the keys act on comes into view only when a key moved
   // there (j, k, Enter, Notes by a key): a press, an Accept with the mouse,
