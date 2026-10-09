@@ -345,7 +345,8 @@ async function checkRenders(
     if (blank) notes.push(`${what} page ${page} draws blank (ink ${round(appInk, 4)}, MuPDF ${pref.ink})`);
     else if (!shapeOk) notes.push(`${what} page ${page} shape ${px.w}x${px.h}, the page is ${pref.width}x${pref.height}`);
     else if (s < 0.999) notes.push(`${what} page ${page} similarity ${round(sim)}${best !== "upright" ? `, matches the page ${best}` : ""}`);
-    if (px.w !== width) notes.push(`${what} page ${page} drawn ${px.w} px wide, not ${width}`);
+    const wantWidth = typeof width === "number" ? width : width(pref.width, pref.height, page);
+    if (Math.abs(px.w - wantWidth) > 1) notes.push(`${what} page ${page} drawn ${px.w} px wide, not ${wantWidth}`);
   }
   return { ok: mean(scores), notes, ms };
 }
