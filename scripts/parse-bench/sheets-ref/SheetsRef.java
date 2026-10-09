@@ -221,6 +221,12 @@ public class SheetsRef {
         return new RefCell(cell.getCellType() == CellType.FORMULA ? cell.getRichStringCellValue().getString() : formatter.formatCellValue(cell), "s", general, null);
       case NUMERIC: {
         double value = cell.getNumericCellValue();
+        // A format's section left empty shows nothing for the numbers it
+        // covers: ";;;" hides every number, and "0;;" shows a negative
+        // number and zero as nothing (ECMA-376 Part 1, §18.8.31; Microsoft's
+        // "Hide cell values" uses ";;;"). DataFormatter skips empty
+        // sections and showed ";;;" as 0.0.
+        if (emptySection(format, value)) return new RefCell("", "n", general, value);
         boolean date1904 = cell.getSheet().getWorkbook() instanceof XSSFWorkbook x && x.isDate1904();
         // Excel shows a date or a time below 0 or past 9999-12-31 as a row
         // of "#" across the cell (in the 1904 date system a negative one
@@ -292,6 +298,38 @@ public class SheetsRef {
     String shown = plain.replaceAll("(?i)s\\.0{1,3}", "s");
     if (!shown.matches("(?is).*[hs].*") || shown.matches("(?s).*[#?0].*") || shown.toLowerCase(Locale.ROOT).contains("general")) return 0;
     return 86_400L * (long) Math.pow(10, decimals);
+  }
+
+  /** Is the section of the format that shows this number empty: one
+      section covers every number; of two, the first covers zero and up and
+      the second the negatives; of three or four, positive, negative, and
+      zero. False for a format with conditions ([>100]), which choose their
+      own sections. */
+  static boolean emptySection(String format, double value) {
+    if (format == null || format.indexOf(';') < 0 || format.matches("(?s).*\\[[<>=].*")) return false;
+    List<String> sections = new ArrayList<>();
+    StringBuilder cur = new StringBuilder();
+    for (int i = 0; i < format.length(); i++) {
+      char ch = format.charAt(i);
+      if (ch == '"') {
+        int end = format.indexOf('"', i + 1);
+        if (end < 0) end = format.length() - 1;
+        cur.append(format, i, end + 1);
+        i = end;
+      } else if (ch == '\\' && i + 1 < format.length()) {
+        cur.append(ch).append(format.charAt(++i));
+      } else if (ch == ';') {
+        sections.add(cur.toString());
+        cur.setLength(0);
+      } else {
+        cur.append(ch);
+      }
+    }
+    sections.add(cur.toString());
+    String section;
+    if (sections.size() == 2) section = value >= 0 ? sections.get(0) : sections.get(1);
+    else section = value > 0 ? sections.get(0) : value < 0 ? sections.get(1) : sections.get(2);
+    return section.isEmpty();
   }
 
   static String str(String s) {
