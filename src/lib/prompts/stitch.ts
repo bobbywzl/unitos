@@ -52,6 +52,9 @@ export type StitchSelectCtx = ReadingCtx & {
   // ranker, cut the rest).
   partial: boolean;
   names?: StitchNameCtx[];
+  // The blocks whose full text shares the most words with the command
+  // (lib/graph/stitch.ts textMatches; STITCH_INDEX), best first.
+  matches?: string[];
 };
 
 // The documents of the project a pick left out (ANS6-02): how many, and the
@@ -209,6 +212,9 @@ export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
       ? ["The skeletons above are cut to the lines a first read found for this command; (…) marks lines not shown between two lines."]
       : []),
     ...(ctx.names ?? []).map((n) => `Blocks whose full text names "${n.term}", though their skeleton line may not: ${n.aliases.join(", ")}.`),
+    ...((ctx.matches ?? []).length > 0
+      ? [`Blocks whose full text shares the most words with the command, best first, though their skeleton line may not: ${(ctx.matches ?? []).join(", ")}. Check each of them.`]
+      : []),
     ...commandLines(ctx),
     ...citedLine(ctx.cited, "Pick them as well, when the command refers back to them."),
     "",

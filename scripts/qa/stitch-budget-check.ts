@@ -50,10 +50,14 @@ import {
   skeletonGroups,
   skeletonSystem,
   namePicks,
+  textMatches,
   trimmedHistory,
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
+import { fuseRanks } from "../../src/lib/graph/rank";
+import { searchQuery } from "../../src/lib/graph/search";
+import { commandIntent } from "../../src/lib/graph/intent";
 import { asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
@@ -1064,6 +1068,51 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("currentSkeleton: an edit past the 600th character of a long paragraph is in its line", line8.endsWith("Correction: he calls suicide a mistake, not a crime.") && line8.startsWith("The will is blind") && line8.includes(" … ") && line8.length <= 610, `${line8.length}: ${line8.slice(-80)}`);
 }
 
+// ── Round 9 (RETRIEVAL9, STITCH_INDEX): the targeted path's pure functions ──
+{
+  const k28 = "讲义里有哪些说法与其他文档不符？";
+  check("asksContradictions: 不符 is a contradiction; the command is a links command (K28)", asksContradictions(k28) && commandKind(k28) === "links");
+  // searchQuery: the index's query, the ranker's tokens.
+  check("searchQuery: Latin words OR'ed as lexemes, the command's function words dropped", searchQuery("Why did Nietzsche break with Wagner?") === "'nietzsche' | 'break' | 'wagner'", searchQuery("Why did Nietzsche break with Wagner?") ?? "null");
+  check(
+    "searchQuery: a CJK bigram is a phrase; a single character only when there is no bigram",
+    searchQuery("尼采") === "('尼' <-> '采')" && searchQuery("采") === "'采'" && searchQuery("Wagner 尼采") === "'wagner' | ('尼' <-> '采')",
+    `${searchQuery("尼采")} / ${searchQuery("采")} / ${searchQuery("Wagner 尼采")}`,
+  );
+  check("searchQuery: nothing to search is null", searchQuery("?") === null && searchQuery("a") === null);
+  // fuseRanks: reciprocal rank fusion.
+  const fused = fuseRanks([["A1", "A2", "A3"], ["A3", "B1"]]).map((f) => f.key);
+  check("fuseRanks: a key high in both lists comes first; a key in one list still places; one list's order is kept", fused[0] === "A3" && fused.includes("B1") && fused.indexOf("A1") < fused.indexOf("A2"), fused.join(","));
+  // textMatches: the blocks' full text ranked.
+  const blocks9 = [
+    { id: "1", alias: "A1", text: "The will is blind and strives without end." },
+    { id: "2", alias: "A2", text: `${"Of life and living. ".repeat(30)}Pity thwarts the whole law of evolution, which is the law of natural selection.` },
+    { id: "3", alias: "B1", text: "Pity is the practice of nihilism." },
+  ];
+  const m9 = textMatches(blocks9, "What does pity do to natural selection?", 25);
+  check("textMatches: the blocks whose text shares the command's words, best first; one sharing none is left out", m9[0] === "A2" && m9.includes("B1") && !m9.includes("A1"), m9.join(","));
+  check("textMatches: the index's candidates narrow the pool", textMatches(blocks9, "pity", 25, new Set(["3"])).join(",") === "B1");
+  check("textMatches: the top is a cut", textMatches(blocks9, "pity", 1).length === 1);
+  // commandIntent: the route a command needs.
+  check("commandIntent: an overview is holistic", commandIntent("Give me an overview of the project: what does each document argue, one line per document?", false, "question") === "holistic");
+  check("commandIntent: each document on a topic is a fact", commandIntent("What does each document say about Wagner?", false, "question") === "fact" && commandIntent("What does Schopenhauer say pity does?", false, "question") === "fact");
+  check("commandIntent: contradictions are links; which claims disagree, in Chinese, too", commandIntent("Find the contradictions between the documents.", false, "links") === "links" && commandIntent(k28, false, commandKind(k28)) === "links");
+  check("commandIntent: whether another document disagrees with the second point is a fact", commandIntent("Does any other document disagree with the second point?", true, "links") === "fact");
+  check(
+    "commandIntent: a page is a page; the second link's passages are a followup; my reply on a link is meta",
+    commandIntent("Write a page comparing what Mencken and Förster-Nietzsche say about Wagner.", false, "page") === "page" &&
+      commandIntent("Quote both passages of the second link in full.", true, commandKind("Quote both passages of the second link in full.")) === "followup" &&
+      commandIntent("What did I reply on the link about when The Antichrist was printed?", false, "question") === "meta",
+  );
+  // stitchSelectPrompt: the matches line, and nothing else changed without it.
+  const sel9 = { documents: [], command: "What does pity do?", continued: false, earlier: [], cited: [], maxBlocks: 150, partial: false };
+  check(
+    "stitchSelectPrompt: the matches line names the blocks, best first; without matches the prompt is as before",
+    stitchSelectPrompt({ ...sel9, matches: ["A2", "B1"] }).includes("Blocks whose full text shares the most words with the command, best first, though their skeleton line may not: A2, B1. Check each of them.") &&
+      stitchSelectPrompt({ ...sel9, matches: [] }) === stitchSelectPrompt(sel9),
+  );
+}
+
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──
 void (async () => {
   const view = (letter: string, n: number) =>
@@ -1080,6 +1129,27 @@ void (async () => {
   check("cutLines: no line matches → every line read, not the first documents", shown.size === total && last.lines.every((l) => shown.has(l.alias)), `${shown.size} of ${total}`);
   const match = await cutLines(views, null, async () => "line 5 words", 20_000);
   check("cutLines: a query that matches still cuts", match.size < total, `${match.size} of ${total}`);
+  // Round 9 (STITCH_INDEX): the softer fallback (COST9-01) and the fused cut.
+  let retried = 0;
+  const retryHit = await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, {
+    retry: async () => {
+      retried++;
+      return "line 5 words";
+    },
+    cap: 60_000,
+  });
+  check("cutLines: no line matches → the expansion is asked for once more, and a match then cuts as usual", retried === 1 && retryHit.size === match.size, `${retried} retry, ${retryHit.size} of ${total}`);
+  const capped = await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, { retry: async () => "尼采", cap: 60_000 });
+  const perDoc = new Map<string, number>();
+  for (const a of capped) perDoc.set(a.replace(/\d+$/, ""), (perDoc.get(a.replace(/\d+$/, "")) ?? 0) + 1);
+  check(
+    "cutLines: no match even then → every document's opening lines up to the cap, not every line",
+    capped.size < total && capped.size > match.size && perDoc.size === views.length && Math.max(...perDoc.values()) - Math.min(...perDoc.values()) <= 1,
+    `${capped.size} of ${total} lines over ${perDoc.size} documents`,
+  );
+  check("cutLines: without a cap every line is read, as before", (await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, { retry: async () => "尼采" })).size === total);
+  const fusedCut = await cutLines(views, null, async () => "line 5 words", 20_000, { matches: ["DA100", "A99"] });
+  check("cutLines: the text matches' lines are kept in the cut", fusedCut.has("DA100") && fusedCut.has("A99") && !match.has("DA100") && fusedCut.size <= match.size + 2, `${fusedCut.size} of ${total}`);
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();

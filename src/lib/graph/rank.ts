@@ -56,3 +56,22 @@ export function rank<T>(items: T[], textOf: (item: T) => string, query: string):
   scored.sort((a, b) => b.score - a.score || a.i - b.i);
   return scored.map(({ item, score }) => ({ item, score }));
 }
+
+/** Reciprocal rank fusion of ranked lists of keys (best first): a key's
+    score is the sum over the lists that hold it of 1 / (k + its rank),
+    highest first; ties keep the first list's order. A key high in two
+    lists beats one high in one, and a key only one list holds still
+    places (STITCH_INDEX: the skeleton lines' rank fused with the blocks'
+    full-text rank). */
+export function fuseRanks(lists: string[][], k = 60): { key: string; score: number }[] {
+  const scores = new Map<string, { score: number; i: number }>();
+  let order = 0;
+  for (const list of lists) {
+    list.forEach((key, rank) => {
+      const s = scores.get(key);
+      if (s) s.score += 1 / (k + rank + 1);
+      else scores.set(key, { score: 1 / (k + rank + 1), i: order++ });
+    });
+  }
+  return [...scores.entries()].sort((a, b) => b[1].score - a[1].score || a[1].i - b[1].i).map(([key, s]) => ({ key, score: s.score }));
+}

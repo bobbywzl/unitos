@@ -801,6 +801,10 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+  // Stitch's targeted path (STITCH_INDEX, SPEC.md §22): the full-text index
+  // of text, a generated column with a GIN index (migration block_search).
+  // Postgres writes it with the row; Prisma never reads or writes it.
+  search       Unsupported("tsvector")?
   // PAGE blocks: the page rendered once and kept (SPEC.md §16).
   pageImage    PageImage?
 
