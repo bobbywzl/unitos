@@ -225,6 +225,27 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("the import keeps 第九条 as words in a list that draws no marker", levels.length === 9 && levels.every((l) => l.bullet === "") && first === "第九条 合同双方履行义务。", JSON.stringify({ levels: found?.attrs?.listLevels, first }));
 }
 
+// ── A cross-reference in a list item makes no contents list ─────────────────
+
+{
+  const text = "• Refer to Step 1 for the data.\n• Keep the device codes.\n• Send one time zone.";
+  const at = text.indexOf("Step 1");
+  const notes: ParsedBlock[] = [
+    { type: "HEADING", text: "Step 1", html: "<h2>Step 1</h2>" },
+    { type: "LIST", text, links: [{ start: at, end: at + 6, quotedText: "Step 1", targetOrder: 0 }] },
+  ];
+  const kinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: notes }).richText.content ?? []).map((n) => n.type).join(",");
+  check("a bulleted list whose one item cites a heading stays a list", kinds === "heading,bulletList", kinds);
+  const toc = "1 Introduction\n2 Methods";
+  const contents: ParsedBlock[] = [
+    { type: "LIST", text: toc, links: [{ start: 2, end: 14, quotedText: "Introduction", targetOrder: 1 }, { start: 17, end: 24, quotedText: "Methods", targetOrder: 2 }] },
+    { type: "HEADING", text: "Introduction", html: "<h1>Introduction</h1>" },
+    { type: "HEADING", text: "Methods", html: "<h1>Methods</h1>" },
+  ];
+  const tocKinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: contents }).richText.content ?? []).map((n) => n.type).join(",");
+  check("lines that each link to a heading are a contents list: a paragraph each", tocKinds === "paragraph,paragraph,heading,heading", tocKinds);
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

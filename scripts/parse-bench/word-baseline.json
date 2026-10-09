@@ -9,12 +9,12 @@
   "import.mark.bold": 213,
   "mark.bold": 98,
   "import.list.depth": 2,
-  "import.list.missing": 16,
   "mark.underline": 51,
   "import.mark.underline": 51,
   "mark.italic": 26,
   "import.mark.italic": 27,
   "link.missing": 1,
+  "import.list.missing": 2,
   "image.missing": 3,
   "import.image.missing": 3,
   "lost:body": 1,
@@ -354,7 +354,6 @@
   "bonterms-professional-services-agreement.docx": {},
   "cdc-reportstream-programmers-guide.docx": {
    "mark.bold": 14,
-   "import.list.missing": 5,
    "import.mark.bold": 14
   },
   "cp-cloud-service-agreement.docx": {},
@@ -389,7 +388,7 @@
    "import.mark.underline": 1
   },
   "d4j-OpenDoPE_Specification.docx": {
-   "import.list.missing": 11,
+   "import.list.missing": 2,
    "import.mark.bold": 84
   },
   "d4j-arabic_align.docx": {},

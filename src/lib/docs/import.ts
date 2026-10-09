@@ -750,6 +750,25 @@ function levelsOfLines(lines: ListLine[], printed: Bullets): void {
   }
 }
 
+/** How many of a LIST block's lines hold a link to a heading (a link with
+    targetOrder). */
+function linkedLines(block: ParsedBlock): number {
+  const starts: number[] = [];
+  let at = 0;
+  for (const line of block.text.split("\n")) {
+    starts.push(at);
+    at += line.length + 1;
+  }
+  const lines = new Set<number>();
+  for (const l of block.links ?? []) {
+    if (l.targetOrder === undefined) continue;
+    let k = 0;
+    while (k + 1 < starts.length && starts[k + 1] <= l.start) k++;
+    lines.add(k);
+  }
+  return lines.size;
+}
+
 /** Each line's depth: how many lines still open above it are set less
     deep. A line goes at most one level deeper than the line before it, and
     lines set alike stay siblings wherever the first line stands. A list
@@ -1427,9 +1446,12 @@ class Converter {
       if (initial && above?.indent === l.indent && above.unmarked) lines[k] = { ...l, type: null, unmarked: true, count: undefined, letter: undefined, words: l.whole };
     });
     // A contents list: its class, or lines that link to headings, whatever
-    // their markers ("1 Introduction", "2.1 Background").
-    const contents =
-      tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
+    // their markers ("1 Introduction", "2.1 Background"): half its lines or
+    // more. A cross-reference in an item's sentence ("see Step 1: Sample
+    // Data") makes no contents list. Word benchmark finding: a CDC guide's
+    // bulleted notes, one citing a step by its heading, drew as paragraphs
+    // with their bullets as words.
+    const contents = tokensOf(block.html).includes("contents") || linkedLines(block) * 2 >= block.text.split("\n").length;
     if (!contents && this.resume(lines, block, index)) return;
     nestLines(lines);
     levelsOfLines(lines, this.printed);
