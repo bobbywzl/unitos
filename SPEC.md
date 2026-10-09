@@ -630,7 +630,7 @@ Each rung fails with a plain reason; the ladder tries the next and reports every
 
 ### The assistant on the media pane
 
-An Assistant button in the tool bar opens a chat card under it (editor-gated, document scope — the model reads the whole timed transcript through `/api/assistant/act`). Facing video and audio content the card carries the two FORMALIZE skills as suggestion chips — "Formalize into an article" and "Formalize into bullet-point notes" — disabled until the transcript lands; typed questions answer in the chat. The chat executes no plan actions on media documents yet and says so when a plan proposes any. Send becomes Stop while a turn is running (closing the card stops it too, same as the reader's chat) — the sent message stays, no reply lands.
+An Assistant button in the tool bar opens a chat card under it (editor-gated, document scope — the model reads the whole timed transcript through `/api/assistant/act`). Facing video and audio content the card carries the two FORMALIZE skills as suggestion chips — "Formalize into an article" and "Formalize into bullet-point notes" — disabled until the transcript lands; typed questions answer in the chat. The chat executes no plan actions on media documents yet and says so when a plan proposes any. Send becomes Stop while a turn is running (closing the card stops it too, same as the reader's chat) — the sent message stays, no reply lands. A turn that fails stores nothing: the message goes back into the box, the one failure line shows under it ("No answer: …", §7), and queued messages wait until the next send. Queued messages are kept in the browser with the box's words, so a reload or the card closed and opened again still sends them.
 
 ### Build phases (continue §8 order)
 
