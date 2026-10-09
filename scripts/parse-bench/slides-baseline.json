@@ -1,7 +1,7 @@
 {
  "total": {
   "composite": 1,
-  "words": 0.999,
+  "words": 1,
   "order": 0.999,
   "bullets": 1,
   "tables": 1,
@@ -1918,8 +1918,8 @@
    "lost": 0
   },
   "wth-016-AppMigration-04-ServerlessComput": {
-   "composite": 0.986,
-   "words": 0.922,
+   "composite": 0.997,
+   "words": 0.99,
    "order": 0.994,
    "bullets": 1,
    "tables": null,

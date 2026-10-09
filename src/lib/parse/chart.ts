@@ -40,6 +40,7 @@ type Series = {
   cats: string[];
   vals: (number | null)[];
   xs: (number | null)[]; // scatter only
+  xFormatCode: string | null; // scatter only: the x values' number format
   color: string | null;
   pointColors: Map<number, string>;
   marker: boolean;
@@ -157,6 +158,7 @@ function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalet
     cats: cat.text,
     vals: val.numbers,
     xs: kind === "scatter" ? cat.numbers : [],
+    xFormatCode: kind === "scatter" ? cat.formatCode : null,
     color: (kind === "line" || kind === "scatter" ? line ?? fill : fill ?? line) ?? null,
     pointColors,
     marker: markerSymbol !== "none",
@@ -392,7 +394,11 @@ function dataRows(plots: Plot[]): string[][] {
     const longest = Math.max(...series.map((s) => s.vals.length));
     // An x value that is text (a scatter chart over named points) keeps
     // its name: the chart places it by its position, the data says which.
-    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : (series[0].cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
+    // A number x shows in its format, General as a cell writes it: the
+    // cache's 5.550000000000001 reads 5.55. Slides benchmark finding (a
+    // scatter chart's 71 x values).
+    const x = series[0];
+    for (let i = 0; i < longest; i++) rows.push([x.xs[i] !== null && x.xs[i] !== undefined ? dataValue(x.xs[i] as number, x.xFormatCode) : (x.cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
     return rows;
   }
   if (categories.length > 0) {
