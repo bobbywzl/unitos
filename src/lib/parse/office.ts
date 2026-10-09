@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { inflateSync, strFromU8, unzipSync } from "fflate";
 import { JSDOM } from "jsdom";
 import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
@@ -78,9 +78,78 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   return null;
 }
 
+/** A zip's mark for a size or an offset stored in its zip64 extra field. */
+const ZIP64_MARK = 0xffffffff;
+
+/** The entries whose sizes sit in a zip64 extra field, read from the
+    central directory. fflate reads that field only when the zip also has
+    a zip64 end record; without one it took the mark for the size and set
+    aside 4 GB for each entry. Sheets benchmark finding: a 4 KB workbook
+    (LibreOffice tdf82984) took half a second alone and up to a minute
+    beside other files. */
+function zip64Entries(bytes: Uint8Array, names: Set<string>): Record<string, Uint8Array> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u16 = (at: number) => view.getUint16(at, true);
+  const u32 = (at: number) => view.getUint32(at, true);
+  const u64 = (at: number) => u32(at) + u32(at + 4) * 2 ** 32;
+  let end = bytes.length - 22;
+  while (end > 0 && u32(end) !== 0x06054b50) end--;
+  let count = u16(end + 10);
+  let at = u32(end + 16);
+  // A zip64 end record, when the file has one, holds the true count and offset.
+  if (end >= 20 && u32(end - 20) === 0x07064b50) {
+    const record = u64(end - 12);
+    if (u32(record) === 0x06064b50) {
+      count = u64(record + 32);
+      at = u64(record + 48);
+    }
+  }
+  const out: Record<string, Uint8Array> = {};
+  for (let i = 0; i < count && u32(at) === 0x02014b50; i++) {
+    const method = u16(at + 10);
+    let packed = u32(at + 20);
+    let size = u32(at + 24);
+    const nameLength = u16(at + 28);
+    const extraLength = u16(at + 30);
+    let offset = u32(at + 42);
+    const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLength), !(u16(at + 8) & 0x800));
+    // The zip64 field (tag 1) holds, in order, each of the size, the packed
+    // size, and the offset that is marked.
+    for (let x = at + 46 + nameLength; x + 4 <= at + 46 + nameLength + extraLength; x += 4 + u16(x + 2)) {
+      if (u16(x) !== 1) continue;
+      let y = x + 4;
+      if (size === ZIP64_MARK) {
+        size = u64(y);
+        y += 8;
+      }
+      if (packed === ZIP64_MARK) {
+        packed = u64(y);
+        y += 8;
+      }
+      if (offset === ZIP64_MARK) offset = u64(y);
+      break;
+    }
+    at += 46 + nameLength + extraLength + u16(at + 32);
+    if (!names.has(name)) continue;
+    const start = offset + 30 + u16(offset + 26) + u16(offset + 28);
+    const data = bytes.subarray(start, start + packed);
+    if (method === 0) out[name] = data.slice();
+    else if (method === 8) out[name] = inflateSync(data, size > 0 && size < ZIP64_MARK ? { out: new Uint8Array(size) } : undefined);
+  }
+  return out;
+}
+
 /** Every entry of the zip, decompressed. Throws on a broken zip. */
 export function unzipOffice(bytes: Uint8Array): OfficeZip {
-  const entries = unzipSync(bytes);
+  const marked = new Set<string>();
+  const entries = unzipSync(bytes, {
+    filter: (file) => {
+      if (file.size !== ZIP64_MARK && file.originalSize !== ZIP64_MARK) return true;
+      marked.add(file.name);
+      return false;
+    },
+  });
+  if (marked.size > 0) Object.assign(entries, zip64Entries(bytes, marked));
   const zip: OfficeZip = new OfficeParts();
   for (const [stored, data] of Object.entries(entries)) {
     const name = partName(stored);
