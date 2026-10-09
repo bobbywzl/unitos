@@ -17,6 +17,7 @@ import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
+import { changeWindow } from "@/lib/assistant/diff-window";
 
 // The revise action (SPEC.md §7): a change to many blocks of a document
 // without rich text, the spelling or the grammar across it, its register, a
@@ -172,11 +173,19 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
   checklist: "list",
 };
 
-const DESCRIPTION_MAX = 300;
-const describe = (whys: string[]): string => {
-  const text = [...new Set(whys.map((w) => w.trim()).filter(Boolean))].join(" ");
-  return text.length > DESCRIPTION_MAX ? `${text.slice(0, DESCRIPTION_MAX - 1).trimEnd()}…` : text;
-};
+/** The plan card's description of an edit a pass made (SPEC.md §7): the
+    change itself, "Change “old” to “new”", when a stretch of the block
+    changes, else "Rewrite the paragraph that starts …"; never the pass's
+    one why repeated on every edit, which names no block and no words. */
+function editDescription(t: TFunc, before: string, after: string): string {
+  const window = changeWindow(before, after, 0);
+  const cut = (text: string, n = 60) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+  const changed = window.before.length;
+  if (window.before && window.after && changed <= Math.max(60, before.length * 0.6)) {
+    return t("api.editChange", { from: cut(window.before), to: cut(window.after) });
+  }
+  return t("api.editRewrite", { start: cut(before.replace(/\s+/g, " ").trim(), 40) });
+}
 
 const anchorIn = (text: string, blockId: string, start: number, end: number): AssistantAnchor => ({
   blockId,
@@ -293,7 +302,7 @@ export function reviseActions(
           for (let k = 0; k < paired; k++) {
             const was = gapOld[k];
             const now = gapNew[k];
-            if (now.text !== was.text) actions.push({ type: "edit_block", blockId: was.id, newText: now.text, description: op.why });
+            if (now.text !== was.text) actions.push({ type: "edit_block", blockId: was.id, newText: now.text, description: editDescription(t, was.text, now.text) });
             if (now.kind !== kindOf(was)) actions.push({ type: "format_block", blockId: was.id, kind: now.kind, description: op.why });
             lastKept = was.id;
           }
@@ -376,7 +385,7 @@ export function reviseActions(
         if (op.op === "format_words") marks.push({ start: moved(op.start), end: moved(op.end), format: op.format, value: op.value, why: op.why });
       }
     }
-    if (text !== block.text) actions.push({ type: "edit_block", blockId, newText: text, description: describe(whys) });
+    if (text !== block.text) actions.push({ type: "edit_block", blockId, newText: text, description: editDescription(t, block.text, text) });
     for (const mark of marks) {
       const anchor = anchorIn(text, blockId, mark.start, mark.end);
       if (mark.format === "bold" || mark.format === "italic" || mark.format === "underline") {

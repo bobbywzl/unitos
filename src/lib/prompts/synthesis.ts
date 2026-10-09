@@ -89,6 +89,7 @@ export function synthesisAskPrompt(params: {
     "3a. Cite with the tags alone: [block <id>] and [note <id>] render as links. Never write an id in your own words (\"note cmuo…\"), and never write a tag where you mean the words: name the note by what it says.",
     "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
+    "6. Stop at the answer. After the sentences that answer and the reasoning they rest on, nothing follows: no aside on a passage that neither answers nor contradicts, no figure derived from the document's figures, no mistake the reader might make, no advice, and at most one sentence that ties the answer to the reader's purpose. A lookup ends with its one to three sentences.",
     ANSWER_LENGTH,
     CORE_RULE,
     CONNECTION_RULE,
@@ -164,7 +165,7 @@ function actLines(act: PageActions): string[] {
       : act.transcript
         ? [`8. ${TRANSCRIPT_RULE}`]
         : []),
-    "9. The answer to a message that asks for a change is one or two sentences that name what changes and where: the block, the words, the section, the note. Nothing else: not the new words (the plan card shows them), not what stays as it is, not the blocks the plan leaves alone, not the document's content around the change, not the change's consequences, not advice on the document. A confirmation gets one sentence. The reader approves the change in the plan card; the answer only names it.",
+    "9. The answer to a message that asks for a change is one or two sentences that name what changes and where: the block, the words, the section, the note; when a few words change, the old words and the new (\"This changes 'the numbers' to 'these numbers' in the risks paragraph\"). Written as a statement of what the plan does, never as an offer (\"I can…\", \"I could…\") and never the message's own words said back. Nothing else: not a whole new text (the plan card shows it), not what stays as it is, not the blocks the plan leaves alone, not the document's content around the change, not the change's consequences, not advice on the document. A confirmation gets one sentence. The reader approves the change in the plan card; the answer only names it.",
     "10. A message that asks for a new document (make, create, or write a document, a page, or a doc: a summary, a study guide, action items, an outline, a glossary) is one create_document action, never notes or sections in its place, and never words added to the open document. Its markdown is the whole new document, written from the material: ## headings for its parts, the points in plain words with the material's own numbers and names, and under each point the passage that supports it as a > quote line, one passage of one block copied word for word. The title names what the document is. The answer is one sentence that names the document.",
   ];
 }
