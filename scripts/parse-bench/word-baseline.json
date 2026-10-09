@@ -2,9 +2,9 @@
  "total": {
   "math.missing": 1,
   "import.math.missing": 1,
-  "words": 188,
+  "words": 186,
   "lost:label": 59,
-  "import.words": 190,
+  "import.words": 188,
   "import.lost:label": 59,
   "import.list.kind": 23,
   "import.mark.bold": 10,
@@ -183,10 +183,7 @@
   "pandoc-numbered_header.docx": {},
   "pandoc-overlapping_targets.docx": {},
   "pandoc-pageref.docx": {},
-  "pandoc-paragraph_insertion_deletion.docx": {
-   "words": 2,
-   "import.words": 2
-  },
+  "pandoc-paragraph_insertion_deletion.docx": {},
   "pandoc-relative_indentation_blockquotes.docx": {},
   "pandoc-sdt_elements.docx": {},
   "pandoc-sdt_in_footnote.docx": {},

@@ -279,6 +279,7 @@ function readReference(zip: OfficeZip): Reference {
     }
   };
 
+  let carried: string | null = null;
   const paragraph = (p: Element, ctx: Ctx) => {
     const pPr = child(p, "pPr");
     const styleId = attr(child(pPr, "pStyle"), "val") ?? defaultPara;
@@ -327,9 +328,20 @@ function readReference(zip: OfficeZip): Reference {
     const prevOpen = open;
     open = markable ? { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } : null;
     const inner: Ctx = { ...ctx, unit, pRPr: styleChain, markable };
+    // A paragraph after one whose mark is a tracked deletion (accepted)
+    // opens with that one's words: Word joins the two.
+    if (carried !== null) {
+      unit.text = carried;
+      carried = null;
+    }
     for (const node of p.children) walk(node, inner);
     closeMarks();
     open = prevOpen;
+    if (child(child(pPr, "rPr"), "del") && ref.units.at(-1) === unit) {
+      carried = unit.text;
+      ref.units.pop();
+      return;
+    }
     unit.text = unit.text.replace(/\s+/g, " ").trim();
   };
 
