@@ -2119,7 +2119,10 @@ class DocxReader {
     const pictures = [...urls].map((url) => ({ url, alt, widthEmu }));
     const icon = widthEmu > 0 && heightEmu > 0 && widthEmu <= ICON_EMU && heightEmu <= ICON_EMU;
     if (frame?.localName === "anchor" && !icon) sink.floating.push(...pictures);
-    else sink.cut({ kind: "figure", pictures, icon });
+    // An icon after words stays out without a cut: the line's words go on
+    // as one paragraph (Word benchmark finding: lo-tdf163575's "با علامت",
+    // an icon, "نمایش داده" read as two paragraphs).
+    else if (!(icon && !sink.line().empty)) sink.cut({ kind: "figure", pictures, icon });
   }
 
   private pictureUrl(rid: string | null): string | null {

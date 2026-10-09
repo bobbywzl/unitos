@@ -284,6 +284,29 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a PAGEREF outside a contents list keeps its number in the sentence", block?.text === "See page 1, Select by Polygon.", JSON.stringify(block?.text));
 }
 
+// ── An icon between words keeps the sentence one paragraph ──────────────────
+
+/** A .docx of a body whose drawings show media/image1.png (r:embed rId9). */
+function withPicture(body: string): Uint8Array {
+  const parts = unzipSync(docx(body));
+  parts["word/_rels/document.xml.rels"] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="${REL}/image" Target="media/image1.png"/></Relationships>`,
+  );
+  parts["word/media/image1.png"] = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return zipSync(parts);
+}
+const picture = (emu: number) =>
+  `<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${emu}" cy="${emu}"/><wp:docPr id="1" name="Picture 1"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="rId9"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+
+{
+  const blocks = await parse(withPicture(`<w:p>${words("Select by Polygon: the sign ")}${picture(114286)}${words(" draws a closed shape.")}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("an icon between words leaves the sentence one paragraph", lines === "PARAGRAPH:Select by Polygon: the sign draws a closed shape.", JSON.stringify(lines));
+  const alone = (await parse(withPicture(`<w:p>${picture(114286)}</w:p>`))).map((b) => b.type).join(",");
+  check("an icon on a line of its own is a figure", alone === "FIGURE", alone);
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

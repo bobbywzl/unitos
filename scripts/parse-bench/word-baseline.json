@@ -6,8 +6,8 @@
   "lost:label": 59,
   "import.words": 188,
   "import.lost:label": 59,
-  "split": 5,
-  "import.split": 5,
+  "split": 4,
+  "import.split": 4,
   "import.mark.bold": 210,
   "mark.bold": 98,
   "import.list.depth": 2,
@@ -420,9 +420,7 @@
   "lo-tdf149089.docx": {},
   "lo-tdf155707.docx": {},
   "lo-tdf163575.docx": {
-   "split": 1,
    "image.missing": 2,
-   "import.split": 1,
    "import.image.missing": 2
   },
   "lo-tdf49073.docx": {},
