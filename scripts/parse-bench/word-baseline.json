@@ -8,14 +8,12 @@
   "lost:label": 70,
   "import.words": 232,
   "import.lost:label": 70,
-  "mark.bold": 17,
+  "mark.bold": 13,
   "import.list.kind": 53,
-  "import.mark.bold": 19,
+  "import.mark.bold": 15,
   "lost:body": 2,
   "list.kind": 4,
   "import.list.missing": 68,
-  "link.missing": 2,
-  "import.link.missing": 2,
   "lost:note": 1,
   "list.missing": 3,
   "mark.italic": 1
@@ -291,8 +289,8 @@
   "poi-comment.docx": {},
   "poi-delins.docx": {},
   "poi-drawing.docx": {
-   "mark.bold": 5,
-   "import.mark.bold": 5
+   "mark.bold": 1,
+   "import.mark.bold": 1
   },
   "poi-endnotes.docx": {},
   "poi-footnotes.docx": {},
@@ -310,10 +308,7 @@
   },
   "poi-smarttag-snippet.docx": {},
   "poi-stress001.docx": {},
-  "poi-stress003.docx": {
-   "link.missing": 2,
-   "import.link.missing": 2
-  },
+  "poi-stress003.docx": {},
   "poi-stress004.docx": {
    "lost:note": 1,
    "list.missing": 1,

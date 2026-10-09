@@ -839,6 +839,8 @@ class Line {
   readonly sizes = new Map<number, number>();
   /** Every run with words is code (Look.code). */
   mono = true;
+  /** A run with words is set in a named face that is not monospace. */
+  proportional = false;
 
   /** No words, and no underlined tab (a line to fill in). */
   get empty(): boolean {
@@ -860,6 +862,7 @@ class Line {
       this.size = Math.max(this.size, look.size);
       this.sizes.set(look.size, (this.sizes.get(look.size) ?? 0) + words);
       if (!look.code) this.mono = false;
+      if (look.font !== "" && !MONO_FONT.test(look.font)) this.proportional = true;
     }
     const marks: Mark[] = [];
     if (look.bold) marks.push("bold");
@@ -901,6 +904,7 @@ class Line {
     this.bookmarks.push(...other.bookmarks);
     this.size = Math.max(this.size, other.size);
     this.mono = this.mono && other.mono;
+    this.proportional ||= other.proportional;
   }
 
   /** The raw characters from `from` to `to` alone (a typed marker cut from
@@ -1586,14 +1590,18 @@ class DocxReader {
     }
 
     // Code: a paragraph in a code style, or every run of it monospace. A
-    // blank line inside code is the code's own.
+    // blank line inside code is the code's own. A code style's paragraph
+    // whose words are set in a face that is not monospace is prose, as Word
+    // draws it (Word benchmark finding: Russian filings in "HTML
+    // Preformatted" with every run in Times New Roman read as code and
+    // lost their bold and their links).
     const blank = pieces.every((piece) => piece.kind === "words" && piece.line.empty);
     if (this.code && blank) {
       this.code.push("");
       return;
     }
     // A line of underlined tabs alone (a line to fill in) holds no words: no code.
-    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || (only.mono && only.text.trim() !== ""))) {
+    if (only && props.heading === null && props.role !== "title" && ((props.role === "code" && !only.proportional) || (only.mono && only.text.trim() !== ""))) {
       this.closeList();
       (this.code ??= []).push(only.finish(true).text.replace(/\s+$/, ""));
       return;

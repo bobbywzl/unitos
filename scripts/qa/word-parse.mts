@@ -105,6 +105,21 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a run struck once or twice is struck, whichever the other says", struck.join("|") === "once|twice", JSON.stringify(struck));
 }
 
+// ── Code: a code style's words in a face that is not monospace are prose ────
+
+{
+  const run = (text: string, rPr: string) => `<w:r><w:rPr>${rPr}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
+  const code = '<w:pPr><w:pStyle w:val="Code"/></w:pPr>';
+  const times = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>';
+  const courier = '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>';
+  const body = `<w:p>${code}${run("Filed today", `${times}<w:b/>`)}</w:p><w:p/><w:p>${code}${run("let x = 1;", courier)}</w:p>${para("Between")}<w:p>${code}${run("let y = 2;", "")}</w:p>`;
+  const blocks = await parse(docx(body));
+  const kinds = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a code style's words in Times New Roman are a paragraph, a monospace or unnamed face's are code", kinds === "PARAGRAPH:Filed today|CODE:let x = 1;|PARAGRAPH:Between|CODE:let y = 2;", JSON.stringify(kinds));
+  const bold = (blocks[0]?.styles ?? []).filter((s) => s.style === "bold").map((s) => s.quotedText);
+  check("the prose keeps its bold", bold.join("|") === "Filed today", JSON.stringify(bold));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
