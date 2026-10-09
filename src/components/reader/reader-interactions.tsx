@@ -5413,7 +5413,10 @@ export function ReaderInteractions({
   }, [collapseView]);
   // Collapse on or off keeps the reader's place: the block at the reading
   // line stays there, cut at the same share (lib/reading-position.ts), read
-  // just before the article changes view and put back once it has.
+  // just before the article changes view and put back once it has. A
+  // collapsed article too short to bring the block to the line gets that
+  // much room under its end, so the block still lands there, and Collapse
+  // off reads the same block back; the room goes with the collapsed view.
   const collapsePlaceRef = useRef<ReturnType<typeof readReadingPosition> | null>(null);
   function keepCollapsePlace() {
     const container = containerRef.current;
@@ -5423,8 +5426,26 @@ export function ReaderInteractions({
     const place = collapsePlaceRef.current;
     const container = containerRef.current;
     collapsePlaceRef.current = null;
-    if (place && container) applyReadingPosition(container, place, false);
-  }, [collapseView]);
+    if (!container) return;
+    if (!collapseOn) container.style.paddingBottom = "";
+    if (!place) return;
+    applyReadingPosition(container, place, false);
+    const want = collapseOn ? readingPositionScroll(container, place, false) : null;
+    if (want !== null && want > container.scrollTop + 1) {
+      const base = parseFloat(getComputedStyle(container).paddingBottom) || 0;
+      // The hint row under the pane goes in a while, and the pane grows by
+      // its height: the room covers that too.
+      const under = container.parentElement ? container.parentElement.clientHeight - container.offsetHeight : 0;
+      container.style.paddingBottom = `${base + want - container.scrollTop + Math.max(0, under)}px`;
+      container.scrollTop = want;
+    }
+  }, [collapseView, collapseOn]);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    return () => {
+      if (container) container.style.paddingBottom = "";
+    };
+  }, [documentId]);
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
   // for them: coresComingRef).
