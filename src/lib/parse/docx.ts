@@ -2090,10 +2090,10 @@ class DocxReader {
       sink.cut({ kind: "rule" });
       return;
     }
-    // A group or a canvas of shapes is a diagram: its words are labels, not
-    // the document's text. A text box on its own holds text.
-    const diagram = ["wgp", "wpc", "group"].some((name) => descendants(el, name).length > 0);
-    if (!diagram) for (const box of descendants(el, "txbxContent")) if (!inside(box, new Set(["txbxContent", "Fallback"]))) this.boxes.push(box);
+    // A diagram's words are labels, not the document's text. A text box on
+    // its own, or in a group that only places a few boxes, holds text.
+    const boxes = descendants(el, "txbxContent").filter((box) => !inside(box, BOX_HOSTS));
+    if (!isDiagram(el, boxes.length)) this.boxes.push(...boxes);
     const frame = child(el, "inline") ?? child(el, "anchor");
     const extent = child(frame, "extent");
     const widthEmu = intAttr(extent, "cx") ?? 0;
@@ -2485,6 +2485,29 @@ function coreTitle(zip: OfficeZip): string | null {
   const core = parseXmlPart(zip, "docProps/core.xml");
   const title = core ? descendants(core, "title")[0]?.textContent?.trim() : "";
   return title ? cleanText(title) : null;
+}
+
+/** A text box inside one of these is read with it, or not at all. */
+const BOX_HOSTS = new Set(["txbxContent", "Fallback"]);
+
+/** Most text boxes a group may place and still be layout, not a diagram. */
+const LAYOUT_BOXES = 3;
+
+/** A group or a canvas of shapes is a diagram when it links its shapes (a
+    connector, a line, an arrowhead) or labels more than LAYOUT_BOXES boxes:
+    an org chart, a flow chart. A group of a few boxes and no links lays
+    out the page (a résumé's name beside its contact lines, a letterhead's
+    name beside its emblem), and its words are the document's own (Word
+    benchmark finding: poi-60316, poi-stress015, poi-shapes-with-text lost
+    that text; poi-stress010's org chart has 26 connectors). */
+function isDiagram(el: Element, boxes: number): boolean {
+  if (!["wgp", "wpc", "group"].some((name) => descendants(el, name).length > 0)) return false;
+  if (boxes > LAYOUT_BOXES) return true;
+  if (["cNvCnPr", "cxnSp", "line", "polyline", "arc", "curve"].some((name) => descendants(el, name).length > 0)) return true;
+  if (descendants(el, "prstGeom").some((g) => /^line$|Connector/.test(attr(g, "prst") ?? ""))) return true;
+  if (descendants(el, "headEnd").concat(descendants(el, "tailEnd")).some((end) => (attr(end, "type") ?? "none") !== "none")) return true;
+  // VML: a connector shape (o:connectortype), a stroke with an arrowhead.
+  return descendants(el, "*").some((n) => attr(n, "connectortype") !== null || ["startarrow", "endarrow"].some((a) => (attr(n, a) ?? "none") !== "none"));
 }
 
 /** What an equation in Word's linear format holds beside its runs. */

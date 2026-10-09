@@ -133,6 +133,21 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a backslash before one letter is no LaTeX command: the run is read as characters", !raw, JSON.stringify(blocks[1]?.math ?? []));
 }
 
+// ── A group of a few boxes is layout; one that links its shapes is a diagram ─
+
+{
+  const NS =
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"';
+  const box = (text: string) => `<wps:wsp><wps:txbx><w:txbxContent>${para(text)}</w:txbxContent></wps:txbx></wps:wsp>`;
+  const connector = '<wps:wsp><wps:cNvCnPr/><wps:spPr><a:prstGeom prst="straightConnector1"/></wps:spPr></wps:wsp>';
+  const group = (inner: string) =>
+    `<w:p><w:r><w:drawing ${NS}><wp:anchor><wp:extent cx="3000000" cy="900000"/><a:graphic><a:graphicData><wpg:wgp>${inner}</wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r><w:r><w:t>Anchor</w:t></w:r></w:p>`;
+  const layout = (await parse(docx(group(box("Jane Doe") + box("jane@example.com"))))).map((b) => b.text).join("|");
+  check("a group of two boxes and no link reads its boxes after its paragraph", layout === "Anchor|Jane Doe|jane@example.com", JSON.stringify(layout));
+  const chart = (await parse(docx(group(box("Board") + connector + box("Staff"))))).map((b) => b.text).join("|");
+  check("a group that links its boxes is a diagram: its labels stay out", chart === "Anchor", JSON.stringify(chart));
+}
+
 // ── A picture straight in the body is a figure ───────────────────────────────
 
 {

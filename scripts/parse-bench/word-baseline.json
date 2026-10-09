@@ -2,10 +2,10 @@
  "total": {
   "math.missing": 1,
   "import.math.missing": 1,
-  "words": 226,
-  "lost:label": 70,
-  "import.words": 232,
-  "import.lost:label": 70,
+  "words": 188,
+  "lost:label": 59,
+  "import.words": 194,
+  "import.lost:label": 59,
   "mark.bold": 13,
   "import.list.kind": 53,
   "import.mark.bold": 15,
@@ -14,9 +14,7 @@
   "import.list.missing": 68,
   "lost:note": 1,
   "list.missing": 3,
-  "mark.italic": 1,
-  "image.missing": 1,
-  "import.image.missing": 1
+  "mark.italic": 1
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -239,12 +237,7 @@
   "poi-57312.docx": {},
   "poi-58067.docx": {},
   "poi-59378.docx": {},
-  "poi-60316.docx": {
-   "words": 18,
-   "lost:label": 7,
-   "import.words": 18,
-   "import.lost:label": 7
-  },
+  "poi-60316.docx": {},
   "poi-61470.docx": {},
   "poi-Bug51170.docx": {},
   "poi-Bug54849.docx": {},
@@ -297,12 +290,7 @@
   "poi-rtl.docx": {},
   "poi-sample.docx": {},
   "poi-saut_page.docx": {},
-  "poi-shapes-with-text.docx": {
-   "words": 7,
-   "lost:label": 2,
-   "import.words": 7,
-   "import.lost:label": 2
-  },
+  "poi-shapes-with-text.docx": {},
   "poi-smarttag-snippet.docx": {},
   "poi-stress001.docx": {},
   "poi-stress003.docx": {},
@@ -336,14 +324,7 @@
   "poi-stress014.docx": {
    "import.mark.bold": 1
   },
-  "poi-stress015.docx": {
-   "words": 13,
-   "lost:label": 2,
-   "image.missing": 1,
-   "import.words": 13,
-   "import.lost:label": 2,
-   "import.image.missing": 1
-  },
+  "poi-stress015.docx": {},
   "poi-stress016.docx": {},
   "poi-stress017.docx": {},
   "poi-stress018.docx": {
