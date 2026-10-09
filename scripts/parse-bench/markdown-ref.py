@@ -16,7 +16,10 @@ built without the code under test:
   paragraphs, and its verse lines. A file marked lines (a log, a field
   list) has one unit per line of the file. An RFC's units are its section
   headings, found from its own layout (a line at the margin that opens
-  with a section number).
+  with a section number). A file whose corpus entry names `headings` or
+  `items` (patterns of its format's own lines: a man page's section names,
+  a changelog's version lines and "- " items, a license's clauses) has
+  those lines as its units; an mbox (`mail`) has its header and diff lines.
 
 A unit is {k, l, t, br}: k the kind (h heading, p paragraph, q quote, li
 list item, code, cell, hr, math, line), l the level (a heading's 1 to 6, a
@@ -464,6 +467,73 @@ def rfc_units(text):
     return units, optional
 
 
+def layout_units(text, headings, items):
+    """A text file's outline from its own layout, as the corpus names it for
+    the file's format: a line that matches `headings` is a heading (a man
+    page's section name at the margin, a changelog's "Changes in 1.3"
+    line, a license's "Section 1 – Definitions."); a line that matches
+    `items` opens an item (a changelog's "- " line, a license's clause),
+    which goes on over the lines under it that are set in deeper and open
+    no item of their own. An item's text leaves out its marker ("- ",
+    "1.1. ", "(a) "): a parse may read the marker as a list's number or as
+    words (markdown.mts keys ours without it too). Line breaks are not
+    known (br null): an item's words are scored as one unit, wrapped or
+    not."""
+    units = []
+    head_rx = re.compile(headings) if headings else None
+    item_rx = re.compile(items) if items else None
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        if head_rx and head_rx.search(line):
+            units.append({"k": "h", "l": 0, "t": re.sub(r"\s+", " ", line).strip(), "br": None})
+            i += 1
+            continue
+        if item_rx and item_rx.search(line):
+            indent = len(line) - len(line.lstrip())
+            parts = [item_rx.sub("", line, count=1).strip()]
+            i += 1
+            while i < len(lines):
+                more = lines[i].rstrip()
+                if not more.strip() or len(more) - len(more.lstrip()) <= indent or item_rx.search(more) or (head_rx and head_rx.search(more)):
+                    break
+                parts.append(more.strip())
+                i += 1
+            units.append({"k": "li", "l": 0, "t": " ".join(parts), "br": None})
+            continue
+        i += 1
+    return units
+
+
+MBOX_FROM_RX = re.compile(r"^From \S+ \w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d \d{4}$")
+
+
+def mail_units(text):
+    """An mbox's lines that are lines by their format: each line of a
+    header block (from the "From " line that opens a message to the first
+    blank line; a folded header's lines as written) and each line of a diff
+    (from "diff --git" to the signature's "-- " line or the next message).
+    A body's prose is wrapped to a width, and has no units: its words are
+    scored."""
+    units = []
+    state = None
+    for line in text.split("\n"):
+        if MBOX_FROM_RX.match(line):
+            state = "header"
+        elif state == "header" and not line.strip():
+            state = None
+            continue
+        elif state is None and line.startswith("diff --git "):
+            state = "diff"
+        elif state == "diff" and line.rstrip() in ("--", "-- ", "--=20"):
+            state = None
+            continue
+        if state and line.strip():
+            units.append({"k": "line", "l": 0, "t": re.sub(r"\s+", " ", line).strip(), "br": None})
+    return units
+
+
 def text_ref(entry, data, encoding):
     text = data.decode(encoding)
     if text.startswith("﻿"):
@@ -472,6 +542,11 @@ def text_ref(entry, data, encoding):
     out = {"text": text, "units": [], "links": [], "figures": [], "headingsOnly": False}
     if entry.get("lines"):
         out["units"] = [{"k": "line", "l": 0, "t": re.sub(r"\s+", " ", ln).strip(), "br": None} for ln in text.split("\n") if ln.strip()]
+    elif entry.get("mail"):
+        out["units"] = mail_units(text)
+    elif entry.get("headings") or entry.get("items"):
+        out["units"] = layout_units(text, entry.get("headings"), entry.get("items"))
+        out["headingsOnly"] = not entry.get("items")
     elif entry["id"].startswith("rfc"):
         units, optional = rfc_units(text)
         out["units"] = units

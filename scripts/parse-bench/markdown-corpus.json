@@ -1039,6 +1039,208 @@
    },
    "license": "Public domain (Project Gutenberg)",
    "exercises": "a novel with each paragraph on one line (an editor that wraps on screen): lines of 1,000 characters and more"
+  },
+  {
+   "id": "powershell-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/PowerShell/PowerShell/c172d736a647d5219fb49b33b1b07a39d228d891/README.md",
+   "license": "MIT",
+   "exercises": "a title heading of a logo image reference and words (# ![logo][] PowerShell), the logo's path relative"
+  },
+  {
+   "id": "keepassxc-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/keepassxreboot/keepassxc/9e0f57a4a4c6c629fa6d0a593acb7d089b1d95cd/README.md",
+   "license": "GPL-2.0-or-later OR GPL-3.0",
+   "exercises": "a title heading of an <img> logo and words, badge lines, long paragraphs"
+  },
+  {
+   "id": "htop-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/htop-dev/htop/44a59cf1b407df3a1853e9f4f86c3f366808c9e0/README.md",
+   "license": "GPL-2.0-or-later",
+   "exercises": "a title heading that is only a linked logo image with a relative path, badges, build steps in code"
+  },
+  {
+   "id": "chalk-readme",
+   "kind": "md",
+   "name": "readme.md",
+   "url": "https://raw.githubusercontent.com/chalk/chalk/47fc05abd46171b235e24174cd2dba83d25bf037/readme.md",
+   "license": "MIT",
+   "exercises": "an HTML <h1> that holds only a logo image and <br> lines, API lists, code"
+  },
+  {
+   "id": "neovim-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/neovim/neovim/f5e839bdec08be149c36674483c98a77ce956dc8/README.md",
+   "license": "Apache-2.0 AND Vim",
+   "exercises": "an HTML <h1> of an absolute logo image and a row of links"
+  },
+  {
+   "id": "rust-book-strings",
+   "kind": "md",
+   "name": "ch08-02-strings.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/book/1500248d8f230566e4ec9f27fcbb8fe9e2898ab1/src/ch08-02-strings.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "an mdBook chapter that opens at level 2: <Listing> components around code, {{#rustdoc_include}} lines, HTML anchors, notes"
+  },
+  {
+   "id": "rust-book-summary",
+   "kind": "md",
+   "name": "SUMMARY.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/book/1500248d8f230566e4ec9f27fcbb8fe9e2898ab1/src/SUMMARY.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "an mdBook SUMMARY.md: part headings, nested lists of relative links, separators"
+  },
+  {
+   "id": "mdbook-guide-markdown",
+   "kind": "md",
+   "name": "markdown.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/mdBook/d4658998d44112e873c90049767d7eb002169a2d/guide/src/format/markdown.md",
+   "license": "MPL-2.0",
+   "exercises": "mdBook's Markdown guide: heading attributes ({ #id .class }), definition lists, admonitions, footnotes in a quote, tables, task lists"
+  },
+  {
+   "id": "mdbook-guide-mdbook",
+   "kind": "md",
+   "name": "mdbook.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/mdBook/d4658998d44112e873c90049767d7eb002169a2d/guide/src/format/mdbook.md",
+   "license": "MPL-2.0",
+   "exercises": "mdBook's own syntax: hidden code lines (# fn main), escaped \\{{#include}} lines, code block attributes"
+  },
+  {
+   "id": "rust-reference-operators",
+   "kind": "md",
+   "name": "operator-expr.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/reference/9fa1d6fba4ca87ca2d4e1b2c3807488bd8b4a85c/src/expressions/operator-expr.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "a long reference chapter: r[...] rule ids, grammar blocks, operator tables, footnotes, many code examples"
+  },
+  {
+   "id": "rust-rfc-3498",
+   "kind": "md",
+   "name": "3498-lifetime-capture-rules-2024.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/rfcs/d2705ad64ba47e812a2b6b19d6f613fb4c14c5e0/text/3498-lifetime-capture-rules-2024.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "a long design document: footnotes, quoted passages, many code blocks, a contents of sections"
+  },
+  {
+   "id": "tailwind-changelog",
+   "kind": "md",
+   "name": "CHANGELOG.md",
+   "url": "https://raw.githubusercontent.com/tailwindlabs/tailwindcss/fa81d697fe572a10ac150d18964a093a7a874081/CHANGELOG.md",
+   "license": "MIT",
+   "exercises": "a 300 KB keep-a-changelog file: version headings that are link references, Added/Fixed/Changed sections, PR links in every item"
+  },
+  {
+   "id": "fpb-arabic",
+   "kind": "md",
+   "name": "free-programming-books-ar.md",
+   "url": "https://raw.githubusercontent.com/EbookFoundation/free-programming-books/0ddd8749a993efeac1644ea9f47af0bb6f47b955/books/free-programming-books-ar.md",
+   "license": "CC-BY-4.0",
+   "exercises": "Arabic (right to left) headings and list items with English titles, authors, and links mixed into each line"
+  },
+  {
+   "id": "react-testing-library-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/testing-library/react-testing-library/20ce75f2907ca0e5c5a8ae595c0e9a4e368c7800/README.md",
+   "license": "MIT",
+   "exercises": "an HTML <table> of 144 contributor cells (avatar, name, emoji links), a contents list, details, badges"
+  },
+  {
+   "id": "vim-man",
+   "kind": "txt",
+   "name": "vim.1.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/vim/vim/b2b47bdf9401c865780dd4c47b1dbafb0463c75a/runtime/doc/vim.man",
+   "headings": "^[A-Z][A-Z -]*$",
+   "license": "Vim",
+   "exercises": "a man page as text (nroff | col -b): section names at the margin, body set in seven spaces, option tags with their text beside them, a running head and foot"
+  },
+  {
+   "id": "xxd-man",
+   "kind": "txt",
+   "name": "xxd.1.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/vim/vim/b2b47bdf9401c865780dd4c47b1dbafb0463c75a/runtime/doc/xxd.man",
+   "headings": "^[A-Z][A-Z -]*$",
+   "license": "Vim",
+   "exercises": "a man page as text: section names at the margin, hex dump examples set in, option tags"
+  },
+  {
+   "id": "zlib-changelog",
+   "kind": "txt",
+   "name": "ChangeLog.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/madler/zlib/767c4c947852e143f582c85f14cf573411df1b35/ChangeLog",
+   "headings": "^Changes in ",
+   "items": "^\\s*- ",
+   "license": "Zlib",
+   "exercises": "a plain text changelog: \"Changes in 1.3.2 (17 Feb 2026)\" lines right over their \"- \" items, items wrapped with a two-space indent, nested items"
+  },
+  {
+   "id": "git-sample-mbox",
+   "kind": "txt",
+   "name": "patches.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/git/git/6de20f6092dcf9bdb1c8efe03db4b70c82b423dd/t/t5100/sample.mbox",
+   "mail": true,
+   "license": "GPL-2.0",
+   "exercises": "an mbox of patch mails: header blocks, folded headers, quoted-printable lines, wrapped bodies, diffs, signatures"
+  },
+  {
+   "id": "mpl-2.0",
+   "kind": "txt",
+   "name": "MPL-2.0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/text/MPL-2.0.txt",
+   "headings": "^(?:\\d+\\. \\S|Exhibit [AB] - )",
+   "items": "^\\s*(?:\\d+\\.\\d+\\. |\\([a-z]\\) )",
+   "license": "CC0-1.0 (SPDX license-list-data); the license text may be copied verbatim",
+   "exercises": "a license with numbered sections under \"---\" lines, numbered clauses (1.1.) whose text is set in under the number, (a) items set in four spaces, a boxed section"
+  },
+  {
+   "id": "cc-by-4.0",
+   "kind": "txt",
+   "name": "CC-BY-4.0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/text/CC-BY-4.0.txt",
+   "headings": "^Section \\d+ – ",
+   "items": "^\\s*(?:[a-zA-Z]|\\d{1,2})\\.\\s",
+   "license": "CC0-1.0 (SPDX license-list-data); the license text may be copied verbatim",
+   "exercises": "a license of one long line per clause: \"Section 1 – Definitions.\" lines, clauses lettered and numbered at three depths, set in with spaces and a tab"
+  },
+  {
+   "id": "emacs-tutorial-fa",
+   "kind": "txt",
+   "name": "TUTORIAL.fa.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/emacs-mirror/emacs/4685782c211ecc74f3d48da928f646280c4ba017/etc/tutorials/TUTORIAL.fa",
+   "license": "GPL-3.0-or-later",
+   "exercises": "Persian (right to left) mixed with Latin key names, bidi marks (U+200F, U+202A), >> lines, angle-bracket keys"
+  },
+  {
+   "id": "rfc6762",
+   "kind": "txt",
+   "name": "rfc6762.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/tass-belgium/picotcp/46120abecc9fb79f7dfb2cc8192341a42e40fc8b/RFC/rfc6762.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "a long modern RFC (2013): form feeds between pages, running heads and feet, packet diagrams, deep sections, appendices"
+  },
+  {
+   "id": "rfc2131",
+   "kind": "txt",
+   "name": "rfc2131.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/tass-belgium/picotcp/46120abecc9fb79f7dfb2cc8192341a42e40fc8b/RFC/rfc2131.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "an RFC with ASCII message formats, tables of fields set in columns, state diagrams, form feeds"
   }
  ]
 }
