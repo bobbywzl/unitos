@@ -129,6 +129,28 @@
 .ProseMirror[data-docs-paging] {
   opacity: 0;
 }
+/* Meanwhile the frame's gray lines (frame.tsx) stand in the view where the
+   words will show, so the load is one waiting state, never an empty page.
+   Sticky, and taking no room: the text keeps its place. */
+:has(> .ProseMirror[data-docs-paging])::before {
+  content: "";
+  display: block;
+  position: sticky;
+  top: 150px;
+  height: 226px;
+  margin-bottom: -226px;
+  pointer-events: none;
+  --line: linear-gradient(var(--docs-page-border), var(--docs-page-border));
+  background-image: var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line);
+  background-repeat: no-repeat;
+  background-size: 96% 10px, 100% 10px, 92% 10px, 100% 10px, 64% 10px, 100% 10px, 88% 10px, 100% 10px, 72% 10px;
+  background-position: 0 0, 0 24px, 0 48px, 0 72px, 0 96px, 0 144px, 0 168px, 0 192px, 0 216px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :has(> .ProseMirror[data-docs-paging])::before {
+    animation: docs-frame-pulse 1.4s ease-in-out infinite;
+  }
+}
 
 /* The sheets behind the flow of text (each sheet: frame.css). */
 .docs-sheets {

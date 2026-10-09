@@ -247,7 +247,12 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
       }
     }
   }
-  cards.forEach(({ el }, i) => Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` }));
+  // A card shows once it has its place: never first drawn at the column's
+  // left edge (css/layer.css).
+  cards.forEach(({ el }, i) => {
+    Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` });
+    el.dataset.placed = "";
+  });
   const end = pane.querySelector<HTMLElement>("[data-docs-column-end]");
   if (end) end.style.top = `${Math.max(0, ...fixed.map((f) => f.bottom), ...cards.map((_, i) => tops[i] + heights[i])) + CARD_GAP}px`;
   // No room where the page stands, but room once it moves left: holding the
