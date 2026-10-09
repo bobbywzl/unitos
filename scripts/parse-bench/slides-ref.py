@@ -331,6 +331,38 @@ def auto_label(scheme, n):
             v //= 26
         return out
 
+    def han(v):
+        # 1 一, 10 十, 11 十一, 20 二十, 105 一百零五: the ideographic count.
+        digits = "零一二三四五六七八九"
+        if v <= 0 or v >= 10000:
+            return str(v)
+        out = ""
+        zero = False
+        for unit, sym in ((1000, "千"), (100, "百"), (10, "十"), (1, "")):
+            d = v // unit
+            v %= unit
+            if d == 0:
+                zero = bool(out)
+                continue
+            if zero:
+                out += "零"
+                zero = False
+            out += ("" if (unit == 10 and d == 1 and not out) else digits[d]) + sym
+        return out
+
+    # The East Asian schemes (ECMA-376 Part 1, 20.1.10.61): ideographic
+    # numbers (Simplified and Traditional Chinese, Japanese and Korean),
+    # full-width digits, and circled numbers; "Db" is a double-byte period.
+    if scheme.startswith("ea1"):
+        core = han(n)
+        return core + ("．" if scheme.endswith("DbPeriod") else "." if scheme.endswith("Period") else "")
+    if scheme.startswith("arabicDb"):
+        core = "".join(chr(0xFF10 + int(c)) for c in str(n))
+        return core + ("．" if scheme.endswith("Period") else "")
+    if scheme.startswith("circleNum"):
+        if scheme == "circleNumWdBlackPlain":
+            return chr(0x2776 + n - 1) if 1 <= n <= 10 else chr(0x24EB + n - 11) if n <= 20 else str(n)
+        return chr(0x2460 + n - 1) if 1 <= n <= 20 else chr(0x3251 + n - 21) if n <= 35 else chr(0x32B1 + n - 36) if n <= 50 else str(n)
     if scheme.startswith("alphaLc"):
         core = alpha(n)
     elif scheme.startswith("alphaUc"):
