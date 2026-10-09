@@ -1627,10 +1627,10 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
   const rows: string[][] = [];
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];
   if (categories.length > 0) {
-    rows.push(["", ...series.map((s) => s.name)]);
+    if (series.some((s) => s.name)) rows.push(["", ...series.map((s) => s.name)]);
     categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => s.vals[i] ?? "")]));
   } else if (series.length > 0) {
-    rows.push(series.map((s) => s.name));
+    if (series.some((s) => s.name)) rows.push(series.map((s) => s.name));
     const longest = Math.max(...series.map((s) => s.vals.length));
     for (let i = 0; i < longest; i++) rows.push(series.map((s) => s.vals[i] ?? ""));
   }

@@ -36,6 +36,7 @@ type Kind = "col" | "bar" | "line" | "area" | "pie" | "doughnut" | "scatter";
 
 type Series = {
   name: string;
+  named: boolean; // false: the file names it not; name is the legend's stand-in
   cats: string[];
   vals: (number | null)[];
   xs: (number | null)[]; // scatter only
@@ -152,6 +153,7 @@ function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalet
   const markerSymbol = attr(child(markerEl, "symbol"), "val");
   return {
     name: name || `Series ${index + 1}`,
+    named: name !== "",
     cats: cat.text,
     vals: val.numbers,
     xs: kind === "scatter" ? cat.numbers : [],
@@ -285,7 +287,12 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const explicitTitle = richText(child(chart, "title"));
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
-  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length === 1 ? allSeries[0].name : "");
+  // A title element without words is the automatic title: the one series'
+  // name, "Chart Title" when the file names it not (PowerPoint's own
+  // thumbnail of lo chart-theme-override). Slides benchmark finding: the
+  // legend's stand-in "Series 1" read as the title.
+  const only = allSeries.length === 1 ? allSeries[0] : null;
+  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && only ? (only.named ? only.name : "Chart Title") : "");
 
   // Series colors: the file's, else the accents in order.
   let colorIndex = 0;
@@ -358,10 +365,16 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
 function dataRows(plots: Plot[]): string[][] {
   const series = plots.flatMap((p) => p.series);
   const rows: string[][] = [];
+  // The header names the series the file names; with none named, no header
+  // (an unnamed series' "Series 1" is the legend's stand-in, not the file's
+  // words).
+  const header = (lead: string[]) => {
+    if (series.some((s) => s.named)) rows.push([...lead, ...series.map((s) => (s.named ? s.name : ""))]);
+  };
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];
   const scatter = plots[0].kind === "scatter";
   if (scatter) {
-    rows.push(["", ...series.map((s) => s.name)]);
+    header([""]);
     const longest = Math.max(...series.map((s) => s.vals.length));
     // An x value that is text (a scatter chart over named points) keeps
     // its name: the chart places it by its position, the data says which.
@@ -369,10 +382,10 @@ function dataRows(plots: Plot[]): string[][] {
     return rows;
   }
   if (categories.length > 0) {
-    rows.push(["", ...series.map((s) => s.name)]);
+    header([""]);
     categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]));
   } else {
-    rows.push(series.map((s) => s.name));
+    header([]);
     const longest = Math.max(...series.map((s) => s.vals.length));
     for (let i = 0; i < longest; i++) rows.push(series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode))));
   }

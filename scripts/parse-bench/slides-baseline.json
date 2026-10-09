@@ -1,7 +1,7 @@
 {
  "total": {
-  "composite": 0.999,
-  "words": 0.998,
+  "composite": 1,
+  "words": 0.999,
   "order": 1,
   "bullets": 1,
   "tables": 1,
@@ -37,8 +37,8 @@
    "lost": 0
   },
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
-   "composite": 0.994,
-   "words": 0.975,
+   "composite": 0.995,
+   "words": 0.976,
    "order": 0.991,
    "bullets": 1,
    "tables": 1,
@@ -731,7 +731,7 @@
   },
   "ox-O12Typical": {
    "composite": 1,
-   "words": 0.998,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,
@@ -1390,8 +1390,8 @@
    "lost": 0
   },
   "lo-chart-theme-override": {
-   "composite": 0.944,
-   "words": 0.778,
+   "composite": 0.969,
+   "words": 0.875,
    "order": null,
    "bullets": 1,
    "tables": null,
