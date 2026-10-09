@@ -1,4 +1,6 @@
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
+import { srtCueLine, webVttCueText } from "@/lib/video/cue-text";
+import { isTtml, ttmlCues } from "@/lib/video/ttml";
 import { parseTimeInput } from "@/lib/video/types";
 
 // A pasted transcript (SPEC.md §11): the last rung, and the one that never
@@ -8,6 +10,11 @@ import { parseTimeInput } from "@/lib/video/types";
 //   Time and text on one line: "0:33 text", "[0:33] text", "(0:33) text"
 //   SRT and WebVTT cues: "00:00:33,000 --> 00:00:34,433" with the text under it
 // A segment without its own end runs to the next segment's start.
+// A WebVTT file (its first line starts "WEBVTT") is read by the WebVTT
+// standard's block rules: a cue is an optional identifier, a timing line, and
+// text up to a blank line; NOTE, STYLE, and REGION blocks and cues with broken
+// timings are not captions. A TTML file (its root element is <tt>) is read
+// by lib/video/ttml.ts: one cue per <p>.
 
 const MAX_PASTE_CHARS = 2_000_000;
 const DEFAULT_SEGMENT_SECONDS = 4;
@@ -22,12 +29,36 @@ function seconds(raw: string): number | null {
   return parseTimeInput(raw.replace(",", "."));
 }
 
-type Open = { start: number; end: number | null; text: string[] };
+// cue: opened by a "-->" range line (an SRT or WebVTT cue), so its lines are
+// cue text with markup.
+type Open = { start: number; end: number | null; text: string[]; cue?: boolean };
 
 /** Timed segments out of pasted text. Throws with a plain reason when the
     text is empty, too long, or carries no times. */
 export function parsePastedTranscript(text: string): TranscriptSegment[] {
   if (text.length > MAX_PASTE_CHARS) throw new Error("the pasted text is too long");
+  const opens = isTtml(text)
+    ? ttmlCues(text).map((c) => ({ start: c.start, end: c.end, text: [c.text] }))
+    : WEBVTT_SIGNATURE.test(text)
+      ? webVttCues(text)
+      : looseCues(text);
+  const timed = opens.filter((o) => o.text.length > 0);
+  if (timed.length === 0) {
+    throw new Error(
+      opens.length > 0 ? "the pasted text has times but no words" : "the pasted text has no times",
+    );
+  }
+  const segments = timed.map((o, i) => {
+    const next = timed[i + 1]?.start;
+    const end =
+      o.end ?? (next !== undefined && next > o.start ? next : o.start + DEFAULT_SEGMENT_SECONDS);
+    return { start: o.start, end, text: o.text.join(" ") };
+  });
+  return normalizeSegments(segments);
+}
+
+// Any timed text: a time opens a segment and the lines under it are its text.
+function looseCues(text: string): Open[] {
   const lines = text
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -49,7 +80,7 @@ export function parsePastedTranscript(text: string): TranscriptSegment[] {
       const end = seconds(range[2]);
       if (start === null) continue;
       close();
-      open = { start, end: end !== null && end > start ? end : null, text: [] };
+      open = { start, end: end !== null && end > start ? end : null, text: [], cue: true };
       continue;
     }
     const alone = TIME_ONLY.exec(line);
@@ -69,21 +100,107 @@ export function parsePastedTranscript(text: string): TranscriptSegment[] {
         continue;
       }
     }
-    if (open) open.text.push(line);
+    if (open) {
+      const words = open.cue ? srtCueLine(line) : line;
+      if (words !== "") open.text.push(words);
+    }
   }
   close();
+  return opens;
+}
 
-  const timed = opens.filter((o) => o.text.length > 0);
-  if (timed.length === 0) {
-    throw new Error(
-      opens.length > 0 ? "the pasted text has times but no words" : "the pasted text has no times",
-    );
+const WEBVTT_SIGNATURE = /^\uFEFF?WEBVTT(?:[ \t\n\r]|$)/;
+// A timestamp tag inside cue text: <00:00:01.490>.
+const INLINE_TIME = /<(?:\d+:)?\d{2}:\d{2}\.\d{3}>/;
+
+// The cues of a WebVTT file, by the standard's parser: blocks part at blank
+// lines; a block whose first line, or whose second line after an identifier,
+// holds "-->" is a cue, and its text runs to a blank line or to the next line
+// that holds "-->". The header block and every other block are dropped.
+function webVttCues(text: string): Open[] {
+  const lines = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n");
+  const cues: Open[] = [];
+  let at = 1;
+  // One block from `at`. In the header, a line with "-->" ends the block and
+  // starts the next one.
+  const block = (header: boolean) => {
+    let count = 0;
+    let arrow = false;
+    let cue: Open | null = null;
+    const buffer: string[] = [];
+    while (at < lines.length) {
+      const line = lines[at];
+      at += 1;
+      count += 1;
+      if (line.includes("-->")) {
+        if (!header && (count === 1 || (count === 2 && !arrow))) {
+          arrow = true;
+          const timing = webVttTiming(line);
+          cue = timing ? { ...timing, text: [] } : null;
+          buffer.length = 0;
+          continue;
+        }
+        at -= 1;
+        break;
+      }
+      if (line === "") break;
+      buffer.push(line.trim());
+    }
+    if (cue) blocks.push({ start: cue.start, end: cue.end, lines: [...buffer] });
+  };
+  const blocks: { start: number; end: number | null; lines: string[] }[] = [];
+  if (at < lines.length && lines[at] !== "") block(true);
+  while (at < lines.length) {
+    if (lines[at] === "") at += 1;
+    else block(false);
   }
-  const segments = timed.map((o, i) => {
-    const next = timed[i + 1]?.start;
-    const end =
-      o.end ?? (next !== undefined && next > o.start ? next : o.start + DEFAULT_SEGMENT_SECONDS);
-    return { start: o.start, end, text: o.text.join(" ") };
-  });
-  return normalizeSegments(segments);
+  // YouTube's automatic captions roll: each cue shows the line before it
+  // again above its new words, and times each new word inline. In a file
+  // with inline times, a cue's first line that repeats the last line of the
+  // cue before is not new words.
+  const rolling = blocks.some((b) => b.lines.some((l) => INLINE_TIME.test(l)));
+  let before: string | null = null;
+  for (const b of blocks) {
+    if (!rolling) {
+      const words = webVttCueText(b.lines.join("\n"));
+      cues.push({ start: b.start, end: b.end, text: words === "" ? [] : [words] });
+      continue;
+    }
+    const shown = b.lines.map(webVttCueText).filter((l) => l !== "");
+    const fresh = shown.length > 0 && shown[0] === before ? shown.slice(1) : shown;
+    if (shown.length > 0) before = shown[shown.length - 1];
+    cues.push({ start: b.start, end: b.end, text: fresh });
+  }
+  return cues;
+}
+
+// [hh:]mm:ss.ttt: hours any number of digits, minutes and seconds two,
+// milliseconds three. Two parts are minutes and seconds unless the first is
+// not two digits or is over 59; then three parts are needed.
+const WEBVTT_TIME = /(\d+):(\d{2})(?!\d)(?::(\d{2})(?!\d))?\.(\d{3})(?!\d)/y;
+
+function webVttTime(line: string, at: number): { seconds: number; at: number } | null {
+  WEBVTT_TIME.lastIndex = at;
+  const m = WEBVTT_TIME.exec(line);
+  if (!m) return null;
+  const hours = m[3] !== undefined;
+  if (!hours && (m[1].length !== 2 || Number(m[1]) > 59)) return null;
+  const [h, min, sec] = hours ? [m[1], m[2], m[3]] : ["0", m[1], m[2]];
+  if (Number(min) > 59 || Number(sec) > 59) return null;
+  return { seconds: Number(h) * 3600 + Number(min) * 60 + Number(sec) + Number(m[4]) / 1000, at: WEBVTT_TIME.lastIndex };
+}
+
+// "00:01.000 --> 00:02.500 settings". Null when either time is broken.
+function webVttTiming(line: string): { start: number; end: number | null } | null {
+  const skip = (i: number) => {
+    while (line[i] === " " || line[i] === "\t") i += 1;
+    return i;
+  };
+  const start = webVttTime(line, skip(0));
+  if (!start) return null;
+  const arrow = skip(start.at);
+  if (!line.startsWith("-->", arrow)) return null;
+  const end = webVttTime(line, skip(arrow + 3));
+  if (!end) return null;
+  return { start: start.seconds, end: end.seconds > start.seconds ? end.seconds : null };
 }

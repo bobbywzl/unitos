@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
 import { geminiCall, geminiConfigured } from "@/lib/video/gemini";
-import type { TranscriptSegment } from "@/lib/video/transcribe";
+import { clipSegments, groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 
 // Transcript cleanup (SPEC.md §11): every new video and audio transcript is
 // cleaned line by line before it stores — filler words, stutters, and false
@@ -158,4 +158,19 @@ export async function tidyTranscript(
       .filter((line) => line.text !== ""),
     provider: "rules",
   };
+}
+
+/** The lines a transcript stores (SPEC.md §11), whatever rung made its
+    segments: only the imported part of the recording (SPEC.md §15), the
+    ranges in order and pulled apart, cut into lines, then cleaned. Cleanup
+    emptying every line means it misfired; the raw lines stand. */
+export async function transcriptLines(
+  segments: TranscriptSegment[],
+  clip: { clipStart: number | null; clipEnd: number | null } | null,
+  userId: string | null,
+): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "rules" }> {
+  const kept = clipSegments(segments, clip?.clipStart ?? null, clip?.clipEnd ?? null);
+  const grouped = groupSegments(normalizeSegments(kept));
+  const tidied = await tidyTranscript(grouped, userId);
+  return { lines: tidied.lines.length > 0 ? tidied.lines : grouped, provider: tidied.provider };
 }
