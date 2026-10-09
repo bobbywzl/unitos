@@ -96,7 +96,7 @@ export function actPrompt(ctx: ActCtx): string {
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
     "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
-    "2a. A command that confirms a change the conversation proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: return its actions in full, and reply in one sentence. Never answer a confirmation with reply alone. A command that asks for a change never returns an empty actions list unless the change cannot be made; then reply says why.",
+    "2a. A command that confirms a change the conversation proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: return its actions in full, and reply in one sentence. Never answer a confirmation with reply alone. A command that asks for a change never returns an empty actions list unless the change cannot be made; then reply says why. A confirmation of suggestions the conversation already made (its turn says the suggestions are in the document): reply in one sentence that they are in the document, to accept or reject in the review box, and return no action.",
     "2b. When one of the reader's tools does the job better than an action (Simplify, Explain, Visualize, Define, Extract, Stitch), name the tool in reply and say in one sentence what it will do.",
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
     "4. description: one plain sentence of what the action does, naming the block by its opening words (\"the paragraph that starts 'Fuel is'\"), for the reader's approval list.",
@@ -142,6 +142,7 @@ export function actPrompt(ctx: ActCtx): string {
     `Command: ${ctx.command}`,
     "",
     ...(ctx.web ? ["", ...WEB_LINES, ""] : []),
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"reply": string or null, "actions": [...], "matches": [{"blockId": "<id>", "quote": "<verbatim>", "why": "<sentence>"}]}',
   ].join("\n");
 }

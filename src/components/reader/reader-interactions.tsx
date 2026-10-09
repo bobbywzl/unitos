@@ -5718,6 +5718,7 @@ export function ReaderInteractions({
     await landOps(key, result.ops, result.warnings, replacing);
     run.running = false;
     publishRun(key);
+    openReview(run);
     return key;
   }
 
@@ -5747,8 +5748,19 @@ export function ReaderInteractions({
   // Review suggested edits over this command's suggestions, the first one selected.
   function reviewRun(run: SuggestionRun) {
     pageEditorIn(containerRef.current)?.view.dom.dispatchEvent(
-      new CustomEvent("docs:review-suggestions", { detail: { ids: run.ids } }),
+      new CustomEvent("docs:review-suggestions", {
+        detail: { ids: run.ids, summary: run.summary, skipped: [...run.skipped, ...run.notes], assistant: true },
+      }),
     );
+  }
+
+  // The assistant's suggestions landed: the page's review box opens on them
+  // (components/docs/suggest/review.tsx), so the reader sees each change and
+  // accepts or rejects it, and reads why a change did not land. A run that
+  // landed nothing and skipped nothing opens no box.
+  function openReview(run: SuggestionRun) {
+    if (readerClosedRef.current || (run.ids.length === 0 && run.skipped.length === 0 && run.notes.length === 0)) return;
+    reviewRun(run);
   }
 
   // Accept all or Reject all of this command: one undo step.
@@ -5812,6 +5824,7 @@ export function ReaderInteractions({
       run.running = false;
       run.controller = null;
       publishRun(request.key);
+      openReview(run);
     }
   }
   const suggestDocumentRef = useRef(suggestDocument);

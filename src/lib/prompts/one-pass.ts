@@ -77,6 +77,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one or two sentences on what changes. why: one sentence on why.`,
     "10. When the command asks no change, return document as the blocks stand, remove empty, and say so in summary.",
     "",
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"summary": "…", "why": "…", "document": ["<id>", {"id": "<id>", "text": "…"}, {"new": "…"}, …], "remove": ["<id>"], "formats": [ … ]}',
   ].join("\n");
 }

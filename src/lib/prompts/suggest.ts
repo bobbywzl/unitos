@@ -161,6 +161,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
     "Rules:",
     ...rules.map((rule, n) => `${n + 1}. ${rule}`),
     "",
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"summary": "…", "ops": [ … ]}',
   ].join("\n");
 }

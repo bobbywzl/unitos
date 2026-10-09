@@ -15,6 +15,7 @@ import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
 import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
 import { texError } from "@/lib/katex";
+import { restoreControlEscapes } from "@/lib/tex-escapes";
 import { ungrounded, type Grounding } from "@/lib/docs/grounding";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
@@ -333,7 +334,13 @@ function conflicts(a: Claim, b: Claim): boolean {
     when it occurs once. */
 function once(text: string, needle: string): QuoteHit | "notFound" | "ambiguous" {
   const selector = { quotedText: needle, prefix: "", suffix: "" };
-  const hit = matchInTextLoose(text, selector);
+  let hit = matchInTextLoose(text, selector);
+  // Words not found with a control character before a letter: a TeX
+  // command's backslash the JSON read as one (lib/tex-escapes.ts).
+  if (!hit && /[\t\b\f\n\r][A-Za-z]/.test(needle)) {
+    selector.quotedText = restoreControlEscapes(needle);
+    hit = matchInTextLoose(text, selector);
+  }
   if (!hit) return "notFound";
   const rest = text.slice(0, hit.start) + "\u0000".repeat(hit.end - hit.start) + text.slice(hit.end);
   return matchInTextLoose(rest, selector) ? "ambiguous" : hit;

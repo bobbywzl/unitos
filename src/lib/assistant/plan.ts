@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { repairJsonEscapes, restoreTexEscapesDeep } from "@/lib/tex-escapes";
 import type { BlockKind } from "@/lib/block-kind";
 import { blockTakes, isWebAddress, skippedWarning, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -725,12 +726,18 @@ function looseJsonAt(text: string, start: number): unknown {
       out += c;
     }
   }
+  // The escapes JSON does not know repaired, and TeX spans' backslashes read
+  // back (lib/tex-escapes.ts): a quote or new words with `\text` in them
+  // still find their block.
   const attempt = (json: string): unknown => {
-    try {
-      return JSON.parse(json);
-    } catch {
-      return undefined;
+    for (const source of [json, repairJsonEscapes(json)]) {
+      try {
+        return restoreTexEscapesDeep(JSON.parse(source));
+      } catch {
+        // the next reading
+      }
     }
+    return undefined;
   };
   if (!inString && closers.length === 0) {
     const whole = attempt(out);

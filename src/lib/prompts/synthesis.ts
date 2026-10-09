@@ -146,6 +146,7 @@ function actLines(act: PageActions): string[] {
     ...actionLines(act.edits ?? "blocks", Boolean(act.transcript)),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block that opens with the line ```actions and holds a JSON array of the actions, one action too. Every action has its \"type\". Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, simplify, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes. Example of the block's shape:\n```actions\n[{\"type\": \"comment\", \"blockId\": \"<id>\", \"quote\": \"<exact words>\", \"comment\": \"<note>\", \"description\": \"<one sentence>\"}]\n```",
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     "1a. A message that confirms a change an earlier answer proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: answer in one sentence, then end with the actions block for it, written in full again. Never answer a confirmation with words alone.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block. Never write the actions as JSON anywhere but the actions block.",
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",

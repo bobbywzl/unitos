@@ -147,3 +147,32 @@
   justify-content: flex-end;
   gap: 8px;
 }
+.docs-suggest-review-summary,
+.docs-suggest-review-current {
+  margin: 0;
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.docs-suggest-review-current {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+}
+.docs-suggest-review-why {
+  opacity: 0.7;
+}
+.docs-suggest-review-skipped summary {
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.docs-suggest-review-skipped ul {
+  margin: 4px 0 0 16px;
+  max-width: 380px;
+  font-size: 12px;
+  line-height: 1.4;
+}
