@@ -18,6 +18,8 @@ import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
 // Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
 // command across the project's documents — gather every passage on a
@@ -30,8 +32,9 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // Generated content. Under every reply, what was read of each document: a
 // video or audio document reads as its transcript, and a document with
 // nothing to read says why (the transcript still being written, or failed
-// with the stored reason). The conversation is kept per project for the
-// browser tab, so closing the graph and opening it again keeps it. The box
+// with the stored reason). The conversation is kept for the account per
+// project (lib/kept-chat.ts, place "stitch"), so closing the graph, leaving
+// the page, or a reload keeps it; Clear conversation removes it. The box
 // folds to a pill so the canvas is clear.
 //
 // A citation in a reply names its document and opens the passage card in
@@ -44,17 +47,12 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // The route adds `cited` (the document and words of every [block] tag in the
 // reply); a reply from before it has none, and its chips stay ¶.
 type StitchReply = StitchResult & { cited?: Record<string, StitchCitation> };
-// savedNote: the answer was saved as a note (Save as note keeps its line).
-type Turn = {
-  role: "user" | "assistant";
-  content: string;
-  result?: StitchReply;
-  savedNote?: { noteId: string; section: string };
+// A kept turn (lib/kept-chat.ts keeps role, content, and data only): the
+// result under the reply, and savedNote once the answer was saved as a note
+// (Save as note keeps its line, so the answer is not saved twice).
+type Turn = KeptTurn & {
+  data?: { result?: StitchReply; savedNote?: { noteId: string; section: string } };
 };
-const threads = new Map<string, Turn[]>();
-// The unsent command per project, kept when the graph closes (CLAUDE.md
-// rule zero §6).
-const drafts = new Map<string, string>();
 
 // The route's caps: a longer command is refused, a longer history turn cut.
 const COMMAND_MAX = 4_000;
@@ -128,12 +126,33 @@ export function StitchBox({
   const router = useRouter();
   const ime = useImeGuard();
   const { canEdit } = useCollab();
-  const [turns, setTurnsState] = useState<Turn[]>(() => threads.get(notebookId) ?? []);
-  const [command, setCommandState] = useState(() => drafts.get(notebookId) ?? "");
-  const [running, setRunning] = useState(false);
+  const kept = useKeptChat<Turn>(notebookId, "stitch");
+  const { turns, setTurns } = kept;
+  const running = kept.busy;
+  // The unsent command, kept in this browser until it is sent (CLAUDE.md
+  // rule zero §6): closing the graph, leaving the page, and a reload keep it.
+  const draftKey = `stitch:${notebookId}`;
+  const [command, setCommand] = useState("");
+  useChatDraft(draftKey, setCommand);
   // The command on its way, drawn as the user turn until the reply comes;
   // failed = the request failed, and Retry sends it again.
   const [pending, setPending] = useState<{ text: string; failed: boolean } | null>(null);
+  // The box's words as last rendered, for a failed send (its state is stale
+  // there). The browser's draft holds the box's words, else the command on
+  // its way until its reply lands, so a reload or a crash mid-answer keeps
+  // it; it is written once the kept draft was read back (the first run would
+  // clear it).
+  const commandRef = useRef("");
+  const draftRead = useRef(false);
+  const draftText = command.trim() ? command : (pending?.text ?? "");
+  useEffect(() => {
+    commandRef.current = command;
+    if (!draftRead.current) {
+      draftRead.current = true;
+      return;
+    }
+    writeChatDraft(draftKey, draftText);
+  }, [command, draftText, draftKey]);
   const [error, setError] = useState<string | null>(null);
   const [openState, setOpenState] = useState(true);
   const open = openProp ?? openState;
@@ -142,7 +161,6 @@ export function StitchBox({
     onOpenChange?.(next);
   };
   const [passage, setPassage] = useState<{ blockId: string; citation: StitchCitation } | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const regionRef = useRef<HTMLDivElement>(null);
@@ -151,19 +169,6 @@ export function StitchBox({
   // focus is on one of them (Shift+Tab from the text box reaches them).
   const suggestRef = useRef<HTMLDivElement>(null);
   const [fieldFocus, setFieldFocus] = useState(false);
-
-  function setTurns(update: (turns: Turn[]) => Turn[]) {
-    setTurnsState((prev) => {
-      const next = update(prev);
-      threads.set(notebookId, next);
-      return next;
-    });
-  }
-
-  function setCommand(value: string) {
-    drafts.set(notebookId, value);
-    setCommandState(value);
-  }
 
   // [view2] Find's Ask Stitch: the question goes in the box after any words
   // already typed (never over them), and the cursor waits at its end.
@@ -233,9 +238,7 @@ export function StitchBox({
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns.length, running, open, pending]);
 
-  function stop() {
-    abortRef.current?.abort();
-  }
+  const stop = kept.stop;
 
   const picked = nodes.filter((n) => selectedIds.has(n.id));
   const coarse = useCoarsePointer();
@@ -276,14 +279,20 @@ export function StitchBox({
     // no failed or stopped command. A turn with no text (an answer that was
     // only links or a page) has nothing for the model to read, and the
     // route refuses an empty one; a long one the route would cut anyway.
+    // An assistant turn carries its record (what it proposed and stored:
+    // every link in the order proposed, and the page), kept with the turn in
+    // data.result, so "the third one" and "that page" find what it named
+    // (ANS4-02, ANS5-02). A turn kept before records existed carries none.
+    const recordOf = (turn: Turn) => (turn.role === "assistant" ? turn.data?.result?.record : undefined);
     const history = turns
-      .filter((turn) => turn.content.trim())
+      .filter((turn) => turn.content.trim() || recordOf(turn)?.links.length || recordOf(turn)?.document)
       .slice(-20)
-      .map((turn) => ({ role: turn.role, content: turn.content.slice(0, HISTORY_TURN_MAX) }));
+      .map((turn) => {
+        const record = recordOf(turn);
+        return { role: turn.role, content: turn.content.slice(0, HISTORY_TURN_MAX), ...(record ? { record } : {}) };
+      });
     setPending({ text, failed: false });
-    setRunning(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const controller = kept.begin();
     try {
       const result = await runHeartbeat<StitchReply>(
         `/api/notebooks/${notebookId}/stitch`,
@@ -297,9 +306,12 @@ export function StitchBox({
       setTurns((prev) => [
         ...prev,
         { role: "user", content: text },
-        { role: "assistant", content: result.reply, result },
+        { role: "assistant", content: result.reply, data: { result } },
       ]);
       setPending(null);
+      // The reply landed: the draft keeps only what the box holds now (the
+      // box may have closed meanwhile, and its effect would not run).
+      writeChatDraft(draftKey, commandRef.current);
       onCited?.(citedDocumentIds(result));
       onProposed?.([...(result.linkIds ?? []), ...(result.existingLinkIds ?? [])]); // [view2] new links and the existing ones the answer is about (ANS5-05)
       // The graph's new curves and the generated list arrive with a refresh.
@@ -307,7 +319,7 @@ export function StitchBox({
     } catch (err) {
       // The command goes back into the text box, unless the reader typed a
       // new one meanwhile. Stopped: nothing more is stored, and no error.
-      if (!drafts.get(notebookId)?.trim()) setCommand(text);
+      if (!commandRef.current.trim()) setCommand(text);
       if (controller.signal.aborted) {
         setPending(null);
       } else {
@@ -315,8 +327,7 @@ export function StitchBox({
         setError(err instanceof Error ? err.message : t("common.requestFailed"));
       }
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setRunning(false);
+      kept.end(controller);
     }
   }
 
@@ -467,13 +478,7 @@ export function StitchBox({
           </>
         )}
         {turns.length > 0 && !running && (
-          <button
-            onClick={() => setTurns(() => [])}
-            data-track="stitch-new"
-            className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          >
-            {t("stitch.stitchNew")}
-          </button>
+          <ClearConversation onClear={kept.clear} track="stitch-clear" className="ml-auto" />
         )}
         <button
           onClick={() => {
@@ -502,10 +507,10 @@ export function StitchBox({
             ) : (
               <div key={i} className="flex max-w-[92%] flex-col gap-1.5 text-[13px] text-sand-800">
                 {turn.content && (
-                  <Markdown renderBlockCitation={citationRenderer(turn.result?.cited)}>{turn.content}</Markdown>
+                  <Markdown renderBlockCitation={citationRenderer(turn.data?.result?.cited)}>{turn.content}</Markdown>
                 )}
-                {turn.result && (
-                  <ResultLine result={turn.result} onOpen={openDocument} onShowRecommended={onShowRecommended} />
+                {turn.data?.result && (
+                  <ResultLine result={turn.data.result} onOpen={openDocument} onShowRecommended={onShowRecommended} />
                 )}
                 {turn.content.trim() && canEdit && (
                   <div className="flex flex-wrap items-center gap-2">
@@ -515,9 +520,9 @@ export function StitchBox({
                       question={turns[i - 1]?.role === "user" ? turns[i - 1].content : ""}
                       answer={turn.content}
                       onShow={showNote}
-                      saved={turn.savedNote}
+                      saved={turn.data?.savedNote}
                       onSaved={(savedNote) =>
-                        setTurns((prev) => prev.map((x) => (x === turn ? { ...x, savedNote } : x)))
+                        setTurns((prev) => prev.map((x) => (x === turn ? { ...x, data: { ...x.data, savedNote } } : x)))
                       }
                     />
                     <RatingButtons

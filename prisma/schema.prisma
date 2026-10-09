@@ -1113,3 +1113,24 @@ model ToolRating {
   @@index([tool, rating, createdAt])
   @@index([createdAt])
 }
+
+// A kept conversation (SPEC.md §21): the turns of one assistant surface that
+// keeps no note of its own — the media assistant, Ask about a range, Stitch,
+// and the note's assistant — for one account at one place, so the
+// conversation survives leaving the page, a reload, and another device. One
+// row per account per project per place ("media:<documentId>",
+// "ask:<documentId>", "stitch", "note:<noteId>"). It stays until the account
+// clears it (Clear conversation). Soft references like Notebook.userId: no
+// cascade reaches it, and no other account reads it.
+model KeptChat {
+  id         String   @id @default(cuid())
+  userId     String
+  notebookId String
+  place      String
+  turns      Json // [{role: "user" | "assistant", content, data?}], oldest first
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, notebookId, place])
+  @@index([notebookId])
+}

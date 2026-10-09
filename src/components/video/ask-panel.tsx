@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api";
 import { splitStreamError } from "@/lib/derive/config";
 import { useImeGuard } from "@/lib/ime";
@@ -13,11 +13,27 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { formatTime, parseTimeInput } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
 
 // Ask about a range (SPEC.md §11): the reader names a start and an end time
 // and asks a question; the model answers from the transcript inside that
-// range and streams the answer here. Nothing persists: "Add to notes" lands
-// the answer as a PENDING note with a time source for the range.
+// range and streams the answer here. The question and its answer are kept
+// for the account per document (lib/kept-chat.ts), so closing the card,
+// leaving the page, or a reload keeps them; Clear conversation removes them.
+// "Add to notes" lands the answer as a PENDING note with a time source for
+// the range.
+type Range = { startTime: number; endTime: number };
+type AskTurn = KeptTurn & { data?: { range?: Range; saved?: boolean } };
+type Answer = { text: string; range: Range; question: string; saved: boolean };
+
+/** The kept question and answer, as the card draws them; null with none. */
+function answerOf(turns: AskTurn[]): Answer | null {
+  const answer = turns[turns.length - 1];
+  const question = turns[turns.length - 2];
+  if (!answer || answer.role !== "assistant" || !question || !answer.data?.range) return null;
+  return { text: answer.content, range: answer.data.range, question: question.content, saved: answer.data.saved === true };
+}
 export function AskRange({
   notebookId,
   documentId,
@@ -47,20 +63,25 @@ export function AskRange({
   const [startTime, setStartTime] = useState(formatTime(defaultStart));
   const [endTime, setEndTime] = useState(formatTime(defaultEnd));
   const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [answer, setAnswer] = useState<{
-    text: string;
-    range: { startTime: number; endTime: number };
-    question: string;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  function stop() {
-    abortRef.current?.abort();
+  const kept = useKeptChat<AskTurn>(notebookId, `ask:${documentId}`, "replace");
+  const busy = kept.busy;
+  const answer = answerOf(kept.turns);
+  const saved = answer?.saved === true;
+  const { setTurns } = kept;
+  /** The answer on screen: a new one, a change to it, or none. */
+  function setAnswer(update: (a: Answer | null) => Answer | null) {
+    setTurns((turns) => {
+      const next = update(answerOf(turns));
+      if (!next) return [];
+      return [
+        { role: "user", content: next.question },
+        { role: "assistant", content: next.text, data: { range: next.range, saved: next.saved } },
+      ];
+    });
   }
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const stop = kept.stop;
 
   async function ask() {
     const q = question.trim();
@@ -78,11 +99,8 @@ export function AskRange({
   async function run(q: string, range: { startTime: number; endTime: number }) {
     if (busy || !hasTranscript) return;
     setError(null);
-    setSaved(false);
-    setBusy(true);
-    setAnswer({ text: "", range, question: q });
-    const controller = new AbortController();
-    abortRef.current = controller;
+    setAnswer(() => ({ text: "", range, question: q, saved: false }));
+    const controller = kept.begin();
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -106,7 +124,7 @@ export function AskRange({
       }
       const { text, error: streamError } = splitStreamError(raw);
       if (streamError || !text.trim()) {
-        setAnswer(null);
+        setAnswer(() => null);
         throw new Error(streamError ?? t("video.assistantNoReply"));
       }
       setAnswer((a) => (a ? { ...a, text } : a));
@@ -118,8 +136,7 @@ export function AskRange({
       }
       setError(err instanceof Error ? err.message : t("video.askFailed"));
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setBusy(false);
+      kept.end(controller);
     }
   }
 
@@ -135,7 +152,7 @@ export function AskRange({
         video: { documentId, ...answer.range },
         origin: "ask",
       });
-      setSaved(true);
+      setAnswer((a) => (a ? { ...a, saved: true } : a));
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("video.saveFailed"));
@@ -167,15 +184,17 @@ export function AskRange({
           aria-label={t("video.endTime")}
           className={timeInput}
         />
+        {answer && !busy && (
+          <ClearConversation onClear={kept.clear} track="video-ask-clear" className="ml-auto" />
+        )}
         <button
-          onClick={() => {
-            stop();
-            onClose();
-          }}
+          // A running answer keeps running: it lands in the kept
+          // conversation, and the card shows it when it opens again.
+          onClick={onClose}
           data-track="video-ask-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="ml-auto rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+          className={`${answer && !busy ? "" : "ml-auto "}rounded-full px-1.5 text-sand-500 hover:text-clay-800`}
         >
           ✕
         </button>

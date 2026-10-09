@@ -777,7 +777,7 @@ const NoteCardBody = memo(function NoteCardBody({
         </div>
         {/* The note's assistant (SPEC.md §6), docked at the bottom: a change
             it proposes lands in the draft on Apply. */}
-        {canEdit && <NoteAssistant noteId={note.id} draft={draft} onApply={setDraft} className="mt-2.5" />}
+        {canEdit && <NoteAssistant notebookId={notebookId} noteId={note.id} draft={draft} onApply={setDraft} className="mt-2.5" />}
       </div>
     );
   }
