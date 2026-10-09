@@ -11,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
+import { decodeTextFile } from "@/lib/parse/charset";
 import type { ParsedDocument } from "@/lib/parse/types";
 import { inlineTexText, parseHtmlContent } from "@/lib/parse/url";
 
@@ -422,10 +423,12 @@ export function markdownToHtml(
   return { html, title, titleFromFile: ownTitle === null };
 }
 
-/** A Markdown or text file's bytes as text: the add and the re-parse read
-    the file the same way (scripts/parse-bench/markdown.mts measures it). */
+/** A Markdown or text file's bytes as text, in the charset the bytes say
+    (decodeTextFile, lib/parse/charset.ts: UTF-8, UTF-16, or a legacy one):
+    the add and the re-parse read the file the same way
+    (scripts/parse-bench/markdown.mts measures it). */
 export function markdownFileText(bytes: Uint8Array): string {
-  return new TextDecoder("utf-8").decode(bytes);
+  return decodeTextFile(bytes);
 }
 
 /** A Markdown file's blocks: the same walk a web page takes, no model pass,

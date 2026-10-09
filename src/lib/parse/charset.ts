@@ -77,3 +77,196 @@ export function decodePage(bytes: Uint8Array, contentType?: string | null): stri
   }
   return new TextDecoder(charsets[0]).decode(bytes);
 }
+
+// ── A text file's charset ───────────────────────────────────────────────────
+// A Markdown or text file declares no charset: the bytes say it. The byte
+// order mark first (UTF-8, UTF-16); then UTF-16 with no mark (a NUL beside
+// every ASCII character); then UTF-8 when every byte reads as UTF-8 (a file
+// that does reads exactly as before). Else the file is in a legacy charset
+// (Windows' and the old Unix ones: Latin-1, Central European, Cyrillic,
+// Greek, Shift_JIS, EUC-JP, GBK, Big5, EUC-KR), and each is tried on the
+// file's start and scored by how its text reads: the letters past ASCII
+// are mostly small letters in a word of one script, an ideograph or a
+// Hangul syllable among the most used ones, a kana; a replacement
+// character, a control, a capital inside a small-letter word, or a symbol
+// inside a word reads as wrong. Before, every file read as UTF-8, and a
+// file saved in another charset read with every letter past ASCII as the
+// replacement character, and a UTF-16 file as noise. Markdown benchmark
+// finding: the Vim tutor in eleven legacy charsets, Python's CJK codec
+// samples, and Windows' UTF-16 and Windows-1252 files lost 10 to 99% of
+// their words.
+
+const TEXT_SAMPLE_BYTES = 64 * 1024;
+
+// The charsets a text file not wholly UTF-8 is tried in, the most common
+// first: a tie keeps the earlier. UTF-8 is one: a UTF-8 file with a stray
+// byte reads as UTF-8 with one replacement character, as before.
+const LEGACY_TEXT_CHARSETS = [
+  "utf-8",
+  "windows-1252",
+  "shift_jis",
+  "euc-jp",
+  "gb18030",
+  "big5",
+  "euc-kr",
+  "iso-8859-2",
+  "windows-1250",
+  "windows-1251",
+  "koi8-r",
+  "iso-8859-7",
+];
+
+// The most used ideographs and Hangul syllables: in a text read in its own
+// charset they are a large share of its ideographs; in a text read in the
+// wrong one, the ideographs fall anywhere in the table.
+const COMMON_HAN = new Set(
+  "的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三已老从动两长知民样现分将外但身些与高意进把法此实回二理美点月明其种声全工己话儿者向情部正名定女问力机给等几很业最间新什打便位因重被走电四第门相次东政海口使教西再平真听世气信北少关并内加化由却代军产入先山五太水万市眼体别处总才场师书比住员九笑性通目华报立马命张活难神数件安表原车白应路期叫死常提感金何更反合放做系计或司利受光王果亲界及今京务制解各任至清物台象记边共风战干接它许八特觉望直服毛林题建南度统色字请交爱让认算论百吃义科怎元社术结六功指思非流每青管夫连远资队跟带花快条院变联言权往展该领传近留红治决周保达办运武半候七必城父强步完革深区" +
+    "這個們來說為會時對裡後麼過學發開見經頭動兩長樣現將與實點種聲話兒問機給幾業間電門東關軍產萬體別處總場師書員華報馬張難數車應條變聯權領傳紅決達辦運強區無從認論義術結視專還讓計記邊戰許覺題統請愛輸鍵標刪除移單語檔" +
+    "気本語行末削挿押戻消練習課読編集画面確実注意場合使用終了次示表移単語文字入力変更保存始操作" ,
+);
+const COMMON_HANGUL = new Set(
+  "이다는의에가고하을를한지로서도기나사인리어수게자해대일만으적요시것그라들보정부있없면니아주우제상과전와되말성데동문국무오장내소연화생경여구비신위중진계저습할까거히공원회관개실마드모때년분했었람같안알음법터처및래려났봐줄함각업명발입력커삭제및키행단어줄파일명령",
+);
+
+function isSmallLetter(c: string): boolean {
+  return c !== c.toUpperCase() && c === c.toLowerCase();
+}
+function isCapital(c: string): boolean {
+  return c !== c.toLowerCase() && c === c.toUpperCase();
+}
+const LETTER_RX = /\p{L}/u;
+const SCRIPT_OF: [RegExp, string][] = [
+  [/\p{sc=Latin}/u, "latin"],
+  [/\p{sc=Cyrillic}/u, "cyrillic"],
+  [/\p{sc=Greek}/u, "greek"],
+];
+function scriptOf(c: string): string | null {
+  for (const [rx, name] of SCRIPT_OF) if (rx.test(c)) return name;
+  return null;
+}
+
+type CharKind = { letter: boolean; script: string | null; small: boolean; capital: boolean };
+const CHAR_KINDS = new Map<string, CharKind>();
+function kindOf(c: string): CharKind {
+  let kind = CHAR_KINDS.get(c);
+  if (!kind) {
+    const letter = LETTER_RX.test(c);
+    kind = { letter, script: letter ? scriptOf(c) : null, small: isSmallLetter(c), capital: isCapital(c) };
+    CHAR_KINDS.set(c, kind);
+  }
+  return kind;
+}
+
+// The Latin-1 signs a Western text uses: they read as right where they stand
+// (a short Windows-1252 file with one ©, °, or ¿ otherwise reads better as
+// Central European, or as GBK with the sign and the next letter one
+// ideograph).
+const LATIN1_SIGNS = new Set("\u00A0¡¢£¤¥§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷€‚„…†‡‰‹›‘’“”•–—™");
+
+/** How well a decoded text reads: higher is better. */
+function readingScore(text: string): number {
+  let score = 0;
+  let prev = kindOf(" ");
+  let prevHigh = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const code = c.charCodeAt(0);
+    const kind = kindOf(c);
+    if (code < 0x80) {
+      // An ASCII capital right after a small letter past ASCII.
+      if (prevHigh && prev.small && kind.capital) score -= 3;
+      prev = kind;
+      prevHigh = false;
+      continue;
+    }
+    if (c === "�") score -= 10;
+    else if (code <= 0x9f) score -= 5;
+    else if (LATIN1_SIGNS.has(c)) score += 0;
+    else if (code >= 0x3040 && code <= 0x30ff) score += 2;
+    else if (code >= 0xac00 && code <= 0xd7a3) score += COMMON_HANGUL.has(c) ? 2 : -0.5;
+    else if (code >= 0x4e00 && code <= 0x9fff) score += COMMON_HAN.has(c) ? 2 : -0.5;
+    else if ((code >= 0xe000 && code <= 0xf8ff) || (code >= 0x3400 && code <= 0x4dbf)) score -= 3;
+    else if (code >= 0xff61 && code <= 0xff9f) score -= 0.5;
+    else if (kind.letter) {
+      // A letter of another script inside a word, or a capital after a
+      // small letter, reads as wrong; so does a capital standing alone.
+      const next = kindOf(text[i + 1] ?? " ");
+      if (prev.script && kind.script && prev.script !== kind.script) score -= 3;
+      if (kind.small) score += 1;
+      else if (kind.capital) score += prev.small ? -3 : !prev.letter && !next.letter ? -1 : 0.3;
+    } else if (prev.letter && kindOf(text[i + 1] ?? " ").letter) {
+      // A symbol inside a word.
+      score -= 3;
+    } else score -= 0.2;
+    prev = kind;
+    prevHigh = true;
+  }
+  return score;
+}
+
+// Windows-1252's characters at 0x80–0x9F (a hole reads as its C1 code point,
+// as the WHATWG decoder reads it). Node's TextDecoder("windows-1252") reads
+// these bytes as Latin-1's C1 controls (Node 22): a curly apostrophe, a
+// dash, an euro sign read as nothing.
+const WINDOWS_1252_HIGH =
+  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
+
+function decodeIn(label: string, bytes: Uint8Array): string {
+  if (label !== "windows-1252") return new TextDecoder(label).decode(bytes);
+  return new TextDecoder("windows-1252").decode(bytes).replace(/[\u0080-\u009f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]);
+}
+
+/** UTF-16 with no byte order mark: a NUL beside most characters of the
+    start, on the even bytes (big-endian) or the odd ones (little-endian). */
+function utf16Shape(bytes: Uint8Array): "utf-16le" | "utf-16be" | null {
+  const n = Math.min(bytes.length, 4096) & ~1;
+  if (n < 4) return null;
+  let even = 0;
+  let odd = 0;
+  for (let i = 0; i < n; i += 2) {
+    if (bytes[i] === 0) even++;
+    if (bytes[i + 1] === 0) odd++;
+  }
+  const pairs = n / 2;
+  if (odd >= pairs * 0.4 && even <= pairs * 0.05) return "utf-16le";
+  if (even >= pairs * 0.4 && odd <= pairs * 0.05) return "utf-16be";
+  return null;
+}
+
+/** The charset a text file is in (see above). */
+export function textFileCharset(bytes: Uint8Array): string {
+  const bom = bomCharset(bytes);
+  if (bom) return bom;
+  const wide = utf16Shape(bytes);
+  if (wide) return wide;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return "utf-8";
+  } catch {
+    // Not UTF-8: a legacy charset.
+  }
+  // The sample ends at a line end, so no charset reads half a character.
+  let end = Math.min(bytes.length, TEXT_SAMPLE_BYTES);
+  if (end < bytes.length) {
+    const nl = bytes.lastIndexOf(0x0a, end);
+    if (nl > 0) end = nl + 1;
+  }
+  const sample = bytes.subarray(0, end);
+  let best = "utf-8";
+  let bestScore = -Infinity;
+  for (const label of LEGACY_TEXT_CHARSETS) {
+    if (!decoderFor(label, false)) continue;
+    const score = readingScore(decodeIn(label, sample));
+    if (score > bestScore) {
+      best = label;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/** A text file's text from its bytes, in the charset textFileCharset finds.
+    The byte order mark is not text. */
+export function decodeTextFile(bytes: Uint8Array): string {
+  return decodeIn(textFileCharset(bytes), bytes);
+}
