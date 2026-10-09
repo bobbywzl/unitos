@@ -209,7 +209,10 @@ export function CoverageHead({
   const unopened = docs.filter((d) => !d.opened).length;
   const press = (which: DocumentsListing) => onListing?.(listing === which ? "rows" : which);
   // [panel6] VIEW6-07: the counts are text, "·" between them; Gaps only is the one pill.
-  const counts = [
+  // [view10] VIEW10-02: two groups, each kept whole on a line: what the notes
+  // cover (parts, not opened), then what other people wrote (comments,
+  // waiting, new). A line breaks between the groups, never after a "·".
+  const cover = [
     parts > 0 && (
       <span key="parts" data-graph-coverage-parts={`${noted}/${parts}`} data-tip={t("graphCover.headPartsTitle")}>
         {t("graphCover.headParts", { n: noted, m: parts })}
@@ -222,18 +225,26 @@ export function CoverageHead({
     >
       {t("graphCover.headUnopened", { n: unopened })}
     </span>,
+  ].filter(Boolean);
+  const people = [
     // [lists8] WALK8-02: the open comments, a press that lists them all.
+    // [view10] VIEW10-02: the chip form, as on the node and the card: the
+    // comment mark and the count; the words are the name and the tooltip.
     open.length > 0 && (
       <button
         key="comments"
         onClick={() => press("comments")}
         aria-pressed={listing === "comments"}
+        aria-label={open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length })}
         data-graph-coverage-comments-all={open.length}
         data-track="graph-documents-comments-all"
-        data-tip={t("graphCover.commentsAllTitle")}
-        className={`${TEXT_HIT} font-semibold text-[var(--kind-comment)] hover:underline ${listing === "comments" ? "underline" : ""}`}
+        data-tip={`${open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length })}. ${t("graphCover.commentsAllTitle")}`}
+        className={`${TEXT_HIT} -mx-1 px-1 font-semibold text-[var(--kind-comment)] hover:underline pointer-coarse:-mx-3 pointer-coarse:px-3 ${listing === "comments" ? "underline" : ""}`}
       >
-        {open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length })}
+        <span className="inline-flex items-center gap-0.5 align-bottom">
+          <CommentIcon size={10} />
+          {open.length}
+        </span>
       </button>
     ),
     // [lists7] WALK7-04: said only when something waits. [style9] VIEW9-05,
@@ -262,14 +273,24 @@ export function CoverageHead({
   ].filter(Boolean);
   return (
     <div data-graph-coverage-head className="flex items-center gap-2">
-      <p className={`min-w-0 flex-1 ${TEXT_META} leading-snug text-sand-600 tabular-nums`}>
-        {/* [style8] VIEW8-03: a line breaks at a "·", never inside a count. */}
-        {counts.map((c, i) => (
-          <span key={i}>
-            {i > 0 && <span className="text-sand-400"> · </span>}
-            <span className="whitespace-nowrap">{c}</span>
-          </span>
-        ))}
+      <p className={`flex min-w-0 flex-1 flex-wrap gap-x-2 ${TEXT_META} leading-snug text-sand-600 tabular-nums`}>
+        {/* [style8] VIEW8-03: a line breaks at a "·", never inside a count.
+            [view10] VIEW10-02: each group is one line; a break falls between them. */}
+        {[cover, people]
+          .filter((g) => g.length > 0)
+          .map((g, gi) => (
+            // The space between the groups is for a screen reader (a flex
+            // row draws no whitespace text); gap-x-2 is the visible gap.
+            <span key={gi} className="whitespace-nowrap">
+              {gi > 0 && " "}
+              {g.map((c, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="text-sand-400"> · </span>}
+                  {c}
+                </span>
+              ))}
+            </span>
+          ))}
       </p>
       {/* [style9] WALK9-08: Gaps only is about the rows; while a listing
           shows in their place it is off (the rows come back with it). */}

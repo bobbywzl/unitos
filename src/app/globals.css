@@ -2022,6 +2022,13 @@ ellipse.anchor-flash {
 .corpus-graph .react-flow__controls-button:hover {
   background: var(--sand-200);
 }
+/* [view10] VIEW10-09: under a finger the zoom stack's buttons are 40 px, not 26×27. */
+@media (pointer: coarse) {
+  .corpus-graph .react-flow__controls-button {
+    width: 40px;
+    height: 40px;
+  }
+}
 .corpus-graph .react-flow__controls-button svg {
   fill: currentColor;
 }
@@ -2102,19 +2109,24 @@ ellipse.anchor-flash {
     transform 0.2s ease,
     box-shadow 0.2s ease;
 }
+/* [view10] VIEW10-06: the opacity blends the stroke into the paper. A one-link
+   clay-600 curve at 0.7 read 2.43:1 on light paper (3.86 dark); at 0.85 it
+   reads 3.24:1 light, 5.56 dark. Recommended dashes, sand-500 at 0.45, read
+   1.44:1 light and 1.74 dark; sand-700 at 0.7 reads 2.98 light, 4.96 dark. */
 .corpus-graph .graph-curve {
-  opacity: 0.7;
+  opacity: 0.85;
   transition: opacity 0.25s ease;
 }
 .corpus-graph .graph-curve[data-rec] {
-  opacity: 0.45;
+  opacity: 0.7;
 }
 .corpus-graph .graph-curve-stroke {
   stroke-width: var(--w);
   transition: stroke-width 0.25s ease;
 }
 .corpus-graph .graph-note-curve {
-  opacity: 0.8;
+  /* [view10] VIEW10-06: sage-600 at 0.9 reads 3.02:1 light, 5.34 dark (sage-500 at 0.8 read 1.95 light). */
+  opacity: 0.9;
   transition: opacity 0.25s ease;
 }
 .corpus-graph .graph-note-stroke {

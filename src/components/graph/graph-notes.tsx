@@ -651,7 +651,7 @@ export function NoteEdge({
   return (
     <g data-graph-note-curve={id} className="graph-note-curve">
       <title>{t("graphNotes.noteCurveHint")}</title>
-      <path d={path} fill="none" stroke="var(--sage-500)" strokeLinecap="round" strokeDasharray="1.5 6" className="graph-note-stroke" />
+      <path d={path} fill="none" stroke="var(--sage-600)" /* [view10] VIEW10-06 */ strokeLinecap="round" strokeDasharray="1.5 6" className="graph-note-stroke" />
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
       <CurveMarks
         pair={id}

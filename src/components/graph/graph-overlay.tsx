@@ -1021,6 +1021,7 @@ export function GraphOverlay({
         <NoteGatherDock
           notebookId={notebookId}
           onOpenDocument={leave}
+          onOpenLink={(linkId) => openLink(linkId, "links") /* [view10] VIEW10-01 */}
           findWords={view2.find.query /* [lists8] WALK7-13 */}
           onWritePage={
             canEdit

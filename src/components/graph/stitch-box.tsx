@@ -452,9 +452,26 @@ export function StitchBox({
         {canEdit && (
           <>
             {headSaysCommand ? (
-              <span data-stitch-last-command data-tip={lastCommand} className="min-w-0 max-w-[50%] truncate text-sand-600">
-                {lastCommand}
-              </span>
+              // [view10] VIEW10-04: the last command is the unfold press, its
+              // chevron inside; it shrinks before Pick and Clear wrap (44 px
+              // under a finger). The tooltip and the unfolded turn hold the words.
+              <button
+                type="button"
+                onClick={() => {
+                  setTurnsFolded(false);
+                  // The press goes with the fold: the focus moves to the
+                  // chevron that takes its place (keyboard, VIEW10-08).
+                  requestAnimationFrame(() => regionRef.current?.querySelector<HTMLElement>('[data-track="stitch-collapse"]')?.focus());
+                }}
+                data-stitch-last-command
+                data-track="stitch-collapse"
+                aria-expanded={false}
+                data-tip={`${lastCommand} — ${t("stitch.stitchExpand")}`}
+                className="-my-0.5 flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded-full px-1.5 text-left text-sand-600 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:min-h-11"
+              >
+                <span className="min-w-0 flex-1 truncate">{lastCommand}</span>
+                <ChevronDownIcon size={15} className="shrink-0 rotate-180 text-sand-500" />
+              </button>
             ) : (
               <span className="font-semibold text-sand-700">
                 {picked.length === 1
@@ -504,24 +521,28 @@ export function StitchBox({
           <ClearConversation onClear={kept.clear} track="stitch-clear" className="ml-auto" />
         )}
         {/* [style9] REV8-05: the one fold button: folded on kept turns, it
-            unfolds the conversation; else it folds the box to the pill. */}
-        <button
-          onClick={() => {
-            if (folded) {
-              setTurnsFolded(false);
-              return;
-            }
-            setOpen(false);
-            onPickingChange(false);
-            setPassage(null);
-          }}
-          data-track="stitch-collapse"
-          aria-label={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
-          data-tip={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
-          className={`${turns.length > 0 && !running ? "" : "ml-auto "}-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-7`}
-        >
-          <ChevronDownIcon size={15} className={folded ? "rotate-180" : undefined} />
-        </button>
+            unfolds the conversation; else it folds the box to the pill.
+            [view10] VIEW10-04: when the head says the last command, that
+            press unfolds, and this button is not drawn. */}
+        {!(folded && headSaysCommand) && (
+          <button
+            onClick={() => {
+              if (folded) {
+                setTurnsFolded(false);
+                return;
+              }
+              setOpen(false);
+              onPickingChange(false);
+              setPassage(null);
+            }}
+            data-track="stitch-collapse"
+            aria-label={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
+            data-tip={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
+            className={`${turns.length > 0 && !running ? "" : "ml-auto "}-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-11`}
+          >
+            <ChevronDownIcon size={15} className={folded ? "rotate-180" : undefined} />
+          </button>
+        )}
       </div>
 
       {(turns.length > 0 || pending) && !folded && (

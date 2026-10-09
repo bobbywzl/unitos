@@ -246,6 +246,7 @@ export function NoteGatherDock({
   boxOpen = false,
   onFoldBox,
   findWords = "",
+  onOpenLink,
 }: {
   notebookId: string;
   /** [lists8] WALK7-13: Find's words: a long quote's chip shows the part around them. */
@@ -257,6 +258,9 @@ export function NoteGatherDock({
   /** The Stitch box is open (its fold), and how to fold it. */
   boxOpen?: boolean;
   onFoldBox?: () => void;
+  /** [view10] VIEW10-01: one link's two ends in the note draw as one row that
+      opens the link's panel; the panel's In the note takes an end out. */
+  onOpenLink?: (linkId: string) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -414,11 +418,19 @@ export function NoteGatherDock({
         data-track="graph-note-gather-write-page"
         aria-label={t("graphCover.composerWritePage")}
         data-tip={`${t("graphCover.composerWritePage")}. ${t("graphCover.composerWritePageTitle")}`}
-        className="flex size-6 items-center justify-center rounded-full text-[var(--kind-assistant)] hover:bg-[color-mix(in_srgb,var(--kind-assistant)_10%,transparent)]"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-[var(--kind-assistant)] hover:bg-[color-mix(in_srgb,var(--kind-assistant)_10%,transparent)] pointer-coarse:size-11"
       >
         <SparkleIcon size={13} />
       </button>
     ) : null;
+
+  // [view10] VIEW10-01: one link's two ends alone (Note on this link) draw as
+  // one row; any other quotes draw one row each.
+  const linkPair =
+    gather.quotes.length === 2 && gather.quotes[0].linkId && gather.quotes.every((q) => q.linkId === gather.quotes[0].linkId)
+      ? gather.quotes[0].linkId
+      : null;
+  const titleOf = (documentId: string) => ctx.titleOf.get(documentId) ?? "";
 
   // The saved line: alone after a save, or at the head of the next note's
   // composer when words or quotes came after the ones sent.
@@ -470,14 +482,11 @@ export function NoteGatherDock({
       style={place}
     >
       {!compact && savedRow}
-      <div className="flex items-center gap-2">
-        <NotesIcon size={13} />
-        <p className={`min-w-0 flex-1 truncate ${TEXT_BODY}`}>
-          <span className="font-semibold text-ink">{t("graphCover.composerTitle")}</span>
-          <span data-graph-note-gather-summary className="text-sand-600"> · {summary}</span>
-        </p>
-        {writePageButton}
+      {/* [view10] VIEW10-01: the title row is the fold press, 44 px under a
+          finger, with the chevron at its end; the sparkle sits beside it. */}
+      <div className="flex items-center gap-1">
         <button
+          type="button"
           onClick={() => {
             // Folded over the Stitch box: unfolding folds the box (WALK5-12).
             if (compact) {
@@ -486,13 +495,18 @@ export function NoteGatherDock({
             } else gather.setOpen(!gather.open);
           }}
           aria-expanded={gather.open && !compact}
-          aria-label={t(gather.open && !compact ? "graphCover.composerFold" : "graphCover.composerUnfold")}
           data-tip={t(gather.open && !compact ? "graphCover.composerFold" : "graphCover.composerUnfold")}
           data-track="graph-note-gather-fold"
-          className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-ml-1 flex min-h-6 min-w-0 flex-1 items-center gap-2 rounded-full px-1 text-left hover:bg-clay-100 pointer-coarse:min-h-11 pointer-coarse:px-2 ${TEXT_BODY}`}
         >
-          <ChevronDownIcon size={13} className={gather.open && !compact ? "" : "rotate-180"} />
+          <NotesIcon size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-semibold text-ink">{t("graphCover.composerTitle")}</span>
+            <span data-graph-note-gather-summary className="text-sand-600"> · {summary}</span>
+          </span>
+          <ChevronDownIcon size={13} className={`shrink-0 text-sand-500 ${gather.open && !compact ? "" : "rotate-180"}`} />
         </button>
+        {writePageButton}
       </div>
       {gather.open && !compact && (
         <form
@@ -511,7 +525,7 @@ export function NoteGatherDock({
                 value={chosen?.id ?? ""}
                 onChange={(e) => gather.setSectionId(e.target.value)}
                 data-track="graph-note-gather-section"
-                className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 ${TEXT_BODY} text-ink`}
+                className={`min-h-6 min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 ${TEXT_BODY} text-ink pointer-coarse:min-h-11`}
               >
                 {choices.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -521,10 +535,28 @@ export function NoteGatherDock({
               </select>
             </label>
           )}
-          <ul data-graph-note-gather-quotes className="flex max-h-[168px] flex-col gap-1 overflow-y-auto overscroll-contain">
-            {gather.quotes.map((q) => (
-              <li key={keyOf(q)} data-graph-note-gather-quote={q.documentId} className="flex items-start gap-1.5 rounded-xl bg-sand-100 px-2 py-1">
-                <span className={`min-w-0 flex-1 ${TEXT_META} leading-snug text-sand-700`}>
+          {linkPair && onOpenLink ? (
+            // [view10] VIEW10-01: Note on this link: the two ends as one row, a
+            // press that opens the link's panel (its In the note takes an end
+            // out; Discard drops the note). No ✕ per end.
+            <button
+              type="button"
+              onClick={() => onOpenLink(linkPair)}
+              data-graph-note-gather-quote={gather.quotes.map((q) => q.documentId).join(" ")}
+              data-graph-note-gather-link={linkPair}
+              data-track="graph-note-gather-link"
+              data-tip={t("graphCover.composerLinkPairTitle")}
+              className={`flex min-h-6 items-center rounded-xl bg-sand-100 px-2 py-1 text-left ${TEXT_META} leading-snug text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:min-h-11`}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {t("graphCover.composerLinkPair", { a: titleOf(gather.quotes[0].documentId), b: titleOf(gather.quotes[1].documentId) })}
+              </span>
+            </button>
+          ) : (
+            <ul data-graph-note-gather-quotes className="flex max-h-[168px] flex-col gap-1 overflow-y-auto overscroll-contain">
+              {gather.quotes.map((q) => (
+                // [view10] VIEW10-01: the row is the press that opens the passage (44 px under a finger); ✕ beside it, as tall.
+                <li key={keyOf(q)} data-graph-note-gather-quote={q.documentId} className="flex items-center gap-1 rounded-xl bg-sand-100 pr-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -532,25 +564,27 @@ export function NoteGatherDock({
                       onOpenDocument();
                     }}
                     data-tip={t("graphCover.composerOpenQuote")}
-                    className={`mr-1 inline-block max-w-40 truncate rounded-full bg-sand-200 px-1.5 align-bottom ${TEXT_META} font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
+                    className={`min-h-6 min-w-0 flex-1 rounded-xl px-2 py-1 text-left ${TEXT_META} leading-snug text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:min-h-11`}
                   >
-                    {ctx.titleOf.get(q.documentId) ?? ""}
+                    <span className={`mr-1 inline-block max-w-40 truncate rounded-full bg-sand-200 px-1.5 align-bottom ${TEXT_META} font-semibold text-sand-700`}>
+                      {titleOf(q.documentId)}
+                    </span>
+                    {q.whole ? <span className="font-semibold">¶ {q.text}</span> : chipText(q.text, findWords)}
                   </button>
-                  {q.whole ? <span className="font-semibold">¶ {q.text}</span> : chipText(q.text, findWords)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => gather.remove(q)}
-                  aria-label={t("graphCover.composerRemove")}
-                  data-tip={t("graphCover.composerRemove")}
-                  data-track="graph-note-gather-quote-remove"
-                  className="flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <button
+                    type="button"
+                    onClick={() => gather.remove(q)}
+                    aria-label={t("graphCover.composerRemove")}
+                    data-tip={t("graphCover.composerRemove")}
+                    data-track="graph-note-gather-quote-remove"
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-11"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <textarea
             value={gather.content}
             onChange={(e) => gather.setContent(e.target.value)}

@@ -48,6 +48,9 @@ const en = {
   cardHintOpen: "Click to open · right-click or long press for its card · ⇧-click to pick for Stitch",
   gesturesOpen:
     "Click a node to open it · right-click or long press for its card · ⇧-click to pick it for Stitch · drag to move · scroll to pan · pinch or Ctrl+scroll to zoom",
+  // [view10] VIEW10-03: a touch screen has no ⇧-click, right-click, arrow keys, or Ctrl+scroll.
+  gesturesTouchSelect: "Tap a node for its card, tap again to open it · Pick documents in the Stitch box, then tap nodes · pinch to zoom",
+  gesturesTouchOpen: "Tap a node to open it, long press for its card · Pick documents in the Stitch box, then tap nodes · pinch to zoom",
 
   // The last Stitch answer on the graph
   fromLastAnswer: "From the last Stitch answer",
@@ -116,6 +119,8 @@ const zh: Record<keyof typeof en, string> = {
   cardHintOpen: "点击打开 · 右键或长按查看卡片 · ⇧-点击为缝合选取",
   gesturesOpen:
     "点击节点打开 · 右键或长按查看卡片 · ⇧-点击为缝合选取 · 拖动可移动 · 滚动可平移 · 双指捏合或 Ctrl+滚动可缩放",
+  gesturesTouchSelect: "轻点节点查看卡片，再点一次打开 · 在缝合框按“选取文档”后轻点节点 · 双指捏合可缩放",
+  gesturesTouchOpen: "轻点节点打开，长按查看卡片 · 在缝合框按“选取文档”后轻点节点 · 双指捏合可缩放",
   fromLastAnswer: "来自上一次缝合回答",
   findLabel: "在项目中查找",
   findPlaceholder: "在所有文档中查找词语…",

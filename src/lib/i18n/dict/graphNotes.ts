@@ -22,11 +22,12 @@ const en = {
   // How to read the graph: the curve marks (WALK4-13).
   keyCurveCount: "The number of links between two documents",
   // [style9] VIEW9-01: the "?" on a curve, as on a node's comments chip.
-  keyCurveReplies: "Open replies on the links between two documents; ? when one waits on you",
+  // [view10] VIEW10-03: the ? and the far-zoom ring are explained once, in graphCover.keyWaiting.
+  keyCurveReplies: "Open replies on the links between two documents",
   keyCurveNotes: "Notes that quote both documents",
   keyPending: "Pending notes, awaiting Accept",
   keyNotesGroup: "Notes and comments",
-  keyFar: "Zoomed out, link counts and notes show on a lit curve and in the cards; replies always show. A comment waiting on you draws the ring in comment blue.",
+  keyFar: "Zoomed out, link counts and notes hide until a curve is lit; replies stay.",
   noteCurveLabelOne: "1 note quotes {a} and {b}",
   noteCurveLabel: "{n} notes quote {a} and {b}",
   showNote: "Show this note in the notes tray",
@@ -89,11 +90,11 @@ const zh: Record<keyof typeof en, string> = {
   pairNotesTitle: "同时引用这两个文档的笔记",
   noteCurveHint: "有笔记同时引用这两个文档",
   keyCurveCount: "两个文档之间的链接数",
-  keyCurveReplies: "两个文档之间链接上的未解决回复；有一条待你回复时显示 ?",
+  keyCurveReplies: "两个文档之间链接上的未解决回复",
   keyCurveNotes: "同时引用这两个文档的笔记",
   keyPending: "待定笔记，等待接受",
   keyNotesGroup: "笔记和评论",
-  keyFar: "缩小视图时，链接数和笔记显示在点亮的曲线上和卡片里；回复始终显示，有评论待你回复的文档会用评论颜色画出它的环。",
+  keyFar: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。",
   noteCurveLabelOne: "1 条笔记同时引用 {a} 和 {b}",
   noteCurveLabel: "{n} 条笔记同时引用 {a} 和 {b}",
   showNote: "在笔记栏中显示这条笔记",

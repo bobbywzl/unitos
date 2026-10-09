@@ -55,7 +55,7 @@ import {
 import { LinkReplyCount } from "@/components/graph/link-replies";
 // [/graph-notes]
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
-import { useGraphContent } from "@/components/graph/graph-content";
+import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
 import { CoverageRing, useDocumentCoverage, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
@@ -420,7 +420,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       <path
         d={path}
         fill="none"
-        stroke={recommendedOnly ? "var(--sand-500)" : gradient ? `url(#${gradientId})` : edgeTone(depth * 0.8)}
+        stroke={recommendedOnly ? "var(--sand-700)" /* [view10] VIEW10-06 */ : gradient ? `url(#${gradientId})` : edgeTone(depth * 0.8)}
         strokeLinecap="round"
         strokeDasharray={recommendedOnly ? "5 7" : undefined}
         className={recommendedOnly && !plain ? "graph-curve-stroke graph-dash-march" : "graph-curve-stroke"}
@@ -823,6 +823,7 @@ function GraphKey({
 }) {
   const t = useT();
   const { clickSelects } = useGraphContent(); // [view2]
+  const coarse = useCoarsePointer(); // [view10] VIEW10-03: the gestures line for a finger
   const row = (mark: ReactNode, key: Parameters<typeof t>[0]) => (
     <li className="flex items-center gap-2">
       <span className="flex w-7 shrink-0 items-center justify-center">{mark}</span>
@@ -838,7 +839,7 @@ function GraphKey({
   const dot = (cls: string) => <span className={`block size-3.5 border-2 border-card ${cls}`} />;
   const line = (dashed: boolean, w: number) => (
     <svg width="28" height="10" aria-hidden>
-      <path d="M2 5 Q14 1 26 5" fill="none" stroke={dashed ? "var(--sand-500)" : "var(--clay-600)"} strokeWidth={w} strokeDasharray={dashed ? "4 4" : undefined} strokeLinecap="round" />
+      <path d="M2 5 Q14 1 26 5" fill="none" stroke={dashed ? "var(--sand-700)" : "var(--clay-600)"} strokeWidth={w} strokeDasharray={dashed ? "4 4" : undefined} strokeLinecap="round" />
     </svg>
   );
   return (
@@ -911,21 +912,16 @@ function GraphKey({
             {/* [graph-notes] The note curve and the node's notes chip. */}
             {row(
               <svg width="28" height="10" aria-hidden>
-                <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sage-500)" strokeWidth={2.2} strokeDasharray="1.5 6" strokeLinecap="round" />
+                <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sage-600)" strokeWidth={2.2} strokeDasharray="1.5 6" strokeLinecap="round" />
               </svg>,
               "graphNotes.noteCurveHint",
             )}
-            {row(
-              <span className={`flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
-                <NotesIcon size={10} />2
-              </span>,
-              "graphNotes.nodeNotesTitle",
-            )}
+            {/* [view10] VIEW10-03: the notes chip and its pending dot, one row. */}
             {row(
               <span className={`flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
                 <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
               </span>,
-              "graphNotes.keyPending",
+              "graphCover.keyNodeNotes",
             )}
             {row(
               <span className={`flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
@@ -936,15 +932,27 @@ function GraphKey({
             {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
             {row(
               <span className={`flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}>
-                <CommentIcon size={10} />2<span aria-hidden>?</span>
+                <CommentIcon size={10} />2
               </span>,
               "graphCover.keyComments",
+            )}
+            {/* [view10] VIEW10-03: the waiting mark once: the ? on a chip, and the far-zoom ring. */}
+            {row(
+              <span className="flex items-center gap-0.5">
+                <span className={`rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1 ${TEXT_META} font-bold text-[var(--kind-comment)]`} aria-hidden>
+                  ?
+                </span>
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+                  <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--kind-comment)" strokeWidth={2} />
+                </svg>
+              </span>,
+              "graphCover.keyWaiting",
             )}
           </>,
         )}
       </div>
       <p className={`border-t border-line pt-2 ${TEXT_META} leading-relaxed text-sand-600`}>
-        {t(clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] */}
+        {t(coarse ? (clickSelects ? "graphView.gesturesTouchSelect" : "graphView.gesturesTouchOpen") : clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] [view10] */}
         <span className="mt-1 block">{t("graphNotes.keyFar")}</span>
       </p>
     </div>
