@@ -1,0 +1,3195 @@
+{
+ "sources": {
+  "pandoc": {
+   "repo": "jgm/pandoc",
+   "commit": "e51c9c6054c8f4ec5c3209d5abe10939dfe2963e",
+   "license": "GPL-2.0-or-later",
+   "what": "pandoc's Word reader tests (test/docx)"
+  },
+  "pandoc-golden": {
+   "repo": "jgm/pandoc",
+   "commit": "e51c9c6054c8f4ec5c3209d5abe10939dfe2963e",
+   "license": "GPL-2.0-or-later",
+   "what": "pandoc's Word writer output (test/docx/golden)"
+  },
+  "mammoth": {
+   "npm": "mammoth@1.13.0",
+   "license": "BSD-2-Clause",
+   "what": "mammoth's tests (test/test-data, shipped in the npm package)"
+  },
+  "docx2python": {
+   "repo": "ShayHill/docx2python",
+   "commit": "fd4f0653eb861ad4a7431e9a4f62f9a74ab9d9a1",
+   "license": "MIT",
+   "what": "docx2python's tests (tests/resources)"
+  },
+  "python-docx": {
+   "repo": "python-openxml/python-docx",
+   "commit": "e45454602b53e8e572b179ccf1c91093ec9f4ed7",
+   "license": "MIT",
+   "what": "python-docx's tests (features/steps/test_files, tests/test_files)"
+  },
+  "poi": {
+   "repo": "apache/poi",
+   "commit": "ae62bb5116b9aee19ebd5834e3a82066132c9f7f",
+   "license": "Apache-2.0",
+   "what": "Apache POI's test data (test-data/document, and the stress files of test-data/integration)"
+  },
+  "libreoffice": {
+   "repo": "LibreOffice/core",
+   "commit": "d881165a038cfaa48894662c630524e06957a93e",
+   "license": "MPL-2.0",
+   "what": "LibreOffice's Word export tests (sw/qa/extras/ooxmlexport/data)"
+  }
+ },
+ "files": [
+  {
+   "name": "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx",
+   "source": "docx2python",
+   "path": "tests/resources/240-DOP-1013A Lay Down Tubulars.docx",
+   "sha256": "c29e83dcc0b9d18e904849ec6e20ee93e91f9561a3d666deffee26740da4fe9e",
+   "covers": [
+    "table",
+    "nested-table",
+    "merged-cells",
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-ControlTest.docx",
+   "source": "docx2python",
+   "path": "tests/resources/ControlTest.docx",
+   "sha256": "97f7bf6a6f547c322f9da5ab76f93d1761ce337bf123b2a9ca45ee08a3fd30d5",
+   "covers": [
+    "content-control"
+   ]
+  },
+  {
+   "name": "d2p-Weekly_Schedule.docx",
+   "source": "docx2python",
+   "path": "tests/resources/Weekly Schedule.docx",
+   "sha256": "d78e5e567b2460b810f68b8cbd7004c7c826a916754efa74d25e362d4319bc5d",
+   "covers": [
+    "table",
+    "nested-table",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "d2p-apples_and_pears.docx",
+   "source": "docx2python",
+   "path": "tests/resources/apples_and_pears.docx",
+   "sha256": "5b03868946f399b949310fb6bdfb78da41d3fb76cdc6ab8e209a2f1dd762b305",
+   "covers": []
+  },
+  {
+   "name": "d2p-ascii_printable.docx",
+   "source": "docx2python",
+   "path": "tests/resources/ascii_printable.docx",
+   "sha256": "f5c8da8f224178c09a716d6d96b5a7e9994320b57aff57adf0a088938e6c4070",
+   "covers": [
+    "page-break"
+   ]
+  },
+  {
+   "name": "d2p-basic.docx",
+   "source": "docx2python",
+   "path": "tests/resources/basic.docx",
+   "sha256": "e549fbc86694b57155265315fe92ed8f2987f8617b720d26bbf2232bb9100fe8",
+   "covers": []
+  },
+  {
+   "name": "d2p-check_drop_my.docx",
+   "source": "docx2python",
+   "path": "tests/resources/check_drop_my.docx",
+   "sha256": "86c89dc1d03813a8c50ac031b160d143ce54f6ffb4fd20b84cf60174db4526a3",
+   "covers": [
+    "field",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-checked-true-false.docx",
+   "source": "docx2python",
+   "path": "tests/resources/checked-true-false.docx",
+   "sha256": "795bae38de999d55e17906724cab3e50a6d641cbd5b7a2c8cd751d1046e650ed",
+   "covers": [
+    "field"
+   ]
+  },
+  {
+   "name": "d2p-checked_boxes.docx",
+   "source": "docx2python",
+   "path": "tests/resources/checked_boxes.docx",
+   "sha256": "916c54edb5a1dbc8c1cdeec742be096aa86d55a586017f3d6803c9ae6c518309",
+   "covers": [
+    "table",
+    "merged-cells",
+    "heading",
+    "field",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-checked_drop1.docx",
+   "source": "docx2python",
+   "path": "tests/resources/checked_drop1.docx",
+   "sha256": "252ce479278e11117aaecbe155a727c40ea894bab5d9d6fabd09d30336c7ca7c",
+   "covers": [
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-comments.docx",
+   "source": "docx2python",
+   "path": "tests/resources/comments.docx",
+   "sha256": "715e593122254b6294785c9b0f0bd99df67bf174879047e5ec21d48c05806f35",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-created-in-pages-bulleted-lists.docx",
+   "source": "docx2python",
+   "path": "tests/resources/created-in-pages-bulleted-lists.docx",
+   "sha256": "804ed59db8bc59ac05d79bfbd29c840cf9b6a2dc9653dd10c355f0de8263c9f8",
+   "covers": [
+    "list"
+   ]
+  },
+  {
+   "name": "d2p-created-in-pages-paragraphs-only.docx",
+   "source": "docx2python",
+   "path": "tests/resources/created-in-pages-paragraphs-only.docx",
+   "sha256": "d936b423d5ea688bef2557b6ec32f2ddb3fe1bf98c2f47c24f81270a28b416ef",
+   "covers": []
+  },
+  {
+   "name": "d2p-equations.docx",
+   "source": "docx2python",
+   "path": "tests/resources/equations.docx",
+   "sha256": "bc33e6a51ad4f9d2247f277f857383cd1bbbb698e7fa68405a079627dfcd4a6f",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "d2p-example.docx",
+   "source": "docx2python",
+   "path": "tests/resources/example.docx",
+   "sha256": "95862d33b6d8fc5e93280332e1dfb0742f49a2912c78f7965fcf98e2e6ebd816",
+   "covers": [
+    "table",
+    "nested-table",
+    "list",
+    "heading",
+    "footnote",
+    "endnote",
+    "picture"
+   ]
+  },
+  {
+   "name": "d2p-example_numbering.docx",
+   "source": "docx2python",
+   "path": "tests/resources/example_numbering.docx",
+   "sha256": "3b2c0dcda73e7115ceea24dc34294cfa4246657a657a383fe5d69b11d398201d",
+   "covers": [
+    "list"
+   ]
+  },
+  {
+   "name": "d2p-has_pict.docx",
+   "source": "docx2python",
+   "path": "tests/resources/has_pict.docx",
+   "sha256": "02425f40b5d568e30e93780732c486948a33338d93f8c581bcadf39f10e6fbe5",
+   "covers": [
+    "picture",
+    "pict"
+   ]
+  },
+  {
+   "name": "d2p-hyperlink.docx",
+   "source": "docx2python",
+   "path": "tests/resources/hyperlink.docx",
+   "sha256": "5b217c6b67955c1960e0a90d096ce580729d9be95339b316b933d9a9756fd5c8",
+   "covers": [
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "d2p-imagedata_without_rid.docx",
+   "source": "docx2python",
+   "path": "tests/resources/imagedata_without_rid.docx",
+   "sha256": "4e810e8cda2bd0f5bf062caf40cb462e7e6a189a95804e69a2139f6b436a9122",
+   "covers": [
+    "large",
+    "table",
+    "merged-cells",
+    "list",
+    "heading",
+    "picture",
+    "text-box",
+    "diagram",
+    "field",
+    "contents-field",
+    "symbol",
+    "smart-tag",
+    "rtl",
+    "pict",
+    "cjk",
+    "page-break",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-invalid_tag_name.docx",
+   "source": "docx2python",
+   "path": "tests/resources/invalid_tag_name.docx",
+   "sha256": "1f32082196ce8630d1f2aa07ecdd5ea9edb7024d50d211a10151ecc837e57bde",
+   "covers": [
+    "table",
+    "list",
+    "field",
+    "page-break",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-libreoffice_conversion.docx",
+   "source": "docx2python",
+   "path": "tests/resources/libreoffice_conversion.docx",
+   "sha256": "fb8d3aa64eaa2ec475fd6c3074418eaf4b245fced2c899ab3a4f500b9f78d4f3",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "text-box",
+    "hyperlink",
+    "alt-content",
+    "pict",
+    "cjk",
+    "page-break",
+    "section-break"
+   ]
+  },
+  {
+   "name": "d2p-list_index_a.docx",
+   "source": "docx2python",
+   "path": "tests/resources/list_index_a.docx",
+   "sha256": "afce227d244544e836f77de01bad309989ccb3d644bb64a8a7c4ec355d3c0c04",
+   "covers": [
+    "table",
+    "merged-cells",
+    "content-control"
+   ]
+  },
+  {
+   "name": "d2p-long_hyperlink.docx",
+   "source": "docx2python",
+   "path": "tests/resources/long_hyperlink.docx",
+   "sha256": "147508e7a4ba781975c9858fc8b3155b41e782874526f659db5cf3e50e3101ff",
+   "covers": [
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "d2p-merged_cells.docx",
+   "source": "docx2python",
+   "path": "tests/resources/merged_cells.docx",
+   "sha256": "de283e6dedbe5365117c0e447735537983ff180809c17c59e28586885b323c0d",
+   "covers": [
+    "table",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "d2p-merged_links.docx",
+   "source": "docx2python",
+   "path": "tests/resources/merged_links.docx",
+   "sha256": "2125827575c6a8e4ea6923cd6508a6068cdeba9790050198f76f83f2460a548b",
+   "covers": [
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "d2p-multiple_runs_per_paragraph.docx",
+   "source": "docx2python",
+   "path": "tests/resources/multiple_runs_per_paragraph.docx",
+   "sha256": "30abcd8aa3c0787215e35266e4455ea98d79522cd6158675b96db231eff7fc17",
+   "covers": []
+  },
+  {
+   "name": "d2p-nested_paragraphs.docx",
+   "source": "docx2python",
+   "path": "tests/resources/nested_paragraphs.docx",
+   "sha256": "6e88c0f7f95b34829d3265046a3c1aed71c8e72686e6d474c916edadc7375b6f",
+   "covers": [
+    "heading",
+    "text-box",
+    "content-control",
+    "alt-content",
+    "pict"
+   ]
+  },
+  {
+   "name": "d2p-nested_paragraphs_in_header.docx",
+   "source": "docx2python",
+   "path": "tests/resources/nested_paragraphs_in_header.docx",
+   "sha256": "3635439804f3fe29567c3ac90bda0d1830e93fa35dcad572ed565a3316633809",
+   "covers": []
+  },
+  {
+   "name": "d2p-nested_paragraphs_in_header3b.docx",
+   "source": "docx2python",
+   "path": "tests/resources/nested_paragraphs_in_header3b.docx",
+   "sha256": "7f9a03b57202bca577b3f6d8fbd57f9bedcf0cd9f840a1b9cfd1eef48b913a1c",
+   "covers": []
+  },
+  {
+   "name": "d2p-paragraphs_and_tables.docx",
+   "source": "docx2python",
+   "path": "tests/resources/paragraphs_and_tables.docx",
+   "sha256": "d97a15c9eea31e596a47dd85609160586a95174cdadd8c511986f7803f2702f0",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "d2p-pic_alt_text.docx",
+   "source": "docx2python",
+   "path": "tests/resources/pic_alt_text.docx",
+   "sha256": "1700bc9b7f9f522407bd199d73d90dbd44f3cf831a1a617bcd7d3725ade4b500",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "d2p-renamed_document_xml.docx",
+   "source": "docx2python",
+   "path": "tests/resources/renamed_document_xml.docx",
+   "sha256": "738f59144d2bd0753d4a2120e95416f8fd03caac64a3b004528e3c8775e3907a",
+   "covers": [
+    "no-document-xml"
+   ]
+  },
+  {
+   "name": "d2p-run_styles.docx",
+   "source": "docx2python",
+   "path": "tests/resources/run_styles.docx",
+   "sha256": "cf3107a74df7c2eb15f5cabec85b7b133dcc12642303daa1463012e50323558e",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-slanted_quotes.docx",
+   "source": "docx2python",
+   "path": "tests/resources/slanted_quotes.docx",
+   "sha256": "61c48e23dfff8bf797ad2ff5da21347aa575ddf22cba7bd371d96378bc35eeb1",
+   "covers": []
+  },
+  {
+   "name": "d2p-soft_line_breaks.docx",
+   "source": "docx2python",
+   "path": "tests/resources/soft_line_breaks.docx",
+   "sha256": "d3833adc96de95250020b654a53876bab5382b4194ae00699c4bbf65ecb44833",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "d2p-strict.docx",
+   "source": "docx2python",
+   "path": "tests/resources/strict.docx",
+   "sha256": "db819ed789a24fd2ba89d520de5abf61b394bc2b4e2f530cad34ebc9dba5d3c8",
+   "covers": [
+    "strict",
+    "table",
+    "list"
+   ]
+  },
+  {
+   "name": "d2p-symbols.docx",
+   "source": "docx2python",
+   "path": "tests/resources/symbols.docx",
+   "sha256": "3f76ea9204f261733dfbe6d4d4f0562db9166ba1e16b04bca94300a2c257ec85",
+   "covers": [
+    "symbol"
+   ]
+  },
+  {
+   "name": "d2p-test-docx2python-conversion-google_docs.docx",
+   "source": "docx2python",
+   "path": "tests/resources/test-docx2python-conversion-google_docs.docx",
+   "sha256": "233f7eb9a4091fd89e2db311a86e3f36c2ecc09c964b4d924c5f196b72b6d50c",
+   "covers": []
+  },
+  {
+   "name": "d2p-test_file_with_comments.docx",
+   "source": "docx2python",
+   "path": "tests/resources/test_file_with_comments.docx",
+   "sha256": "7dd6b4fd41a6f133626fa3679c0699b04a83154b290690d035d8c5d5f28faeee",
+   "covers": [
+    "comments",
+    "table",
+    "picture"
+   ]
+  },
+  {
+   "name": "d2p-unchecked_drop0.docx",
+   "source": "docx2python",
+   "path": "tests/resources/unchecked_drop0.docx",
+   "sha256": "2de939cfb734fcb91a3f2e219ad5f291032c661d331d717720a6f23a4bdd5660",
+   "covers": [
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "d2p-zen_of_python.docx",
+   "source": "docx2python",
+   "path": "tests/resources/zen_of_python.docx",
+   "sha256": "e629bc3bb0a69a10bcc3cee03e3a3536221b164280de4962243fb917383e9b7b",
+   "covers": [
+    "heading",
+    "field",
+    "contents-field",
+    "hyperlink",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-EquationAsScientificNumbering.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/EquationAsScientificNumbering.docx",
+   "sha256": "34b4729cb333ebd321bd48c171ecd45689cf4611086b836a2264bda0c9d8293b",
+   "covers": [
+    "math",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-EquationWithAboveAndBelowCaption.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/EquationWithAboveAndBelowCaption.docx",
+   "sha256": "c374744274fc17a8963628b3def12a872862da978db000922b36724d8fbf2a59",
+   "covers": [
+    "math",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-TOC_field_b.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/TOC_field_b.docx",
+   "sha256": "c629322a22daa3716dd631e68af6173573bf9243348da671845f998fefa08f68",
+   "covers": [
+    "heading",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-TableWithAboveCaptions.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/TableWithAboveCaptions.docx",
+   "sha256": "4bce6a10b00d0e375f27b38bdf5b33c37e4f2f291d711c29ea4d1ada86814da0",
+   "covers": [
+    "table",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-caption.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/caption.docx",
+   "sha256": "df1448c03fdaa41b4e216add28fb242d5d85092aaca04a15edaf1bd7d7cb1192",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-cjklist30.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/cjklist30.docx",
+   "sha256": "4c64fff5bfc4a49e8c94aac95847dea0e752413acc1bed68af0dd7bff4ab017b",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-cjklist31.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/cjklist31.docx",
+   "sha256": "596e4512a4f871c4051e6959e92b6de4551d0a2f29fe65725b6ca59af6b41f44",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-cjklist34.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/cjklist34.docx",
+   "sha256": "6560ad97b43998399f382c5132c5bab029069fb5c5dab23f55b2597a9af3960b",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-cjklist44.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/cjklist44.docx",
+   "sha256": "515f79edc1e9f31d213d4fc3553f598d6aaee00bd5c3919d22f66a2cb9e7128a",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-footnote.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/footnote.docx",
+   "sha256": "9c3ef260d32723c6e8195c47a504f40d275afa5b82d98d60faecf55a39f60eda",
+   "covers": [
+    "footnote",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-math-accents.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-accents.docx",
+   "sha256": "3248b895b4113e9dd1674cdbbd1ad6329f750bde9509e0db9b7c654e18a37b00",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-bold-italic.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-bold-italic.docx",
+   "sha256": "13ecf025f52a58b83904b45af8bb614c5a11b0da347e701575a9729ec63b4319",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-color.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-color.docx",
+   "sha256": "6ed39fc2960611fce973d420aa5dd5a212db7a431c9ebfc438b5f2bced135d43",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-d.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-d.docx",
+   "sha256": "52bdd01bc742108215aac9c44e231aaee5f893a20fbfb23b9cfda466445a0708",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-escape.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-escape.docx",
+   "sha256": "4e85548db9ff177e627527cde528555fec3bc2f432652bde1a116e4da80ed1a7",
+   "covers": [
+    "math",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-math-lim.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-lim.docx",
+   "sha256": "8e9f17cce185ac28b2a2fdcb9e446af6656fabe670d0adf7d2f39f9f158e5e83",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-literal.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-literal.docx",
+   "sha256": "0f3ad864e3e4ccfd9a4131f66211927884b0290a5a7c15a22cdd683c4adf7da6",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-matrix.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-matrix.docx",
+   "sha256": "dd84c0d6d5d392007adab77944d3e2d0a87558b881b4b97d86682a539d781c63",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-mso2k7.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-mso2k7.docx",
+   "sha256": "49a16f38ab3fab079f67a1b0fb19dd3adf99baa5bb7dc9358707eb1bf001dead",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-nary.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-nary.docx",
+   "sha256": "f7507103c8c4b52567bae284333729f9c562289ccfe9faefe289aea1c8bb4f34",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-overbrace_underbrace.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-overbrace_underbrace.docx",
+   "sha256": "7b4640dd9a756c83de1de8492990d1c9c312a7343bc3f66d83c7b4299d7e96a7",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-placeholders.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-placeholders.docx",
+   "sha256": "de59fe7e6b66d21d2621c46d83e3a240bbbf8aee1ff9448ae3182ed96d93f65f",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-rad.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-rad.docx",
+   "sha256": "6aeb7a5343166ebb0687228295633a23902cc44f20e2aac69f7a06d06c377862",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-subscripts.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-subscripts.docx",
+   "sha256": "8dc0a463435b387e20527dd39dcd8fb5f1cad919c3861bac5068806fd4992bcc",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-math-vertical_stacks.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/math-vertical_stacks.docx",
+   "sha256": "fe0d9581f9974dc87ed67af38e94ac29d2e4fcd5ec823c9cf100f90d13717b23",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-mathtype.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/mathtype.docx",
+   "sha256": "026d773a1ea94258784b3420b9e1cc263f6939baea0dddce801c47e01c3e27dd",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "lo-multi-page-toc.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/multi-page-toc.docx",
+   "sha256": "88dbf98cd74204fe364cd426b5a6bc1c7b4c13906e41f876c57f213e0a7ab624",
+   "covers": [
+    "heading",
+    "field",
+    "contents-field",
+    "hyperlink",
+    "content-control",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-table-rtl.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/table-rtl.docx",
+   "sha256": "97fe9822a1b5d1a5a9fbcc21a166b9a61306c732ff537c730819f8565250abe7",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-tdf106174_rtlParaAlign.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf106174_rtlParaAlign.docx",
+   "sha256": "6cbda9cdda1c0e4aea9e6bbd826a3ee9f4e70f7bccb6a7b5a124794185586877",
+   "covers": []
+  },
+  {
+   "name": "lo-tdf118361_RTLfootnoteSeparator.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf118361_RTLfootnoteSeparator.docx",
+   "sha256": "75a4a49bfd25b3c2e5c4e88708676633d5fe1264ab21c15d0c967b2f14e3f29c",
+   "covers": [
+    "footnote",
+    "rtl"
+   ]
+  },
+  {
+   "name": "lo-tdf143583_emptyParaAtEndOfFootnote.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf143583_emptyParaAtEndOfFootnote.docx",
+   "sha256": "07f48f9b92163859dbea2efc2ff097459163e1f12aa2965896f49f235cc30176",
+   "covers": [
+    "footnote",
+    "page-break"
+   ]
+  },
+  {
+   "name": "lo-tdf162916_nastyTOC.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf162916_nastyTOC.docx",
+   "sha256": "c0a416cb18c77e9a9eb5953c9682d08a170d03126d71b67f1bb01340bde2fd39",
+   "covers": [
+    "heading",
+    "field",
+    "contents-field",
+    "hyperlink",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "lo-tdf171433_equation.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf171433_equation.docx",
+   "sha256": "fec06799347729584a52ff83f20609b2856d36a43229f646f6a45ee5f63866a2",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "name": "lo-tdf92470_footnoteRestart.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf92470_footnoteRestart.docx",
+   "sha256": "7a58c4296c62012d1184e772c1552744dee48efd19d0b9cb599c59100bdfd6a1",
+   "covers": [
+    "footnote",
+    "page-break"
+   ]
+  },
+  {
+   "name": "lo-testFootnote.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/testFootnote.docx",
+   "sha256": "9b5f1cf90f30905c09dbd61c13f13bf499bfdbd7761e75333cd6147735631316",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "lo-toc_doc.docx",
+   "source": "libreoffice",
+   "path": "sw/qa/extras/ooxmlexport/data/toc_doc.docx",
+   "sha256": "2980c160508443df936fb088027c4a6777e48cbc706394b574e93f0f3970ead9",
+   "covers": [
+    "heading",
+    "field",
+    "contents-field",
+    "hyperlink",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-comments.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/comments.docx",
+   "sha256": "adc9f524d176f562db830c346c1e9e21c6a6aa6768d9c09892a423f1257fe17c",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-embedded-style-map.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/embedded-style-map.docx",
+   "sha256": "3c21d6901093577e52f9681c0af36b01d1127385234077772a8e95d332d08c9e",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-empty.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/empty.docx",
+   "sha256": "fd9160a87bcbe94570d998499f1b1ed9b39f381fde1688c2ed2b0b0a6d562bf2",
+   "covers": []
+  },
+  {
+   "name": "mammoth-endnotes.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/endnotes.docx",
+   "sha256": "8b0275a08427605e57e0ca7596bc89fb4c00e4b9a5cdae2b1941c619c2496014",
+   "covers": [
+    "endnote"
+   ]
+  },
+  {
+   "name": "mammoth-external-picture.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/external-picture.docx",
+   "sha256": "2f5dbcf27f3dcec02e81535de21b81a2719e0acfd73158750cb7f91249e628f5",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "mammoth-footnote-hyperlink.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/footnote-hyperlink.docx",
+   "sha256": "1024a9054d06dc14d69a59f3b0d9d98361f755d5aff93f7b4f27b4af27fa8295",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "mammoth-footnotes.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/footnotes.docx",
+   "sha256": "a3d786ba3ad53833dd3d5e01bd55e93b628c1287d8f9210eb94cb7533f270306",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "mammoth-simple-list.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/simple-list.docx",
+   "sha256": "ed3c015cf411d07b08bf34264ff709363740b0747af355479088079d0796dfb3",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-single-paragraph.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/single-paragraph.docx",
+   "sha256": "7d89bf44b4d6940234efb6973d24706c881aa875bb794bfbe54efd92f9c6cf3e",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-strict-format.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/strict-format.docx",
+   "sha256": "86d90f50d8fd3310c4079291c6622878d8f4d8864d665d1e34841f407e7b7662",
+   "covers": [
+    "strict"
+   ]
+  },
+  {
+   "name": "mammoth-strikethrough.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/strikethrough.docx",
+   "sha256": "1058370d03b42e797384e25b2142fce805f5520693e5ddbdf5e5ee64a3cf910c",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-tables.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/tables.docx",
+   "sha256": "9f75a82d36530d91989a43fcb8940f2e753051787714cecbf6a1f49a22e58ded",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-text-box.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/text-box.docx",
+   "sha256": "a94f4c516bec29b7c2e2e219ad1799700f0eecd0ebf25ef7f8fc59c14db8fdc9",
+   "covers": [
+    "text-box",
+    "alt-content",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-tiny-picture-target-base-relative.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/tiny-picture-target-base-relative.docx",
+   "sha256": "7ce8d0d134ce59d89217eeee8e604ec5c60f57ff726f38ccda8201c2e8fedf12",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-tiny-picture.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/tiny-picture.docx",
+   "sha256": "791b57c038328560d710c33c5b53bc3ea67a6c08bd9fa0fce0770883e39228d8",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-underline.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/underline.docx",
+   "sha256": "3cc0b83be6c543ef74624303b5a37881ae1784cddb3a238f4410448c81604dde",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "mammoth-utf8-bom.docx",
+   "source": "mammoth",
+   "path": "package/test/test-data/utf8-bom.docx",
+   "sha256": "8b59e5faa28793693ce0801711525f88b1f94f62d150ae9a92d1e70012d786ee",
+   "covers": []
+  },
+  {
+   "name": "pandoc-0_level_headers.docx",
+   "source": "pandoc",
+   "path": "test/docx/0_level_headers.docx",
+   "sha256": "0d99c52804c856788c773639a36f695e908bff14b07e4b242e377f6131f8941e",
+   "covers": [
+    "table",
+    "heading",
+    "title",
+    "field",
+    "contents-field",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-adjacent_codeblocks.docx",
+   "source": "pandoc",
+   "path": "test/docx/adjacent_codeblocks.docx",
+   "sha256": "e2079bf5334e9291ef1ed870dfeec7fbba5762492c40ff513990984b455c1dd5",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-already_auto_ident.docx",
+   "source": "pandoc",
+   "path": "test/docx/already_auto_ident.docx",
+   "sha256": "e31df4512420095ddd61e583debf79ebda3bd30a0bd4e5106d778304960eb751",
+   "covers": [
+    "heading",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-alternate_document_path.docx",
+   "source": "pandoc",
+   "path": "test/docx/alternate_document_path.docx",
+   "sha256": "2e219951e06a202bcddfa3ed9503b77d51c40ed8d2a489dc5bee9f1d4d1be13f",
+   "covers": [
+    "renamed-part",
+    "heading"
+   ]
+  },
+  {
+   "name": "pandoc-anchor_header_after_anchor.docx",
+   "source": "pandoc",
+   "path": "test/docx/anchor_header_after_anchor.docx",
+   "sha256": "c00c83f0666301f283e8bb513c4dfaaa908c6dc0aa87a5fb495558718e75db45",
+   "covers": [
+    "field",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-block_quotes.docx",
+   "source": "pandoc",
+   "path": "test/docx/block_quotes.docx",
+   "sha256": "f6901b01b1b7e289ce23d694087acec1183475567a3bee8847e0c61b2109b9c9",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "pandoc-char_styles.docx",
+   "source": "pandoc",
+   "path": "test/docx/char_styles.docx",
+   "sha256": "4befadc2fcc30221f2eea54824d464c5ea89cd0ffb0c28b772e39e3dccc38e1f",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-codeblock.docx",
+   "source": "pandoc",
+   "path": "test/docx/codeblock.docx",
+   "sha256": "560bec785eb4d9d79dba11bc036ac97692b6826796e17479db644b4c4fa5165a",
+   "covers": []
+  },
+  {
+   "name": "pandoc-comments.docx",
+   "source": "pandoc",
+   "path": "test/docx/comments.docx",
+   "sha256": "b6df01371955a599f38ec1192d130ecd750a5d83363b7c3755adb0f15679a507",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-comments_warning.docx",
+   "source": "pandoc",
+   "path": "test/docx/comments_warning.docx",
+   "sha256": "e11fac51c9210a2b3d320aac9c9168dd1dffd07d345deb0ec0b99a3a0ab35e21",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-compact-style-removal.docx",
+   "source": "pandoc",
+   "path": "test/docx/compact-style-removal.docx",
+   "sha256": "1b429f6b694893fac056c69f20c31aa4ad7fa2533857836002ecdd39b31ab8c5",
+   "covers": [
+    "comments",
+    "list"
+   ]
+  },
+  {
+   "name": "pandoc-cross_reference.docx",
+   "source": "pandoc",
+   "path": "test/docx/cross_reference.docx",
+   "sha256": "bef87b2dbdac587374c0ea0af6554953aec1fe113d82f509ff15ef71afaeca99",
+   "covers": [
+    "heading",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-custom-style-reference.docx",
+   "source": "pandoc",
+   "path": "test/docx/custom-style-reference.docx",
+   "sha256": "c97751c49b8c84b3acc1e265462e0eec045dd8d4b322d162ae1442f81fde8e1e",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-deep_normalize.docx",
+   "source": "pandoc",
+   "path": "test/docx/deep_normalize.docx",
+   "sha256": "2919fbb144c78033f1e7b981ecc4cfa86a00a26f4018c61116af496f9036f03a",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-definition_list.docx",
+   "source": "pandoc",
+   "path": "test/docx/definition_list.docx",
+   "sha256": "e67345aaa850fda07528a821b907e594449ea53036afd930e970f6234f7194c9",
+   "covers": []
+  },
+  {
+   "name": "pandoc-diagram.docx",
+   "source": "pandoc",
+   "path": "test/docx/diagram.docx",
+   "sha256": "38342a4ae44586feeeb4ee6f65c6827412d425eccc7d59fa322ec0144a862b93",
+   "covers": []
+  },
+  {
+   "name": "pandoc-double_strikeout.docx",
+   "source": "pandoc",
+   "path": "test/docx/double_strikeout.docx",
+   "sha256": "ff2f08de9b82c9699be1b8792ad51eebb5e4fd122e6a8102babb3bf0169bf31a",
+   "covers": []
+  },
+  {
+   "name": "pandoc-drop_cap.docx",
+   "source": "pandoc",
+   "path": "test/docx/drop_cap.docx",
+   "sha256": "22083b930abb1b9817a91722d0eb29eff8e6d02f1cf0a490b3b763365e13a4ef",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-dummy_item_after_list_item.docx",
+   "source": "pandoc",
+   "path": "test/docx/dummy_item_after_list_item.docx",
+   "sha256": "6ad4900a3f09a98da6807fd423f646855c19fc3d5d44e3cbfffa5e8e0898a635",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-dummy_item_after_paragraph.docx",
+   "source": "pandoc",
+   "path": "test/docx/dummy_item_after_paragraph.docx",
+   "sha256": "3139f9e057d816821d101fdbe19762eeba78bd94046d1271d8dc21bff84f0ae5",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-empty_field.docx",
+   "source": "pandoc",
+   "path": "test/docx/empty_field.docx",
+   "sha256": "383e353f855438bceb80cefd593d42cda2599f39c21b3b43cb7263474a755a64",
+   "covers": [
+    "field",
+    "hyperlink",
+    "cjk",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-enumerated_headings.docx",
+   "source": "pandoc",
+   "path": "test/docx/enumerated_headings.docx",
+   "sha256": "b4ef1f6a67bd0e432c8358b56b78a44fc6fbef141edfec232f230c4652354229",
+   "covers": [
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-german-reference.docx",
+   "source": "pandoc",
+   "path": "test/docx/german-reference.docx",
+   "sha256": "b4a9e407340cc8d08a1c902d9840f690e104f2b9d68f46d5e2f47921deea3c20",
+   "covers": [
+    "comments",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-german_styled_lists.docx",
+   "source": "pandoc",
+   "path": "test/docx/german_styled_lists.docx",
+   "sha256": "172b4bca913f60a98cf9ac7dd7550957949dbab730045c745978862fd956c4bd",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-hanging_indent.docx",
+   "source": "pandoc",
+   "path": "test/docx/hanging_indent.docx",
+   "sha256": "12667eac12915a109ee6ccaaa821a6f468a3a9ddb41099a761da51606c4031ae",
+   "covers": []
+  },
+  {
+   "name": "pandoc-headers.docx",
+   "source": "pandoc",
+   "path": "test/docx/headers.docx",
+   "sha256": "d5bde0239367f1fd990fc5219331b1f2f23c021f884718f68493328150892ba8",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "pandoc-i18n_blocks.docx",
+   "source": "pandoc",
+   "path": "test/docx/i18n_blocks.docx",
+   "sha256": "5b4ed41bfefd4feb37fe6bacb911d13bc45cdbddfc4ab0ce27a1778d7a15f2d4",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-image.docx",
+   "source": "pandoc",
+   "path": "test/docx/image.docx",
+   "sha256": "f95aaf3a2cd5b914d35048a8a8ac7610969ae5e9470448b9d76ac8142d5f410a",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-image_vml.docx",
+   "source": "pandoc",
+   "path": "test/docx/image_vml.docx",
+   "sha256": "8065acde23fe24fd232c503382ae41a8e18eef73de9754eed9e51850541ea184",
+   "covers": [
+    "heading",
+    "picture",
+    "pict"
+   ]
+  },
+  {
+   "name": "pandoc-image_vml_as_object.docx",
+   "source": "pandoc",
+   "path": "test/docx/image_vml_as_object.docx",
+   "sha256": "188839764b68c8f41c2dc65b1b7f27ef09b1302692335bb47d4540f021965df4",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-image_with_textbox_caption.docx",
+   "source": "pandoc",
+   "path": "test/docx/image_with_textbox_caption.docx",
+   "sha256": "844c550ca10afdbc032757bf2bad7562c2057059afd71f75c45588c225c3a6b7",
+   "covers": [
+    "picture",
+    "text-box",
+    "field",
+    "alt-content",
+    "pict"
+   ]
+  },
+  {
+   "name": "pandoc-inline_code.docx",
+   "source": "pandoc",
+   "path": "test/docx/inline_code.docx",
+   "sha256": "76a5dc71142604fe7d8b266f70263794055fabc262e7bc6b0da1c27c92a1be3a",
+   "covers": []
+  },
+  {
+   "name": "pandoc-inline_formatting.docx",
+   "source": "pandoc",
+   "path": "test/docx/inline_formatting.docx",
+   "sha256": "0d868a2dbedabc866088711ab72cdd9904ccc00a54d5aec26e823e66b4779f22",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-inline_images.docx",
+   "source": "pandoc",
+   "path": "test/docx/inline_images.docx",
+   "sha256": "e7f289c4722968471fec2344d6cccb033cee2380b5958cf24f8467d86ee72ec8",
+   "covers": [
+    "picture",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-instrText_hyperlink.docx",
+   "source": "pandoc",
+   "path": "test/docx/instrText_hyperlink.docx",
+   "sha256": "52fb997054e2510caf169256dda7847195ba35eaaf3e23e1f7cbd7efffcb99b7",
+   "covers": [
+    "field",
+    "hyperlink",
+    "cjk",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-link_in_notes.docx",
+   "source": "pandoc",
+   "path": "test/docx/link_in_notes.docx",
+   "sha256": "38bd262b4276803b866d98c917c7f8e52d647ba2f699796c0db14d3c6b248a2f",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "pandoc-link_tooltips.docx",
+   "source": "pandoc",
+   "path": "test/docx/link_tooltips.docx",
+   "sha256": "8a217ced47458d54baad1109633ac5612e8661877d6f19efb3a54b42bf4869d0",
+   "covers": [
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-links.docx",
+   "source": "pandoc",
+   "path": "test/docx/links.docx",
+   "sha256": "529af3511760ff21d5d74587d01a8d376b5cc20c624038c91004cd6ec46c0223",
+   "covers": [
+    "heading",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-lists-compact.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists-compact.docx",
+   "sha256": "2dfc35136f82850cbd22c941c148c3a309c3bd2084d316e23775b85206534333",
+   "covers": [
+    "comments",
+    "list"
+   ]
+  },
+  {
+   "name": "pandoc-lists.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists.docx",
+   "sha256": "e5b1a7204be70bb0398ee9b585e53901f057b851a9f13f41fc4b9554548f741e",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-lists_continuing.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists_continuing.docx",
+   "sha256": "71cc0a8468c253cbad04bb0d4597f7b9f8aade0c4592ae5fa0c1963748e103d2",
+   "covers": [
+    "list",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-lists_level_override.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists_level_override.docx",
+   "sha256": "e2d15b1db0af8f6edb5925818b8d422cb24a996e2d38dfaa6cedb9197e3244e3",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-lists_restart_8367.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists_restart_8367.docx",
+   "sha256": "82a7d9ef72325b53a2a2de927406f17ed6cc9625e74a339d523c11434d756a0b",
+   "covers": [
+    "list",
+    "heading",
+    "section-break"
+   ]
+  },
+  {
+   "name": "pandoc-lists_restarting.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists_restarting.docx",
+   "sha256": "d4d1827009ffaff49c8b84ebccdf661fbe7f32ea1d6e73a324b9563923e50199",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-lists_sublist_reset.docx",
+   "source": "pandoc",
+   "path": "test/docx/lists_sublist_reset.docx",
+   "sha256": "592885bfe715d41ec57e4e1d9dfdbc0cbea0c221e1ed6bb27e37615907186108",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-mendeley_citations.docx",
+   "source": "pandoc",
+   "path": "test/docx/mendeley_citations.docx",
+   "sha256": "cd560f3f139beffc810ec12505de97b2a3cfb7e12aaa8f5a85148272d950bc7a",
+   "covers": [
+    "heading",
+    "field"
+   ]
+  },
+  {
+   "name": "pandoc-metadata.docx",
+   "source": "pandoc",
+   "path": "test/docx/metadata.docx",
+   "sha256": "6b2fcb3cb98842e856357745c4e50308093977ef4c28d351273667f0ebe2698c",
+   "covers": [
+    "title",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-metadata_after_normal.docx",
+   "source": "pandoc",
+   "path": "test/docx/metadata_after_normal.docx",
+   "sha256": "e2270c2b157f9944cd0b096e8d44a7367ebc124dd177e4bbb6ac598f28abab08",
+   "covers": [
+    "title",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-nested_anchors_in_header.docx",
+   "source": "pandoc",
+   "path": "test/docx/nested_anchors_in_header.docx",
+   "sha256": "f14d82adf16226721c68b0a0272d0d61db44e696041e1a5b6c2afe04dd0f8cf9",
+   "covers": [
+    "heading",
+    "field",
+    "contents-field",
+    "hyperlink",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-nested_instrText.docx",
+   "source": "pandoc",
+   "path": "test/docx/nested_instrText.docx",
+   "sha256": "48db95ea05d5a4f85cd1d3f4074ac2681074a6a2eb979a4dc2ca09f3deca7372",
+   "covers": [
+    "field",
+    "hyperlink",
+    "cjk",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-nested_sdt.docx",
+   "source": "pandoc",
+   "path": "test/docx/nested_sdt.docx",
+   "sha256": "b52b096bda700e0434af8aa884de4e40ee1876d07d0551eb0ebd6d943ff06a88",
+   "covers": [
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-nested_smart_tags.docx",
+   "source": "pandoc",
+   "path": "test/docx/nested_smart_tags.docx",
+   "sha256": "0859a711b5175b4e7297bcc756e68c790437b2a5345ed64a55443c7d50ae87cf",
+   "covers": [
+    "smart-tag",
+    "rtl",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-normalize.docx",
+   "source": "pandoc",
+   "path": "test/docx/normalize.docx",
+   "sha256": "ca188dab080ee7782111370238c103ef58b45ddcc99a82dd42ca5a714e1bbcd7",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-notes.docx",
+   "source": "pandoc",
+   "path": "test/docx/notes.docx",
+   "sha256": "887cbbc9d248706b146dba09f543e3d8952cc59abcf054b467c1773bcd120d00",
+   "covers": [
+    "heading",
+    "footnote",
+    "endnote"
+   ]
+  },
+  {
+   "name": "pandoc-ns0-reference.docx",
+   "source": "pandoc",
+   "path": "test/docx/ns0-reference.docx",
+   "sha256": "5310462e44b2b601a259d1b0ae83c8407f81a9e966b623d235c9240ce7929d67",
+   "covers": []
+  },
+  {
+   "name": "pandoc-numbered_header.docx",
+   "source": "pandoc",
+   "path": "test/docx/numbered_header.docx",
+   "sha256": "a82993f4bd661a9d88ebb4393729fd067b0cac61706882a31e1f54cd71ec9156",
+   "covers": [
+    "list",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-overlapping_targets.docx",
+   "source": "pandoc",
+   "path": "test/docx/overlapping_targets.docx",
+   "sha256": "81a29c029b50bfcada05c44cefe7f794e102b2b2b04faa8d64ff1dee624628e0",
+   "covers": [
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-pageref.docx",
+   "source": "pandoc",
+   "path": "test/docx/pageref.docx",
+   "sha256": "c55d2062474c6c6a06eb5f609c8f25cda67fb2b39ed412d72e35d54e5e36e643",
+   "covers": [
+    "field",
+    "contents-field",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-paragraph_insertion_deletion.docx",
+   "source": "pandoc",
+   "path": "test/docx/paragraph_insertion_deletion.docx",
+   "sha256": "9845f2d9fa6c980aa7b3456c1babb1bb5273687bc6122cc0d124fbb5f38ab8c6",
+   "covers": [
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-relative_indentation_blockquotes.docx",
+   "source": "pandoc",
+   "path": "test/docx/relative_indentation_blockquotes.docx",
+   "sha256": "52a9bf4ec3e01c9252b87c1cee0dff672bbe7a279c71c3a2a5bb02e5534e9907",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "pandoc-sdt_elements.docx",
+   "source": "pandoc",
+   "path": "test/docx/sdt_elements.docx",
+   "sha256": "b79853b199c8ceb698ff083c5d2fd0af4aeb5f98b92b34afdf1ba55e4563f5df",
+   "covers": [
+    "table",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-sdt_in_footnote.docx",
+   "source": "pandoc",
+   "path": "test/docx/sdt_in_footnote.docx",
+   "sha256": "0d491048f55d1e806e187449785aa79cdbb29ead49944dc79efdcee85ef97b84",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "pandoc-special_punctuation.docx",
+   "source": "pandoc",
+   "path": "test/docx/special_punctuation.docx",
+   "sha256": "8f3c116a108ca239bac2dc20f0a950fa4c1c44054b80c0285fea5e0f24b647d3",
+   "covers": []
+  },
+  {
+   "name": "pandoc-table_captions_no_field.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_captions_no_field.docx",
+   "sha256": "4c66cba3986d0f462ea13b487663bc3f62e45e9060152704aa0825d19da785ee",
+   "covers": [
+    "table",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-table_captions_with_field.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_captions_with_field.docx",
+   "sha256": "9f1a710ae81ec1572a268f3dbc55b5af33d3de26ef071f9796cc67aab77328da",
+   "covers": [
+    "table",
+    "heading",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-table_gridbefore.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_gridbefore.docx",
+   "sha256": "d0cfbad2182a33e058aefe6eb6efc96cfdcbe85af266afab69e46b1f24e56ebb",
+   "covers": [
+    "comments",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "pandoc-table_header_rowspan.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_header_rowspan.docx",
+   "sha256": "e5a1c8507b9d33fa884bde402de7d7f11531f55efc96b2a1da4ec1f8b4b60792",
+   "covers": [
+    "table",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "pandoc-table_one_header_row.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_one_header_row.docx",
+   "sha256": "c2a5fe244f931e03f68989ec1fac2f45a5c58d1737ec16d5a8af01f9998dc978",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "pandoc-table_one_row.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_one_row.docx",
+   "sha256": "f80b30b16fcdef3774a4d8359d5861fc11204b7e8bbaa750394d936360dbdf99",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "pandoc-table_variable_width.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_variable_width.docx",
+   "sha256": "d2ae3268a3389787d9bace1f92133cfcc40eaa69c38a9a04111b9ee234e863cd",
+   "covers": [
+    "table",
+    "merged-cells",
+    "section-break"
+   ]
+  },
+  {
+   "name": "pandoc-table_with_list_cell.docx",
+   "source": "pandoc",
+   "path": "test/docx/table_with_list_cell.docx",
+   "sha256": "e9560eceed1d21d7a4ca4659a65ed9586135b9196c5fe7079f9c5b1b26609f9a",
+   "covers": [
+    "table",
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-tables.docx",
+   "source": "pandoc",
+   "path": "test/docx/tables.docx",
+   "sha256": "b6156434c0d1e6cf697e2774c9ce6e6616a2e0965160e2f74269dfc7008894de",
+   "covers": [
+    "table",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-tabs.docx",
+   "source": "pandoc",
+   "path": "test/docx/tabs.docx",
+   "sha256": "5c77c40314136e773b6a0827c40f06f8da79453bcd40123249fb4fbd3ed023ee",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-task_list.docx",
+   "source": "pandoc",
+   "path": "test/docx/task_list.docx",
+   "sha256": "cb4541872bca25d3269983a10333d95a1ef3e7b23053b2edc69a300ba9d0899e",
+   "covers": [
+    "comments",
+    "list"
+   ]
+  },
+  {
+   "name": "pandoc-text_in_shape_format.docx",
+   "source": "pandoc",
+   "path": "test/docx/text_in_shape_format.docx",
+   "sha256": "a30338884675f1b64f9142097aef017a52c95888f972acf8dde8f8c5f5818f76",
+   "covers": [
+    "text-box",
+    "field",
+    "smart-tag",
+    "alt-content",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-textbox_image.docx",
+   "source": "pandoc",
+   "path": "test/docx/textbox_image.docx",
+   "sha256": "2855ac4e3a5305d29de2ce7491d7647dbcb71fc304ce184e588b5282db178747",
+   "covers": [
+    "picture",
+    "text-box",
+    "pict"
+   ]
+  },
+  {
+   "name": "pandoc-textbox_image_duplicate_encoding.docx",
+   "source": "pandoc",
+   "path": "test/docx/textbox_image_duplicate_encoding.docx",
+   "sha256": "4b27e66960671211dbac92b5780201ec379926dee3343fbbb57638872dd1d2f6",
+   "covers": [
+    "picture",
+    "text-box",
+    "alt-content",
+    "pict"
+   ]
+  },
+  {
+   "name": "pandoc-track_changes_deletion.docx",
+   "source": "pandoc",
+   "path": "test/docx/track_changes_deletion.docx",
+   "sha256": "a7254a9f2c055e6d8e4d46336ba9f31794f54f9ebd04f1bacdb2805456e8e7df",
+   "covers": [
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-track_changes_edge_spaces.docx",
+   "source": "pandoc",
+   "path": "test/docx/track_changes_edge_spaces.docx",
+   "sha256": "c6d340a0f08f3cfd25ba52488d8445cdc540754638ba26923b9bf0a661909999",
+   "covers": [
+    "tracked-changes"
+   ]
+  },
+  {
+   "name": "pandoc-track_changes_insertion.docx",
+   "source": "pandoc",
+   "path": "test/docx/track_changes_insertion.docx",
+   "sha256": "94b98d852342f3838c36ad09b19f6ce7247010fa7bb03ab2faadb0a027f2aa07",
+   "covers": [
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-track_changes_move.docx",
+   "source": "pandoc",
+   "path": "test/docx/track_changes_move.docx",
+   "sha256": "9ea28f56f9fe00146a845497e226b19ec901685dd22798a2817b470abb0d1e5d",
+   "covers": [
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-track_changes_scrubbed_metadata.docx",
+   "source": "pandoc",
+   "path": "test/docx/track_changes_scrubbed_metadata.docx",
+   "sha256": "cc3f45e39a4ffb06d8d1d0f841f99217ba49474cc947a650ddccdd03a7900114",
+   "covers": [
+    "comments",
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-trailing_spaces_in_formatting.docx",
+   "source": "pandoc",
+   "path": "test/docx/trailing_spaces_in_formatting.docx",
+   "sha256": "7058a3620402bc7f5a8f5ce825f7d621251adbcc08c6b0ff0efe2ad0d4b3ebe2",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-trim_last_inline.docx",
+   "source": "pandoc",
+   "path": "test/docx/trim_last_inline.docx",
+   "sha256": "97c7a121d8115876fdd7167aa3845c4ab0efb94fee304e67176913f95ba39f40",
+   "covers": []
+  },
+  {
+   "name": "pandoc-unicode.docx",
+   "source": "pandoc",
+   "path": "test/docx/unicode.docx",
+   "sha256": "a2f90d5ace8500ddc9d30be6b8a30730ffa289680ca516c6b442ef6310f469f8",
+   "covers": [
+    "symbol",
+    "cjk",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-unused_anchors.docx",
+   "source": "pandoc",
+   "path": "test/docx/unused_anchors.docx",
+   "sha256": "555a9ef5f1741c87ff9fd8944857efa96092c7f334cefb6d02a65cc3ff14cfbf",
+   "covers": [
+    "heading",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandoc-verbatim_subsuper.docx",
+   "source": "pandoc",
+   "path": "test/docx/verbatim_subsuper.docx",
+   "sha256": "256cd0e4a798054da0e7d26a27f8d4f23b69e08fb3d7ac0801be4d924820bdab",
+   "covers": []
+  },
+  {
+   "name": "pandoc-zotero_citations.docx",
+   "source": "pandoc",
+   "path": "test/docx/zotero_citations.docx",
+   "sha256": "96b9a9557db731685396c3edf62a4c18a37a42edc0049443e2d2a45364490d94",
+   "covers": [
+    "heading",
+    "field"
+   ]
+  },
+  {
+   "name": "pandocw-csl_bibliography.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/csl_bibliography.docx",
+   "sha256": "fd9aa828e6b1df46381e884a47a08c7b9daf63c8c77652c5235bb48b370fa00e",
+   "covers": [
+    "comments",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandocw-custom_style_reference.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/custom_style_reference.docx",
+   "sha256": "1c4fc596c1fa0be71f928f1384703e0f94e861c00f7928be487716dbbe94f5f5",
+   "covers": [
+    "comments"
+   ]
+  },
+  {
+   "name": "pandocw-definition_list.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/definition_list.docx",
+   "sha256": "b3d578cd8970955b53851d1c4195e0ca60f15b8879753cb97e1043222fd72580",
+   "covers": [
+    "comments"
+   ]
+  },
+  {
+   "name": "pandocw-lists_9994.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/lists_9994.docx",
+   "sha256": "fa2deed6cc14a138b209ab107099dcbb1ce80160d840c8e8d195bbfc240bf693",
+   "covers": [
+    "comments",
+    "list"
+   ]
+  },
+  {
+   "name": "pandocw-lists_div_bullets.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/lists_div_bullets.docx",
+   "sha256": "93590f5cdf0af2e585eef8cd182196359c3cd99d175a8af97a467753c9c3cf24",
+   "covers": [
+    "comments",
+    "list",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandocw-mark_math.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/mark_math.docx",
+   "sha256": "c3b02d2cb2186446217e4c765d7351b784ecdd373c2966d30803d993f57f4662",
+   "covers": [
+    "comments",
+    "math"
+   ]
+  },
+  {
+   "name": "pandocw-notes.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/notes.docx",
+   "sha256": "b1fbc5e4dc94f48ac3467c5aff165b8344b46b8ea3c02c94fc89bacaaa530ded",
+   "covers": [
+    "comments",
+    "heading",
+    "footnote",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandocw-raw-bookmarks.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/raw-bookmarks.docx",
+   "sha256": "f4cbbf009413b0e14754f58fdb92ef1c2cfac11d89cf1baeada24f6bb0626c83",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandocw-tables-default-widths.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/tables-default-widths.docx",
+   "sha256": "7e334208abee8c353e51dfaf5c7df528d44bdbbc0a368d719b5521a28b670786",
+   "covers": [
+    "comments",
+    "table",
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pandocw-task_list.docx",
+   "source": "pandoc-golden",
+   "path": "test/docx/golden/task_list.docx",
+   "sha256": "fa60be87a2d5d96e83209060adfe40d080924304cab0a348096087079fd34f23",
+   "covers": [
+    "comments",
+    "list"
+   ]
+  },
+  {
+   "name": "poi-52449.docx",
+   "source": "poi",
+   "path": "test-data/document/52449.docx",
+   "sha256": "f48139d1b019b5e5e0d4396fb6b10ed21dd30116926646bbd5598d807580ae2b",
+   "covers": [
+    "field",
+    "content-control"
+   ]
+  },
+  {
+   "name": "poi-55733.docx",
+   "source": "poi",
+   "path": "test-data/document/55733.docx",
+   "sha256": "b5c30080ffe667ef27414302ffd3ccd01ef1c85d4a5a459761b9c82c3421a4e0",
+   "covers": []
+  },
+  {
+   "name": "poi-57312.docx",
+   "source": "poi",
+   "path": "test-data/document/57312.docx",
+   "sha256": "f80b3c4f3885e0284d8017fec93818b4ec5366f9486ad97b8ddd47ab68a330c5",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-58067.docx",
+   "source": "poi",
+   "path": "test-data/document/58067.docx",
+   "sha256": "719b5076b736e6208be4b10fd268e9e3b7e0029c819d485d53ca14700fc98fc5",
+   "covers": [
+    "heading",
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-59378.docx",
+   "source": "poi",
+   "path": "test-data/document/59378.docx",
+   "sha256": "9829d202db7fc9d86399552ea7e92fbb415444c9242303c8142026b73034776a",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-60316.docx",
+   "source": "poi",
+   "path": "test-data/document/60316.docx",
+   "sha256": "0bfd17f6ccbf1d410278fcd9141c6007b521ebb0cba53276eddb52bdd16c4769",
+   "covers": [
+    "list",
+    "text-box",
+    "diagram",
+    "content-control",
+    "alt-content",
+    "pict"
+   ]
+  },
+  {
+   "name": "poi-61470.docx",
+   "source": "poi",
+   "path": "test-data/document/61470.docx",
+   "sha256": "abda850b3685027eef32a4c583b2b5f7f20f243026d8c453cdb3315348ed6ff0",
+   "covers": [
+    "cjk",
+    "bookmark",
+    "ruby"
+   ]
+  },
+  {
+   "name": "poi-Bug51170.docx",
+   "source": "poi",
+   "path": "test-data/document/Bug51170.docx",
+   "sha256": "3a5f19e5bfdc7f25ce16cb256bb8bab1a15e900a767b4a4c6b1ea3ee34faaa32",
+   "covers": []
+  },
+  {
+   "name": "poi-Bug54849.docx",
+   "source": "poi",
+   "path": "test-data/document/Bug54849.docx",
+   "sha256": "f54182713ea5ce5d77b9593d3d9d24e645460043cec0b40ef59c932385f084d3",
+   "covers": [
+    "table",
+    "footnote",
+    "endnote",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-Bug60337.docx",
+   "source": "poi",
+   "path": "test-data/document/Bug60337.docx",
+   "sha256": "87f983bdd93b3b5b8469104a5b09ccff41e0f5c144060e13fd4db07bfd2e39da",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-Bug66988.docx",
+   "source": "poi",
+   "path": "test-data/document/Bug66988.docx",
+   "sha256": "349b3576e2478801a80672e190d7406252d7adefb6d722bd6ae790817ea0bd2f",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "poi-ComplexNumberedLists.docx",
+   "source": "poi",
+   "path": "test-data/document/ComplexNumberedLists.docx",
+   "sha256": "297a085a7d433af2eeee7661e8db21539452cb585096484774a1e9f5f258b0b6",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-FieldCodes.docx",
+   "source": "poi",
+   "path": "test-data/document/FieldCodes.docx",
+   "sha256": "9247f85ab90b15f11d0cf14d0070fdcb5cdf47c65d6bc77cc32cb7ee682aad24",
+   "covers": [
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-FldSimple.docx",
+   "source": "poi",
+   "path": "test-data/document/FldSimple.docx",
+   "sha256": "6cf7364676d465e702cbbac44ca92331c525476e36a29c26f780cb9d7643b631",
+   "covers": [
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-HeaderFooterUnicode.docx",
+   "source": "poi",
+   "path": "test-data/document/HeaderFooterUnicode.docx",
+   "sha256": "ec439ac0643294e1e2961b381983304e044444f3a8f0dc465a98adf9ebee0e67",
+   "covers": [
+    "heading",
+    "page-break"
+   ]
+  },
+  {
+   "name": "poi-IllustrativeCases.docx",
+   "source": "poi",
+   "path": "test-data/document/IllustrativeCases.docx",
+   "sha256": "4c2407d338f02a6ae107eac0b3e925ffb3d37921942ebe88db8660dea0891a00",
+   "covers": [
+    "table",
+    "title"
+   ]
+  },
+  {
+   "name": "poi-MultipleBodyBug.docx",
+   "source": "poi",
+   "path": "test-data/document/MultipleBodyBug.docx",
+   "sha256": "7b34a3e9458daa3cb4a56c012e279dc8edab71300404b3d9da6f145cb743211d",
+   "covers": []
+  },
+  {
+   "name": "poi-Numbering.docx",
+   "source": "poi",
+   "path": "test-data/document/Numbering.docx",
+   "sha256": "776a59dcf0e290f1988602e6305e2d9cb2e31f631dc4aa751593c23cddbaad4d",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-NumberingWOverrides.docx",
+   "source": "poi",
+   "path": "test-data/document/NumberingWOverrides.docx",
+   "sha256": "3754dee43880ce4c9e962eca41ac78c353999888282c9ada528efbb826e2bee6",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-SampleDoc.docx",
+   "source": "poi",
+   "path": "test-data/document/SampleDoc.docx",
+   "sha256": "ea2c517bd7be4628887eb97f630334b93b894f4522d2c0adae263e602d76df92",
+   "covers": [
+    "page-break"
+   ]
+  },
+  {
+   "name": "poi-Styles.docx",
+   "source": "poi",
+   "path": "test-data/document/Styles.docx",
+   "sha256": "63f3fe4c3b4fbdc211eca8fa7fd31a799ff4438afbf4ca6e771b3aef107c732e",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "poi-TestDocument.docx",
+   "source": "poi",
+   "path": "test-data/document/TestDocument.docx",
+   "sha256": "527a906b3cc31d0a72a47290a6c8a53854a89a31178a60fa3cb314d70b57a413",
+   "covers": [
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-TestTableCellAlign.docx",
+   "source": "poi",
+   "path": "test-data/document/TestTableCellAlign.docx",
+   "sha256": "2968d4a5d5de21dce1cbeae3235e545cdf4bfd7ae508fe0eed3a9b032773ce17",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-TestTableColumns.docx",
+   "source": "poi",
+   "path": "test-data/document/TestTableColumns.docx",
+   "sha256": "3b1965a295c4a5c24573a6d5f2ded93f7de3e7a46ffe26b881456f1c4ddd6335",
+   "covers": [
+    "table",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "poi-Tika-792.docx",
+   "source": "poi",
+   "path": "test-data/document/Tika-792.docx",
+   "sha256": "95de9f3b655bfec5b619ee31d1319e5a9a6ce4f253a9738898876640a2969665",
+   "covers": [
+    "tracked-changes",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-VariousPictures.docx",
+   "source": "poi",
+   "path": "test-data/document/VariousPictures.docx",
+   "sha256": "c1eecbca7de9f99e21c677e1d5b045eaa1d5a442eff4c82f0cbe9af93726a070",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "poi-WithTabs.docx",
+   "source": "poi",
+   "path": "test-data/document/WithTabs.docx",
+   "sha256": "c6460c33b3343b0656189d5cba344fadafea821f8982ea01619c5324fa87a266",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bib-chernigovka.netdo.ru_download_docs_17459.docx",
+   "source": "poi",
+   "path": "test-data/document/bib-chernigovka.netdo.ru_download_docs_17459.docx",
+   "sha256": "74575caabe35de9982ed11328ebe556844fcd3da2fed1e425255bfe81dee4c50",
+   "covers": [
+    "table",
+    "merged-cells",
+    "text-box",
+    "alt-content",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bookmarks.docx",
+   "source": "poi",
+   "path": "test-data/document/bookmarks.docx",
+   "sha256": "9b93eef9e2ce1ad0e28dc65beab73a896d5d1631a0b7fc73ec6ac279cf36b218",
+   "covers": [
+    "title",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bug56075-changeTracking_on.docx",
+   "source": "poi",
+   "path": "test-data/document/bug56075-changeTracking_on.docx",
+   "sha256": "9c837e12aaf3deac10ac20ac1bc08dc6bebdec14b553698063742b9bc12f8920",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bug57031.docx",
+   "source": "poi",
+   "path": "test-data/document/bug57031.docx",
+   "sha256": "bbd88b16a90c65b46e1a6922f7017e8d4cc0bc8f62ac28619c2d367d37d6754b",
+   "covers": [
+    "table",
+    "merged-cells",
+    "picture",
+    "pict",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bug59058.docx",
+   "source": "poi",
+   "path": "test-data/document/bug59058.docx",
+   "sha256": "89d0abb8eed1a58f262c49c386f74d8a82798d6344bed690d66b389514f0751c",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "picture",
+    "field",
+    "hyperlink",
+    "hidden",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bug65649.docx",
+   "source": "poi",
+   "path": "test-data/document/bug65649.docx",
+   "sha256": "f98d2bfcca5d091cda26539b00318bb2b2b1e6d8aa644e370175e99ca9c1b4ad",
+   "covers": [
+    "large",
+    "table",
+    "merged-cells",
+    "list",
+    "footnote",
+    "hyperlink",
+    "alt-content",
+    "pict",
+    "cjk",
+    "page-break",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-bug65738.docx",
+   "source": "poi",
+   "path": "test-data/document/bug65738.docx",
+   "sha256": "67797f5691cb5346201f1c40000a959f9f08d05d0b4493b4291e8d5f16e81e65",
+   "covers": [
+    "table",
+    "nested-table",
+    "heading",
+    "title",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-capitalized.docx",
+   "source": "poi",
+   "path": "test-data/document/capitalized.docx",
+   "sha256": "e96c6a0f4db42a658f56a2c96db0d6a7c899db1078d1fe3ea05033c1b7297dc3",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-checkboxes.docx",
+   "source": "poi",
+   "path": "test-data/document/checkboxes.docx",
+   "sha256": "06f1dc1370c772a020c6d5183c8b7c4fe30ad7a9fff108cb2f027128ddf5e209",
+   "covers": [
+    "table",
+    "list",
+    "field",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-comment.docx",
+   "source": "poi",
+   "path": "test-data/document/comment.docx",
+   "sha256": "23bbfe33e1acf7073253bd87552cbee5be0a07cbd08a479a4bf139f09b1dd6dc",
+   "covers": [
+    "comments"
+   ]
+  },
+  {
+   "name": "poi-delins.docx",
+   "source": "poi",
+   "path": "test-data/document/delins.docx",
+   "sha256": "7ecad102602586be7f1371f117fc567ea47f3ed0ca703b353e003002f1ff8d3f",
+   "covers": [
+    "list",
+    "tracked-changes",
+    "field",
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "poi-drawing.docx",
+   "source": "poi",
+   "path": "test-data/document/drawing.docx",
+   "sha256": "5e83462dd7ac3cf0a333fe09cf0837602dbd41775cdcec813a6e288b5d55dff8",
+   "covers": [
+    "table",
+    "nested-table",
+    "merged-cells",
+    "picture",
+    "hyperlink",
+    "hidden",
+    "smart-tag",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-endnotes.docx",
+   "source": "poi",
+   "path": "test-data/document/endnotes.docx",
+   "sha256": "6e2e1b2dabb0ae6b9b26ddd613dca446ba0710ecc8b4008722abc4ed592934e3",
+   "covers": [
+    "endnote"
+   ]
+  },
+  {
+   "name": "poi-footnotes.docx",
+   "source": "poi",
+   "path": "test-data/document/footnotes.docx",
+   "sha256": "9070094b27ff5201477f4de4b2c027730c66cb889106a1609c5adeed207a59c1",
+   "covers": [
+    "footnote"
+   ]
+  },
+  {
+   "name": "poi-form_footnotes.docx",
+   "source": "poi",
+   "path": "test-data/document/form_footnotes.docx",
+   "sha256": "a890294bfbdc63f6d03eab61efc1e98cb51d59f0920541150dd7082f9bdf31f1",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "heading",
+    "footnote",
+    "picture",
+    "field",
+    "symbol",
+    "smart-tag",
+    "pict",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-heading123.docx",
+   "source": "poi",
+   "path": "test-data/document/heading123.docx",
+   "sha256": "dac67500b907811030ab2bdd5b1c65cda97a15651d6ec0d33592ef70d34a5550",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "poi-issue_51265_1.docx",
+   "source": "poi",
+   "path": "test-data/document/issue_51265_1.docx",
+   "sha256": "711adad4316f4a1937b08f4647e679aac00a42dc134d205e81759777a0cda8a7",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "poi-rtl.docx",
+   "source": "poi",
+   "path": "test-data/document/rtl.docx",
+   "sha256": "d159b6ac6734f14a9ecf8e97ca5029bdcddbfae2d33ba0128aa774924e0b190d",
+   "covers": [
+    "hyperlink",
+    "rtl",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-sample.docx",
+   "source": "poi",
+   "path": "test-data/document/sample.docx",
+   "sha256": "be4fc1bf778ad8183f714e09b9df40669de34e9ecbc3adecfc8953f00749036f",
+   "covers": []
+  },
+  {
+   "name": "poi-saut_page.docx",
+   "source": "poi",
+   "path": "test-data/document/saut_page.docx",
+   "sha256": "748f34f3dc285f4d48474930758b2c37382d17965545a1729cb7400cada793da",
+   "covers": [
+    "page-break"
+   ]
+  },
+  {
+   "name": "poi-shapes-with-text.docx",
+   "source": "poi",
+   "path": "test-data/document/shapes-with-text.docx",
+   "sha256": "1ef4d8cbfd5e2333897ab3193b58ce445cee7e45476d39e5626a4c7097f72d95",
+   "covers": [
+    "text-box",
+    "diagram",
+    "alt-content",
+    "pict"
+   ]
+  },
+  {
+   "name": "poi-smarttag-snippet.docx",
+   "source": "poi",
+   "path": "test-data/document/smarttag-snippet.docx",
+   "sha256": "693ad667f07b6ca90c4375e024a122adb970e9f5cc7e29a1cd53e0a9cbfb6de9",
+   "covers": [
+    "heading",
+    "hyperlink",
+    "smart-tag"
+   ]
+  },
+  {
+   "name": "poi-stress001.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress001.docx",
+   "sha256": "e5a046b17acca2e2454f668b969c31c72ae16c57c137c1a659d29c2f156c68f0",
+   "covers": [
+    "table",
+    "custom-xml"
+   ]
+  },
+  {
+   "name": "poi-stress003.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress003.docx",
+   "sha256": "35bfe2e4c99e193b52692a90317f027650e07fc35150ce9523af68e936ae38fc",
+   "covers": [
+    "table",
+    "list",
+    "picture",
+    "text-box",
+    "hyperlink",
+    "smart-tag",
+    "pict",
+    "page-break"
+   ]
+  },
+  {
+   "name": "poi-stress004.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress004.docx",
+   "sha256": "ac9e1510b76a96868f4df82c59e4a3b852d7e66d3ad7ba785de2a86d9a7f523d",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "footnote",
+    "picture",
+    "field",
+    "hyperlink",
+    "rtl",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress005.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress005.docx",
+   "sha256": "0c58de6a757f69fef210440bf0e0f95dc018d908401aee866cfbfeca1309d43c",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "heading",
+    "text-box",
+    "field",
+    "symbol",
+    "pict",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress006.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress006.docx",
+   "sha256": "5ccd91b2cb7ecc8a5b27f81ecc0d165f2290ebfc3328e478b1d8b7a6455d6dd0",
+   "covers": [
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress007.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress007.docx",
+   "sha256": "8f4e499bd93e2a8ec93f44ca6ddf8a9b729c432687977bd314717c6b14b36c68",
+   "covers": [
+    "math",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress008.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress008.docx",
+   "sha256": "ecab21e4458b8d4a8014774dd60cb92a88a6acf364512f6ea0fc49e6ff9a0508",
+   "covers": [
+    "list",
+    "heading",
+    "footnote",
+    "picture",
+    "field",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress009.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress009.docx",
+   "sha256": "d081c4c6e5ba299e6fca4296dad434408a7c5de3046e4918d6b7abbd4a8b9a98",
+   "covers": [
+    "list",
+    "picture",
+    "hyperlink",
+    "cjk",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress010.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress010.docx",
+   "sha256": "48bbb9a5b330705a0abb2a954937a15b5c7f6baad761320027af49cff608ffa5",
+   "covers": [
+    "comments",
+    "table",
+    "merged-cells",
+    "list",
+    "footnote",
+    "picture",
+    "text-box",
+    "diagram",
+    "rtl",
+    "pict",
+    "page-break",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress011.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress011.docx",
+   "sha256": "59fdcfe90b1d6e18d93a8378f4255fb70f847f69989b56d72571d41ddf16e8bf",
+   "covers": [
+    "table",
+    "footnote",
+    "picture",
+    "rtl",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress012.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress012.docx",
+   "sha256": "19ca555e1c2bfd92974c152ea6402d1100f83ca0257e10afa1a80c143a37b102",
+   "covers": []
+  },
+  {
+   "name": "poi-stress014.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress014.docx",
+   "sha256": "958cc680955ae5ef86bee0834a762996b53a0e5c0c9016d99cd59b2989bcff8b",
+   "covers": [
+    "table",
+    "list",
+    "heading",
+    "picture",
+    "text-box",
+    "hyperlink",
+    "pict",
+    "section-break"
+   ]
+  },
+  {
+   "name": "poi-stress015.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress015.docx",
+   "sha256": "1609d3eed78c3a6bb5308726ea242b2351d3e8ec690b26267f8af544599fe2ea",
+   "covers": [
+    "table",
+    "merged-cells",
+    "list",
+    "picture",
+    "text-box",
+    "diagram",
+    "symbol",
+    "rtl",
+    "pict"
+   ]
+  },
+  {
+   "name": "poi-stress016.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress016.docx",
+   "sha256": "cebd91383486a63d4d9a79b77fc771faa6ccfdb081a5e72b5d358eddfb640f75",
+   "covers": [
+    "list",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress017.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress017.docx",
+   "sha256": "24598df56cf6282d4f21898b01e9db934cd9bd3efa355a45a5e5aff1d663de44",
+   "covers": [
+    "list",
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress018.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress018.docx",
+   "sha256": "51272c835875c822b1f92a465c7dce34ca217374261f2fb180e1a67cda81c649",
+   "covers": [
+    "list",
+    "footnote",
+    "picture",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-stress019.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress019.docx",
+   "sha256": "6565a369e05dbe7fd1fd75373c0335bd0ed5c38c351579dda393c1ffaf346394",
+   "covers": [
+    "table",
+    "merged-cells",
+    "field",
+    "hyperlink",
+    "cjk",
+    "page-break",
+    "bookmark",
+    "ruby"
+   ]
+  },
+  {
+   "name": "poi-stress023.docx",
+   "source": "poi",
+   "path": "test-data/integration/stress023.docx",
+   "sha256": "32b036e66eb701f37e8b64a3c491bf1d6234be3cee1e6e36d2e8435f4516cc94",
+   "covers": [
+    "picture",
+    "tracked-changes",
+    "page-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "poi-table-alignment.docx",
+   "source": "poi",
+   "path": "test-data/document/table-alignment.docx",
+   "sha256": "ee36729e0d050e529fea0b444006a194bea72b35cf8958ae58c6624c26156b41",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "name": "poi-table_footnotes.docx",
+   "source": "poi",
+   "path": "test-data/document/table_footnotes.docx",
+   "sha256": "69666500a7dd00600da64cc7676f8939c84df8804967ec2fc75567fad41f21a9",
+   "covers": [
+    "table",
+    "footnote"
+   ]
+  },
+  {
+   "name": "poi-tika-3388.docx",
+   "source": "poi",
+   "path": "test-data/document/tika-3388.docx",
+   "sha256": "3a1b5f73e61be4071c5bef5be3e52d344142f45c78681a673b14bc38bc07f717",
+   "covers": [
+    "picture"
+   ]
+  },
+  {
+   "name": "poi-tika-3816.docx",
+   "source": "poi",
+   "path": "test-data/document/tika-3816.docx",
+   "sha256": "ab5b32d15d2fd14c633452cc5a8b1cd27cd65038cd208a11ede29d6f8fe24259",
+   "covers": [
+    "table",
+    "content-control",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-blk-containing-table.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/blk-containing-table.docx",
+   "sha256": "5e036b49ff8d24f9f7eed8ae60a39f7a570f66f9bbebcf76b3ed8f2f28f89b3d",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-blk-inner-content.docx",
+   "source": "python-docx",
+   "path": "tests/test_files/blk-inner-content.docx",
+   "sha256": "16243dd05f686d6d5fab331843691492ad78ae3eb4f13cc8686077b44718c0ba",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-blk-paras-and-tables.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/blk-paras-and-tables.docx",
+   "sha256": "93f40c8a23dbcbc75b073e0f7050a5f064e6aff58c1bc6c6003359122e9faf79",
+   "covers": [
+    "table",
+    "nested-table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-comments-rich-para.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/comments-rich-para.docx",
+   "sha256": "8ee6b9bd84c59169bc7e5838003806edefb2c51920f40035b7879d4a3414deed",
+   "covers": [
+    "comments",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-doc-access-sections.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-access-sections.docx",
+   "sha256": "871f058319e155fa5d76625a4e019d63f804e9b17da24f7047b38c6b1ee353d1",
+   "covers": [
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-doc-add-section.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-add-section.docx",
+   "sha256": "fc5879727f3c8b513c4b4a32dd58e37aa16aee6c0699b520d5536dee1670f68d",
+   "covers": [
+    "page-break"
+   ]
+  },
+  {
+   "name": "pydocx-doc-coreprops.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-coreprops.docx",
+   "sha256": "358ba16289fc12f9c50a22d74ab610ef4dc74563c5ed7c889ac48f372b956dd0",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-doc-default.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-default.docx",
+   "sha256": "0cde4019e31cf05f229e5955c6021fd07c863a2936a7f4de0d9169d426f4fe59",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-doc-no-coreprops.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-no-coreprops.docx",
+   "sha256": "546b286667a8891d6e9206f754014112de86c05e9d9dc4500aef8ce5410cc2bd",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-doc-odd-even-hdrs.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-odd-even-hdrs.docx",
+   "sha256": "2c29ec565cc971743f95ea7bba0b716c146c09ddfb9e5b414400b5fe33a387d7",
+   "covers": [
+    "page-break"
+   ]
+  },
+  {
+   "name": "pydocx-doc-word-default-blank.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/doc-word-default-blank.docx",
+   "sha256": "560b0e299a592f6b7d1ec9abab98648f1d92bf8fa684ce544a0424fdde798903",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-fnt-color.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/fnt-color.docx",
+   "sha256": "b4f97dfacde60d114e91fcd38b85fb941b4d60537922eff07dbb460dff0fbe9d",
+   "covers": []
+  },
+  {
+   "name": "pydocx-having-images.docx",
+   "source": "python-docx",
+   "path": "tests/test_files/having-images.docx",
+   "sha256": "72f40baa1b89e4849e817121dbbf148ed78e51be9bf04d8e6f4bc1494aa517b7",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-hdr-header-footer.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/hdr-header-footer.docx",
+   "sha256": "5a4cb270680d1365688073e4816be98c2ab1a7ba2921d86cb3efadca97a72d27",
+   "covers": [
+    "section-break"
+   ]
+  },
+  {
+   "name": "pydocx-num-having-numbering-part.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/num-having-numbering-part.docx",
+   "sha256": "66b45ace7afa65acab6036bdc63d9416554576df633c13a6774bf41d4a60a47e",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-par-alignment.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-alignment.docx",
+   "sha256": "8a276964f84b5104fffdf0e29ecb96744e1c3d0139543f6feba0e2152619a7e0",
+   "covers": []
+  },
+  {
+   "name": "pydocx-par-hlink-frags.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-hlink-frags.docx",
+   "sha256": "28a23ab5ad87a927fcf1e82111ee6843e1f9bc29b3e2d825b869b41847a750bf",
+   "covers": [
+    "hyperlink",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-par-hyperlinks.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-hyperlinks.docx",
+   "sha256": "206539619eb347b1cd5b3fe88031cc18327accfe5d34a886f3d9120115f6bdad",
+   "covers": [
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "pydocx-par-known-paragraphs.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-known-paragraphs.docx",
+   "sha256": "0e1381929a0833057ef0095e42f0d34f9a456821b8e9053489b596b1b417b3c9",
+   "covers": [
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-par-known-styles.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-known-styles.docx",
+   "sha256": "0a2155da9b7eb69af16b33f0012e53f67d179d6bafa9ee2e460c0c91ff5e47db",
+   "covers": [
+    "heading"
+   ]
+  },
+  {
+   "name": "pydocx-par-rendered-page-breaks.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/par-rendered-page-breaks.docx",
+   "sha256": "a87b16cbd3b86bda5a5a3a7d02dde898094074455126dee89216b9e7a36ee960",
+   "covers": [
+    "hyperlink"
+   ]
+  },
+  {
+   "name": "pydocx-run-char-style.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/run-char-style.docx",
+   "sha256": "cd647c103be2a6f6af62f5d093236796ac2d515307ddf44dd774b74941b79d15",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-run-enumerated-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/run-enumerated-props.docx",
+   "sha256": "b66ecfd9c0c886b0454c2844b28f6be9be2ec93eb214ea60a2c741ad856e2d7b",
+   "covers": []
+  },
+  {
+   "name": "pydocx-sct-first-page-hdrftr.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sct-first-page-hdrftr.docx",
+   "sha256": "9e7e7b1bd132fe889d43d57fbe1e99c126544326fa21364695f2eec7cd336578",
+   "covers": [
+    "page-break",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-sct-inner-content.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sct-inner-content.docx",
+   "sha256": "d92e9ca7b09fab7b475c57dfba08f6acba2742aff2691cc7284649c640059c73",
+   "covers": [
+    "table",
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-sct-section-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sct-section-props.docx",
+   "sha256": "0d741b9f881f3a1583711f0d85227768b01fa13760ebf972c43e1496b18ab3d5",
+   "covers": [
+    "section-break",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-set-no-settings-part.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/set-no-settings-part.docx",
+   "sha256": "cef04e3a5b3c040e5210e02eb20ca0357768cf2f6e80b38df4f2f57a0f848845",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-shp-inline-shape-access.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/shp-inline-shape-access.docx",
+   "sha256": "8fcf0f0433be0968d9305c564ce69601931695ffe163d264fb69b7782feff517",
+   "covers": [
+    "picture",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-sty-behav-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sty-behav-props.docx",
+   "sha256": "eb885bd1892b1c4a67c5ce7d997b24323aa63233f8bf10939e71f661b180083d",
+   "covers": []
+  },
+  {
+   "name": "pydocx-sty-having-no-styles-part.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sty-having-no-styles-part.docx",
+   "sha256": "b5e861d2d5cc53ba0d2ab3115bf51d270621c484c9b3fef6569c48ed9423b295",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-sty-having-styles-part.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sty-having-styles-part.docx",
+   "sha256": "c57dae87cc43ef35a85b25c78d15d4506075a289c0d8de78617930ec82aee84b",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-sty-known-styles.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/sty-known-styles.docx",
+   "sha256": "97a0978dfb941a7041867a2432616e3b5e3bbf6f7efb76bc5be2e722cd6cb012",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tab-stops.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tab-stops.docx",
+   "sha256": "cf1ab27e6cf523b57b3166d2e927b688aea0f5e10590b21745b334b56a0f418d",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-2x2-table.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-2x2-table.docx",
+   "sha256": "c2f09412ae551d52b6a35b974f1fc428f0c9a3de2ccacfdb7ab5d55985f137c2",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-cell-access.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-cell-access.docx",
+   "sha256": "dc01708a24c5e940c94b99b7ee496606e5f17152bc41cec211c9f8c72334cb22",
+   "covers": [
+    "table",
+    "merged-cells",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-cell-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-cell-props.docx",
+   "sha256": "612ab03dfde001588d0081706238c08d2938b55807de5342677cfcc0bcd53e6d",
+   "covers": [
+    "table",
+    "merged-cells"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-col-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-col-props.docx",
+   "sha256": "4a3d8bb3570a798c5c6a59d14b092a8ef579a89d41a2ec9a31e7c4f2ef77e892",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-having-applied-style.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-having-applied-style.docx",
+   "sha256": "761802878f363b57dce41b77657946ae5dc70d745261561242c9ed5a769260d9",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-having-tables.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-having-tables.docx",
+   "sha256": "5e23ecb6ec09b5db467ddeb22110c2aab83d1218662e8f7c8db444f085e081cc",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-on-off-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-on-off-props.docx",
+   "sha256": "2513f8adbe54b1dcc769a2da8da61746758ea96b588d0ba22b606185b43dc51a",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-tbl-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/tbl-props.docx",
+   "sha256": "70f6a24488b85609e5d3ceaed653e584d23e6867a7f22bd267827d73fbfc2cad",
+   "covers": [
+    "table",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-test.docx",
+   "source": "python-docx",
+   "path": "tests/test_files/test.docx",
+   "sha256": "fba1c76b66ff30982e5281941ca1111eaeaeb092abb6dfbe1730bed3774f40b6",
+   "covers": [
+    "heading",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-txt-font-highlight-color.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/txt-font-highlight-color.docx",
+   "sha256": "27d22be137f8c1c63356f917ce74b3ca21ba5638a7c7c2899acb887013ef0686",
+   "covers": [
+    "bookmark"
+   ]
+  },
+  {
+   "name": "pydocx-txt-font-props.docx",
+   "source": "python-docx",
+   "path": "features/steps/test_files/txt-font-props.docx",
+   "sha256": "a5de256a9cd1598d4e63ba0883995899ddb72ec9390c04d46474c2b093ffde96",
+   "covers": [
+    "bookmark"
+   ]
+  }
+ ]
+}
