@@ -62,10 +62,10 @@ async function run() {
   await page.waitForFunction((sel) => /\/api\/images\//.test(document.querySelector(sel)?.getAttribute("src") ?? ""), `${editor} img`, { timeout: 15000 });
   await img.click();
 
-  // The image toolbar's Assistant.
-  const button = page.locator(".docs-img-toolbar .docs-img-assistant");
+  // The figure tools a click on the image opens: the Assistant alone.
+  const button = page.locator('[data-selection-popover] [data-track="assistant"]');
   await button.waitFor({ timeout: 5000 });
-  check("the image toolbar shows the Assistant button", await button.isVisible());
+  check("the image's figure tools show the Assistant", await button.isVisible());
   await page.screenshot({ path: `${SHOT}/figure-words-toolbar.png` });
   await button.click();
   const bar = page.locator("[data-assistant-bar]");

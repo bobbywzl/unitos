@@ -225,17 +225,27 @@ function TranscriptBody({
   // A click seeks; a drag that ends in a selection is the toolbar's, not a
   // seek. Marks inside the line stop their own clicks. After a click the
   // focus is the player's, so Space plays from the line, as the player's
-  // tip says; the keys reach a line with Tab and seek with Enter.
+  // tip says; the keys reach a line with Tab and seek with Enter. A click
+  // that selected words (a double click, a drag) gives the focus to the
+  // player too: the line keeps no focus, so Escape on the toolbar leaves no
+  // ring on it and Space plays.
+  const focusPlayer = () =>
+    listRef.current?.closest("article")?.querySelector<HTMLElement>("[data-video-player]")?.focus({ preventScroll: true });
   const seek = (line: TranscriptLine, e: React.MouseEvent) => {
     if (!window.getSelection()?.isCollapsed) return;
     onSeek(line);
-    if (e.detail > 0) {
-      listRef.current?.closest("article")?.querySelector<HTMLElement>("[data-video-player]")?.focus({ preventScroll: true });
-    }
+    if (e.detail > 0) focusPlayer();
   };
 
   return (
-    <div ref={listRef} className="mx-auto w-full max-w-[720px]" onPointerLeave={() => pointTools(null, 300)}>
+    <div
+      ref={listRef}
+      className="mx-auto w-full max-w-[720px]"
+      onPointerLeave={() => pointTools(null, 300)}
+      onClick={(e) => {
+        if (e.detail > 0 && !window.getSelection()?.isCollapsed) focusPlayer();
+      }}
+    >
       {paragraphs.map((paragraph, pi) => {
         const speaker = speakerById.get(paragraph[0].speaker ?? "");
         return (

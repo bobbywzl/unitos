@@ -568,10 +568,23 @@ export default async function NotebookPage(props: {
     // here carries the same card, so each block of the passage paints in
     // the kind's color and a click on any of them opens the card. Only the
     // first carries the tool's symbol (chipless).
+    // The quote of such a passage is every source's quote, one paragraph per
+    // block in the document's order: what a pure highlight stores as its
+    // content (the create route, cut at 5000). A highlight whose content is
+    // that quote, or one source's quote, holds no comment (SPEC.md §6).
     const otherSourcesByNote = new Map<string, string[]>();
+    const passageQuoteByNote = new Map<string, string>();
     for (const n of notebook!.sections.filter((s) => s.hidden).flatMap((s) => s.notes)) {
-      const here = n.sources.filter((src) => src.documentId === document.id).map((src) => src.id);
-      if (here.length > 1) otherSourcesByNote.set(n.id, here.slice(1));
+      const here = n.sources.filter((src) => src.documentId === document.id);
+      if (here.length < 2) continue;
+      otherSourcesByNote.set(n.id, here.slice(1).map((src) => src.id));
+      const rank = (src: (typeof here)[number]) => blockById.get(src.blockId)?.order ?? here.indexOf(src);
+      const joined = [...here]
+        .sort((a, b) => rank(a) - rank(b) || a.startOffset - b.startOffset)
+        .map((src) => src.quotedText)
+        .join("\n\n");
+      const pure = n.content === joined.slice(0, 5000) || here.some((src) => src.quotedText === n.content);
+      passageQuoteByNote.set(n.id, pure ? n.content : joined);
     }
     const everySource = <T,>(a: AnnotationItem, value: T): [string, T][] => [
       [a.sourceId as string, value],
@@ -623,7 +636,8 @@ export default async function NotebookPage(props: {
           kind: a.kind,
           color: a.color,
           content: a.content,
-          quotedText: a.quotedText,
+          // The whole passage's quote: the card compares the content with it.
+          quotedText: passageQuoteByNote.get(a.id) ?? a.quotedText,
           createdById: a.createdById,
         };
         for (const [id] of everySource(a, value)) annotationsBySource[id] = value;

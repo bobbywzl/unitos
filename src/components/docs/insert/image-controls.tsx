@@ -4,8 +4,6 @@ import type { Editor } from "@tiptap/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { MoreHorizIcon } from "@/components/docs/icons";
-import { SparkleIcon } from "@/components/icons";
-import { FIGURE_ASSISTANT_EVENT } from "@/components/reader/figure-suggestion";
 import { MenuItem } from "@/components/docs/menu";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { DropBtn, Sep } from "@/components/docs/toolbar/controls";
@@ -134,9 +132,9 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const pageless = ctx.drawnPageless;
   // A window too narrow for the whole row (a phone; the row is about 600 px):
   // the five wrap modes fold into one Text wrapping menu that shows the
-  // current mode, the Assistant keeps only its symbol, and Replace image and
-  // Reset image go into More, so the row fits the screen and every control
-  // stays one press away.
+  // current mode, and Replace image and Reset image go into More, so the
+  // row fits the screen and every control stays one press away. The
+  // image's Assistant is in the figure tools a click on the image opens.
   const compact = window.innerWidth < COMPACT_BELOW;
   const shownWrap = pageless ? "inline" : a.wrap;
   const ShownWrapIcon = MODES.find(([wrap]) => wrap === shownWrap)?.[2] ?? InLineIcon;
@@ -151,31 +149,6 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
     <>
       {anchor && (
         <FloatingBox anchor={anchor} gap={12} className="docs-img-toolbar" role="toolbar" label={t("docsInsert.imageOptions")}>
-          {typeof hit.node.attrs.blockId === "string" && hit.node.attrs.blockId && (
-            <>
-              <button
-                type="button"
-                className="docs-img-assistant"
-                aria-label={t("docsInsert.imageAssistant")}
-                data-tip={t("docsInsert.imageAssistantTitle")}
-                data-track="image-assistant"
-                onClick={() => {
-                  window.dispatchEvent(
-                    new CustomEvent(FIGURE_ASSISTANT_EVENT, {
-                      detail: { blockId: hit.node.attrs.blockId as string, top: anchor.bottom, from: editor.view.dom },
-                    }),
-                  );
-                  // The caret goes after the image, so this toolbar does not
-                  // cover the words the assistant puts under it.
-                  editor.commands.setTextSelection(hit.pos + hit.node.nodeSize);
-                }}
-              >
-                <SparkleIcon size={14} />
-                {!compact && <span>{t("reader.assistant")}</span>}
-              </button>
-              <Sep />
-            </>
-          )}
           {compact ? (
             <DropBtn label={t("docsInsert.textWrapping")} track="image-wrap" face={<ShownWrapIcon />}>
               {(close) =>

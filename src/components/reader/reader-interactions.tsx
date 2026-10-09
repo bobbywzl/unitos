@@ -196,7 +196,7 @@ import {
   SuggestionRow,
   type SuggestRequest,
 } from "@/components/assistant/suggestion-row";
-import { FIGURE_ASSISTANT_EVENT, publishFigureSuggestion, splitFigureSuggestions } from "@/components/reader/figure-suggestion";
+import { publishFigureSuggestion, splitFigureSuggestions } from "@/components/reader/figure-suggestion";
 import {
   belowSlot,
   marginPlace,
@@ -330,6 +330,45 @@ function dockUnderWords(wordsLeft: number, cw: number) {
   const width = cw - 16 - 300 < 160 ? cw - 16 : 300;
   const left = Math.max(8, Math.min(wordsLeft - 12, cw - width - 8));
   return { left, width };
+}
+
+/** A sheet's card (SPEC.md §6): of the two places beside the selected
+    cells — right of the grid, level with the words, and under the words —
+    the one that covers fewer of the grid's filled cells, a cell's text
+    overflowing into the room beside it included. Null: not a sheet, no
+    room right of the grid, or the place under the words covers fewer. */
+function sheetCardSlot(
+  container: HTMLElement,
+  words: { top: number; bottom: number; left: number; blockId: string },
+  cw: number,
+  height: number,
+): { left: number; top: number; width: number } | null {
+  const el = drawnBlock(container, words.blockId);
+  const grid = el?.classList.contains("reader-sheet") ? el.querySelector("table") : null;
+  if (!el || !grid) return null;
+  const crect = container.getBoundingClientRect();
+  const toX = (x: number) => x - crect.left;
+  const toY = (y: number) => y - crect.top + container.scrollTop;
+  const width = 300;
+  const right = { left: toX(grid.getBoundingClientRect().right) + 12, top: words.top, width };
+  if (right.left + width > cw - 8) return null;
+  const under = { ...dockUnderWords(words.left, cw), top: words.bottom + 8 };
+  const boxes: DOMRect[] = [];
+  const range = document.createRange();
+  for (const cell of el.querySelectorAll("td, th")) {
+    if (!cell.textContent?.trim()) continue;
+    range.selectNodeContents(cell);
+    boxes.push(range.getBoundingClientRect());
+  }
+  const covered = (slot: { left: number; top: number; width: number }) =>
+    boxes.filter(
+      (b) =>
+        toX(b.right) > slot.left &&
+        toX(b.left) < slot.left + slot.width &&
+        toY(b.bottom) > slot.top &&
+        toY(b.top) < slot.top + height,
+    ).length;
+  return covered(right) <= covered(under) ? right : null;
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -2346,6 +2385,10 @@ export function ReaderInteractions({
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
+  // When a figure object last opened its tools (DOCS_EVENT.figureTools): a
+  // release that came before it, a tap's pointerup and its mouseup on a
+  // phone, never closes them.
+  const figureToolsAtRef = useRef(-Infinity);
 
   // Tool block placement, by proximity to the highlighted text: with nothing
   // beside it a new block goes right; with a block already close on the right
@@ -2387,6 +2430,8 @@ export function ReaderInteractions({
     const col = columnAtRest(measured, cardsRoomRef.current);
     const room = narrowRef.current ? null : cardRoom(col);
     if (!room) {
+      const sheet = words && containerRef.current ? sheetCardSlot(containerRef.current, words, cw, CARD_ESTIMATE) : null;
+      if (sheet) return { ...sheet, side: "right" as const };
       if (words && overBlock(words, containerRef.current?.clientHeight ?? 0)) {
         return { ...dockUnderWords(words.left, cw), top: words.bottom + 8, side: "right" as const };
       }
@@ -3274,6 +3319,14 @@ export function ReaderInteractions({
     let press: { x: number; y: number } | null = null;
     const onPress = (e: PointerEvent) => {
       press = { x: e.clientX, y: e.clientY };
+      // The page editor and the edit mode skip the click below: there a
+      // press outside the chooser closes it, a tap on a phone too.
+      if (
+        (editModeRef.current || richTextRef.current) &&
+        openLayersRef.current.includes("chooser") &&
+        !(e.target instanceof Element && e.target.closest("[data-stack-chooser]"))
+      )
+        setStackChooser(null);
     };
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || editModeRef.current || richTextRef.current) return;
@@ -3359,6 +3412,8 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // The figure tools this release's own tap opened stay open.
+        if (popoverRef.current?.figure && figureToolsAtRef.current >= event.timeStamp) return;
         // A drag that began on the article and let go in the tray or the
         // header selects the page between: the selection is cut to the
         // article's blocks it crosses, as if the drag had stopped at the
@@ -3724,6 +3779,7 @@ export function ReaderInteractions({
     let disarm = 0;
     const onFigureTools = (e: Event) => {
       const { blockId, x, y } = (e as CustomEvent<{ blockId: string; x: number; y: number }>).detail;
+      figureToolsAtRef.current = performance.now();
       openFigureToolsRef.current(blockId, x, y);
       cancelAnimationFrame(disarm);
       disarm = requestAnimationFrame(() => {
@@ -4122,7 +4178,7 @@ export function ReaderInteractions({
         el: HTMLElement;
         anchorTop: number;
         anchorBottom: number;
-        over: { bottom: number; left: number } | null;
+        over: { top: number; bottom: number; left: number; blockId: string } | null;
       }[]
     >();
     const paneShown = container.clientHeight;
@@ -4180,6 +4236,7 @@ export function ReaderInteractions({
       }
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
       let overY = -Infinity;
+      let sideY = -Infinity;
       for (const card of cards) {
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         const held = narrowLiftRef.current.get(card.kind);
@@ -4189,7 +4246,15 @@ export function ReaderInteractions({
           if (capView.key === key) recheck.push(card.kind);
         }
         const lifted = !card.over && held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
-        if (card.over) {
+        // A sheet's card stands right of the grid when that covers fewer
+        // cells (sheetCardSlot).
+        const sheet = card.over ? sheetCardSlot(container, card.over, container.clientWidth, CARD_ESTIMATE) : null;
+        if (sheet) {
+          sideY = Math.max(sideY, sheet.top);
+          tops[card.kind] = sideY;
+          docks[card.kind] = { left: sheet.left, width: sheet.width };
+          sideY += card.el.offsetHeight + CARD_GAP;
+        } else if (card.over) {
           overY = Math.max(overY, card.over.bottom + 8);
           tops[card.kind] = overY;
           docks[card.kind] = dockUnderWords(card.over.left, container.clientWidth);
@@ -6044,7 +6109,9 @@ export function ReaderInteractions({
       return;
     }
     const text = block.text;
-    if (!text.trim()) {
+    // In the page editor a figure with no words (an image) opens its tools
+    // with the Assistant alone (has); the block reader has nothing to offer.
+    if (!text.trim() && !richTextRef.current) {
       showToast(t("reader.figureNoCaption"));
       return;
     }
@@ -7744,26 +7811,26 @@ export function ReaderInteractions({
   const openBarRef = useRef(openBar);
   openBarRef.current = openBar;
 
-  // The image toolbar's Assistant (SPEC.md §7, words from a figure): the bar
-  // opens on the image. An image has no words, so its anchor quotes none and
-  // the request names the figure by its block id (assistantTurn). The page
-  // editor that sent it picks this reader in a split pane.
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent<{ blockId: string; top: number; from: Element }>).detail;
-      const container = containerRef.current;
-      if (!detail || !container || !container.contains(detail.from)) return;
-      if (!canEditRef.current) return;
-      const text = blocksRef.current.find((b) => b.id === detail.blockId)?.text ?? "";
-      const rect = container.getBoundingClientRect();
-      openBarRef.current({
-        anchor: { blockId: detail.blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
-        yTop: Math.max(8, detail.top - rect.top + container.scrollTop),
-      }, true);
-    };
-    window.addEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
-    return () => window.removeEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
-  }, []);
+  // A figure with no words (an image in the page editor): the figure tools'
+  // Assistant opens the bar under the image (SPEC.md §7, words from a
+  // figure). Its anchor quotes none, so the request names the figure by its
+  // block id (assistantTurn). The caret goes after a selected image, so the
+  // image's own toolbar does not cover the words the assistant puts under it.
+  function openFigureBar(anchor: Popover["anchor"]) {
+    const container = containerRef.current;
+    if (!container) return;
+    const figure = container.querySelector(`[data-block-id="${CSS.escape(anchor.blockId)}"]`);
+    const rect = container.getBoundingClientRect();
+    const bottom = (figure?.querySelector(".docs-img-box") ?? figure)?.getBoundingClientRect().bottom ?? rect.top;
+    const editor = pageEditorIn(container);
+    if (editor && !editor.isDestroyed && editor.isEditable) {
+      const { from, to } = editor.state.selection;
+      if (to === from + 1 && editor.state.doc.nodeAt(from)?.attrs.blockId === anchor.blockId) {
+        editor.commands.setTextSelection(to);
+      }
+    }
+    openBar({ anchor, yTop: Math.max(8, bottom - rect.top + container.scrollTop) }, true);
+  }
 
   // The bar's edit: its last command's suggestions.
   const barRunKey = (b: AssistantBar) => b.messages.findLast((m) => m.suggestKey)?.suggestKey ?? null;
@@ -9735,6 +9802,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const has = (tool: Tool) =>
     (canEdit || tool === "define") &&
     TOOLBARS[popoverKind].includes(tool) &&
+    // A figure with no words (an image) has nothing to anchor a mark to: the
+    // assistant, which reads the picture, is its one tool.
+    !(popover?.figure && !popover.anchor.quotedText && tool !== "assistant") &&
     !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
   // The definition under the Define row: the open popover's own.
@@ -10954,8 +11024,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             >
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
-            {/* One head for every card a mark opens (SPEC.md §6): the kind,
-                then Link across texts (a highlight), Delete, and ✕. */}
+            {/* One head for every card a mark opens (SPEC.md §6): the kind
+                and Delete, away from ✕; then Link across texts (a
+                highlight) and ✕. */}
+            <button
+              onClick={() => void deleteAnnotation()}
+              data-track="annotation-delete"
+              aria-label={t("common.delete")}
+              data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
+              disabled={annotationCard.busy}
+              className={`ml-1 flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+            >
+              <TrashIcon size={coarse ? 15 : 13} />
+            </button>
             <span className="ml-auto flex items-center gap-0.5">
               {/* A link across texts starts from the highlight: the next
                   words the reader selects, here or in another text, close it. */}
@@ -10977,16 +11058,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   <UnlinkIcon size={coarse ? 15 : 13} />
                 </button>
               )}
-              <button
-                onClick={() => void deleteAnnotation()}
-                data-track="annotation-delete"
-                aria-label={t("common.delete")}
-                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
-                disabled={annotationCard.busy}
-                className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
-              >
-                <TrashIcon size={coarse ? 15 : 13} />
-              </button>
               <button
                 onClick={() => setAnnotationCard(null)}
                 data-track="annotation-close"
@@ -11454,7 +11525,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
 
           {has("assistant") && (
           <button
-            onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
+            onClick={() =>
+              barOffered
+                ? openBar(popover)
+                : popover.figure && !popover.anchor.quotedText
+                  ? openFigureBar(popover.anchor)
+                  : setSubmenu(submenu === "ai" ? null : "ai")
+            }
             data-track="assistant"
             aria-disabled={aiOff || undefined}
             aria-expanded={submenu === "ai"}
@@ -12120,8 +12197,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
-            {/* The page editor's comment card's shape: its icons at the
-                head's right — Resolve, then Delete — and the field under it. */}
+            {/* One head for every card a mark opens (SPEC.md §6): the kind
+                and Delete, away from ✕; then Resolve and ✕. */}
+            {commentCard.noteId && (
+              <button
+                onClick={() => void deleteCommentCard()}
+                data-track="comment-card-delete"
+                aria-label={t("common.delete")}
+                data-tip={t("reader.deleteCommentTitle")}
+                disabled={commentCard.busy}
+                className={`ml-1 flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+              >
+                <TrashIcon size={coarse ? 15 : 13} />
+              </button>
+            )}
             <span className="ml-auto flex items-center gap-0.5">
               {commentCard.noteId && canEdit && (
                 <button
@@ -12132,18 +12221,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700`}
                 >
                   <CheckIcon size={coarse ? 16 : 14} />
-                </button>
-              )}
-              {commentCard.noteId && (
-                <button
-                  onClick={() => void deleteCommentCard()}
-                  data-track="comment-card-delete"
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteCommentTitle")}
-                  disabled={commentCard.busy}
-                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
-                >
-                  <TrashIcon size={coarse ? 15 : 13} />
                 </button>
               )}
               <button

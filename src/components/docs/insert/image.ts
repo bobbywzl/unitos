@@ -4,6 +4,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { lengthUnitFor, PT_PER_UNIT, PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 import { caretUnderImage, insertImage, insertImageFiles } from "@/components/docs/typing/paste";
@@ -217,6 +218,21 @@ class ImageView implements NodeView {
       else this.startCrop();
     });
     this.box.addEventListener("mousedown", (e) => this.onBoxDown(e));
+    // A click on the picture opens the figure tools, as a click on an
+    // import's figure does (figure.ts), in Viewing and in Editing; the
+    // reader layer answers. A press that moves is a drag, not a click.
+    let down: { x: number; y: number } | null = null;
+    this.frame.addEventListener("mousedown", (e) => {
+      down = e.button === 0 && !this.crop ? { x: e.clientX, y: e.clientY } : null;
+    });
+    this.frame.addEventListener("mouseup", (e) => {
+      const start = down;
+      down = null;
+      const blockId = this.node.attrs.blockId;
+      if (!start || e.button !== 0 || this.crop || typeof blockId !== "string" || !blockId) return;
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) return;
+      fireDocs(this.editor, DOCS_EVENT.figureTools, { blockId, x: e.clientX, y: e.clientY });
+    });
     this.render();
   }
 
