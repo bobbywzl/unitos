@@ -1,8 +1,8 @@
 {
  "total": {
-  "a": 0.956,
+  "a": 0.975,
   "b": 1,
-  "all": 0.978
+  "all": 0.988
  },
  "files": {
   "a-tracemonkey": 1,
@@ -153,8 +153,8 @@
   "a-photo-curled": 1,
   "a-photo-notes-b": 1,
   "a-strips": 1,
-  "a-hugemono": 0.7,
-  "a-jbig2-giant": 0,
+  "a-hugemono": 1,
+  "a-jbig2-giant": 1,
   "b-photo-curled-cookbook": 1,
   "b-photo-curled-thesis": 1,
   "b-photo-notes-b1": 1,

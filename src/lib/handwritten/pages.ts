@@ -96,6 +96,88 @@ function rgbaImage(value: unknown): unknown {
   return { ...image, kind: RGBA_32BPP, data: rgba };
 }
 
+// pdf.js paints an image through a canvas of the image's own size: a
+// 25000 x 18000 one-bit scan (56 MB as decoded) asks for a 1.8 GB canvas,
+// and a 35000 x 35000 one asks for 4.9 GB, which Skia refuses. An image past
+// PAINT_MAX_PIXELS is box-averaged by a whole factor to at most
+// PAINT_TARGET_PIXELS before it reaches the page: no page image draws more
+// than 24 MP (pageImageWidth), so the page looks the same. An image at or
+// under PAINT_MAX_PIXELS is untouched, so every render it was in before
+// stays the same. Images benchmark finding: a large-format JBIG2 scan took
+// the add past 2 GB, and a giant CCITT scan's pages drew nothing.
+const GRAYSCALE_1BPP = 1;
+const PAINT_MAX_PIXELS = 100_000_000;
+const PAINT_TARGET_PIXELS = 16_000_000;
+
+type DecodedImage = { kind: number; data: Uint8Array | Uint8ClampedArray; width: number; height: number };
+
+function decodedImage(value: unknown): DecodedImage | null {
+  const image = value as ImageData24 | null;
+  if (!image || typeof image !== "object") return null;
+  const { kind, data, width, height } = image;
+  if (kind !== GRAYSCALE_1BPP && kind !== RGB_24BPP && kind !== RGBA_32BPP) return null;
+  if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return null;
+  if (typeof width !== "number" || typeof height !== "number" || width < 1 || height < 1) return null;
+  const length = kind === GRAYSCALE_1BPP ? ((width + 7) >> 3) * height : width * height * (kind === RGB_24BPP ? 3 : 4);
+  return data.length >= length ? { kind, data, width, height } : null;
+}
+
+/** An image past PAINT_MAX_PIXELS, box-averaged to at most
+    PAINT_TARGET_PIXELS, as RGBA; any other value as it is. */
+function reducedImage(value: unknown): unknown {
+  const image = decodedImage(value);
+  if (!image || image.width * image.height <= PAINT_MAX_PIXELS) return value;
+  const { kind, data, width, height } = image;
+  const k = Math.ceil(Math.sqrt((width * height) / PAINT_TARGET_PIXELS));
+  const w = Math.ceil(width / k);
+  const h = Math.ceil(height / k);
+  const channels = kind === GRAYSCALE_1BPP ? 1 : kind === RGB_24BPP ? 3 : 4;
+  const stride = kind === GRAYSCALE_1BPP ? (width + 7) >> 3 : width * channels;
+  const sum = new Float64Array(w * 4);
+  const count = new Uint32Array(w);
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let ty = 0; ty < h; ty++) {
+    sum.fill(0);
+    count.fill(0);
+    const y1 = Math.min(height, (ty + 1) * k);
+    for (let y = ty * k; y < y1; y++) {
+      const row = y * stride;
+      if (kind === GRAYSCALE_1BPP) {
+        // A set bit is white, a clear bit black (pdf.js
+        // convertBlackAndWhiteToRGBA); rows are padded to whole bytes.
+        for (let x = 0; x < width; x++) {
+          const tx = (x / k) | 0;
+          count[tx]++;
+          if ((data[row + (x >> 3)] >> (7 - (x & 7))) & 1) sum[tx * 4] += 255;
+        }
+      } else {
+        for (let x = 0, p = row; x < width; x++, p += channels) {
+          const tx = (x / k) | 0;
+          count[tx]++;
+          sum[tx * 4] += data[p];
+          sum[tx * 4 + 1] += data[p + 1];
+          sum[tx * 4 + 2] += data[p + 2];
+          sum[tx * 4 + 3] += channels === 4 ? data[p + 3] : 255;
+        }
+      }
+    }
+    for (let tx = 0; tx < w; tx++) {
+      const n = count[tx] || 1;
+      const q = (ty * w + tx) * 4;
+      if (kind === GRAYSCALE_1BPP) {
+        out[q] = out[q + 1] = out[q + 2] = sum[tx * 4] / n;
+        out[q + 3] = 255;
+      } else {
+        out[q] = sum[tx * 4] / n;
+        out[q + 1] = sum[tx * 4 + 1] / n;
+        out[q + 2] = sum[tx * 4 + 2] / n;
+        out[q + 3] = sum[tx * 4 + 3] / n;
+      }
+    }
+  }
+  return { ...(value as object), kind: RGBA_32BPP, data: out, width: w, height: h };
+}
+
 /** Once per process: images reach the page as RGBA (see above). objs is a
     page's PDFObjects; its class is not exported, so the fix goes on its
     prototype. */
@@ -105,7 +187,8 @@ function fixRgbPaint(objs: unknown): void {
   const resolve = proto.resolve;
   if (typeof resolve !== "function") return;
   proto.resolve = function (this: unknown, id: string, data: unknown = null) {
-    return resolve.call(this, id, rgbaImage(data));
+    const reduced = reducedImage(data);
+    return resolve.call(this, id, reduced === data ? rgbaImage(data) : reduced);
   };
   rgbPaintFixed = true;
 }
