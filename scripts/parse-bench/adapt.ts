@@ -166,10 +166,13 @@ const MATH_GLYPH_RE = /[\p{Sm}\p{sc=Greek}\u{1D400}-\u{1D7FF}ℂℍℕℙℚℝ�
     chart's labels: a tenth of its glyphs or more are math, or it ends in an
     equation number? Kept strict: a diagram's labels read as a caption count
     as words (a leak), and any figure where the reference has an equation
-    still counts as an equation image. */
+    still counts as an equation image. A panel's caption ("(a) M = 0") is a
+    caption: read as an equation picture, the MML book's p. 305 panels "(a) M
+    = 0" ... "(f) M = 9", each its chart's caption with its formula, counted
+    their formulas lost. */
 export function isMathText(text: string): boolean {
   const t = text.trim();
-  if (!t || CAPTION_RE.test(t)) return false;
+  if (!t || CAPTION_RE.test(t) || /^\([a-z]\)\s+\S/.test(t)) return false;
   const glyphs = [...t.replace(/\s/g, "")];
   const math = glyphs.filter((c) => MATH_GLYPH_RE.test(c)).length;
   return math / glyphs.length >= 0.1 || (math >= 1 && /\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)$/.test(t));
