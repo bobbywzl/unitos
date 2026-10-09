@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.apache.poi.ss.format.CellFormat;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -39,6 +40,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 public class SheetsRef {
   static final int MAX_ROWS = 10_000;
   static final int MAX_COLS = 256;
+  // A quoted or escaped literal between two digit placeholders.
+  static final java.util.regex.Pattern LITERAL_BETWEEN_DIGITS = java.util.regex.Pattern.compile("[0#?](?:\"[^\"]*\"|\\\\.)+[0#?]");
   // 9999-12-31, the last day Excel shows.
   static final double MAX_DATE_SERIAL = 2958465;
 
@@ -238,6 +241,21 @@ public class SheetsRef {
         if (step > 0 && value >= 0 && DateUtil.isCellDateFormatted(cell)) {
           double rounded = Math.round(value * step) / (double) step;
           return new RefCell(formatter.formatRawCellContents(rounded, cell.getCellStyle().getDataFormat(), format, date1904), "n", general, value);
+        }
+        // A literal between digit placeholders always shows, and the digits
+        // fill the placeholders around it from the right (ECMA-376 Part 1,
+        // §18.8.31): 41310 in ###"."###"."##0 shows .41.310, and 5551234
+        // in (###) ###-#### shows () 555-1234. DataFormatter drops the
+        // literals (41310, and (555-1234) for the phone number) and reads
+        // a fraction's whole part and numerator as one number. POI's own
+        // Excel formatter, CellFormat, keeps the literals: it reads these
+        // formats.
+        if (format != null && LITERAL_BETWEEN_DIGITS.matcher(format).find() && !DateUtil.isCellDateFormatted(cell)) {
+          try {
+            return new RefCell(CellFormat.getInstance(Locale.US, format).apply(value).text, "n", general, value);
+          } catch (Exception e) {
+            // DataFormatter below.
+          }
         }
         return new RefCell(formatter.formatCellValue(cell), "n", general, value);
       }

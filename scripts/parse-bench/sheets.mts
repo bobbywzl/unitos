@@ -73,7 +73,7 @@ const FILES = join(BENCH, "files");
 const SDISTS = join(BENCH, "sdist");
 const JARS = join(BENCH, "jars");
 // Bump when the reference builders change: references are rebuilt.
-const REF_VERSION = 7;
+const REF_VERSION = 8;
 const REFS = join(BENCH, `ref-v${REF_VERSION}`);
 const CORPUS = join(import.meta.dirname, "sheets-corpus.json");
 const BASELINE = join(import.meta.dirname, "sheets-baseline.json");
