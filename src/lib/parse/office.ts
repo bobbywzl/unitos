@@ -93,10 +93,32 @@ export function unzipOffice(bytes: Uint8Array): OfficeZip {
 
 const decoder = new TextDecoder("utf-8");
 
+/** The character set an XML part is written in: a byte order mark, else
+    the declaration's encoding, else UTF-8 (XML 1.0, §4.3.3). Sheets
+    benchmark finding: a workbook whose worksheet declares ISO-8859-1 read
+    every accented letter as U+FFFD. */
+function xmlCharset(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+  if (bytes[0] !== 0x3c || bytes[1] !== 0x3f) return "utf-8";
+  let head = "";
+  for (let i = 0; i < Math.min(bytes.length, 200) && bytes[i] !== 0x3e; i++) head += String.fromCharCode(bytes[i]);
+  const declared = /encoding\s*=\s*["']([A-Za-z0-9._-]+)["']/.exec(head)?.[1].toLowerCase();
+  return declared ?? "utf-8";
+}
+
 /** An XML part's text, or null when the zip has no such part. */
 export function partText(zip: OfficeZip, path: string): string | null {
   const bytes = zip.get(path);
-  return bytes ? decoder.decode(bytes) : null;
+  if (!bytes) return null;
+  const charset = xmlCharset(bytes);
+  if (charset === "utf-8") return decoder.decode(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    // A label the decoder does not know: read it as UTF-8, as before.
+    return decoder.decode(bytes);
+  }
 }
 
 // One DOM parser for every part: a JSDOM window per part would be the slow

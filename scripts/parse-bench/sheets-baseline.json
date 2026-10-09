@@ -7,7 +7,7 @@
   "formats": 0.938,
   "merges": 1,
   "frozen": 1,
-  "lost": 13006,
+  "lost": 12917,
   "dom": 0,
   "errors": 0
  },
@@ -743,13 +743,13 @@
    "dom": 0
   },
   "lo-tdf76115": {
-   "score": 0.687,
-   "text": 0.611,
-   "cells": 0.509,
+   "score": 0.692,
+   "text": 0.623,
+   "cells": 0.521,
    "formats": 0.317,
    "merges": null,
    "frozen": 1,
-   "lost": 2959,
+   "lost": 2870,
    "dom": 0
   },
   "lo-tdf131575": {
