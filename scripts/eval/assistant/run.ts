@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
+import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
 import { blockKind } from "@/lib/block-kind";
 import { EXTERNAL_PENDING } from "@/lib/derive/external-call";
@@ -360,8 +361,10 @@ function renderPlan(actions: AssistantAction[], before: Map<string, { text: stri
     .map((a) => {
       const detail = (() => {
         switch (a.type) {
-          case "edit_block":
-            return `${short(a.blockId)}: "${clip(before.get(a.blockId)?.text ?? "")}" → "${clip(a.newText)}"`;
+          case "edit_block": {
+            const window = changeWindow(before.get(a.blockId)?.text ?? "", a.newText);
+            return `${short(a.blockId)}: "${clip(window.before, 160)}" → "${clip(window.after, 160)}"`;
+          }
           case "insert_paragraph":
             return `after ${a.afterBlockId ? short(a.afterBlockId) : "the start"}${a.kind ? ` as ${a.kind}` : ""}: "${clip(a.text)}"`;
           case "remove_block":

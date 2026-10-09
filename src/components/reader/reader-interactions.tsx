@@ -73,6 +73,7 @@ import {
   useAnswerSelection,
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
+import { changeWindow } from "@/lib/assistant/diff-window";
 import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
@@ -491,8 +492,12 @@ function actionDetail(
     }
     case "add_section":
       return `“${action.title}”`;
-    case "edit_block":
-      return t("reader.detailTo", { text: clip(action.newText) });
+    case "edit_block": {
+      // The change itself, with the words around it, so a change late in
+      // a long paragraph reads in the card (lib/assistant/diff-window.ts).
+      const window = changeWindow(blockText(action.blockId), action.newText);
+      return t("reader.detailChange", { before: clip(window.before, 120), after: clip(window.after, 120) });
+    }
     case "insert_paragraph":
       return `${action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : ""}“${clip(action.text)}”`;
     case "remove_block":
