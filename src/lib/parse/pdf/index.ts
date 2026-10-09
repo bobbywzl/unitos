@@ -98,6 +98,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const flagsByFont = new Map<string, FontFlags>();
   const unnamedFonts = new Set<string>();
   const realNames = new Map<string, string>();
+  let layerChars = 0;
 
   for (const pageNumber of read) {
     const keep = kept.has(pageNumber);
@@ -158,6 +159,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       (raw): raw is typeof raw & { str: string; fontName: string; transform: number[]; width: number } =>
         "str" in raw && typeof raw.str === "string" && raw.str.trim() !== "",
     );
+    if (keep) layerChars += textItems.reduce((n, raw) => n + raw.str.trim().length, 0);
     const glyphRuns = itemGlyphs(
       textItems.map((raw) => ({
         font: String(raw.fontName ?? ""),
@@ -811,6 +813,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   if (pageWidths.length > 0) parsed.pageSize = { width: points(pageWidths[0]), height: points(pageHeights[0]) };
   const labels = pageLabelsOf(await pdf.getPageLabels().catch(() => null), pdf.numPages);
   if (labels) parsed.pageLabels = labels;
+  parsed.layerChars = layerChars;
   // The page's look: the body's (Normal text) and the title's.
   const bodyFont = takeBodyFont(blocks);
   if (bodyFont) parsed.bodyFont = bodyFont;
@@ -825,7 +828,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "layerChars" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
 
 // The drawn glyphs no item took that start at a text item's origin, in one
 // font on its baseline, while they spell the item's letters (spaces aside);

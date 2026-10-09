@@ -220,6 +220,10 @@ export type ParsedDocument = {
   // leaves unnamed among named ones has the number its neighbors imply, or
   // none (""). Stored on Document.pageLabels.
   pageLabels?: string[];
+  // PDF parses: the characters the chosen pages' text layer holds, every
+  // word the parse kept or set aside (inside a figure, as page furniture).
+  // Read by the judgment alone (classify.ts textLayerVerdict); never stored.
+  layerChars?: number;
   // PDF parses: the body's look (the import's Normal text), and the title's
   // look and alignment when the title came from the page (the import's
   // Title).

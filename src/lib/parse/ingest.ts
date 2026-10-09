@@ -10,7 +10,7 @@ import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
-import { classifyPdf, textLayerEmpty } from "@/lib/handwritten/classify";
+import { classifyPdf, pdfShape, textLayerEmpty } from "@/lib/handwritten/classify";
 import { CONVERT_MAX_PAGES, transcribePages } from "@/lib/handwritten/convert";
 import { featureConfigured } from "@/lib/feature-models";
 import { storePageSizes } from "@/lib/handwritten/page-images";
@@ -644,9 +644,10 @@ export async function ingestPdf(
   onProgress?.("parse");
   const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
   const pages = documentPages(pdfPages, pdfPages?.count ?? (await pdfPageCount(bytes)));
+  // An article whose parse holds no text adds as its pages (pdfShape).
   const kind = opts.pages
     ? "handwritten"
-    : await classifyPdf(bytes, parsed.blocks, pages, userId);
+    : pdfShape(await classifyPdf(bytes, parsed.blocks, pages, userId, parsed.layerChars), parsed.blocks);
   // A scan of print reads off its page images into text, and goes on as an
   // article (SPEC.md §16). A read that fails leaves the PDF as its pages,
   // the reason on the strip under them and in the box.

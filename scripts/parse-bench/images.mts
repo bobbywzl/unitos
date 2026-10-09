@@ -23,14 +23,26 @@
 //   b. Images (lib/handwritten/image.ts sniffImage, image-pdf.ts
 //      imageToPdf): each file is sniffed and wrapped into the one-page PDF
 //      the add stores, then drawn as the page image the reader sees
-//      (pdfPageSizes, renderPdfPagesJpeg at PAGE_IMAGE_WIDTH). Against
+//      (pdfPageSizes, renderPdfPagesJpeg at pageImageWidth). Against
 //      Pillow's reading (images-ref.py): nothing Pillow opens in a format the
 //      add takes is refused; the page is upright (EXIF applied: the render
 //      matches the upright picture better than any turn or mirror of it), at
 //      the upright aspect, true to the picture (colors, alpha on white, the
 //      first frame), and the stored image keeps the pixels the cap allows.
 //      A format the add does not take (TIFF, HEIC, AVIF) must be refused
-//      cleanly; it is listed apart.
+//      cleanly; it is listed apart. The page image must also be legible and
+//      bounded: its short side keeps 700 px where the picture has them (a
+//      9:1 panorama drawn 156 px tall is unreadable), and it draws no more
+//      than 24 MP (a 1170 x 16000 screenshot drawn 1400 px wide is a
+//      27 MP canvas; one of 60000 px is past what a JPEG can hold).
+//
+// What the reader gets (section a): an article whose parse holds no text is
+// an empty document, so for such a PDF the right outcome is its pages (the
+// pages keep the drawing, and conversion reads the words); the bench scores
+// the add's outcome against that, not the label alone. A file marked giant
+// (a picture past what the server can decode whole) is right when the add
+// draws it or refuses it with a reason; a file marked isolate runs in a
+// child process killed past 2 GB, the server's memory, and scores 0 then.
 //
 // Model passes in the path: the classifier (CLASSIFY_MODEL) and a scan's read
 // or a conversion (CONVERT_MODEL) read the page images. No key runs here;
@@ -42,8 +54,8 @@
 // (numbers only). --baseline lists every file whose score dropped by more
 // than 0.01 and exits 1 when one did. --mem runs each file in a child
 // process and reports its peak memory.
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -87,6 +99,11 @@ type CorpusFile = {
   why?: string;
   expect?: "refused";
   exercises?: string;
+  // A picture past what the server decodes whole: drawn, or refused with a
+  // reason. Its reference may hold the header alone.
+  giant?: boolean;
+  // Run in a child process killed past ISOLATE_MB.
+  isolate?: boolean;
 };
 const corpus = JSON.parse(readFileSync(CORPUS, "utf8")) as { files: CorpusFile[] };
 
@@ -104,6 +121,7 @@ type ImageRef = {
   uprightHeight?: number;
   thumb?: Thumb;
   error?: string;
+  headerOnly?: boolean;
 };
 type PdfPageRef = { width: number; height: number; rotate: number; chars: number; oneLetter: number; ink: number; thumb: Thumb };
 type PdfRef = { opens: boolean; pageCount: number; encrypted: boolean; pages: PdfPageRef[] };
@@ -111,8 +129,8 @@ type PdfRef = { opens: boolean; pageCount: number; encrypted: boolean; pages: Pd
 type Result = { id: string; section: "a" | "b"; score: number; metrics: Record<string, number>; ms: number; notes: string[]; tag?: string };
 
 const { parsePdf } = await import("@/lib/parse/pdf");
-const { textLayerVerdict, classifySamplePages } = await import("@/lib/handwritten/classify");
-const { CLASSIFY_IMAGE_WIDTH, PAGE_IMAGE_WIDTH, pdfPageCount, pdfPageSizes, renderPdfPage, renderPdfPagesJpeg } = await import(
+const { textLayerVerdict, classifySamplePages, pdfShape } = await import("@/lib/handwritten/classify");
+const { CLASSIFY_IMAGE_WIDTH, pageImageWidth, pdfPageCount, pdfPageSizes, renderPdfPage, renderPdfPagesJpeg } = await import(
   "@/lib/handwritten/pages"
 );
 const { sniffImage } = await import("@/lib/handwritten/image");
@@ -270,6 +288,9 @@ function compare(render: Pixels, refThumb: Pixels): { sim: number; best: string;
 
 // ── Section a: the judgment ─────────────────────────────────────────────────
 
+// The shape the add gives a PDF the judgment named (classify.ts pdfShape).
+const shapeOf = (kind: Label, blocks: Parameters<typeof pdfShape>[1]): Label => pdfShape(kind, blocks);
+
 function pagesOf(file: CorpusFile, count: number): number[] {
   const [from, to] = file.pages ?? [1, count];
   return Array.from({ length: Math.min(to, count) - from + 1 }, (_, i) => from + i);
@@ -284,7 +305,7 @@ async function checkRenders(
   bytes: Uint8Array,
   ref: PdfRef,
   pages: number[],
-  width: number,
+  width: Parameters<typeof renderPdfPagesJpeg>[2],
   jpeg: boolean,
   what: string,
 ): Promise<PageCheck> {
@@ -324,7 +345,8 @@ async function checkRenders(
     if (blank) notes.push(`${what} page ${page} draws blank (ink ${round(appInk, 4)}, MuPDF ${pref.ink})`);
     else if (!shapeOk) notes.push(`${what} page ${page} shape ${px.w}x${px.h}, the page is ${pref.width}x${pref.height}`);
     else if (s < 0.999) notes.push(`${what} page ${page} similarity ${round(sim)}${best !== "upright" ? `, matches the page ${best}` : ""}`);
-    if (px.w !== width) notes.push(`${what} page ${page} drawn ${px.w} px wide, not ${width}`);
+    const wantWidth = typeof width === "number" ? width : width(pref.width, pref.height, page);
+    if (Math.abs(px.w - wantWidth) > 1) notes.push(`${what} page ${page} drawn ${px.w} px wide, not ${wantWidth}`);
   }
   return { ok: mean(scores), notes, ms };
 }
@@ -337,29 +359,38 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
   const pages = pagesOf(file, count);
   const parsed = await quiet(() => parsePdf(bytes, { pages: file.pages ? pages : undefined }));
   const parseMs = performance.now() - t0;
-  const verdict = textLayerVerdict(parsed.blocks, pages.length);
+  const verdict = textLayerVerdict(parsed.blocks, pages.length, parsed.layerChars);
+  // What the reader gets: an article of no text is an empty document, so
+  // such a PDF's right outcome is its pages.
+  const holdsText = parsed.blocks.some((b) => b.text.trim() !== "");
+  const want: Label = label === "article" && !holdsText ? "handwritten" : label;
   // With a model that answers each label right, only the gate can be wrong.
-  const withModel: Label = verdict.kind ?? label;
-  const keyless: Label = verdict.kind ?? verdict.fallback;
-  const keylessWant: Label = label === "article" ? "article" : "handwritten";
-  const choice = withModel === label ? 1 : 0;
+  const withModel: Label = shapeOf(verdict.kind ?? label, parsed.blocks);
+  const keyless: Label = shapeOf(verdict.kind ?? verdict.fallback, parsed.blocks);
+  const keylessWant: Label = want === "article" ? "article" : "handwritten";
+  const choice = withModel === want ? 1 : 0;
   const keylessOk = keyless === keylessWant ? 1 : 0;
   const toModel = verdict.kind === null;
-  const refChars = pages.reduce((n, p) => n + (ref.pages[p - 1]?.chars ?? 0), 0) / Math.max(1, pages.length);
+  const refTotal = pages.reduce((n, p) => n + (ref.pages[p - 1]?.chars ?? 0), 0);
+  const refChars = refTotal / Math.max(1, pages.length);
   notes.push(
     `text layer ${Math.round(verdict.perPage)} chars/page (MuPDF ${Math.round(refChars)})${verdict.junk ? ", junk" : ""}: ` +
-      `${toModel ? "to the model" : "article, no model call"}; keyless ${keyless}; label ${label} (${file.shape})`,
+      `${toModel ? "to the model" : "article, no model call"}; keyless ${keyless}; label ${label} (${file.shape})` +
+      (holdsText ? "" : "; the parse holds no text"),
   );
-  if (!choice) notes.unshift(`the gate takes a ${label} (${file.shape}) for an article: its text layer is read as the text`);
-  if (!keylessOk && label === "article") notes.unshift(`keyless, an article (${file.shape}) becomes handwritten pages`);
+  if (!choice && withModel === "article" && !holdsText) notes.unshift(`a ${label} (${file.shape}) becomes an article whose parse holds no text: an empty document`);
+  else if (!choice) notes.unshift(`the gate takes a ${label} (${file.shape}) for an article: its text layer is read as the text`);
+  if (!keylessOk && keyless === "article" && !holdsText) notes.unshift(`keyless, a ${label} (${file.shape}) becomes an empty article`);
+  else if (!keylessOk && want === "article") notes.unshift(`keyless, an article (${file.shape}) becomes handwritten pages`);
 
   const metrics: Record<string, number> = {
     choice,
     keyless: keylessOk,
     toModel: toModel ? 1 : 0,
-    needlessModel: toModel && label === "article" ? 1 : 0,
-    articleAsPages: label === "article" && keyless !== "article" ? 1 : 0,
+    needlessModel: toModel && want === "article" ? 1 : 0,
+    articleAsPages: want === "article" && keyless !== "article" ? 1 : 0,
     unreadableScan: label === "scan" && verdict.kind === "article" ? 1 : 0,
+    emptyArticle: (withModel === "article" || keyless === "article") && !holdsText ? 1 : 0,
     pages: pages.length,
   };
   const parts: { w: number; s: number }[] = [
@@ -370,13 +401,24 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
   const samples = classifySamplePages(pages);
   if (toModel) {
     const check = await checkRenders(bytes, ref, samples, CLASSIFY_IMAGE_WIDTH, false, "classifier sample");
-    parts.push({ w: 1, s: check.ok });
-    metrics.modelInput = round(check.ok);
+    // The prompt states the text layer's yield (classify.ts textChars): a
+    // drawing whose words the parse set inside its figures is told it has
+    // none. Right when it states at least a quarter of MuPDF's count (MuPDF
+    // also counts what the parse rightly leaves out: a contents page's
+    // leader dots, a page's furniture), or when the layer holds next to
+    // nothing either way.
+    const told = verdict.textChars;
+    const yieldOk = refChars < 40 || told >= refTotal * 0.25 ? 1 : clamp01(told / (refTotal * 0.25));
+    if (yieldOk < 1) notes.push(`the model is told the text layer holds ${told} characters; MuPDF reads ${refTotal}`);
+    const input = mean([check.ok, yieldOk]);
+    parts.push({ w: 1, s: input });
+    metrics.modelInput = round(input);
+    metrics.toldChars = told;
     notes.push(...check.notes);
     renderMs += check.ms;
   }
-  if (label !== "article") {
-    const check = await checkRenders(bytes, ref, samples, PAGE_IMAGE_WIDTH, true, "page image");
+  if (want !== "article") {
+    const check = await checkRenders(bytes, ref, samples, pageImageWidth, true, "page image");
     parts.push({ w: 1, s: check.ok });
     metrics.pageImages = round(check.ok);
     notes.push(...check.notes);
@@ -393,6 +435,10 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
 // imageToPdf draws no more pixels than this (image-pdf.ts MAX_PIXELS); a
 // JPEG it embeds as it is keeps every pixel.
 const DRAW_CAP = 24_000_000;
+// A page image's short side keeps this many pixels where the picture has
+// them: a 9:1 panorama drawn 1400 px wide is 156 px tall, its words a sixth
+// of their size.
+const LEGIBLE = 700;
 
 function embeddedSize(pdf: Uint8Array): { w: number; h: number } | null {
   const head = Buffer.from(pdf.subarray(0, 4096)).toString("latin1");
@@ -423,6 +469,11 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
       metrics.notTaken = 1;
       return { id: file.id, section: "b", score: 1, metrics, ms: wrapMs, notes: [`refused (${refusal}): a format the add does not take`], tag: ref.format };
     }
+    // A picture past what the server decodes whole, refused with a reason:
+    // the add fails cleanly.
+    if (file.giant && mime) {
+      return { id: file.id, section: "b", score: 1, metrics, ms: wrapMs, notes: [`refused (${refusal}): too large to draw`], tag: ref.format };
+    }
     // An image Pillow cannot read either is refused rightly.
     const wrong = ref.opens ? 1 : 0;
     metrics.wrongRefusal = wrong;
@@ -442,17 +493,33 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
   metrics.pdfBytes = pdf.length;
   metrics.sourceBytes = bytes.length;
   const t1 = performance.now();
-  const [size] = await quiet(() => pdfPageSizes(pdf!));
+  const [size] = await quiet(() => pdfPageSizes(pdf!, pageImageWidth));
   let image: Uint8Array | null = null;
-  await quiet(() => renderPdfPagesJpeg(pdf!, [1], PAGE_IMAGE_WIDTH, async (_p, jpeg) => void (image = jpeg)));
+  await quiet(() => renderPdfPagesJpeg(pdf!, [1], pageImageWidth, async (_p, jpeg) => void (image = jpeg)));
   const renderMs = performance.now() - t1;
   metrics.renderMs = Math.round(renderMs);
-  if (!image || !size || !ref.thumb || !ref.uprightWidth || !ref.uprightHeight) {
+  if (!image || !size || (!ref.thumb && !ref.headerOnly) || !ref.uprightWidth || !ref.uprightHeight) {
     notes.push(!image ? "the page did not render" : "no reference picture");
     metrics.crashed = image ? 0 : 1;
     return { id: file.id, section: "b", score: 0, metrics, ms: wrapMs + renderMs, notes, tag: ref.format };
   }
   const px = await decode(image);
+  // Legible and bounded: the short side keeps LEGIBLE px where the picture
+  // has them, and the page draws no more than DRAW_CAP pixels.
+  const short = Math.min(px.w, px.h);
+  const need = Math.max(1, Math.min(LEGIBLE, ref.uprightWidth, ref.uprightHeight));
+  const legible = clamp01(short / need);
+  const bounded = px.w * px.h <= DRAW_CAP * 1.01 ? 1 : DRAW_CAP / (px.w * px.h);
+  const drawn = Math.min(legible, bounded);
+  if (legible < 1) notes.push(`page image ${px.w}x${px.h}: its short side is ${short} px, the picture's ${Math.min(ref.uprightWidth, ref.uprightHeight)}`);
+  if (bounded < 1) notes.push(`page image ${px.w}x${px.h}: ${round((px.w * px.h) / 1e6, 1)} MP drawn, past ${DRAW_CAP / 1e6} MP`);
+  if (ref.headerOnly) {
+    // No reference picture: the shape and the size alone.
+    const aspectErr = Math.abs(size.width / size.height / (ref.uprightWidth / ref.uprightHeight) - 1);
+    const shapeOk = aspectErr < 0.01 ? 1 : clamp01(1 - aspectErr * 5);
+    Object.assign(metrics, { aspect: round(shapeOk), drawn: round(drawn), pageW: size.width, pageH: size.height });
+    return { id: file.id, section: "b", score: round(mean([shapeOk, drawn])), metrics, ms: wrapMs + renderMs, notes, tag: ref.format };
+  }
   if (detail) {
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, `${file.id}.jpg`), image);
@@ -460,7 +527,7 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
   const want = ref.uprightWidth / ref.uprightHeight;
   const aspectErr = Math.abs(size.width / size.height / want - 1);
   const aspect = aspectErr < 0.01 ? 1 : clamp01(1 - aspectErr * 5);
-  const refPx = fromThumb(ref.thumb);
+  const refPx = fromThumb(ref.thumb!);
   const { sim, best, bestSim } = compare(px, refPx);
   // Upright: the render is the upright picture, not a turn or mirror of it.
   // A picture that looks the same turned (a symmetric one) ties, and passes.
@@ -471,6 +538,7 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
   const kept = embedded ? clamp01((embedded.w * embedded.h) / Math.min(sourcePx, DRAW_CAP)) : 0;
   Object.assign(metrics, {
     upright,
+    drawn: round(drawn),
     aspect: round(aspect),
     similarity: round(sim),
     fidelity: round(fidelity),
@@ -485,7 +553,7 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
   if (fidelity < 0.999 && upright) notes.push(`similarity ${round(sim)} to Pillow's picture (${ref.mode}${ref.frames && ref.frames > 1 ? `, ${ref.frames} frames` : ""})`);
   if (kept < 0.999) notes.push(`stored ${embedded?.w}x${embedded?.h} of ${ref.uprightWidth}x${ref.uprightHeight}`);
   if (ref.truncated) notes.push("the file is cut short; Pillow draws what it holds");
-  const score = expectRefused ? 0 : mean([upright, aspect, fidelity, kept]);
+  const score = expectRefused ? 0 : mean([upright, aspect, fidelity, kept, drawn]);
   return { id: file.id, section: "b", score: round(score), metrics, ms: wrapMs + renderMs, notes, tag: ref.format };
 }
 
@@ -502,9 +570,64 @@ async function runOne(file: CorpusFile): Promise<Result | null> {
 if (child) {
   const file = corpus.files.find((f) => f.id === child)!;
   const before = process.resourceUsage().maxRSS;
-  await runOne(file);
-  process.stdout.write(JSON.stringify({ before, after: process.resourceUsage().maxRSS }));
+  const result = await runOne(file);
+  process.stdout.write(JSON.stringify({ before, after: process.resourceUsage().maxRSS, result }));
   process.exit(0);
+}
+
+// ── A file run apart, killed past the server's memory ───────────────────────
+
+// A function's memory on the host (Vercel's default): an add that needs
+// more dies there and takes the request with it.
+const ISOLATE_MB = 2048;
+
+/** The resident memory of every process in a process group, in bytes
+    (Linux /proc). */
+function groupRss(pgid: number): number {
+  let total = 0;
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
+      const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      if (Number(fields[2]) !== pgid) continue;
+      const rss = /VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${entry}/status`, "utf8"));
+      if (rss) total += Number(rss[1]) * 1024;
+    } catch {
+      // The process ended between the listing and the read.
+    }
+  }
+  return total;
+}
+
+/** runOne in a child process; killed past ISOLATE_MB, it scores 0. */
+async function runIsolated(file: CorpusFile): Promise<Result | null> {
+  const proc = spawn("npx", ["tsx", join(import.meta.dirname, "images.mts"), "--child", file.id], {
+    detached: true,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  let out = "";
+  proc.stdout.on("data", (chunk: Buffer) => (out += chunk.toString("utf8")));
+  let peak = 0;
+  let killed = false;
+  const timer = setInterval(() => {
+    const rss = groupRss(proc.pid!);
+    peak = Math.max(peak, rss);
+    if (rss > ISOLATE_MB * 1024 * 1024 && !killed) {
+      killed = true;
+      process.kill(-proc.pid!, "SIGKILL");
+    }
+  }, 25);
+  const code = await new Promise<number | null>((resolve) => proc.on("close", resolve));
+  clearInterval(timer);
+  const peakMb = Math.round(peak / 1048576);
+  if (killed || code !== 0) {
+    const why = killed ? `the add ran out of memory: killed past ${ISOLATE_MB} MB` : `the add crashed (exit ${code})`;
+    return { id: file.id, section: file.section, score: 0, metrics: { crashed: 1, outOfMemory: killed ? 1 : 0, peakMb }, ms: 0, notes: [why] };
+  }
+  const { result } = JSON.parse(out.slice(out.lastIndexOf('{"before"'))) as { result: Result | null };
+  if (result) result.metrics.peakMb = peakMb;
+  return result;
 }
 
 function peakMb(id: string): number {
@@ -527,12 +650,12 @@ const results: Result[] = [];
 const missing: string[] = [];
 for (const file of corpus.files.filter(pick)) {
   try {
-    const r = await runOne(file);
+    const r = file.isolate ? await runIsolated(file) : await runOne(file);
     if (!r) {
       missing.push(file.id);
       continue;
     }
-    if (flag("--mem")) r.metrics.peakMb = peakMb(file.id);
+    if (flag("--mem") && !file.isolate) r.metrics.peakMb = peakMb(file.id);
     results.push(r);
   } catch (err) {
     console.log(`  ${file.id}: the bench failed: ${err instanceof Error ? err.stack?.split("\n").slice(0, 3).join(" ") : err}`);
@@ -575,15 +698,15 @@ for (const s of sections) {
     }
     console.log(
       `  losses: articles taken for pages (keyless) ${sum("a", "articleAsPages")}   scans whose text is left unreadable ${sum("a", "unreadableScan")}   ` +
-        `articles sent to the model ${sum("a", "needlessModel")}`,
+        `articles sent to the model ${sum("a", "needlessModel")}   empty articles ${sum("a", "emptyArticle")}   out of memory ${sum("a", "outOfMemory")}`,
     );
     console.log(`  what reaches the model: classifier samples ${fmt(avgOf(rs, "modelInput"))}   page images ${fmt(avgOf(rs, "pageImages"))}`);
   } else {
     const taken = rs.filter((r) => !r.metrics.notTaken);
     console.log(`\nb. images: ${rs.length} files, score ${fmt(total.b)}, ${(ms / 1000).toFixed(1)} s in the code under test`);
     console.log(
-      `  refused that should import ${sum("b", "wrongRefusal")}   crashed ${sum("b", "crashed")}   not upright ${taken.filter((r) => r.metrics.upright === 0).length}   ` +
-        `aspect off ${taken.filter((r) => (r.metrics.aspect ?? 1) < 1).length}   fidelity ${fmt(avgOf(taken, "fidelity"))}   pixels kept ${fmt(avgOf(taken, "kept"))}`,
+      `  refused that should import ${sum("b", "wrongRefusal")}   crashed ${sum("b", "crashed")} (out of memory ${sum("b", "outOfMemory")})   not upright ${taken.filter((r) => r.metrics.upright === 0).length}   ` +
+        `aspect off ${taken.filter((r) => (r.metrics.aspect ?? 1) < 1).length}   illegible or past the cap ${taken.filter((r) => (r.metrics.drawn ?? 1) < 1).length}   fidelity ${fmt(avgOf(taken, "fidelity"))}   pixels kept ${fmt(avgOf(taken, "kept"))}`,
     );
     console.log(`  formats not taken (refused cleanly): ${rs.filter((r) => r.metrics.notTaken).map((r) => r.id).join(", ") || "none"}`);
     const slow = [...rs].sort((x, y) => y.ms - x.ms).slice(0, 3);

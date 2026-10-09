@@ -2,9 +2,11 @@ import { db } from "@/lib/db";
 import { PAGE_RENDER_REV } from "@/lib/handwritten/page-url";
 import {
   PAGE_IMAGE_WIDTH,
+  pageImageWidth,
   pdfPageSizes,
   renderPdfPagesJpeg,
   type PageSize,
+  type RenderWidth,
 } from "@/lib/handwritten/pages";
 
 // The stored page images of a handwritten document (SPEC.md §16): PageImage,
@@ -18,6 +20,14 @@ import {
 // The bytes stay in the row for the block's life: a re-parse recreates the
 // blocks, and the cascade drops the rows with them.
 
+// A page draws at its row's width (PageImage.width), the width its size was
+// stored at. A new document's sizes are stored at pageImageWidth, wider for
+// a panorama and narrower for an endless screenshot; a document stored
+// before that rule keeps PAGE_IMAGE_WIDTH, its sizes and every render of it
+// (renderRev, a missing render) the same as before. A size stored later for
+// an old document (pageSizesFor) is PAGE_IMAGE_WIDTH too. Regions (Circle &
+// ask) are percent of the page, so they draw the same at any width.
+
 type PageBlock = { id: string; page: number | null };
 
 async function pageBlocksOf(documentId: string): Promise<PageBlock[]> {
@@ -28,14 +38,16 @@ async function pageBlocksOf(documentId: string): Promise<PageBlock[]> {
   });
 }
 
-/** Every PAGE block's size stored, no render. Rows that exist stay. */
+/** Every PAGE block's size stored at pageImageWidth, no render: the add
+    and a switch to handwritten pages, whose blocks are new. Rows that exist
+    stay. */
 export async function storePageSizes(documentId: string, bytes: Uint8Array): Promise<void> {
-  await storeSizes(await pageBlocksOf(documentId), bytes);
+  await storeSizes(await pageBlocksOf(documentId), bytes, pageImageWidth);
 }
 
-async function storeSizes(blocks: PageBlock[], bytes: Uint8Array): Promise<void> {
+async function storeSizes(blocks: PageBlock[], bytes: Uint8Array, width: RenderWidth): Promise<void> {
   if (blocks.length === 0) return;
-  const sizes = await pdfPageSizes(bytes);
+  const sizes = await pdfPageSizes(bytes, width);
   const rows = blocks.flatMap((b) => {
     const size = b.page === null ? undefined : sizes[b.page - 1];
     return size ? [{ blockId: b.id, width: size.width, height: size.height }] : [];
@@ -66,8 +78,10 @@ export async function renderPageImages(
   if (!document?.fileData) return;
   const bytes = new Uint8Array(document.fileData);
   const blockByPage = new Map(todo.map((b) => [b.page as number, b.id]));
+  const widths = await storedWidths(todo.map((b) => b.id));
+  const width = (_w: number, _h: number, page: number) => widths.get(blockByPage.get(page) ?? "") ?? PAGE_IMAGE_WIDTH;
   const started = Date.now();
-  await renderPdfPagesJpeg(bytes, [...blockByPage.keys()], PAGE_IMAGE_WIDTH, async (page, image, size) => {
+  await renderPdfPagesJpeg(bytes, [...blockByPage.keys()], width, async (page, image, size) => {
     await storeRender(blockByPage.get(page) as string, image, size);
     return opts.budgetMs === undefined || Date.now() - started < opts.budgetMs;
   });
@@ -83,11 +97,22 @@ export async function renderPageImage(
   page: number,
 ): Promise<Uint8Array<ArrayBuffer> | null> {
   let rendered: Uint8Array<ArrayBuffer> | null = null;
-  await renderPdfPagesJpeg(bytes, [page], PAGE_IMAGE_WIDTH, async (_page, image, size) => {
+  const width = (await storedWidths([blockId])).get(blockId) ?? PAGE_IMAGE_WIDTH;
+  await renderPdfPagesJpeg(bytes, [page], width, async (_page, image, size) => {
     await storeRender(blockId, image, size);
     rendered = image;
   });
   return rendered;
+}
+
+/** The width each block's page image was sized at, by block id. A block
+    without a row draws at PAGE_IMAGE_WIDTH, as before rows held sizes. */
+async function storedWidths(blockIds: string[]): Promise<Map<string, number>> {
+  const rows = await db.pageImage.findMany({
+    where: { blockId: { in: blockIds } },
+    select: { blockId: true, width: true },
+  });
+  return new Map(rows.map((r) => [r.blockId, r.width]));
 }
 
 async function storeRender(blockId: string, image: Uint8Array<ArrayBuffer>, size: PageSize): Promise<void> {
@@ -117,7 +142,7 @@ export async function pageSizesFor(
     });
     if (document?.fileData) {
       try {
-        await storeSizes(pageBlocks, new Uint8Array(document.fileData));
+        await storeSizes(pageBlocks, new Uint8Array(document.fileData), PAGE_IMAGE_WIDTH);
         rows = await read();
       } catch (err) {
         console.warn("[handwritten] page sizes failed:", err);
@@ -148,7 +173,7 @@ async function slideBlocksOf(documentId: string): Promise<SlideBlock[]> {
 /** Every SLIDE block's picture size stored from the PDF export, no
     render, so the reader knows a picture is coming. */
 export async function storeSlidePictureSizes(documentId: string, pdfBytes: Uint8Array): Promise<void> {
-  await storeSizes(await slideBlocksOf(documentId), pdfBytes);
+  await storeSizes(await slideBlocksOf(documentId), pdfBytes, PAGE_IMAGE_WIDTH);
 }
 
 /** Every SLIDE block without a stored picture, rendered from the PDF

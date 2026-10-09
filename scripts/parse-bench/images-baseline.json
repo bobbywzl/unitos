@@ -1,8 +1,8 @@
 {
  "total": {
-  "a": 0.98,
-  "b": 1.0,
-  "all": 0.99
+  "a": 0.975,
+  "b": 1,
+  "all": 0.988
  },
  "files": {
   "a-tracemonkey": 1,
@@ -21,7 +21,7 @@
   "a-toc": 0.75,
   "a-word-link": 0.75,
   "a-japanese-short": 1,
-  "a-rotation": 0.75,
+  "a-rotation": 1,
   "a-word-math": 1,
   "a-cheatsheet": 1,
   "a-nics-table": 1,
@@ -137,6 +137,37 @@
   "b-heic-pug": 1,
   "b-heic-xiaomi": 1,
   "b-avif-hopper": 1,
-  "b-png-exif-chunk": 1
+  "b-png-exif-chunk": 1,
+  "a-cad-plans": 1,
+  "a-cad-autocad": 1,
+  "a-cad-simple": 1,
+  "a-vector-drawing": 1,
+  "a-drawing-tutorial": 1,
+  "a-sketch-junk-ocr": 0.8,
+  "a-glyph-names": 1,
+  "a-ocr-ccitt": 1,
+  "a-ocr-francais": 1,
+  "a-ocr-jbig2": 1,
+  "a-mixed-ocr-typed": 1,
+  "a-mixed-typed-notes": 0.25,
+  "a-photo-curled": 1,
+  "a-photo-notes-b": 1,
+  "a-strips": 1,
+  "a-hugemono": 1,
+  "a-jbig2-giant": 1,
+  "b-photo-curled-cookbook": 1,
+  "b-photo-curled-thesis": 1,
+  "b-photo-notes-b1": 1,
+  "b-photo-notes-b2": 1,
+  "b-photo-notepad": 1,
+  "b-photo-table": 1,
+  "b-scan-form": 1,
+  "b-screenshot-terminal": 1,
+  "b-screenshot-markdown": 1,
+  "b-png-endless-screenshot": 0.995,
+  "b-png-bomb": 1,
+  "b-tiff-phototest": 1,
+  "b-tiff-eurotext": 1,
+  "b-png-bomb-rgb": 1
  }
 }
