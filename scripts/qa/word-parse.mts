@@ -3,7 +3,7 @@
 // (scripts/parse-bench/word.mts), parsed the way the Word add parses them
 // and held to what the file says. Nothing is stored.
 // Run: npx tsx --tsconfig tsconfig.json scripts/qa/word-parse.mts
-import { strToU8, zipSync } from "fflate";
+import { strToU8, unzipSync, zipSync } from "fflate";
 import { richTextFromImport } from "@/lib/docs/import";
 import type { RichNode } from "@/lib/docs/schema";
 import { parseDocx } from "@/lib/parse/docx";
@@ -118,6 +118,20 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a code style's words in Times New Roman are a paragraph, a monospace or unnamed face's are code", kinds === "PARAGRAPH:Filed today|CODE:let x = 1;|PARAGRAPH:Between|CODE:let y = 2;", JSON.stringify(kinds));
   const bold = (blocks[0]?.styles ?? []).filter((s) => s.style === "bold").map((s) => s.quotedText);
   check("the prose keeps its bold", bold.join("|") === "Filed today", JSON.stringify(bold));
+}
+
+// ── A picture straight in the body is a figure ───────────────────────────────
+
+{
+  const bytes = docx(`${para("Before")}<w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" style="width:100pt;height:60pt"><v:imagedata r:id="rId9"/></v:shape></w:pict>${para("After")}`);
+  const parts = unzipSync(bytes);
+  parts["word/_rels/document.xml.rels"] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="${REL}/image" Target="media/image1.png"/></Relationships>`,
+  );
+  parts["word/media/image1.png"] = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const blocks = await parse(zipSync(parts));
+  const kinds = blocks.map((b) => b.type).join(",");
+  check("a w:pict out of any paragraph is a figure between its neighbors", kinds === "PARAGRAPH,FIGURE,PARAGRAPH", kinds);
 }
 
 if (failed > 0) {

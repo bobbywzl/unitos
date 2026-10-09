@@ -1476,6 +1476,14 @@ class DocxReader {
         case "AlternateContent":
           this.body(child(node, "Choice") ?? child(node, "Fallback") ?? node, table);
           break;
+        // A picture straight in the body, out of any paragraph (a file a
+        // tool wrote; Word benchmark finding: d2p-has_pict's one picture):
+        // a figure of its own, as in a paragraph of its own.
+        case "pict":
+        case "drawing":
+          this.close();
+          this.loosePicture(node);
+          break;
         case "bookmarkStart": {
           const name = attr(node, "name");
           if (name) this.pendingBookmarks.push(name);
@@ -1731,6 +1739,22 @@ class DocxReader {
   private pageEnd() {
     const gap = this.list?.trail ?? this.lastSpaced;
     if (gap) gap.pageEnd = true;
+  }
+
+  /** A drawing out of any paragraph: its pictures as a figure, its rule a
+      separator, its text boxes read after it. */
+  private loosePicture(el: Element) {
+    const pictures: Picture[] = [];
+    const sink: Sink = {
+      line: () => new Line(),
+      cut: (piece) => {
+        if (piece.kind === "figure") pictures.push(...piece.pictures);
+        else if (piece.kind === "rule") this.push({ type: "SEPARATOR", text: "---" });
+      },
+      floating: pictures,
+    };
+    this.drawing(el, sink);
+    if (pictures.length > 0) this.push(this.figureBlock(pictures));
   }
 
   /** Pictures as a figure: each at its width in the text column. */

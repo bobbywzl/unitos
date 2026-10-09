@@ -2,8 +2,6 @@
  "total": {
   "math.missing": 2,
   "import.math.missing": 2,
-  "image.missing": 2,
-  "import.image.missing": 2,
   "words": 226,
   "lost:label": 70,
   "import.words": 232,
@@ -16,7 +14,9 @@
   "import.list.missing": 68,
   "lost:note": 1,
   "list.missing": 3,
-  "mark.italic": 1
+  "mark.italic": 1,
+  "image.missing": 1,
+  "import.image.missing": 1
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -38,10 +38,7 @@
   },
   "d2p-example.docx": {},
   "d2p-example_numbering.docx": {},
-  "d2p-has_pict.docx": {
-   "image.missing": 1,
-   "import.image.missing": 1
-  },
+  "d2p-has_pict.docx": {},
   "d2p-hyperlink.docx": {},
   "d2p-imagedata_without_rid.docx": {
    "words": 100,
