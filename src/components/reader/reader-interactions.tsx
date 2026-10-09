@@ -3206,10 +3206,11 @@ export function ReaderInteractions({
   // focus is on the page — the words, the page editor's text in Viewing —
   // Tab goes to its first row, before the marks and chips after the words;
   // Shift+Tab on its first row gives the focus back to the words, the
-  // selection kept. In Editing and Suggesting, Tab with a caret or over
-  // lines is the text's (indent, nest a list, the next cell); over words
-  // inside one line it goes to the toolbox. Alt+F10 or Shift+F10 go to the
-  // first row in every mode and every reader.
+  // selection kept. In Editing and Suggesting, Tab with a caret, over
+  // lines, or in a list line or a table cell is the text's (indent, nest a
+  // list, the next cell); over words inside one line of a paragraph or a
+  // heading it goes to the toolbox; with no toolbox open it is the text's.
+  // Alt+F10 or Shift+F10 go to the first row in every mode and every reader.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -3233,7 +3234,8 @@ export function ReaderInteractions({
         return;
       }
       // Editing and Suggesting: Tab is the text's, but words selected inside
-      // one line go to the toolbox too (tabOpensToolbox, keys.ts).
+      // one line of a paragraph or a heading go to the toolbox too
+      // (tabOpensToolbox, keys.ts).
       const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
       if (pageEditor?.isEditable && active?.closest(".ProseMirror") && !tabOpensToolbox(pageEditor.state)) return;
       const onPage =

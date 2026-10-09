@@ -226,14 +226,23 @@ export function wordAtCaret(editor: Editor): { from: number; to: number } | null
   return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end, true) };
 }
 
-/** Words selected inside one line (not the whole line, not over lines,
-    list items, or cells): Tab there goes to the AI toolbar in every mode
-    (SPEC.md §6), never a tab in place of the words. The reader moves the
-    focus (reader-interactions.tsx); the text takes no tab (typing/keys.ts). */
+// List lines and table cells keep the text's Tab (nest, next cell).
+const TEXT_TAB = new Set(["listItem", "taskItem", "tableCell", "tableHeader"]);
+
+/** Words selected inside one line of a paragraph or a heading (not the
+    whole line, not over lines): Tab there goes to the open AI toolbar in
+    every mode (SPEC.md §6). In a list line or a table cell Tab stays the
+    text's: it nests the line, or goes to the next cell. The reader moves
+    the focus (reader-interactions.tsx); with no toolbar open the text takes
+    Tab (typing/keys.ts). */
 export function tabOpensToolbox(state: EditorState): boolean {
   const sel = state.selection;
   // A text selection only: not an image (a node) or table cells.
   if (sel.empty || "node" in sel || "$anchorCell" in sel) return false;
+  const $from = sel.$from;
+  for (let d = $from.depth; d > 0; d--) {
+    if (TEXT_TAB.has($from.node(d).type.name)) return false;
+  }
   let blocks = 0;
   let whole = false;
   state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
