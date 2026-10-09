@@ -10,7 +10,7 @@
    "score": 0.961,
    "parse": 0.956,
    "words": 0.992,
-   "lost": 233
+   "lost": 60
   },
   "txt": {
    "score": 0.926,
@@ -2797,8 +2797,8 @@
    1
   ],
   "pandoc-manual": [
-   0.979,
-   0.979
+   0.983,
+   0.983
   ],
   "javaguide-readme": [
    0.994,
