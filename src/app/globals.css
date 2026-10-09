@@ -2342,6 +2342,17 @@ ellipse.anchor-flash {
 .note-box:hover {
   border-color: var(--sage-600);
 }
+/* A finger's band around a box that ticks: 33 px tall, the box drawn 15. */
+@media (pointer: coarse) {
+  button.note-box {
+    position: relative;
+  }
+  button.note-box::after {
+    content: "";
+    position: absolute;
+    inset: -9px -6px;
+  }
+}
 .note-box[data-checked],
 li[data-checked] > .note-box {
   border-color: var(--sage-600);
