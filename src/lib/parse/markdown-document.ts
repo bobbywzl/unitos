@@ -175,6 +175,62 @@ const HTML_ELEMENTS = new Set(
   ).split(" "),
 );
 
+// GFM tables, resolved one table at a time. micromark-extension-gfm-table
+// resolves every table of a file in one pass whose edit list it searches
+// from the start on each edit: the time grows with the square of the
+// file's table cells (Markdown benchmark finding: public-apis' README, 2,100
+// table rows, took 6.3 s in the table pass alone). Each table's events are
+// handed to the same resolver on their own, from the table's head to its
+// last row; the resolver keeps no state from one table to the next, so the
+// tree is the same.
+type MicromarkEvent = [string, { type: string }, unknown];
+type MicromarkContext = { events: MicromarkEvent[] };
+type TableResolver = (events: MicromarkEvent[], context: MicromarkContext) => MicromarkEvent[];
+type FlowConstruct = { name?: string; resolveAll?: TableResolver };
+
+function tablesOneByOne(resolve: TableResolver): TableResolver {
+  return (events, context) => {
+    if (events !== context.events) return resolve(events, context);
+    const spans: Array<[number, number]> = [];
+    events.forEach(([side, token], i) => {
+      if (side === "enter" && token.type === "tableHead") spans.push([i, i]);
+      else if (side === "exit" && spans.length > 0 && /^table(Head|Row|DelimiterRow)$/.test(token.type)) {
+        spans[spans.length - 1][1] = i;
+      }
+    });
+    if (spans.length < 2) return resolve(events, context);
+    const out: MicromarkEvent[] = [];
+    let at = 0;
+    for (const [start, end] of spans) {
+      for (let i = at; i < start; i++) out.push(events[i]);
+      const own: MicromarkContext = Object.create(context);
+      own.events = events.slice(start, end + 1);
+      resolve(own.events, own);
+      for (const event of own.events) out.push(event[2] === own ? [event[0], event[1], context] : event);
+      at = end + 1;
+    }
+    for (let i = at; i < events.length; i++) out.push(events[i]);
+    events.length = 0;
+    for (const event of out) events.push(event);
+    return events;
+  };
+}
+
+function remarkTablesOneByOne(this: { data: () => Record<string, unknown> }) {
+  const extensions = (this.data().micromarkExtensions ?? []) as Array<{ flow?: Record<string, FlowConstruct | FlowConstruct[]> }>;
+  for (const extension of extensions) {
+    const flow = extension.flow;
+    if (!flow) continue;
+    for (const [code, constructs] of Object.entries(flow)) {
+      flow[code] = (Array.isArray(constructs) ? constructs : [constructs]).map((construct) =>
+        construct.name === "table" && construct.resolveAll
+          ? { ...construct, resolveAll: tablesOneByOne(construct.resolveAll) }
+          : construct,
+      );
+    }
+  }
+}
+
 // The mdast tree as HTML for the walk.
 class Renderer {
   private readonly definitions = new Map<string, Definition>();
@@ -780,7 +836,7 @@ export function markdownToHtml(
   const source = markdown.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
   const { body, title: frontTitle } = splitFrontMatter(source);
   const { text, spans } = setAsideMath(body);
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
+  const tree = unified().use(remarkParse).use(remarkGfm).use(remarkTablesOneByOne).parse(text) as Root;
   if (body === source) shapeTextOutline(tree, text);
   const closed = new Set([...text.matchAll(CLOSING_TAG_RX)].map((m) => m[1].toLowerCase()));
   const renderer = new Renderer(spans, closed);
