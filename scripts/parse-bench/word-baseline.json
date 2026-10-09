@@ -8,11 +8,9 @@
   "import.lost:label": 59,
   "import.list.kind": 23,
   "import.mark.bold": 10,
-  "lost:body": 2,
   "mark.bold": 8,
   "list.kind": 4,
   "import.list.depth": 2,
-  "lost:note": 1,
   "list.missing": 3,
   "mark.italic": 1
  },
@@ -218,9 +216,7 @@
   "pandocw-definition_list.docx": {},
   "pandocw-lists_9994.docx": {},
   "pandocw-lists_div_bullets.docx": {},
-  "pandocw-mark_math.docx": {
-   "lost:body": 1
-  },
+  "pandocw-mark_math.docx": {},
   "pandocw-notes.docx": {},
   "pandocw-raw-bookmarks.docx": {},
   "pandocw-tables-default-widths.docx": {},
@@ -285,14 +281,11 @@
   "poi-stress001.docx": {},
   "poi-stress003.docx": {},
   "poi-stress004.docx": {
-   "lost:note": 1,
    "list.missing": 1
   },
   "poi-stress005.docx": {},
   "poi-stress006.docx": {},
-  "poi-stress007.docx": {
-   "lost:body": 1
-  },
+  "poi-stress007.docx": {},
   "poi-stress008.docx": {
    "mark.italic": 1
   },

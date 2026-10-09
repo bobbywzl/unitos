@@ -592,7 +592,10 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
   for (const b of blocks) {
     // A note's label the parse raises in the words is no word of the file.
     let words = b.text;
-    for (const f of [...(b.footnoteRefs ?? [])].sort((x, y) => y.start - x.start)) words = `${words.slice(0, f.start)}${words.slice(f.end)}`;
+    // An inline formula's characters are no words of the file either: the
+    // reference leaves them out (math), as the import reading does.
+    const cuts = [...(b.footnoteRefs ?? []).map((f) => ({ ...f, by: "" })), ...(b.math ?? []).map((m) => ({ start: m.start, end: m.end, by: " " }))];
+    for (const f of cuts.sort((x, y) => y.start - x.start)) words = `${words.slice(0, f.start)}${f.by}${words.slice(f.end)}`;
     texts.push(b.type === "EQUATION" ? "" : words);
     if (b.footnote) r.notes++;
     if (b.type === "EQUATION") r.math++;
