@@ -128,6 +128,7 @@ export function actPrompt(ctx: ActCtx): string {
             "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions. reply: one sentence on what will change: the plan carries the edits.",
             ...(ctx.transcript ? [`11. ${TRANSCRIPT_RULE}`] : []),
           ]),
+    "12. A command that asks for a new document (make, create, or write a document, a page, or a doc: a summary, a study guide, action items, an outline, a glossary) is one create_document action, never notes or sections in its place, and never words added to the open document. Its markdown is the whole new document, written from the material: ## headings for its parts, the points in plain words with the material's own numbers and names, and under each point the passage that supports it as a > quote line, one passage of one block copied word for word. reply: one sentence that names the document.",
     ...(ctx.figureBlockId && ctx.edits !== "none" ? ["", ...figureWordsRules(ctx.figureBlockId, ctx.edits ?? "blocks")] : []),
     "",
     ...(ctx.history.length > 0

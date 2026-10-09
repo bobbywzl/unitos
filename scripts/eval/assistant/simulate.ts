@@ -179,6 +179,9 @@ export function simulate(
         if (s) s.name = a.name;
         break;
       }
+      case "create_document":
+        sim.documents.push({ title: a.title, markdown: a.markdown });
+        break;
       case "suggest":
       case "revise":
         // Run elsewhere: the page's suggestions, or the windows (run.ts).

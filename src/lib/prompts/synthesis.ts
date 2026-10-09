@@ -155,8 +155,8 @@ function actLines(act: PageActions): string[] {
     act.edits === "suggestions"
       ? "7. A change to the document's words, styles, or order is one suggest action, whatever its size: the whole document, a section, or a paragraph. A change of order (group by theme, organize, put in order) sets reorder: true on it; a message that asks for both an order and word changes (organize, then shorten the descriptions) is still one suggest action. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
       : act.edits === "blocks"
-        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions; a message that asks for both an order and word changes is still one revise action. In the answer, say what the actions change and why; for a revise action, one sentence on what will change: the plan card carries the edits."
-        : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
+        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions; a message that asks for both an order and word changes is still one revise action. For a revise action, the answer is one sentence on what will change: the plan card carries the edits."
+        : "7. The answer names what each action changes. The reader reads the actions in the plan card.",
     ...(act.edits === "none"
       ? [
           "8. The document's words and styles cannot be changed: a project of another account holds the document too. When the message asks to change them, say so in one sentence, and propose no action for the change.",
@@ -164,6 +164,8 @@ function actLines(act: PageActions): string[] {
       : act.transcript
         ? [`8. ${TRANSCRIPT_RULE}`]
         : []),
+    "9. The answer to a message that asks for a change is one or two sentences that name what changes and where: the block, the words, the section, the note. Nothing else: not the new words (the plan card shows them), not what stays as it is, not the blocks the plan leaves alone, not the document's content around the change, not the change's consequences, not advice on the document. A confirmation gets one sentence. The reader approves the change in the plan card; the answer only names it.",
+    "10. A message that asks for a new document (make, create, or write a document, a page, or a doc: a summary, a study guide, action items, an outline, a glossary) is one create_document action, never notes or sections in its place, and never words added to the open document. Its markdown is the whole new document, written from the material: ## headings for its parts, the points in plain words with the material's own numbers and names, and under each point the passage that supports it as a > quote line, one passage of one block copied word for word. The title names what the document is. The answer is one sentence that names the document.",
   ];
 }
 

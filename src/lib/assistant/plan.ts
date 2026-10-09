@@ -7,6 +7,7 @@ import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import { joinRefusal, splitRefusal } from "@/lib/transcript-lines";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 import { groundingOf, ungrounded } from "@/lib/docs/grounding";
+import { findQuoteLoose, findQuoteNormalized, matchInText } from "@/lib/anchors/match";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
 // and enriched against the real document before the reader sees it. The
@@ -20,6 +21,8 @@ const BLOCK_KINDS = ["paragraph", "h1", "h2", "h3", "list", "numbered"] as const
 // The suggest route's own caps (app/api/documents/[documentId]/suggest).
 const INSTRUCTION_MAX = 4000;
 const BLOCK_IDS_MAX = 200;
+// The most markdown a new document takes.
+const DOCUMENT_MARKDOWN_MAX = 60_000;
 
 const quote = z.string().min(1).max(2000);
 const description = z.string().min(1).max(DESCRIPTION_MAX);
@@ -118,6 +121,15 @@ export const actionSchema = z.discriminatedUnion("type", [
     reorder: z.boolean().optional(),
     description,
   }),
+  // A new document of the project written from the material (SPEC.md §7):
+  // a summary, a study guide, action items. Its quote lines are resolved to
+  // the open document's words (enrichActions), so the document links back.
+  z.object({
+    type: z.literal("create_document"),
+    title: z.string().trim().min(1).max(200),
+    markdown: z.string().min(1).max(DOCUMENT_MARKDOWN_MAX),
+    description,
+  }),
 ]);
 
 export type RawAction = z.infer<typeof actionSchema>;
@@ -188,6 +200,7 @@ function inferType(fields: Record<string, unknown>, edits?: DocumentEdits): stri
   if (has("blockId") && has("quote") && has("comment")) return "comment";
   if (has("blockId") && has("quote") && has("color")) return "highlight";
   if (has("blockId") && has("quote") && (has("href") || has("toDocumentId"))) return "link";
+  if (has("title") && has("markdown")) return "create_document";
   if (has("content")) return "add_note";
   if ("afterBlockId" in fields && has("text")) return "insert_paragraph";
   return "";
@@ -238,6 +251,8 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
     "- split_line {blockId, quote, description} — one transcript line becomes two: quote is the exact words the second line starts with; the time divides where the words divide.",
   set_speaker: "- set_speaker {blockId, speakerId, description} — give one transcript line to another voice of the recording: an id from Speakers.",
   rename_speaker: "- rename_speaker {speakerId, name, description} — rename a voice on every line it says.",
+  create_document:
+    "- create_document {title, markdown, description} — a new document of the project written from the material: a summary, a study guide, action items, an outline, a glossary. markdown: the whole new document; ## headings for its parts, paragraphs and - lists in plain words, and > quote lines, each one passage of one block copied word for word (a sentence or more), which becomes a link back to its place; a quote that is not the document's exact words is left out. Only when the message asks for a new document, page, or doc; never for notes, and never for words added to the open document.",
   revise:
     "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
 };
@@ -425,6 +440,16 @@ export function enrichActions(
       case "add_section":
         actions.push(action);
         continue;
+      case "create_document": {
+        const made = resolveDocumentQuotes(action.markdown, ctx);
+        if (made.dropped > 0) warnings.push(t("api.warnQuotesDropped", { n: made.dropped, s: made.dropped === 1 ? "" : "s", description: action.description }));
+        if (!made.markdown.trim()) {
+          warnings.push(t("api.warnDocumentEmpty", { description: action.description }));
+          continue;
+        }
+        actions.push({ type: "create_document", title: action.title, markdown: made.markdown, quotes: made.quotes, description: action.description });
+        continue;
+      }
       case "add_note": {
         const sectionId = action.sectionId && ctx.sectionIds.has(action.sectionId) ? action.sectionId : undefined;
         let source: (AssistantAnchor & { documentId: string }) | undefined;
@@ -569,6 +594,53 @@ export function enrichActions(
     }
   }
   return { actions, warnings };
+}
+
+/** The quote lines of a new document's markdown ("> " lines), each resolved
+    to the open document's words: exact in one block, else the same words
+    with quotes, dashes, and spaces made plain, else close enough to be the
+    passage (lib/anchors/match.ts). A resolved line carries the block's own
+    words; one that resolves nowhere is left out, counted in dropped. */
+function resolveDocumentQuotes(markdown: string, ctx: PlanContext): { markdown: string; quotes: Extract<AssistantAction, { type: "create_document" }>["quotes"]; dropped: number } {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const quotes: Extract<AssistantAction, { type: "create_document" }>["quotes"] = [];
+  const kept: string[] = [];
+  let dropped = 0;
+  for (const raw of lines) {
+    const m = /^\s*>\s?(.*)$/.exec(raw);
+    if (!m) {
+      kept.push(raw);
+      continue;
+    }
+    const wanted = m[1].trim().replace(/^["“”']+|["“”']+$/g, "").trim();
+    if (!wanted) continue;
+    const selector = { quotedText: wanted, prefix: "", suffix: "" };
+    let hit: { blockId: string; start: number; end: number } | null = null;
+    for (const finder of [matchInText, findQuoteNormalized, findQuoteLoose]) {
+      for (const block of ctx.blocks) {
+        if (block.type === "VIDEO" || block.type === "FIGURE" || block.type === "PAGE") continue;
+        const found = finder(block.text, selector);
+        if (found) {
+          hit = { blockId: block.id, start: found.start, end: found.end };
+          break;
+        }
+      }
+      if (hit) break;
+    }
+    if (!hit) {
+      dropped++;
+      continue;
+    }
+    const block = ctx.blocks.find((b) => b.id === hit!.blockId)!;
+    const anchor = buildAnchor(block.text, block.text.slice(hit.start, hit.end), block.id);
+    if (!anchor) {
+      dropped++;
+      continue;
+    }
+    quotes.push({ ...anchor, documentId: ctx.documentId, line: kept.length });
+    kept.push(`> ${anchor.quotedText}`);
+  }
+  return { markdown: kept.join("\n"), quotes, dropped };
 }
 
 /** The open document's shape, from what the plan reads of it. */

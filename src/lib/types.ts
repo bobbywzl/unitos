@@ -465,7 +465,12 @@ export type AssistantAction =
   | { type: "join_lines"; blockId: string; nextBlockId: string; description: string }
   | { type: "split_line"; blockId: string; offset: number; quote: string; description: string }
   | { type: "set_speaker"; blockId: string; speakerId: string; name: string; previous: string | null; description: string }
-  | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string };
+  | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string }
+  // A new document of the project written from the material (SPEC.md §7):
+  // its title and its markdown, and the passages its quote lines copy, each
+  // resolved to the open document's words (line: the line's index in the
+  // markdown), so the new document links back to its sources.
+  | { type: "create_document"; title: string; markdown: string; quotes: (AssistantAnchor & { documentId: string; line: number })[]; description: string };
 
 export type AssistantPlan = {
   reply: string | null;

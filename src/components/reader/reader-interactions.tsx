@@ -516,6 +516,8 @@ function actionDetail(
       return `“${clip(blockText(action.blockId), 60)}” → ${action.name}`;
     case "rename_speaker":
       return `${action.previousName} → ${action.name}`;
+    case "create_document":
+      return t("reader.detailDocument", { title: clip(action.title, 60), n: action.quotes.length, s: plural(action.quotes.length) });
     default:
       return null;
   }
@@ -539,6 +541,7 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   split_line: "reader.actionSplitLine",
   set_speaker: "reader.actionSetSpeaker",
   rename_speaker: "reader.actionRenameSpeaker",
+  create_document: "reader.actionDocument",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -6209,6 +6212,8 @@ export function ReaderInteractions({
     const undo: { description: string; run: () => Promise<unknown> }[] = [];
     let applied = 0;
     const failed: string[] = [];
+    // The titles of the documents the plan made, for the toast.
+    const madeDocuments: string[] = [];
     // A block as the plan's earlier actions left it: the routes answer with it.
     const changed = new Map<string, BlockData>();
     const current = (id: string) => changed.get(id) ?? blocks.find((b) => b.id === id);
@@ -6402,6 +6407,22 @@ export function ReaderInteractions({
             });
             break;
           }
+          case "create_document": {
+            // A new document of the project (SPEC.md §7): written from the
+            // markdown with its quotes linked back to this document, attached
+            // beside it. Undo deletes it.
+            const created = await api<{ id: string; title: string }>("/api/documents/generated", "POST", {
+              notebookId,
+              fromDocumentId: documentId,
+              title: action.title,
+              markdown: action.markdown,
+              quotes: action.quotes,
+              command: action.description,
+            });
+            madeDocuments.push(created.title);
+            undo.push({ description: action.description, run: () => api(`/api/documents/${created.id}`, "DELETE") });
+            break;
+          }
           case "style": {
             // The style route toggles the span: the same request takes it back.
             const body = {
@@ -6425,6 +6446,7 @@ export function ReaderInteractions({
     router.refresh();
     const summary = [
       t("reader.actionsApplied", { n: applied, s: plural(applied) }),
+      ...madeDocuments.map((title) => t("reader.documentCreated", { title })),
       ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
       ...(warnings.length > 0 ? [warnings[0]] : []),
     ].join(" · ");

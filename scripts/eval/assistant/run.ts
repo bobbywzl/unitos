@@ -26,6 +26,7 @@ import { blockKind } from "@/lib/block-kind";
 import { EXTERNAL_PENDING } from "@/lib/derive/external-call";
 import { corpusSystem } from "@/lib/digest/render";
 import { translatorFor } from "@/lib/i18n/dictionaries";
+import { parseMarkdown } from "@/lib/parse/markdown";
 import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesis";
 import type { AssistantAction } from "@/lib/types";
 import { blockTags, cjkShare, loadFixtures, wordCount, type Fixture } from "../lib";
@@ -122,6 +123,7 @@ type CaseResult = {
   annotations: Simulation["annotations"];
   notes: Simulation["notes"];
   sections: string[];
+  documents: { title: string; markdown: string }[];
   words: number;
 };
 
@@ -159,6 +161,7 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
     const after = a.type === "insert_paragraph" || a.type === "move_block" ? a.afterBlockId : undefined;
     if (after === undefined || after !== (e.after === null ? null : idOf(e.after))) return false;
   }
+  if (e.next !== undefined && !(a.type === "join_lines" && a.nextBlockId === idOf(e.next))) return false;
   if (e.quote !== undefined || e.quoteAny !== undefined) {
     const quote =
       a.type === "highlight" || a.type === "comment" || a.type === "style" || a.type === "link"
@@ -187,7 +190,9 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
                   ? a.instruction
                   : a.type === "add_section"
                     ? a.title
-                    : "";
+                    : a.type === "create_document"
+                      ? `${a.title}\n${a.markdown}`
+                      : "";
     if (!has(text, e.text)) return false;
   }
   if (e.kind !== undefined) {
@@ -309,7 +314,21 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
     checks.push({ name: "notes and sections", ok: faults.length === 0, detail: faults.join("; ") || `${sim.notes.length} notes, ${sim.sections.length} sections` });
   }
   if (e.documents) {
-    checks.push({ name: "documents made", ok: false, detail: "create_document is not an action the plan takes yet" });
+    const faults: string[] = [];
+    for (const x of e.documents) {
+      const found = sim.documents.find(
+        (d) => (x.title === undefined || has(d.title, x.title)) && (x.includes ?? []).every((part) => has(d.markdown, part)) && parseMarkdown(d.markdown).length >= (x.minBlocks ?? 1),
+      );
+      if (!found) {
+        const near = sim.documents[0];
+        faults.push(
+          near
+            ? `"${near.title}" (${parseMarkdown(near.markdown).length} blocks) lacks ${(x.includes ?? []).filter((part) => !has(near.markdown, part)).map((part) => `"${part}"`).join(", ") || "the size asked"}`
+            : "no document made",
+        );
+      }
+    }
+    checks.push({ name: "documents made", ok: faults.length === 0, detail: faults.join("; ") || `${sim.documents.length} documents` });
   }
   if (e.answer) {
     const faults: string[] = [];
@@ -374,6 +393,8 @@ function renderPlan(actions: AssistantAction[], before: Map<string, { text: stri
             return `${short(a.blockId)} → ${a.name}`;
           case "rename_speaker":
             return `${a.previousName} → ${a.name}`;
+          case "create_document":
+            return `"${a.title}" (${a.quotes.length} quotes linked back):\n${a.markdown.split("\n").map((l) => `    ${l}`).join("\n")}`;
         }
       })();
       return `- [${a.type}] ${a.description}\n  ${detail}`;
@@ -467,6 +488,7 @@ async function score(): Promise<void> {
       annotations: sim.annotations,
       notes: sim.notes,
       sections: sim.sections,
+      documents: sim.documents,
       words: wordCount(text),
     };
     writeJson(join(dir, "result.json"), result);
@@ -526,6 +548,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     ...(r.annotations.length > 0 ? ["", "Marks the plan makes:", ...r.annotations.map((m) => `- ${m.kind}${m.color ? ` ${m.color}` : ""} on ${m.blockId}: "${m.quote}"${m.comment ? ` — ${m.comment}` : ""}`)] : []),
     ...(r.notes.length > 0 ? ["", "Notes the plan makes:", ...r.notes.map((n) => `- in ${n.section}${n.sourced ? ` (source: "${n.quote}")` : " (no source)"}: ${n.content}`)] : []),
     ...(r.sections.length > 0 ? ["", `Sections the plan makes: ${r.sections.join("; ")}`] : []),
+    ...(r.documents.length > 0 ? ["", "Documents the plan makes (title, then the markdown; a > line is a passage linked back to the document):", ...r.documents.map((d) => `### ${d.title}\n${d.markdown}`)] : []),
     "",
     failed.length > 0 ? `Mechanical checks that failed (count them against the turn): ${failed.map((k) => `${k.name}${k.detail ? ` (${k.detail})` : ""}`).join("; ")}` : "Every mechanical check passed.",
     "",
