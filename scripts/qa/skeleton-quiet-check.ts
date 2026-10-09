@@ -125,8 +125,11 @@ async function main() {
     const s3 = await ensureSkeleton(d, null);
     check("…and the command after it reads the stored gist, no call", calls === 0 && s3.gist === "build 2");
     await setBuilt(SKELETON_QUIET_MS + 60_000);
-    // One more word, so the warm's same-text skip does not hold it back.
+    // One more word, so the warm's same-text skip does not hold it back, and
+    // the project's rev moved, as every block edit through the API moves it
+    // (bumpDocument, lib/collab.ts): the warm reads the rev first (COST9-07).
     await db.block.update({ where: { id: blockIds[1] }, data: { text: `${para(1)} More.` } });
+    await db.notebook.update({ where: { id: notebook.id }, data: { rev: { increment: 1 } } });
     await warmSkeletons(notebook.id, null);
     d = await load();
     check("a graph open past the quiet period builds", calls > 0 && readSkeleton(d.skeleton)?.gist === "build 3", `${calls} calls`);
