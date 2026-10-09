@@ -1,6 +1,7 @@
 import type {
   Definition,
   FootnoteDefinition,
+  Heading,
   ListItem,
   PhrasingContent,
   Root,
@@ -11,6 +12,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
+import { decodeTextFile } from "@/lib/parse/charset";
 import type { ParsedDocument } from "@/lib/parse/types";
 import { inlineTexText, parseHtmlContent } from "@/lib/parse/url";
 
@@ -138,15 +140,40 @@ function slugOf(text: string, seen: Map<string, number>): string {
   return n === 0 ? base : `${base}-${n}`;
 }
 
-function plainText(nodes: PhrasingContent[]): string {
+function plainText(nodes: PhrasingContent[], alts = true): string {
   let out = "";
   for (const node of nodes) {
     if (node.type === "text" || node.type === "inlineCode") out += node.value;
-    else if (node.type === "image" || node.type === "imageReference") out += node.alt ?? "";
-    else if ("children" in node) out += plainText(node.children as PhrasingContent[]);
+    else if (node.type === "image" || node.type === "imageReference") out += alts ? (node.alt ?? "") : " ";
+    else if ("children" in node) out += plainText(node.children as PhrasingContent[], alts);
   }
   return out.replace(/\s+/g, " ").trim();
 }
+
+// A tag in raw HTML, and the names of HTML's elements (and the SVG and
+// MathML ones a page sets inside HTML). A bare tag (<Esc>: no attribute,
+// not self-closed) whose name is no element and that the file never
+// closes is words: a key or a placeholder the author wrote in angle
+// brackets. A component's tag (<Sandpack>...</Sandpack>, <Intro />) stays
+// markup. Before, every such tag read as markup and its words went: a
+// text file's "press <Esc>", a manual's "<CR>" (Markdown benchmark
+// finding: the Vim reference manual lost 172 words).
+const TAG_RX = /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s[^<>]*)?\/?>/g;
+const BARE_TAG_RX = /^<([A-Za-z][A-Za-z0-9-]*)>$/;
+const CLOSING_TAG_RX = /<\/([A-Za-z][A-Za-z0-9-]*)\s*>/g;
+const HTML_ELEMENTS = new Set(
+  (
+    "a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup " +
+    "data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 " +
+    "head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu meta meter nav noscript " +
+    "object ol optgroup option output p param picture pre progress q rp rt ruby s samp script search section select slot " +
+    "small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track u " +
+    "ul var video wbr center font big tt strike acronym marquee nobr " +
+    "svg g path rect circle ellipse line polyline polygon text tspan defs use symbol clippath lineargradient radialgradient " +
+    "stop mask pattern image foreignobject desc " +
+    "math mi mo mn ms mtext mrow mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mspace semantics annotation"
+  ).split(" "),
+);
 
 // The mdast tree as HTML for the walk.
 class Renderer {
@@ -156,7 +183,10 @@ class Renderer {
   private readonly slugs = new Map<string, number>();
   firstHeading: string | null = null;
 
-  constructor(private readonly spans: TexSpan[]) {}
+  constructor(
+    private readonly spans: TexSpan[],
+    private readonly closed: Set<string> = new Set(),
+  ) {}
 
   render(root: Root): string {
     const collect = (node: RootContent | Root) => {
@@ -166,7 +196,13 @@ class Renderer {
     };
     collect(root);
     const first = root.children.find((n) => n.type !== "definition" && n.type !== "footnoteDefinition" && n.type !== "html");
-    if (first && first.type === "heading" && first.depth === 1) this.firstHeading = this.words(plainText(first.children)) || null;
+    // The title is the heading's words; its images' alt words (a README's
+    // badges: "GitHub license", "npm version") only when it has no words
+    // but them. Before, a README's title read "React · GitHub license npm
+    // version (Runtime) Build and Test ..." (Markdown benchmark finding).
+    if (first && first.type === "heading" && first.depth === 1) {
+      this.firstHeading = this.words(plainText(first.children, false)) || this.words(plainText(first.children)) || null;
+    }
     let html = root.children.map((node) => this.block(node)).join("\n");
     if (this.footnoteOrder.length > 0) {
       const items = this.footnoteOrder.map((id, i) => {
@@ -324,9 +360,15 @@ class Renderer {
     return mathAsWords(value, this.spans);
   }
 
-  // Raw HTML, with the math set aside put back as text puts it back.
+  // Raw HTML, with the math set aside put back as text puts it back, and a
+  // bare tag of no element's name that the file never closes as its words.
   private html(value: string): string {
-    return value.replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
+    return value
+      .replace(TAG_RX, (tag: string, name: string) => {
+        const lower = name.toLowerCase();
+        return BARE_TAG_RX.test(tag) && !HTML_ELEMENTS.has(lower) && !this.closed.has(lower) ? escapeHtml(tag) : tag;
+      })
+      .replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
   }
 
   private math(index: number): string {
@@ -369,6 +411,8 @@ function hasHeading(node: Root | RootContent): boolean {
 function standingLine(nodes: RootContent[], i: number): string | null {
   const node = nodes[i];
   if (node.type !== "paragraph" || !node.position) return null;
+  // An image's line is a figure, not a title: its alt words are no heading.
+  if (node.children.some((n) => n.type === "image" || n.type === "imageReference")) return null;
   const { start, end } = node.position;
   if (start.line !== end.line) return null;
   const prev = nodes[i - 1];
@@ -380,21 +424,241 @@ function standingLine(nodes: RootContent[], i: number): string | null {
   return text;
 }
 
-function shapeTextOutline(root: Root) {
+// 3. A paragraph's lines stay lines when the paragraph is not prose
+//    wrapped to a width: a poem's stanza, an address, a log, a list of
+//    requirements. Prose wrapped to a width, by a program or by hand, has
+//    each line nearly full: the line, a space, and the next line's first
+//    word pass four fifths of the width (the file's long lines: the 90th
+//    percentile of its paragraph lines' lengths, in columns, a CJK
+//    character two). A file whose width is under 40 columns has no prose
+//    wrapped to it (a requirements file's short lines). A paragraph of three
+//    lines or more keeps its line ends as line breaks when at most half of
+//    its lines are full, when most of its lines end on a stop (a verse's
+//    lines end on a comma, a period; wrapped prose ends there by chance,
+//    one line in four or five), or when its lines open alike (a log's
+//    lines: the first word's shape, letters and digits as their kind, the
+//    same on four lines in five). A paragraph of two lines keeps them when
+//    its first line is not full and ends on a stop. A paragraph with
+//    Markdown's own marks (a backslash escape, an entity, a link or image
+//    in brackets, inline code, raw HTML, emphasis in asterisks) is
+//    Markdown, and its line ends are soft breaks ("aaa" then "bbb" reads
+//    "aaa bbb"), unless it has five lines or more that open alike (a log
+//    with a <tag> in a line).
+// Before, every paragraph of a text file read as one run of words: a
+// log's 2,000 lines as one line (Markdown benchmark finding).
+const TEXT_LINES_MIN = 2;
+const TEXT_STOP_LINES_MIN = 0.6;
+const TEXT_STOP_RX = /[.,;:!?)\]"'”’»。，；：！？）]$/;
+const TEXT_FULL_SHARE = 0.8;
+const TEXT_FULL_LINES_MAX = 0.5;
+const TEXT_SAME_OPENING_MIN = 0.8;
+const TEXT_ALIKE_OVER_MARKS_MIN = 5;
+const TEXT_WRAP_COLUMNS_MIN = 40;
+const WIDE_RX = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u;
+
+/** A line's width in columns: a CJK character is two. */
+function columns(line: string): number {
+  let n = 0;
+  for (const c of line) n += WIDE_RX.test(c) ? 2 : 1;
+  return n;
+}
+const MARKDOWN_MARKS_RX = /\\[!-/:-@[-`{-~]|\]\(|&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]+);/i;
+const MARKDOWN_NODES = new Set(["html", "inlineCode", "linkReference", "imageReference", "footnoteReference", "delete"]);
+
+/** A paragraph's inline Markdown: a node only Markdown writes, or a link,
+    image, or emphasis written with Markdown's marks (a bare address and
+    _words_ are a text file's too). */
+function hasMarkdownMarks(nodes: PhrasingContent[], source: string): boolean {
+  return nodes.some((node) => {
+    if (MARKDOWN_NODES.has(node.type)) return true;
+    const first = node.position ? source[node.position.start.offset ?? -1] : undefined;
+    if ((node.type === "link" || node.type === "image") && (first === "[" || first === "!" || first === "<")) return true;
+    if ((node.type === "emphasis" || node.type === "strong") && first === "*") return true;
+    return "children" in node && hasMarkdownMarks(node.children as PhrasingContent[], source);
+  });
+}
+
+/** A line's first word's shape: each letter as "a", each digit as "0". */
+function openingShape(line: string): string {
+  return (/^\S+/.exec(line)?.[0] ?? "").replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "0");
+}
+
+/** The phrasing nodes with each line end as a break. */
+function withLineBreaks(nodes: PhrasingContent[]): PhrasingContent[] {
+  return nodes.flatMap((node): PhrasingContent[] => {
+    if (node.type === "text") {
+      return node.value.split("\n").flatMap((part, i): PhrasingContent[] => [
+        ...(i > 0 ? [{ type: "break" } as PhrasingContent] : []),
+        ...(part ? [{ type: "text", value: part } as PhrasingContent] : []),
+      ]);
+    }
+    if ("children" in node) return [{ ...node, children: withLineBreaks(node.children as PhrasingContent[]) } as PhrasingContent];
+    return [node];
+  });
+}
+
+function keepTextLines(root: Root, source: string) {
+  const lines = source.split("\n");
+  const linesOf = (node: RootContent) =>
+    node.position ? lines.slice(node.position.start.line - 1, node.position.end.line).map((l) => l.trim()) : [];
+  const paragraphs = root.children.filter(
+    (n) => n.type === "paragraph" && n.position && n.position.end.line - n.position.start.line + 1 >= TEXT_LINES_MIN,
+  );
+  const lengths = paragraphs.flatMap((n) => linesOf(n).map(columns)).sort((a, b) => a - b);
+  if (lengths.length === 0) return;
+  const p90 = lengths[Math.floor((lengths.length - 1) * 0.9)];
+  const width = p90 < TEXT_WRAP_COLUMNS_MIN ? Infinity : p90;
+  for (const node of paragraphs) {
+    if (node.type !== "paragraph") continue;
+    const own = linesOf(node);
+    let full = 0;
+    for (let i = 0; i < own.length - 1; i++) {
+      const next = /^\S+/.exec(own[i + 1])?.[0] ?? "";
+      if (columns(own[i]) + 1 + columns(next) > width * TEXT_FULL_SHARE) full++;
+    }
+    const stops = own.slice(0, -1).filter((line) => TEXT_STOP_RX.test(line)).length;
+    const shapes = new Map<string, number>();
+    for (const line of own) shapes.set(openingShape(line), (shapes.get(openingShape(line)) ?? 0) + 1);
+    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN;
+    const marks = own.some((line) => MARKDOWN_MARKS_RX.test(line)) || hasMarkdownMarks(node.children, source);
+    if (marks && !(alike && own.length >= TEXT_ALIKE_OVER_MARKS_MIN)) continue;
+    const keep =
+      own.length === 2
+        ? full === 0 && stops === 1
+        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike;
+    if (keep) node.children = withLineBreaks(node.children);
+  }
+}
+
+/** A heading written with "#" (or an HTML heading): Markdown's own. An
+    underlined heading (a line of "=" or "-" under it) is a text file's as
+    often: a MAINTAINERS file's, an RST manual's. */
+function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
+  if (node.type === "heading") return /^ {0,3}#/.test(lines[(node.position?.start.line ?? 1) - 1] ?? "#");
+  if (node.type === "html") return /<h[1-6][\s>]/i.test(node.value);
+  return "children" in node && (node.children as RootContent[]).some((n) => hasHashHeading(n, lines));
+}
+
+// 4. A file whose words are indented (an RFC: half its paragraphs' lines
+//    open with a space) sets its headings at the margin: a line that stands alone at
+//    the margin, of twelve words or fewer, ending no sentence, is a
+//    heading ("Abstract", "4.2 Message Headers", an ordered list's one
+//    item "1.  Introduction"). Its number sets its level: one level under
+//    the Title for each part ("4" a level 2, "4.2" a level 3). A line with
+//    a wide gap (three spaces inside it: a page's header or footer, "RFC
+//    2616   HTTP/1.1   June 1999") is none. A numbered line set in from
+//    the margin, standing alone, is a heading too when its number has two
+//    parts or more ("1.2.1  Error Logging") or its title is in capitals
+//    ("2.  LINK LAYER"): an older RFC indents its sections. Before, an RFC's every
+//    section heading read as a paragraph or a one-item list (Markdown
+//    benchmark finding: five RFCs, 3 to 260 headings each, none found).
+// 5. A line that stands alone and opens with a chapter's word and its
+//    number ("CHAPTER II. The Pool of Tears", "Letter 4", "BOOK I",
+//    "Chapitre XII") is a heading at level 2, though it ends on a period.
+//    Before, a novel's chapters read as paragraphs: the capitals rule
+//    takes no small letter, and no line ending on a period (Markdown
+//    benchmark finding: every Gutenberg novel of the set).
+const CHAPTER_RX =
+  /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
+const TEXT_INDENTED_SHARE_MIN = 0.5;
+const TEXT_MARGIN_WORDS_MAX = 12;
+const INDENTED_SECTION_RX = /^(\d+(?:\.\d+)*)\.?\s+(\S.*)$/;
+const SECTION_NUMBER_RX = /^((?:\d+|[A-Z])(?:\.\d+)*)[.)]?\s+\S/;
+
+/** A short line in capitals (rule 2). */
+function isCapitalsLine(text: string): boolean {
+  return (
+    text.length <= TEXT_HEADING_CHARS_MAX &&
+    text.split(/\s+/).filter(Boolean).length <= TEXT_HEADING_WORDS_MAX &&
+    (text.match(/\p{Lu}/gu) ?? []).length >= 2 &&
+    !/\p{Ll}/u.test(text)
+  );
+}
+
+/** A top-level node whose lines have a blank line above and under them. */
+function standsAlone(nodes: RootContent[], i: number): boolean {
+  const node = nodes[i];
+  const prev = nodes[i - 1];
+  const next = nodes[i + 1];
+  if (!node.position) return false;
+  if (prev?.position && prev.position.end.line >= node.position.start.line - 1) return false;
+  return !next?.position || next.position.start.line > node.position.end.line + 1;
+}
+
+/** A margin heading's level: one level under the Title for each part of
+    its number, else level 2. */
+function marginDepth(text: string): Heading["depth"] {
+  const number = SECTION_NUMBER_RX.exec(text)?.[1];
+  const parts = number ? number.split(".").length : 1;
+  return Math.min(6, parts + 1) as Heading["depth"];
+}
+
+function shapeTextOutline(root: Root, source: string) {
+  const lines = source.split("\n");
+  // The lines rule runs in a file with no "#" heading: an underlined
+  // heading does not make a text file Markdown.
+  if (!hasHashHeading(root, lines)) keepTextLines(root, source);
   if (hasHeading(root)) return;
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+  // The paragraphs' lines: a code block is indented in every file.
+  const filled = nodes
+    .filter((n) => n.type === "paragraph" && n.position)
+    .flatMap((n) => lines.slice((n.position?.start.line ?? 1) - 1, n.position?.end.line ?? 0))
+    .filter((line) => line.trim());
+  const indented = filled.length > 0 && filled.filter((line) => /^\s/.test(line)).length >= filled.length * TEXT_INDENTED_SHARE_MIN;
+  const atMargin = (node: RootContent) => {
+    const line = node.position ? (lines[node.position.start.line - 1] ?? "") : "";
+    return line.length > 0 && !/^\s/.test(line) && !/\S {3,}\S/.test(line.trim());
+  };
   nodes.forEach((node, i) => {
+    // An ordered list's one item at the margin, standing alone: a numbered
+    // heading ("1.  Introduction").
+    if (indented && node.type === "list" && node.ordered && node.children.length === 1 && atMargin(node) && standsAlone(nodes, i)) {
+      const item = node.children[0];
+      const only = item.children.length === 1 ? item.children[0] : null;
+      if (!only || only.type !== "paragraph" || !node.position || node.position.start.line !== node.position.end.line) return;
+      const marker = /^\s*(\d+[.)])/.exec(lines[node.position.start.line - 1] ?? "")?.[1] ?? `${node.start ?? 1}.`;
+      const text = `${marker} ${plainText(only.children)}`;
+      if (words(text) > TEXT_MARGIN_WORDS_MAX || TEXT_SENTENCE_END_RX.test(text)) return;
+      nodes[i] = { type: "heading", depth: marginDepth(text), children: [{ type: "text", value: `${marker} ` }, ...only.children], position: node.position };
+      return;
+    }
+    // A numbered section line set in from the margin (an older RFC's
+    // "      1.2.1  Continuing Internet Evolution", which Markdown reads as
+    // code or a list): a heading, when its number has two parts or more or
+    // its title is in capitals.
+    if (indented && standsAlone(nodes, i) && node.position && node.position.start.line === node.position.end.line) {
+      const raw = (lines[node.position.start.line - 1] ?? "").trim();
+      const numbered = INDENTED_SECTION_RX.exec(raw);
+      if (
+        numbered &&
+        (node.type === "code" || node.type === "list" || node.type === "paragraph") &&
+        (numbered[1].includes(".") || isCapitalsLine(numbered[2])) &&
+        words(raw) <= TEXT_MARGIN_WORDS_MAX &&
+        !TEXT_SENTENCE_END_RX.test(raw) &&
+        !/\S {3,}\S|\.{4,}/.test(numbered[2])
+      ) {
+        nodes[i] = { type: "heading", depth: marginDepth(raw), children: [{ type: "text", value: raw }], position: node.position };
+        return;
+      }
+    }
     if (node.type !== "paragraph") return;
+    // A chapter's line: a heading, though it ends on a period.
+    const line = node.position && node.position.start.line === node.position.end.line && standsAlone(nodes, i) ? plainText(node.children) : "";
+    if (line && i > 0 && CHAPTER_RX.test(line) && words(line) <= TEXT_MARGIN_WORDS_MAX) {
+      nodes[i] = { type: "heading", depth: 2, children: node.children, position: node.position };
+      return;
+    }
     const text = standingLine(nodes, i);
     if (text === null) return;
     const title = i === 0 && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
-    const capitals =
-      text.length <= TEXT_HEADING_CHARS_MAX &&
-      words(text) <= TEXT_HEADING_WORDS_MAX &&
-      (text.match(/\p{Lu}/gu) ?? []).length >= 2 &&
-      !/\p{Ll}/u.test(text);
-    if (title || capitals) nodes[i] = { type: "heading", depth: title ? 1 : 2, children: node.children, position: node.position };
+    const capitals = isCapitalsLine(text);
+    const margin = indented && !title && words(text) <= TEXT_MARGIN_WORDS_MAX && atMargin(node);
+    if (title || capitals || margin) {
+      const depth = title ? 1 : margin ? marginDepth(text) : 2;
+      nodes[i] = { type: "heading", depth, children: node.children, position: node.position };
+    }
   });
 }
 
@@ -409,8 +673,9 @@ export function markdownToHtml(
   const { body, title: frontTitle } = splitFrontMatter(source);
   const { text, spans } = setAsideMath(body);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
-  if (body === source) shapeTextOutline(tree);
-  const renderer = new Renderer(spans);
+  if (body === source) shapeTextOutline(tree, text);
+  const closed = new Set([...text.matchAll(CLOSING_TAG_RX)].map((m) => m[1].toLowerCase()));
+  const renderer = new Renderer(spans, closed);
   const article = renderer.render(tree);
   const ownTitle = frontTitle ?? renderer.firstHeading;
   const title = ownTitle ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
@@ -420,6 +685,14 @@ export function markdownToHtml(
   const head = ownTitle !== null ? `<title>${escapeHtml(ownTitle)}</title>` : "";
   const html = `<!doctype html><html><head><meta charset="utf-8">${head}</head><body><article>${article}</article></body></html>`;
   return { html, title, titleFromFile: ownTitle === null };
+}
+
+/** A Markdown or text file's bytes as text, in the charset the bytes say
+    (decodeTextFile, lib/parse/charset.ts: UTF-8, UTF-16, or a legacy one):
+    the add and the re-parse read the file the same way
+    (scripts/parse-bench/markdown.mts measures it). */
+export function markdownFileText(bytes: Uint8Array): string {
+  return decodeTextFile(bytes);
 }
 
 /** A Markdown file's blocks: the same walk a web page takes, no model pass,

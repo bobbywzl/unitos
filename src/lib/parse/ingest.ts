@@ -45,7 +45,7 @@ import {
   type ParsedBlock,
   type ParsedDocument,
 } from "@/lib/parse/types";
-import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
+import { markdownFileText, parseMarkdownDocument } from "@/lib/parse/markdown-document";
 import { parseDocx } from "@/lib/parse/docx";
 import { sniffOfficeFile } from "@/lib/parse/office";
 // The routes load this module per request (see /api/documents), so the
@@ -729,7 +729,7 @@ export async function ingestMarkdown(
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
-  const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
+  const parsed = await parseMarkdownDocument(markdownFileText(bytes), filename);
   const title = parsed.title ?? filename;
   const blocks = parsed.blocks;
   // A text file is an import while the switch is on: pageless.
@@ -1238,7 +1238,7 @@ export async function reparseDocument(
       look = pageLook(parsed);
     } else {
       // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
-      const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
+      const parsed = await parseMarkdownDocument(markdownFileText(bytes), document.title);
       blocks = parsed.blocks;
       references = parsed.references;
       mediaCheck = parsed.mediaCheck;
