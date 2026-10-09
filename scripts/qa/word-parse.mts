@@ -350,6 +350,19 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   check("a half-built \\int stays an equation, \\backslash then its letters", equation?.text === "\\backslash int_{0}<5", JSON.stringify(blocks.map((b) => `${b.type}:${b.text}`)));
 }
 
+// ── A text box the page sets at its top reads before its paragraph ──────────
+
+{
+  const box = (relativeFrom: string, position: string, text: string) =>
+    `<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:positionH relativeFrom="page"><wp:posOffset>458470</wp:posOffset></wp:positionH><wp:positionV relativeFrom="${relativeFrom}">${position}</wp:positionV><wp:extent cx="1901952" cy="4248150"/><wp:docPr id="1" name="Text Box 1"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${para(text)}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+  const top = await parse(docx(`<w:p>${words("Objective")}${box("margin", "<wp:align>top</wp:align>", "Allison, Timothy B.")}</w:p>${para("Getting the perfect job.")}`));
+  const topLines = top.map((b) => b.text).join("|");
+  check("a text box aligned to the top of the margin reads before its paragraph", topLines === "Allison, Timothy B.|Objective|Getting the perfect job.", JSON.stringify(topLines));
+  const beside = await parse(docx(`<w:p>${words("Objective")}${box("paragraph", "<wp:posOffset>0</wp:posOffset>", "A note beside it.")}</w:p>${para("Getting the perfect job.")}`));
+  const besideLines = beside.map((b) => b.text).join("|");
+  check("a text box set against its paragraph reads after it", besideLines === "Objective|A note beside it.|Getting the perfect job.", JSON.stringify(besideLines));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

@@ -71,6 +71,7 @@ const IMAGE_MIME: Record<string, string> = {
   svg: "image/svg+xml",
 };
 const EMU_PER_PX = 9525;
+const EMU_PER_INCH = 914400;
 const EMU_PER_TWIP = 635;
 /** A picture no larger than this beside words is an icon in the line, not a
     figure (the URL walk's rule for icons, lib/parse/figures.ts). */
@@ -1307,6 +1308,9 @@ class DocxReader {
   private pendingBookmarks: string[] = [];
   /** Text boxes met in a paragraph, read after it. */
   private boxes: Element[] = [];
+  /** Text boxes met in a paragraph that the page sets at its top: read
+      before it. */
+  private topBoxes: Element[] = [];
   private footnoteCount = 0;
   private endnoteCount = 0;
   /** A custom-mark note waiting for its mark's words (claimCustomMark). */
@@ -1452,6 +1456,10 @@ class DocxReader {
 
   body(el: Element, table: StyleDef[] = []) {
     for (const node of el.children) {
+      // Where the node's blocks start, and whether a list or code block ran
+      // on into it.
+      const start = this.blocks.length;
+      const settled = !this.list && !this.code;
       switch (node.localName) {
         case "p":
           this.paragraph(node, table);
@@ -1496,9 +1504,20 @@ class DocxReader {
           break;
         }
       }
-      // The text boxes a paragraph anchors read after it.
+      // The text boxes a paragraph anchors read after it; the ones the page
+      // sets at its top read before it, where the paragraph's blocks are all
+      // out and no list or code block runs on (Word benchmark finding:
+      // poi-60316's name and contact column read after "Objective").
       const boxes = this.boxes;
+      const top = this.topBoxes;
       this.boxes = [];
+      this.topBoxes = [];
+      if (top.length > 0 && node.localName === "p" && settled && !this.list && !this.code) {
+        const from = this.blocks.length;
+        for (const box of top) this.body(box, table);
+        this.close();
+        this.blocks.splice(start, 0, ...this.blocks.splice(from));
+      } else boxes.unshift(...top);
       for (const box of boxes) this.body(box, table);
     }
   }
@@ -2121,8 +2140,8 @@ class DocxReader {
     // A diagram's words are labels, not the document's text. A text box on
     // its own, or in a group that only places a few boxes, holds text.
     const boxes = descendants(el, "txbxContent").filter((box) => !inside(box, BOX_HOSTS));
-    if (!isDiagram(el, boxes.length)) this.boxes.push(...boxes);
     const frame = child(el, "inline") ?? child(el, "anchor");
+    if (!isDiagram(el, boxes.length)) (atPageTop(el, frame) ? this.topBoxes : this.boxes).push(...boxes);
     const extent = child(frame, "extent");
     const widthEmu = intAttr(extent, "cx") ?? 0;
     const heightEmu = intAttr(extent, "cy") ?? 0;
@@ -2549,6 +2568,22 @@ function isDiagram(el: Element, boxes: number): boolean {
   if (descendants(el, "headEnd").concat(descendants(el, "tailEnd")).some((end) => (attr(end, "type") ?? "none") !== "none")) return true;
   // VML: a connector shape (o:connectortype), a stroke with an arrowhead.
   return descendants(el, "*").some((n) => attr(n, "connectortype") !== null || ["startarrow", "endarrow"].some((a) => (attr(n, a) ?? "none") !== "none"));
+}
+
+/** A floating drawing the page sets at its top: a DrawingML anchor aligned
+    to the top of the page or its margin, or set within an inch of it; a VML
+    shape positioned so. */
+function atPageTop(el: Element, frame: Element | null): boolean {
+  if (frame?.localName === "anchor") {
+    const v = child(frame, "positionV");
+    if (!["page", "margin", "topMargin"].includes(attr(v, "relativeFrom") ?? "")) return false;
+    const align = child(v, "align")?.textContent?.trim();
+    const offset = Number(child(v, "posOffset")?.textContent ?? NaN);
+    return align === "top" || (align === undefined && offset >= 0 && offset <= EMU_PER_INCH);
+  }
+  if (frame) return false;
+  const style = descendants(el, "*").map((n) => attr(n, "style") ?? "").find((st) => /position:\s*absolute/.test(st)) ?? "";
+  return /mso-position-vertical:\s*top/.test(style) && /mso-position-vertical-relative:\s*(page|margin|top-margin-area)/.test(style);
 }
 
 /** What an equation in Word's linear format holds beside its runs. */
