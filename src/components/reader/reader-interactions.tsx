@@ -3094,6 +3094,9 @@ export function ReaderInteractions({
   // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
   const annotationParam = searchParams.get(ANNOTATION_PARAM);
+  // [lists9] The kind rides along (lib/annotation-reference.ts): a comment
+  // opens in the Annotations tab (WALK9-04).
+  const commentParam = searchParams.get("kind") === "comment";
   // A jump in this pane flashes its mark at once (dissect:flash-source) and
   // puts ?src= in the address too: when the address lands, the pane moves
   // no more (a press made meanwhile would scroll away). A page opened with
@@ -3108,6 +3111,14 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
+      // A comment: the Annotations tab, its card expanded, where its replies
+      // read and Reply is one press away — the path ?link= takes
+      // (workspace.tsx onFocusAnnotation). The mark's own card shows the
+      // comment alone.
+      if (commentParam) {
+        window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail: { sourceId: src } }));
+        return;
+      }
       const el = containerRef.current?.querySelector<HTMLElement>(sourceMarkSelector(src));
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
@@ -3116,11 +3127,15 @@ export function ReaderInteractions({
         timer = setTimeout(tryOpen, 200);
       }
     };
-    tryOpen();
+    // The first try waits a tick: on a page opened at this address the
+    // listeners that answer (this pane's open-annotation below, the
+    // workspace's focus-annotation) register in effects that run after this
+    // one, and an event sent now reaches none of them.
+    timer = setTimeout(tryOpen, 0);
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [src, annotationParam, flashSource]);
+  }, [src, annotationParam, commentParam, flashSource]);
 
   // Arriving through a link's other end: ?link=<id> flashes the mark here,
   // and the tray turns to the Annotations tab on the link's card; a mark in
