@@ -1,7 +1,7 @@
 {
  "total": {
   "composite": 1,
-  "words": 0.999,
+  "words": 1,
   "order": 1,
   "bullets": 1,
   "tables": 1,
@@ -1478,8 +1478,8 @@
    "lost": 0
   },
   "lo-tdf112089": {
-   "composite": 0.99,
-   "words": 0.971,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
@@ -1489,8 +1489,8 @@
    "lost": 0
   },
   "poi-chart-picture-bg": {
-   "composite": 0.99,
-   "words": 0.971,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,

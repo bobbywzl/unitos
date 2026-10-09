@@ -1625,11 +1625,11 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
     series.push({ name, cats, vals });
   }
   // A title element without words is the automatic title, as the drawn
-  // chart takes it: the one series' name, "Chart Title" when it has none.
+  // chart takes it: the one series' name, else "Chart Title".
   // Slides benchmark finding: PowerPoint's thumbnail of poi radar-chart
   // draws "Sales" over the chart; the table had no title.
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
-  const autoTitle = !titleText && child(chart, "title") && !autoTitleDeleted && series.length === 1 ? series[0].name || "Chart Title" : "";
+  const autoTitle = !titleText && child(chart, "title") && !autoTitleDeleted && series.length > 0 ? (series.length === 1 && series[0].name) || "Chart Title" : "";
   const shownTitle = titleText || autoTitle;
   const rows: string[][] = [];
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];

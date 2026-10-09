@@ -301,11 +301,12 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
   // A title element without words is the automatic title: the one series'
-  // name, "Chart Title" when the file names it not (PowerPoint's own
-  // thumbnail of lo chart-theme-override). Slides benchmark finding: the
-  // legend's stand-in "Series 1" read as the title.
+  // name, else "Chart Title" (one series the file names not, or several:
+  // PowerPoint's own thumbnails of lo chart-theme-override and lo
+  // tdf112089). Slides benchmark finding: the legend's stand-in "Series 1"
+  // read as the title, and a chart of several series lost its title.
   const only = allSeries.length === 1 ? allSeries[0] : null;
-  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && only ? (only.named ? only.name : "Chart Title") : "");
+  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length > 0 ? (only?.named ? only.name : "Chart Title") : "");
 
   // Series colors: the file's, else the accents in order.
   let colorIndex = 0;
