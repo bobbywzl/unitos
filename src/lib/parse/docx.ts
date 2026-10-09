@@ -226,7 +226,10 @@ type Look = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  /** Struck once (w:strike) and struck twice (w:dstrike): two properties
+      a style and a run set apart; either strikes the words. */
   strike: boolean;
+  doubleStrike: boolean;
   smallCaps: boolean;
   vert: "sup" | "sub" | null;
   hidden: boolean;
@@ -248,6 +251,7 @@ const PLAIN_LOOK: Look = {
   italic: false,
   underline: false,
   strike: false,
+  doubleStrike: false,
   smallCaps: false,
   vert: null,
   hidden: false,
@@ -295,8 +299,10 @@ function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
         out.underline = flag(el) ?? out.underline;
         break;
       case "strike":
-      case "dstrike":
         out.strike = flag(el) ?? out.strike;
+        break;
+      case "dstrike":
+        out.doubleStrike = flag(el) ?? out.doubleStrike;
         break;
       case "color":
         out.color = hexColor(attr(el, "val"));
@@ -860,7 +866,7 @@ class Line {
     if (look.italic) marks.push("italic");
     // A link's underline and color are the link's look, not the words'.
     if (look.underline && !link) marks.push("underline");
-    if (look.strike) marks.push("strike");
+    if (look.strike || look.doubleStrike) marks.push("strike");
     if (look.smallCaps) marks.push("smallCaps");
     if (look.vert) marks.push(look.vert);
     if (look.code) marks.push("code");

@@ -11,8 +11,6 @@
   "mark.bold": 17,
   "import.list.kind": 53,
   "import.mark.bold": 19,
-  "mark.strike": 2,
-  "import.mark.strike": 2,
   "lost:body": 2,
   "list.kind": 4,
   "import.list.missing": 68,
@@ -150,10 +148,7 @@
   "pandoc-deep_normalize.docx": {},
   "pandoc-definition_list.docx": {},
   "pandoc-diagram.docx": {},
-  "pandoc-double_strikeout.docx": {
-   "mark.strike": 2,
-   "import.mark.strike": 2
-  },
+  "pandoc-double_strikeout.docx": {},
   "pandoc-drop_cap.docx": {},
   "pandoc-dummy_item_after_list_item.docx": {},
   "pandoc-dummy_item_after_paragraph.docx": {},

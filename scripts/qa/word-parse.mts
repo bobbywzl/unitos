@@ -95,6 +95,16 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a row inside a content control stays the table's row", block?.text === "Item\tPrice\nBread\t2.10\nMilk\t1.20", JSON.stringify(block?.text));
 }
 
+// ── Marks: a single and a double strike are two properties ──────────────────
+
+{
+  const run = (text: string, rPr: string) => `<w:r><w:rPr>${rPr}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
+  const body = `<w:p>${run("Kept ", "")}${run("once", '<w:strike/><w:dstrike w:val="0"/>')}${run(" and ", "")}${run("twice", '<w:strike w:val="0"/><w:dstrike/>')}</w:p>`;
+  const block = (await parse(docx(body)))[0];
+  const struck = (block?.styles ?? []).filter((s) => s.style === "strike").map((s) => s.quotedText);
+  check("a run struck once or twice is struck, whichever the other says", struck.join("|") === "once|twice", JSON.stringify(struck));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
