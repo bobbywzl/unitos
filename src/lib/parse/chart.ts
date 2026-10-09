@@ -152,8 +152,10 @@ function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalet
   const dLbls = child(ser, "dLbls");
   const markerEl = child(ser, "marker");
   const markerSymbol = attr(child(markerEl, "symbol"), "val");
+  // An unnamed series shows as "Series1", "Series2" in the legend, no
+  // space, as Excel and PowerPoint name it.
   return {
-    name: name || `Series ${index + 1}`,
+    name: name || `Series${index + 1}`,
     named: name !== "",
     cats: cat.text,
     vals: val.numbers,
@@ -305,7 +307,7 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   // A title element without words is the automatic title: the one series'
   // name, else "Chart Title" (one series the file names not, or several:
   // PowerPoint's own thumbnails of lo chart-theme-override and lo
-  // tdf112089). Slides benchmark finding: the legend's stand-in "Series 1"
+  // tdf112089). Slides benchmark finding: the legend's stand-in "Series1"
   // read as the title, and a chart of several series lost its title.
   const only = allSeries.length === 1 ? allSeries[0] : null;
   const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length > 0 ? (only?.named ? only.name : "Chart Title") : "");
@@ -382,7 +384,7 @@ function dataRows(plots: Plot[]): string[][] {
   const series = plots.flatMap((p) => p.series);
   const rows: string[][] = [];
   // The header names the series the file names; with none named, no header
-  // (an unnamed series' "Series 1" is the legend's stand-in, not the file's
+  // (an unnamed series' "Series1" is the legend's stand-in, not the file's
   // words).
   const header = (lead: string[]) => {
     if (series.some((s) => s.named)) rows.push([...lead, ...series.map((s) => (s.named ? s.name : ""))]);
