@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.996,
+  "score": 1,
   "sheets": 1,
-  "text": 0.994,
-  "cells": 0.995,
-  "formats": 0.974,
+  "text": 1,
+  "cells": 1,
+  "formats": 0.999,
   "merges": 1,
   "frozen": 1,
-  "lost": 629,
+  "lost": 31,
   "dom": 0,
   "errors": 0
  },
@@ -593,13 +593,13 @@
    "dom": 0
   },
   "lo-tdf81939": {
-   "score": 0.627,
-   "text": 0.333,
-   "cells": 0.4,
-   "formats": 0.4,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 3,
+   "lost": 0,
    "dom": 0
   },
   "lo-too-many-cols-rows": {
@@ -743,13 +743,13 @@
    "dom": 0
   },
   "lo-tdf76115": {
-   "score": 0.921,
-   "text": 0.889,
-   "cells": 0.883,
-   "formats": 0.833,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 596,
+   "lost": 0,
    "dom": 0
   },
   "lo-tdf131575": {
@@ -893,13 +893,13 @@
    "dom": 0
   },
   "pd-testdateoverflow": {
-   "score": 0.886,
-   "text": 0.889,
-   "cells": 0.875,
-   "formats": 0.667,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 1,
+   "lost": 0,
    "dom": 0
   },
   "pd-test_decimal": {
@@ -1558,6 +1558,316 @@
    "cells": 1,
    "formats": 1,
    "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_216": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_188_3": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_194_2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_206": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_281": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_233": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-aaa": {
+   "score": 0.986,
+   "text": 0.987,
+   "cells": 0.99,
+   "formats": 0.941,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 2,
+   "dom": 0
+  },
+  "umya-google": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_232": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-wps_comment": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_288": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_188_2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_268": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-Ekaterinburg_IP_9": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-iris-google-doc": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-dates-1900-LibreOffice": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-deaths": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-datasets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-geometry": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-types": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-Bibelbund": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-numbers1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-simple_spreadsheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "excelize-Book1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "excelize-MergeCell": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "agate-covid_19-iss": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pyexcel-complex-merged-cells-sheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-merged-hidden-words": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-time-rounding": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
    "frozen": 1,
    "lost": 0,
    "dom": 0

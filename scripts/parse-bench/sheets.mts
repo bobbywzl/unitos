@@ -12,8 +12,15 @@
 // license, and what it exercises: Apache POI's, LibreOffice's, pandas', csvkit's,
 // xlsx2csv's, and tablib's test files, csv-spectrum, real data sets, a few real
 // files saved the way other spreadsheet programs save them (derived: another
-// encoding, delimiter, or decimal comma), and three synthetic workbooks for
-// sizes no public file has. The files are other people's: the first run fetches
+// encoding, delimiter, or decimal comma), and synthetic workbooks for sizes
+// and layouts no public file has. Round 2 added workbooks as people make
+// them, from umya-spreadsheet's, readxl's, roo's, excelize's, agate-excel's,
+// and pyexcel-xlsx's tests: ledgers and sales tables people attached to bug
+// reports (Chinese, Japanese, Russian, German, Italian), wide and long
+// sheets, merged headers, accounting formats, pivot tables and charts, and
+// files saved by Google Sheets, LibreOffice, WPS, ONLYOFFICE, and Excel for
+// Mac. Every URL names a commit, a tag, or a released package. The files
+// are other people's: the first run fetches
 // them into .bench/sheets/files (gitignored), and only numbers are committed.
 //
 // The reference never comes from the code under test. A workbook is read by
@@ -55,7 +62,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { JSDOM } from "jsdom";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
 
 const { parseSheetsFile } = await import("@/lib/parse/sheets");
 const { jevEnabled } = await import("@/lib/jev");
@@ -66,7 +73,7 @@ const FILES = join(BENCH, "files");
 const SDISTS = join(BENCH, "sdist");
 const JARS = join(BENCH, "jars");
 // Bump when the reference builders change: references are rebuilt.
-const REF_VERSION = 4;
+const REF_VERSION = 10;
 const REFS = join(BENCH, `ref-v${REF_VERSION}`);
 const CORPUS = join(import.meta.dirname, "sheets-corpus.json");
 const BASELINE = join(import.meta.dirname, "sheets-baseline.json");
@@ -206,50 +213,96 @@ type RefSheet = { name: string | null; hidden: boolean; chartsheet?: boolean; ro
 type Ref = { sheets?: RefSheet[]; error?: string };
 type ParsedSheet = { name: string; grid: string[][]; merges: number[][]; frozenRows: number; frozenCols: number; domOk: boolean; cut: boolean };
 
-const SKIP = "[data-anchor-skip]";
+// The html is read by parse5, the HTML parser jsdom runs, into its plain
+// tree: the same tree a browser builds, without a DOM's weight. A jsdom
+// window per sheet took gigabytes on a sheet of 100,000 cells.
+type P5Node = DefaultTreeAdapterMap["node"];
+type P5Element = DefaultTreeAdapterMap["element"];
 
-/** The text a reader selects in an element: every text node outside
-    [data-anchor-skip] (lib/anchors/dom.ts anchorableText). */
-function anchorable(el: Element): string {
-  let out = "";
-  const doc = el.ownerDocument;
-  const walker = doc.createTreeWalker(el, 4 /* SHOW_TEXT */);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if ((n as Text).parentElement?.closest(SKIP)) continue;
-    out += (n as Text).data;
+const isElement = (n: P5Node): n is P5Element => "tagName" in n;
+const attrOf = (el: P5Element, name: string): string | null => el.attrs.find((a) => a.name === name)?.value ?? null;
+const hasClass = (el: P5Element, name: string) => (attrOf(el, "class") ?? "").split(/\s+/).includes(name);
+const elementChildren = (el: P5Element): P5Element[] => el.childNodes.filter(isElement);
+
+/** Is the node inside an element (itself included) that matches. */
+function within(node: P5Node, match: (el: P5Element) => boolean): boolean {
+  let at: P5Node | null = isElement(node) ? node : "parentNode" in node ? node.parentNode : null;
+  for (; at && isElement(at); at = at.parentNode) if (match(at)) return true;
+  return false;
+}
+
+const skipped = (el: P5Element) => attrOf(el, "data-anchor-skip") !== null;
+
+/** Every text node under the node, in document order, with what its
+    ancestors say: [data-anchor-skip] (SPEC.md §5) and .cell-gap. */
+function texts(node: P5Node, out: { text: string; skip: boolean; gap: boolean }[] = [], skip = false, gap = false): typeof out {
+  if (node.nodeName === "#text") out.push({ text: (node as DefaultTreeAdapterMap["textNode"]).value, skip, gap });
+  if (isElement(node) || node.nodeName === "#document") {
+    const el = isElement(node) ? node : null;
+    const s = skip || (el !== null && skipped(el));
+    const g = gap || (el !== null && hasClass(el, "cell-gap"));
+    for (const c of (node as P5Element).childNodes) texts(c, out, s, g);
   }
   return out;
 }
 
+/** The text a reader selects in an element: every text node outside
+    [data-anchor-skip] (lib/anchors/dom.ts anchorableText). */
+function anchorable(el: P5Element): string {
+  const skip = within(el, skipped);
+  return texts(el, [], skip).filter((t) => !t.skip).map((t) => t.text).join("");
+}
+
 /** A cell's words as shown: its text without the invisible gaps. */
-function cellText(td: Element): string {
-  let out = "";
-  const doc = td.ownerDocument;
-  const walker = doc.createTreeWalker(td, 4);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const parent = (n as Text).parentElement;
-    if (parent?.closest(SKIP) || parent?.closest(".cell-gap")) continue;
-    out += (n as Text).data;
+function cellText(td: P5Element): string {
+  const skip = within(td, skipped);
+  const gap = within(td, (el) => hasClass(el, "cell-gap"));
+  return texts(td, [], skip, gap).filter((t) => !t.skip && !t.gap).map((t) => t.text).join("");
+}
+
+/** The first element in document order that matches. */
+function find(node: P5Node, match: (el: P5Element) => boolean): P5Element | null {
+  if (isElement(node) && match(node)) return node;
+  for (const c of (node as P5Element).childNodes ?? []) {
+    const hit = find(c, match);
+    if (hit) return hit;
   }
+  return null;
+}
+
+/** ".sheet-inner > table > tbody > tr" inside the sheet. */
+function sheetRows(sheet: P5Element): P5Element[] {
+  const out: P5Element[] = [];
+  const walk = (el: P5Element) => {
+    for (const c of elementChildren(el)) {
+      if (c.tagName === "tr" && el.tagName === "tbody") {
+        const table = el.parentNode;
+        const inner = table && isElement(table) ? table.parentNode : null;
+        if (table && isElement(table) && table.tagName === "table" && inner && isElement(inner) && hasClass(inner, "sheet-inner")) out.push(c);
+      }
+      walk(c);
+    }
+  };
+  walk(sheet);
   return out;
 }
 
 function readSheet(name: string, html: string, text: string): ParsedSheet {
-  const dom = new JSDOM(`<!doctype html><body>${html}</body>`);
-  const body = dom.window.document.body;
-  const sheet = body.querySelector(".sheet");
+  const doc = parse(`<!doctype html><body>${html}</body>`);
+  const body = find(doc, (el) => el.tagName === "body")!;
+  const sheet = find(body, (el) => hasClass(el, "sheet"));
   const grid: string[][] = [];
   const merges: number[][] = [];
   const taken = new Set<string>();
-  const rows = sheet ? [...sheet.querySelectorAll(".sheet-inner > table > tbody > tr")] : [];
+  const rows = sheet ? sheetRows(sheet) : [];
   rows.forEach((tr, r) => {
     grid[r] ??= [];
     let c = 0;
-    for (const td of [...tr.children].filter((el) => el.localName === "td")) {
-      if ((td as HTMLElement).style?.display === "none") continue;
+    for (const td of elementChildren(tr).filter((el) => el.tagName === "td")) {
+      if (/(?:^|;)\s*display\s*:\s*none\s*(?:;|$)/i.test(attrOf(td, "style") ?? "")) continue;
       while (taken.has(`${r},${c}`)) c++;
-      const colspan = Number(td.getAttribute("colspan") ?? 1) || 1;
-      const rowspan = Number(td.getAttribute("rowspan") ?? 1) || 1;
+      const colspan = Number(attrOf(td, "colspan") ?? 1) || 1;
+      const rowspan = Number(attrOf(td, "rowspan") ?? 1) || 1;
       grid[r][c] = cellText(td);
       if (colspan > 1 || rowspan > 1) {
         merges.push([r, c, r + rowspan - 1, c + colspan - 1]);
@@ -258,17 +311,15 @@ function readSheet(name: string, html: string, text: string): ParsedSheet {
       c += colspan;
     }
   });
-  const parsed = {
+  return {
     name,
     grid,
     merges,
-    frozenRows: Number(sheet?.getAttribute("data-frozen-rows") ?? 0),
-    frozenCols: Number(sheet?.getAttribute("data-frozen-cols") ?? 0),
+    frozenRows: Number((sheet && attrOf(sheet, "data-frozen-rows")) ?? 0),
+    frozenCols: Number((sheet && attrOf(sheet, "data-frozen-cols")) ?? 0),
     domOk: anchorable(body) === text,
     cut: false,
   };
-  dom.window.close();
-  return parsed;
 }
 
 // ── Scoring ─────────────────────────────────────────────────────────────────
@@ -281,13 +332,20 @@ const norm = (s: string) => s.replace(/[   ]/g, " ").replace(/ {2,}/g, " ")
     never show a CR. A number format's double quotes mark literal text and
     never show (ECMA-376 §18.8.31); POI's DataFormatter keeps them after a
     date code (dd"-"mm"-"yyyy" "hh:mm:ss shows as 03"-"08"-"2017" "14:35:00),
-    so a formatted number matches with them dropped. */
+    so a formatted number matches with them dropped. A backslash shows the
+    character after it and never itself (ECMA-376 §18.8.31); POI keeps it
+    after a date code too (yyyy\年m\月d\日 shows as 2020\年7\月15\日), so
+    a formatted number matches with it dropped. A date Excel cannot
+    show is a row of "#" as wide as the cell: the reference writes one "#",
+    and any row of "#" matches it. */
 function cellRight(ref: RefCell, got: string | undefined): boolean {
   const g = (got ?? "").replace(/\r\n?/g, "\n");
   if (!ref) return g === "";
   const t = ref.t.replace(/\r\n?/g, "\n");
   if (ref.k !== "n") return g === t;
+  if (t === "#") return /^#+$/.test(g.trim());
   if (norm(g) === norm(t) || (!ref.g && t.includes('"') && norm(g) === norm(t.replace(/"/g, "")))) return true;
+  if (!ref.g && t.includes("\\") && norm(g) === norm(t.replace(/"/g, "").replace(/\\([\s\S])/g, "$1"))) return true;
   if (ref.g && ref.v !== undefined && NUMBER.test(g.trim())) {
     const n = Number(g.trim());
     return Math.abs(n - ref.v) <= 1e-9 * Math.max(1, Math.abs(ref.v));
@@ -408,8 +466,25 @@ function scoreFile(e: Entry, ref: RefSheet[], parsed: ParsedSheet[], show: boole
       }
     }
     const key = (m: number[]) => m.join(",");
+    // The reference clips its merges to its grid — the rows and columns up
+    // to the last words, and the merges whose first cell has words — and
+    // leaves out a merge that the clip makes one cell (SheetsRef.java). A
+    // merge past the last words, such as an empty bordered box under a
+    // table, is the sheet's look and never in the reference: the parse's
+    // merges are clipped to the same grid, as frozen rows are below.
+    const refRows = rs.rows.length;
+    const refGridCols = Math.max(
+      rs.rows.reduce((m, row) => Math.max(m, row.length), 0),
+      ...rs.merges.map((m) => m[3] + 1),
+    );
+    const clipped = (m: number[]): number[] | null => {
+      if (m[0] >= refRows || m[1] >= refGridCols) return null;
+      const r1 = Math.min(m[2], refRows - 1);
+      const c1 = Math.min(m[3], refGridCols - 1);
+      return r1 === m[0] && c1 === m[1] ? null : [m[0], m[1], r1, c1];
+    };
     const refMerges = new Set(rs.merges.map(key));
-    const gotMerges = new Set(ps.merges.map(key));
+    const gotMerges = new Set(ps.merges.map(clipped).filter((m): m is number[] => m !== null).map(key));
     for (const m of refMerges) if (gotMerges.has(m)) mergeTp++;
     else mergeFn++;
     for (const m of gotMerges) if (!refMerges.has(m)) mergeFp++;

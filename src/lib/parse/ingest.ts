@@ -875,8 +875,16 @@ export async function ingestSlides(
   return { document, deduped: false };
 }
 
-async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null): Promise<ParsedDocument> {
-  return parseSheetsFile(bytes, filename, { storeImage: slideImageStore(userId) });
+async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null, storedGrid?: string): Promise<ParsedDocument> {
+  return parseSheetsFile(bytes, filename, { storeImage: slideImageStore(userId), storedGrid });
+}
+
+/** A sheets document's first SHEET block's text: a re-parse of a delimited
+    file reads it with the delimiter that gives this grid back (a .tsv
+    keeps its tabs though its title has no extension). */
+async function storedGrid(documentId: string): Promise<string | undefined> {
+  const block = await db.block.findFirst({ where: { documentId, type: "SHEET" }, orderBy: { order: "asc" }, select: { text: true } });
+  return block?.text;
 }
 
 // Sheets upload path (SPEC.md §27): a .xlsx, a Google Sheets file Drive
@@ -1116,7 +1124,7 @@ export async function reparseDocument(
     const parsed =
       document.format === "slides"
         ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
-        : await parseSheetsBytes(bytes, document.title, userId);
+        : await parseSheetsBytes(bytes, document.title, userId, await storedGrid(documentId));
     onProgress?.("save", await saveDetail(parsed.blocks));
     // The stored contents carry onto the new blocks by their text
     // (lib/contents.ts): the old blocks are read before they go.

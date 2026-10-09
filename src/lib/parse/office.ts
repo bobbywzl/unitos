@@ -353,23 +353,34 @@ export function parseXml(text: string): XMLDocument | null {
 // was quadratic (sheets benchmark finding: a 2 MB worksheet with no cells
 // took 57 s).
 
+/** What these helpers read of an element: one of the lean tree's (above),
+    or one read by lib/parse/xml-stream.ts (a worksheet's rows, streamed). */
+export interface XmlElementLike {
+  readonly localName: string;
+  readonly children: ArrayLike<XmlElementLike>;
+  readonly attributes: ArrayLike<{ readonly localName: string; readonly value: string }>;
+  getAttribute(name: string): string | null;
+}
+
 /** The direct children with this local name, in order. */
-export function children(el: Element | null | undefined, localName: string): Element[] {
+export function children<E extends XmlElementLike>(el: E | null | undefined, localName: string): E[] {
   if (!el) return [];
-  const out: Element[] = [];
-  for (const c of el.children) if (c.localName === localName) out.push(c);
+  const out: E[] = [];
+  const all = el.children as ArrayLike<E>;
+  for (let k = 0; k < all.length; k++) if (all[k].localName === localName) out.push(all[k]);
   return out;
 }
 
 /** The first direct child with this local name. */
-export function child(el: Element | null | undefined, ...path: string[]): Element | null {
-  let at: Element | null = el ?? null;
+export function child<E extends XmlElementLike>(el: E | null | undefined, ...path: string[]): E | null {
+  let at: E | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next: Element | null = null;
-    for (const c of at.children) {
-      if (c.localName === name) {
-        next = c;
+    let next: E | null = null;
+    const all = at.children as ArrayLike<E>;
+    for (let k = 0; k < all.length; k++) {
+      if (all[k].localName === name) {
+        next = all[k];
         break;
       }
     }
@@ -379,12 +390,15 @@ export function child(el: Element | null | undefined, ...path: string[]): Elemen
 }
 
 /** Every descendant with this local name, in document order. */
-export function descendants(el: Element | Document | null | undefined, localName: string): Element[] {
+export function descendants<E extends XmlElementLike = Element>(
+  el: { getElementsByTagNameNS(namespace: string, localName: string): ArrayLike<E> } | null | undefined,
+  localName: string,
+): E[] {
   if (!el) return [];
   return Array.from(el.getElementsByTagNameNS("*", localName));
 }
 
-export function attr(el: Element | null | undefined, name: string): string | null {
+export function attr(el: XmlElementLike | null | undefined, name: string): string | null {
   if (!el) return null;
   const value = el.getAttribute(name);
   if (value !== null) return value;
@@ -394,7 +408,7 @@ export function attr(el: Element | null | undefined, name: string): string | nul
   return null;
 }
 
-export function intAttr(el: Element | null | undefined, name: string): number | null {
+export function intAttr(el: XmlElementLike | null | undefined, name: string): number | null {
   const value = attr(el, name);
   if (value === null || value === "") return null;
   const n = Number(value);
@@ -403,7 +417,7 @@ export function intAttr(el: Element | null | undefined, name: string): number | 
 
 /** A boolean attribute the way OOXML writes it: "1", "true", "0", "false",
     absent = the default. */
-export function boolAttr(el: Element | null | undefined, name: string, fallback = false): boolean {
+export function boolAttr(el: XmlElementLike | null | undefined, name: string, fallback = false): boolean {
   const value = attr(el, name);
   if (value === null) return fallback;
   return value === "1" || value === "true" || value === "on";

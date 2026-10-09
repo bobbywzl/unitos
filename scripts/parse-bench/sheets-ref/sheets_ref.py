@@ -164,9 +164,67 @@ def synth(id, out):
         side["A1"] = "never shown"
         last = wb.create_sheet("After hidden")
         last["A1"] = "shown after a hidden sheet"
+    elif id == "synth-merged-hidden-words":
+        # A timetable whose merged headers keep words in the cells they
+        # cover, as files written by libraries keep them (openpyxl drops
+        # them on merge, so the parts are written as they are).
+        return merged_hidden_words(out)
+    elif id == "synth-time-rounding":
+        # A shift log whose times sit a fraction of a second under a
+        # minute, an hour, or a day, as times summed or read off a clock
+        # are stored.
+        ws.title = "Shifts"
+        ws.append(["Entry", "Time", "Format"])
+        for label, value, fmt in [
+            ("Start", 0.3645833, "hh:mm:ss"),
+            ("Clock in", 0.36458, "hh:mm"),
+            ("End of day", 0.999999, "hh:mm"),
+            ("Last second", 0.999999, "hh:mm:ss"),
+            ("Two days", 1.9999999, "[h]:mm:ss"),
+            ("Stamp", 44197.9999999, "yyyy-mm-dd hh:mm:ss"),
+            ("Break", 0.0208333, "h:mm:ss AM/PM"),
+            ("Noon", 0.5, "h:mm AM/PM"),
+            ("Shift", 1 / 3, "h:mm:ss"),
+        ]:
+            ws.append([label, value, fmt])
+            ws.cell(ws.max_row, 2).number_format = fmt
     else:
         raise SystemExit(f"unknown synth id {id}")
     wb.save(out)
+
+
+def merged_hidden_words(out):
+    def cell(ref, text):
+        text = text.replace("&", "&amp;").replace("<", "&lt;")
+        return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+
+    rows = [
+        ["A1:Time", "B1:Monday", "C1:left over", "D1:Tuesday", "E1:draft"],
+        ["A2:9:00", "B2:Maths", "C2:Room 4", "D2:History", "E2:Room 2"],
+        ["A3:10:00", "B3:Break", "C3:hidden", "D3:Science", "E3:Lab"],
+        ["A4:11:00", "B4:stale", "C4:Room 4", "D4:Art", "E4:Room 9"],
+        ["A5:Notes", "B5:Bring the forms", "C5:covered", "D5:covered too", "E5:"],
+    ]
+    sheet_rows = []
+    for i, row in enumerate(rows, 1):
+        cells = "".join(cell(*c.split(":", 1)) for c in row if c.split(":", 1)[1])
+        sheet_rows.append(f'<row r="{i}">{cells}</row>')
+    # Monday and Tuesday span their room columns; the break spans two
+    # rows; the notes span the row.
+    merges = ["B1:C1", "D1:E1", "B3:B4", "B5:E5"]
+    merge_cells = "".join('<mergeCell ref="%s"/>' % m for m in merges)
+    data = "".join(sheet_rows)
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    parts = {
+        "[Content_Types].xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+        "_rels/.rels": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+        "xl/workbook.xml": f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook {ns}><sheets><sheet name="Timetable" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        "xl/_rels/workbook.xml.rels": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+        "xl/worksheets/sheet1.xml": f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet {ns}><sheetData>{data}</sheetData><mergeCells count="{len(merges)}">{merge_cells}</mergeCells></worksheet>',
+    }
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in parts.items():
+            z.writestr(name, data)
 
 
 def main(argv):
