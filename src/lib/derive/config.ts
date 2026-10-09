@@ -223,6 +223,11 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 // chars / 4, a CJK character 1), so a Chinese project reads what an English
 // project of the same token count reads, at the same cost.
 export const STITCH_WHOLE_THRESHOLD = 30_000; // under it the answer pass reads the documents whole
+// The reader's notes and the replies on links (ANS9-04): read by the answer
+// pass only when the command is about them (lib/prompts/stitch.ts
+// asksAboutNotes), ranked against the command (lib/graph/rank.ts) and cut
+// to this many tokens. Read-only: nothing is written.
+export const STITCH_NOTES_BUDGET = 3_000;
 export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads; past it the lines are read in groups
 // What the answer pass reads after selection, by what the command asks for
 // (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A

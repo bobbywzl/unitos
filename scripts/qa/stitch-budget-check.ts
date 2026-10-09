@@ -3,13 +3,14 @@
 // tags as aliases, the reply's citations, and the skeleton's parts without
 // a contents call. No model, no database rows.
 // Run: npx tsx scripts/qa/stitch-budget-check.ts
-import { STITCH_HISTORY_FIRST_MIN, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
+import { STITCH_HISTORY_FIRST_MIN, STITCH_NOTES_BUDGET, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
 import { translatorFor } from "../../src/lib/i18n/dictionaries";
 import { parseMarkdown } from "../../src/lib/parse/markdown";
 import { currentSkeleton, partsFor, type Skeleton } from "../../src/lib/graph/skeleton";
 import { readFileSync } from "node:fs";
 import {
   answerMessages,
+  answerPoints,
   asksContradictions,
   assignSources,
   byDocument,
@@ -44,6 +45,7 @@ import {
   liveLinks,
   quoteBlocks,
   nameHits,
+  ownNotesQuestion,
   readingOf,
   replyLanguage,
   replyWithIds,
@@ -58,7 +60,7 @@ import {
 import { fuseRanks } from "../../src/lib/graph/rank";
 import { searchQuery } from "../../src/lib/graph/search";
 import { commandIntent } from "../../src/lib/graph/intent";
-import { asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksAboutNotes, asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -132,7 +134,7 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["Make a timeline of Nietzsche's life from these documents", "page"],
   ["Gather every passage on pity", "page"],
   ["Write a page on pity in each document.", "page"],
-  ["Do my notes contradict any of the other documents?", "links"],
+  ["Do my notes contradict any of the other documents?", "question"], // REV9-08: a contradiction question about the reader's own notes is a question (ownNotesQuestion)
   ["叔本华认为自杀是罪行吗？", "question"],
   // Round 3 (REV3-06): everyday phrasings — a polite opening before the
   // verb, idiom verbs that make nothing, list without every/all/each.
@@ -186,7 +188,8 @@ try {
 }
 // The answers audit's 27 commands (round 2), when its data is on this machine.
 const ANS = "/home/user/unitos/.qa-tmp/stitch/r2/ans/commands.json";
-const ANS_KIND: Record<string, ReturnType<typeof commandKind>> = { "P1-11": "links", "P1-12": "page", "P2-10": "links" };
+// P1-11 "Do my notes contradict any of the other documents?" is a question since REV9-08 (ownNotesQuestion).
+const ANS_KIND: Record<string, ReturnType<typeof commandKind>> = { "P1-11": "question", "P1-12": "page", "P2-10": "links" };
 try {
   const ans = JSON.parse(readFileSync(ANS, "utf8")) as { id: string; command: string }[];
   const wrong = ans.filter((c) => commandKind(c.command) !== (ANS_KIND[c.id] ?? "question"));
@@ -636,7 +639,8 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("answer sections: a document's gist under its header (whole read)", /\[document A\] "BOOK TWO" \([^)]*\)\ngist: Beyond Good and Evil[^\n]*\n\[block A1\]/.test(gWhole));
 
   // ANS4-08: Stitch says it reads no notes, replies, or links.
-  check("answer rules: Stitch reads only the documents' text", rules.includes("You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph") && rules.includes("notes in the Notes list, replies in the link's panel, links in the graph"));
+  // ENGINE9 (ANS9-04): the notes and the replies on links are read when the command is about them; the links in the graph never.
+  check("answer rules: Stitch reads the documents' text, and the notes and replies only when listed", rules.includes("You read the documents' text, and the reader's notes and the replies on links only when the reader's message lists them") && rules.includes("notes in the Notes list and replies in the link's panel") && rules.includes("You never read the links in the graph, except the links listed as already in the project"));
 
   // ANS4-09: the reading passes keep the last six commands.
   check("STITCH_READ_HISTORY keeps six commands", STITCH_READ_HISTORY === 6);
@@ -1060,7 +1064,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const quoted8 = 'The passages read do not answer it [block F24]. Ask again, for example "Does Nietzsche say Buddhism denies life?", so that every document is read.';
   check("checkReplyQuotes: the back reply's wording in italics stays as written; in quote marks it loses them (ANS8-07)", checkReplyQuotes(ask8, bb8 as unknown as Parameters<typeof checkReplyQuotes>[1], new Set()).reply === ask8 && !checkReplyQuotes(quoted8, bb8 as unknown as Parameters<typeof checkReplyQuotes>[1], new Set()).reply.includes('"Does'));
   // ANS8-06: a document that is the reader's notes is read.
-  check("answer rules: a document of the reader's own notes answers 'my notes' (ANS8-06)", stitchRules("en").includes("A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it, and say you cannot read the Notes list only when no document fits."));
+  check("answer rules: a document of the reader's own notes answers 'my notes' (ANS8-06)", stitchRules("en").includes("A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it as well as from the list."));
   // Round 8 cost note: an edit at the end of a long paragraph is in its line.
   const longText = `${"The will is blind and strives without end. ".repeat(20)}Correction: he calls suicide a mistake, not a crime.`;
   const stored8: Skeleton = { v: 1, gist: "", parts: [], lines: [{ blockId: "b5", hash: "old", text: "the will" }], chars: 0 };
@@ -1153,3 +1157,86 @@ void (async () => {
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();
+
+// [engine9] Round 9 (ENGINE9): the last answer's points, the holistic
+// phrases, the reader's notes and replies, the follow-up guard. Synchronous:
+// these run before the async block above prints the tally.
+{
+  // ANS9-03, REV9-08: holistic phrases share the budget by document.
+  const over9 = ["What are the main threads across these documents?", "What do all seven texts share?", "What themes run through the whole project?", "What are the main ideas across the texts?", "这些文档的主线是什么？", "这些文档之间的主要线索是什么？", "哪些主题贯穿了整个项目？", "这几份文档的主要线索是什么？"];
+  const notOver9 = ["What is the main point of this document?", "Which documents discuss Buddhism?", "What does Nietzsche say pity does?", "Where do my notes disagree with the documents?", "门肯的导言提供了哪些其他文档没有的信息？"];
+  check("overEvery: across these documents, main threads, all seven texts, whole project, 主线, 贯穿, 整个项目 (ANS9-03)", over9.every(overEvery), over9.filter((c) => !overEvery(c)).join(" | "));
+  check("overEvery: the main point of this document, which documents, a topic question are not", !notOver9.some(overEvery), notOver9.filter(overEvery).join(" | "));
+  // ANS9-04: the notes and the replies on links are read when the command is about them.
+  const about9 = ["Where do my notes and comments disagree with the documents?", "What did I reply on the link about when The Antichrist was printed?", "Which line did I say in my notes I would open the essay with?", "Are the replies on the links resolved?", "What did we write about pity?", "我的笔记和评论在哪些地方与文档不一致？", "我在链接上的回复说了什么？", "我写的和文档一致吗？"];
+  const notAbout9 = ["What does Ludovici's Notes add that Zarathustra itself does not say?", "What does the notes document say about pity?", "Find the contradictions between the documents.", "门肯的导言提供了哪些其他文档没有的信息？", "What does Nietzsche say about Wagner?"];
+  check("asksAboutNotes: my notes, what did I reply, the replies, 我的笔记, 回复, 我写的", about9.every(asksAboutNotes), about9.filter((c) => !asksAboutNotes(c)).join(" | "));
+  check("asksAboutNotes: a notes document, Ludovici's Notes, a topic question are not", !notAbout9.some(asksAboutNotes), notAbout9.filter(asksAboutNotes).join(" | "));
+  // REV9-08: a contradiction question about the reader's own notes or self is a question; an imperative still draws links.
+  const own9 = ["Where do my notes disagree with the documents?", "Where do I disagree with Nietzsche?", "我的笔记和文档有哪些不一致？", "Do my notes contradict any of the other documents?"];
+  const notOwn9 = ["Find the contradictions between my notes and Beyond Good and Evil.", "Do the documents contradict each other on any date?", "找出各文档之间的矛盾。", "Where do Nietzsche and Schopenhauer contradict each other on whether life is worth living?"];
+  check("ownNotesQuestion: where do my notes disagree, where do I disagree, 我的笔记和文档有哪些不一致 are questions", own9.every((c) => ownNotesQuestion(c) && commandKind(c) === "question"), own9.filter((c) => commandKind(c) !== "question").join(" | "));
+  check("ownNotesQuestion: find the contradictions between my notes and …, the documents' contradictions stay links", notOwn9.every((c) => !ownNotesQuestion(c) && commandKind(c) === "links"), notOwn9.filter((c) => commandKind(c) !== "links").join(" | "));
+  check("asksContradictions still true for the own-notes question (ANS8-04 lighting, RETRIEVAL9's cut)", asksContradictions("Where do my notes disagree with the documents?"));
+  // The notes lines in the answer prompt.
+  const docs9 = [{ tag: "A", title: "The Antichrist", read: true }, { tag: "B", title: "Nietzsche combined notes", read: true }];
+  const base9 = { documents: docs9, command: "Where do my notes disagree with the documents?", continued: false, selected: true };
+  const withNotes = stitchPrompt({ ...base9, notes: ['- note in "Essay ideas": Count for the essay: 30 days.', '- reply on the link "Nietzsche combined notes" ("printed right away") – "Friedrich Nietzsche" ("not in type until 1895"): Dr. Hale says Mencken is right.'] });
+  check("stitchPrompt: the notes and replies are listed before the command, as not blocks", withNotes.includes("The reader's notes and replies, the ones nearest the command's words first") && withNotes.includes("Dr. Hale says Mencken is right.") && withNotes.indexOf("Dr. Hale") < withNotes.indexOf("The reader's command:"));
+  check("stitchPrompt: a command about the notes with none listed gets the plain sentence; a command not about them gets nothing", stitchPrompt({ ...base9, notes: [] }).includes("the Notes list holds no note, and no link of this project has a reply") && !stitchPrompt(base9).includes("The reader's notes and replies"));
+  check("answer rules: a note or a reply is never cited as a block; a notes command with no list says where they are", stitchRules("en").includes("A note or a reply is not a block: cite no block tag for it") && stitchRules("en").includes("a command that turns on them gets one sentence saying where they are, notes in the Notes list and replies in the link's panel"));
+  check("config: STITCH_NOTES_BUDGET holds a few notes, under the question budget", STITCH_NOTES_BUDGET >= 1_000 && STITCH_NOTES_BUDGET <= STITCH_SELECTED_BUDGET.question / 3);
+  // ANS9-02: the last answer's points reach the reading passes.
+  const reply9 = [
+    "Five threads run through the documents.",
+    "",
+    "- **Pessimism, kept and turned around.** Arthur Schopenhauer: satisfaction \"is negative\" [block E21].",
+    "- **Pity.** The Antichrist: \"pity is the technic of nihilism\" [block F24].",
+    "- Christianity is the third thread, through Mencken and the notes [block A9] [block G7].",
+    "- **永恒轮回与《查拉图斯特拉》。** How Zarathustra came into being [block B20]。",
+    "",
+    "(Stored by this answer, in the order it proposed them:",
+    "- link 1: [block G6] – [block B20]: the date differs.)",
+  ].join("\n");
+  const hist9 = [{ role: "user" as const, content: "What are the main threads across these documents?" }, { role: "assistant" as const, content: reply9 }];
+  const points9 = answerPoints(hist9);
+  check("answerPoints: the bold label, else the first words; block tags dropped; the record's lines left out", points9.join(" | ") === "Pessimism, kept and turned around | Pity | Christianity is the third thread, through Mencken and | 永恒轮回与《查拉图斯特拉》", points9.join(" | "));
+  check("answerPoints: no list, no points; no answer, no points", answerPoints([{ role: "user", content: "x" }, { role: "assistant", content: "One sentence [block A1]." }]).length === 0 && answerPoints([]).length === 0);
+  const long9 = [{ role: "user" as const, content: "x" }, { role: "assistant" as const, content: Array.from({ length: 12 }, (_, i) => `${i + 1}. **${"word ".repeat(10).trim()} ${i}** more`).join("\n") }];
+  const capped9 = answerPoints(long9);
+  check("answerPoints: at most 8 points and 120 tokens", capped9.length <= 8 && capped9.reduce((n, p) => n + estTokens(p) + 2, 0) <= 120, `${capped9.length} points`);
+  const sel9b = { documents: docs9, command: "Which documents does the first thread run through?", continued: true, earlier: ["What are the main threads across these documents?"], cited: ["E21"], maxBlocks: 150, partial: false };
+  const selP = stitchSelectPrompt({ ...sel9b, points: points9 });
+  check("stitchSelectPrompt: the last answer's points, numbered, between the earlier commands and the command", selP.includes("The last answer's points, in order:\n1. Pessimism, kept and turned around\n2. Pity\n") && selP.indexOf("earlier commands") < selP.indexOf("The last answer's points") && selP.indexOf("The last answer's points") < selP.indexOf("The reader's command:"));
+  check("stitchSelectPrompt: without points the prompt is as before", stitchSelectPrompt(sel9b) === stitchSelectPrompt({ ...sel9b, points: [] }) && !stitchSelectPrompt(sel9b).includes("The last answer's points"));
+  const exp9 = { command: "Which documents does the first thread run through?", earlier: ["What are the main threads across these documents?"], titles: ["The Antichrist"], maxWords: 15 };
+  check("stitchExpandPrompt: the points too, so the expansion can name the thread's words", stitchExpandPrompt({ ...exp9, points: points9 }).includes("1. Pessimism, kept and turned around") && !stitchExpandPrompt(exp9).includes("The last answer's points"));
+  // ANS9-06: the follow-up guard on the round 9 follow-ups (guard9.ts): back = the cited blocks answer it; select = it needs new passages.
+  const route9 = (c: string) => (!refersBack(c) ? "select" : asksMore(c) ? "select" : "back");
+  const guard9: [string, "back" | "select"][] = [
+    ["Which of those threads does my notes document leave out?", "back"],
+    ["第二条线索在哪个文档里讲得最充分？", "select"],
+    ["Which of those should I fix before the essay?", "back"],
+    ["Does any other document make the second point?", "select"],
+    ["Which of the differences is about a date?", "back"],
+    ["把这个总结做成一页。", "back"],
+    ["Which documents does the first thread run through?", "select"],
+    ["Why is the first one a contradiction?", "back"],
+    ["Which of those links joins Nietzsche to Schopenhauer directly?", "back"],
+    ["第一点有原文依据吗？", "back"],
+    ["Which of those is still open?", "back"],
+    // Round 8's follow-ups that need new passages, and FU9 (tokens only in round 8).
+    ["Is there a passage that backs up the second point?", "select"],
+    ["叔本华对第二点怎么看？", "select"],
+    ["Is the third point true of Buddhism as well?", "select"],
+    ["Summarise that in two sentences.", "select"],
+    ["Why is the second one a contradiction and not just a different way of dating?", "back"],
+    ["Why is the first one a contradiction, and does any other document disagree?", "select"],
+    ["为什么说第二条是矛盾？", "back"],
+    ["Make the summary a page.", "back"],
+    ["Which document is the third point from?", "back"],
+  ];
+  const wrong9 = guard9.filter(([c, want]) => route9(c) !== want);
+  check("follow-up guard: 0 of the round 9 follow-ups go the wrong way (ANS9-06)", wrong9.length === 0, wrong9.map(([c, want]) => `${c} → ${route9(c)}, want ${want}`).join(" | "));
+  check("asksMore: a why-question about the last answer does not count its contradiction word; with 'other' it does", !asksMore("Why is the first one a contradiction?") && asksMore("Why is the first one a contradiction? Does any other document say so?") && asksMore("Does any other document disagree with the second point?"));
+}

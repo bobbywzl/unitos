@@ -31,11 +31,16 @@ type CommandCtx = {
 };
 
 // The reading passes read the conversation as the reader's earlier
-// commands (oldest first) and the blocks the earlier answers cited, as
-// aliases of this reading, not as the turns themselves.
+// commands (oldest first), the last answer's points, and the blocks the
+// earlier answers cited, as aliases of this reading, not as the turns
+// themselves.
 type ReadingCtx = CommandCtx & {
   earlier: string[];
   cited: string[];
+  // The last answer's points, in order (lib/graph/stitch.ts answerPoints):
+  // what "the first thread" and "the second point" of a follow-up name
+  // (ANS9-02). Empty when the last answer listed none.
+  points?: string[];
 };
 
 export type StitchRouteCtx = ReadingCtx & {
@@ -78,6 +83,11 @@ export type StitchCtx = CommandCtx & {
   // True when the first read's paragraph opens the blocks in the system
   // message (answerMessages), so this message leaves it out.
   firstReadInSystem?: boolean;
+  // The reader's notes and the replies on links, one line each
+  // (lib/graph/stitch.ts notesSection), read only when the command is
+  // about them (asksAboutNotes; ANS9-04). [] when it is and there are
+  // none; undefined when the command is not about them.
+  notes?: string[];
 };
 
 /** True when the command asks where something is named: which documents
@@ -101,22 +111,40 @@ export function asksEvery(command: string): boolean {
     command reads the blocks the earlier answers cited and stored, and no
     select pass runs (lib/graph/stitch.ts backSelection). "Back to the first
     answer" and "both of them" are left to the select pass: they name an
-    older answer, or new passages. */
+    older answer, or new passages. "The summary", "that list", "which of
+    the differences", 这个总结 and 刚才的 refer back too (ANS9-06). */
 export function refersBack(command: string): boolean {
-  return /\b(?:(?:that|this|those|these) (?:page|links?|passages?|quotes?|answers?|ones?|points?|numbers?|two|sentences?)\b|the (?:first|second|third|fourth|fifth|last|other|\d+(?:st|nd|rd|th)) (?:one|link|point|passage|quote|sentence)\b|the (?:page|link)\b|(?:first|second|third|fourth|fifth|last) link\b|you (?:linked|cited|quoted|said|wrote|drew|proposed|made|left)\b|which of (?:those|these)\b)|第.(?:点|条|个|段)|原文|那页|这页|那一页|这一页|那条|这条|这些链接|那些链接|这些段落|那些段落|这两|那两/i.test(command);
+  return /\b(?:(?:that|this|those|these) (?:page|links?|passages?|quotes?|answers?|ones?|points?|numbers?|two|sentences?|summary|list|table|overview)\b|the (?:first|second|third|fourth|fifth|last|other|\d+(?:st|nd|rd|th)) (?:one|link|point|passage|quote|sentence)\b|the (?:page|link|summary)\b|your (?:summary|list|table|overview)\b|(?:first|second|third|fourth|fifth|last) link\b|you (?:linked|cited|quoted|said|wrote|drew|proposed|made|left)\b|which of (?:those|these|the (?:differences|links|points|threads|contradictions|disagreements|passages|quotes|questions|claims|dates|items))\b)|第.(?:点|条|个|段)|原文|那页|这页|那一页|这一页|那条|这条|这些链接|那些链接|这些段落|那些段落|这两|那两|这个总结|这份总结|那个总结|上面的总结|刚才的/i.test(command);
 }
 
 /** True when a follow-up asks for passages beyond the ones cited (ANS7-01):
     other documents, more passages, agreement or disagreement, what someone
     says about the points, a comparison, support or evidence, whether a
-    point holds for something else, what someone thinks of it (怎么看), or
-    whether it is somewhere (有吗; ANS8-01). Such a follow-up runs the
-    select pass even when it refers back ("Does any other document disagree
-    with the second point?"). "Different" is a word about the answer ("a
-    different way of dating"), not a request for more: only differ,
-    differs, differed count. */
+    point holds for something else, what someone thinks of it (怎么看),
+    whether it is somewhere (有吗; ANS8-01), or which document treats it
+    most fully (最充分: every document's passages on it). Such a
+    follow-up runs the select pass even when it refers back ("Does any
+    other document disagree with the second point?"). "Different" is a
+    word about the answer ("a different way of dating"), not a request for
+    more: only differ, differs, differed count. A why-question about the
+    last answer ("Why is the first one a contradiction?", 为什么说第二条是矛盾)
+    asks about the answer's own words, so its agree, disagree, differ and
+    contradict words do not count (ANS9-06), unless it also asks for other,
+    else, another, more, also, 其他, 别的 or 还有. */
 export function asksMore(command: string): boolean {
-  return /\b(?:other|others|else|elsewhere|anywhere|more|another|also|too|as well|agree\w*|disagree\w*|differ|differs|differed|contradict\w*|like (?:the|that|those|this|these)|says? about|think (?:of|about)|compare|support\w*|backs? up|backed up|evidence|confirm\w*|true (?:of|for|in)|appl(?:y|ies) to|holds? for)\b|其他|别的|另外|对应|还有|也|同意|反对|矛盾|怎么看|如何看|看法|怎么说|如何评价|有没有|有吗|是否/i.test(command);
+  const why = /^\s*(?:why|how come|what makes)\b|^\s*(?:为什么|为何|怎么会|何以)/i.test(command) && refersBack(command) && !/\b(?:other|others|else|another|more|also|too|as well)\b|其他|别的|另外|还有/i.test(command);
+  const c = why ? command.replace(/\b(?:agree\w*|disagree\w*|differ|differs|differed|contradict\w*)\b|同意|反对|矛盾/gi, " ") : command;
+  return /\b(?:other|others|else|elsewhere|anywhere|more|another|also|too|as well|agree\w*|disagree\w*|differ|differs|differed|contradict\w*|like (?:the|that|those|this|these)|says? about|think (?:of|about)|compare|support\w*|backs? up|backed up|evidence|confirm\w*|true (?:of|for|in)|appl(?:y|ies) to|holds? for|most (?:fully|thoroughly|completely|extensively)|(?:in|with) (?:the )?most detail|the most (?:about|on))\b|其他|别的|另外|对应|还有|也|同意|反对|矛盾|怎么看|如何看|看法|怎么说|如何评价|有没有|有吗|是否|最充分|最详细|最全面|最多/i.test(c);
+}
+
+/** True when the command is about the reader's notes, comments, or replies
+    (ANS9-04): my notes, our notes, what I wrote, what did I reply, my
+    replies, the replies, 我的笔记, 我们的笔记, 我写的, 回复. Only then does
+    the answer pass read the project's notes and the replies on its links
+    (lib/graph/stitch.ts notesSection). "Ludovici's Notes" and "the notes
+    document" are documents, not the reader's notes. */
+export function asksAboutNotes(command: string): boolean {
+  return /\b(?:my|our) (?:own )?(?:notes?|comments?|repl(?:y|ies)|annotations?)\b|\bthe repl(?:y|ies)\b|\b(?:what|which|where|when) (?:did |do |have )?(?:I|we) (?:wrote|write|noted|note|replied|reply|commented|comment|said|say)\b|\b(?:I|we) (?:wrote|noted|replied|commented) (?:on|in|about|under|that|there)\b|\bnotes list\b|我的笔记|我们的笔记|我写的|我们写的|我的评论|我们的评论|我的回复|回复|笔记列表/i.test(command);
 }
 
 // The documents with no text above. Named only when the command bears on
@@ -151,12 +179,20 @@ const CONTINUED =
 const CONTINUED_COMMANDS =
   'This command continues the earlier commands. Read it with them: "it", "the second one", and "those numbers" name what the earlier commands and their answers named.';
 
-function commandLines(ctx: CommandCtx & { earlier?: string[] }): string[] {
+// The last answer's points, numbered in its order, so "the second point"
+// resolves in a pass that never reads the answers (ANS9-02).
+function pointLines(points: string[] | undefined): string[] {
+  if (!points || points.length === 0) return [];
+  return ["The last answer's points, in order:", ...points.map((p, i) => `${i + 1}. ${p}`), ""];
+}
+
+function commandLines(ctx: CommandCtx & { earlier?: string[]; points?: string[] }): string[] {
   if (!ctx.earlier) return ["The reader's command:", ctx.command, ...(ctx.continued ? ["", CONTINUED] : [])];
   return [
     ...(ctx.earlier.length > 0
       ? ["The reader's earlier commands in this conversation, oldest first:", ...ctx.earlier.map((c) => `- ${c.replace(/\s+/g, " ").trim()}`), ""]
       : []),
+    ...pointLines(ctx.points),
     "The reader's command:",
     ctx.command,
     ...(ctx.continued ? ["", CONTINUED_COMMANDS] : []),
@@ -228,6 +264,9 @@ export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
 export type StitchExpandCtx = {
   command: string;
   earlier: string[];
+  // The last answer's points (ReadingCtx.points): a follow-up's "the first
+  // thread" gets the thread's words in its expansion (ANS9-02).
+  points?: string[];
   // The titles of the documents read: they tell the documents' language
   // and field.
   titles: string[];
@@ -245,6 +284,7 @@ export function stitchExpandPrompt(ctx: StitchExpandCtx): string {
     ...(ctx.earlier.length > 0
       ? ["The reader's earlier commands in this conversation, oldest first:", ...ctx.earlier.map((c) => `- ${c.replace(/\s+/g, " ").trim()}`), ""]
       : []),
+    ...pointLines(ctx.points),
     "The reader's command:",
     ctx.command,
     "",
@@ -270,7 +310,7 @@ export function stitchRules(lang: Lang): string {
     "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. A page that combines findings gets one heading per topic and one text part per finding, each with its own sources; no finding of the documents on the topic is left out. null when the command asks for no page.",
     `3. reply: the answer to the command, in ${name}. A question gets its answer here: start with the answer in one sentence. Then one line per piece of evidence the first sentence does not already say: its document's title, even if the line before named it, the shortest quote that proves that line's claim (one clause), and its block as [block <alias>]. To which of several things changed or hold, end with one clause on the ones that did not. Never restate the first sentence as a list. Stop when the command is answered: no closing remark, no point the command did not ask about. A why question starts with the reason the documents give, in their words; say no reason is given only when no block shown names a cause, a method, or an adjustment. A summary gives the key points of every document that bears on the topic, each with its document and block. Before you say a document says nothing on the topic, check its blocks for the topic's causes and effects: a block on what causes it or on what it causes is on the topic. When the documents give different values or claims on the same point, give each with its document and say they differ; never pick one. Except: when a later-dated document of the reader's says the value changed (moved, now, new, replaced, instead), give the later value first as the current one, and the earlier one as what it replaced. Two documents that name different causes differ only when one denies the other's cause; else give both causes. When two figures differ in what they cover, say what each covers. Never say which to use for a purpose the documents do not name. When the documents answer only in part, answer that part, then say in one sentence what they do not answer. When they do not answer at all, say so in one sentence. Then give a figure only when a block shown gives the same quantity for another scope or date; else stop. When a document marked not read could hold the answer, say in one sentence that it has no text to read. A number you work out from the documents' numbers is marked as worked out and shows the numbers it comes from. A command to gather or write a page gets one sentence: what the page finds (the agreement, the contradiction, the answer), or why the command could not be done with these documents. Never describe the page or count its parts: the count is added under the reply. A command to link gets the count of links, then one clause per group of links, or why no link could be drawn. A count of links equals the number of links you propose. A link listed as already in the project is never proposed again: say in one sentence that it is already in the graph. Never restate the page. A command that also asks a question gets its answer first, as a question does, then one sentence on the links or the page. Answer only what the command asks, from the documents only: no fact, number, comparison, or label the documents do not state (never call a figure a "lab rating" or a cause a "delay" unless a document does), and no topic the command did not ask about. At most 3,000 characters. Markdown: short paragraphs, a list when the answer has three or more parallel items, bold for the one or two key figures, no headings, no bold label on a line of its own. ${SPECIFICITY_RULE} ${STYLE_RULE}`,
     `Rules: every blockId is an alias tagged below, copied exactly; never invent one. In reply, cite a block as [block <alias>], one block per tag: [block B19] [block B21], never [block B19, B21]. Every quote is real text of the named block, copied exactly. A quote in reply is copied exactly from the block it cites; cut words with … instead of rewording. A quote is the document's words in the document's language: a translation or a paraphrase gets no quote marks. When a block repeats another document's block word for word, cite the original, not the copy: the original is in a document not marked "a page Stitch generated", else in the earlier document. Name a document by its title, never by its letter: the reader does not see the letters. When the command cannot be done with these documents, say so in reply and return empty links and a null document.`,
-    "You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph, except the links listed as already in the project and what your earlier answers stored. A command about the reader's notes, replies, or links gets one sentence saying you cannot read them, and where they are: notes in the Notes list, replies in the link's panel, links in the graph. Never add the partial-read sentence or advise picking documents for it. A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it, and say you cannot read the Notes list only when no document fits. You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence, and where the reader does it: a link in its panel, a recommended link under Recommended links, a note in the Notes list.",
+    "You read the documents' text, and the reader's notes and the replies on links only when the reader's message lists them under \"The reader's notes and replies\": a command about them gets them, and answers from them and the blocks. A note or a reply is not a block: cite no block tag for it; name a note by its first words and a reply by its link's two documents. When the message does not list them, they were not read: a command that turns on them gets one sentence saying where they are, notes in the Notes list and replies in the link's panel. Never add the partial-read sentence for them, and never advise picking documents for them. You never read the links in the graph, except the links listed as already in the project and what your earlier answers stored: a command about them gets one sentence saying you cannot read them, and that they are in the graph. A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it as well as from the list. You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence, and where the reader does it: a link in its panel, a recommended link under Recommended links, a note in the Notes list.",
   ].join("\n");
 }
 
@@ -282,6 +322,20 @@ export function stitchRules(lang: Lang): string {
     it stays in the user message and says "above". */
 export function firstReadParagraph(picked: boolean, where: "above" | "below"): string {
   return `A first read picked the blocks ${where} for this command out of every document${picked ? " picked" : ""}; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`;
+}
+
+// The reader's notes and the replies on links (ANS9-04), read when the
+// command is about them: the lines nearest the command's words, as
+// lib/graph/stitch.ts notesSection ranked and cut them; a plain sentence
+// when there are none, so the model never guesses at them.
+function notesLines(notes: string[] | undefined): string[] {
+  if (notes === undefined) return [];
+  if (notes.length === 0) return ["The reader's notes and replies: the Notes list holds no note, and no link of this project has a reply."];
+  return [
+    "The reader's notes and replies, the ones nearest the command's words first (a note with its section, a reply with its link's two documents and quotes); they are not blocks:",
+    ...notes,
+    "",
+  ];
 }
 
 export function stitchPrompt(ctx: StitchCtx): string {
@@ -318,6 +372,7 @@ export function stitchPrompt(ctx: StitchCtx): string {
     ...((ctx.existing ?? []).length > 0
       ? [`Links already in the project between the blocks above: ${(ctx.existing ?? []).join("; ")}. Never propose them again. When the command asks for links, say in one sentence that these are already in the graph, and how many wait under Recommended links when some do; never mention one removed by the reader.`]
       : []),
+    ...notesLines(ctx.notes),
     ...commandLines(ctx),
     "",
     "Answer with the three outputs and the rules at the top of the system message.",

@@ -20,6 +20,7 @@ import {
   STITCH_INDEX_TOP,
   STITCH_LINKS_SKELETON,
   STITCH_MAX_OUTPUT_TOKENS,
+  STITCH_NOTES_BUDGET,
   STITCH_QUESTION_SKELETON,
   STITCH_READ_HISTORY,
   STITCH_READS_GENERATED,
@@ -49,6 +50,7 @@ import { fuseRanks, rank, tokenize } from "@/lib/graph/rank";
 import { searchBlocks } from "@/lib/graph/search";
 import { commandIntent } from "@/lib/graph/intent";
 import {
+  asksAboutNotes,
   asksMore,
   asksWhere,
   firstReadParagraph,
@@ -244,8 +246,21 @@ export function commandKind(command: string): StitchCommandKind {
     lead +
       String.raw`(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b`,
   );
-  if (asksContradictions(command) || links.test(c) || /连接|关联/.test(c)) return "links";
+  if ((asksContradictions(command) && !ownNotesQuestion(command)) || links.test(c) || /连接|关联/.test(c)) return "links";
   return "question";
+}
+
+/** True when a contradiction command is a question about the reader's own
+    notes or self (REV9-08): "where do my notes disagree with the
+    documents", "where do I disagree with Nietzsche", 我的笔记和文档有哪些不一致.
+    Such a command is a question, answered from the reader's notes
+    (notesSection) and the blocks, not a links command; an imperative
+    ("find the contradictions between my notes and …", 找出) still draws
+    links. */
+export function ownNotesQuestion(command: string): boolean {
+  const c = command.trim();
+  if (/^(?:(?:please|now|then)[,\s]+)?(?:find|list|draw|connect|link|propose|show|gather|collect|make|找出|列出|画出|连接|找找|请找|请列)/i.test(c)) return false;
+  return /\b(?:my|our) (?:own )?(?:notes?|comments?|repl(?:y|ies))\b|\b(?:do|does|did|where do|where did|how do|whether) (?:I|we) (?:disagree|differ|contradict|conflict)\b|\b(?:I|we) disagree\b|我的笔记|我们的笔记|我(?:在哪里|哪里|哪些地方|在哪些地方)?(?:不同意|反对|有分歧|和.{1,12}不一致|与.{1,12}不一致)/i.test(c);
 }
 
 /** True when the command asks for contradictions or disagreements: a links
@@ -856,12 +871,77 @@ export async function notPickedOf(notebookId: string, picked: string[], command:
   return { count: rows.length, titles: named.map((d) => d.doc.title) };
 }
 
+const NOTE_CHARS = 600; // chars of a note's or a reply's text in the answer prompt
+const NOTES_ROWS = 200; // notes, and replies, read before the ranker
+
+/** The reader's notes and the replies on links, as the answer pass reads
+    them when the command is about them (ANS9-04; lib/prompts/stitch.ts
+    asksAboutNotes): the accepted notes of the sections the reader sees (no
+    hidden section, no side chat) and the replies on the project's links
+    whose two documents are in the project, open or resolved, one line each
+    — a note with its section and the document it was written in, a reply
+    with its link's two documents and quotes — ranked against the query
+    (lib/graph/rank.ts; ties newest first) and cut to STITCH_NOTES_BUDGET
+    tokens. The scope is the Notes list's and the link's panel's. Read-only:
+    nothing is written. */
+export async function notesSection(notebookId: string, query: string): Promise<string[]> {
+  const [notes, replies] = await Promise.all([
+    db.note.findMany({
+      where: { section: { notebookId, hidden: false }, status: "ACCEPTED", sideChatOfId: null },
+      orderBy: { createdAt: "desc" },
+      take: NOTES_ROWS,
+      select: { content: true, section: { select: { title: true } }, document: { select: { title: true } } },
+    }),
+    db.reply.findMany({
+      where: {
+        docLinkId: { not: null },
+        docLink: {
+          ...projectLinks(notebookId),
+          fromDocument: { notebooks: { some: { notebookId } } },
+          toDocument: { notebooks: { some: { notebookId } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: NOTES_ROWS,
+      select: {
+        content: true,
+        resolvedById: true,
+        docLink: { select: { quotedText: true, toQuotedText: true, fromDocument: { select: { title: true } }, toDocument: { select: { title: true } } } },
+      },
+    }),
+  ]);
+  const fold = (s: string, max: number) => {
+    const t = s.replace(/\s+/g, " ").trim();
+    return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+  };
+  const lines = [
+    ...notes.map((n) => `- note in "${fold(n.section.title, 60)}"${n.document ? ` on "${fold(n.document.title, 80)}"` : ""}: ${fold(n.content, NOTE_CHARS)}`),
+    ...replies.flatMap((r) =>
+      r.docLink
+        ? [
+            `- reply${r.resolvedById ? " (resolved)" : ""} on the link "${fold(r.docLink.fromDocument.title, 80)}" ("${fold(r.docLink.quotedText, 80)}") – "${fold(r.docLink.toDocument.title, 80)}"${r.docLink.toQuotedText ? ` ("${fold(r.docLink.toQuotedText, 80)}")` : ""}: ${fold(r.content, NOTE_CHARS)}`,
+          ]
+        : [],
+    ),
+  ];
+  const out: string[] = [];
+  let used = 0;
+  for (const { item } of rank(lines, (l) => l, query)) {
+    const cost = estTokens(item);
+    if (used + cost > STITCH_NOTES_BUDGET) continue;
+    used += cost;
+    out.push(item);
+  }
+  return out;
+}
+
 /** The answer pass's messages: the system message (the rules, the reader
     context, then the documents whole or the blocks selected), the turns so
     far, and the command. selected: the aliases the reading passes picked,
     or null for the whole read. links: the links already in the project
     between the documents read, as aliases; the prompt lists the ones whose
-    two blocks are both shown (ANS4-01). */
+    two blocks are both shown (ANS4-01). notes: the reader's notes and
+    replies (notesSection), when the command is about them. */
 export function answerMessages(input: {
   reading: Reading;
   selected: Set<string> | null;
@@ -880,6 +960,9 @@ export function answerMessages(input: {
   historyFirstMin?: number;
   // The documents of the project a pick left out (notPickedOf).
   notPicked?: StitchNotPickedCtx;
+  // The reader's notes and the replies on links (notesSection), read when
+  // the command is about them (ANS9-04); undefined when it is not.
+  notes?: string[];
 }): ModelMessage[] {
   const { rendered, documentList, gists } = input.reading;
   const selected = input.selected;
@@ -907,6 +990,7 @@ export function answerMessages(input: {
     existing: existingPairs(input.links ?? [], shownBlock),
     notPicked: input.notPicked,
     firstReadInSystem,
+    notes: input.notes,
   });
   if (selected && historyFirst) {
     return [
@@ -1335,9 +1419,12 @@ export function firstsFirst(
 }
 
 /** True when the command is over every document as a whole: each or
-    every document, all the documents, an overview (ANS8-05). */
+    every document, all the documents, an overview (ANS8-05); across these
+    documents, the main threads, all seven texts, the whole project, 主要线索,
+    主线, 贯穿, 整个项目 (ANS9-03, REV9-08). "The main point of this
+    document" is not. */
 export function overEvery(command: string): boolean {
-  return /\b(?:each|every) (?:document|text|source)s?\b|\ball (?:of )?(?:the |these |my )?(?:documents|texts|sources)\b|\boverview\b|每个文档|每篇|每份|各文档|各个文档|所有文档|全部文档|概述|总览/i.test(command);
+  return /\b(?:each|every) (?:document|text|source)s?\b|\ball (?:of )?(?:the |these |my |\w+ )?(?:documents|texts|sources)\b|\boverview\b|\bacross (?:the |these |all |my )?(?:documents|texts|sources)\b|\bmain (?:threads?|themes?|ideas?)\b|\bwhole project\b|每个文档|每篇|每份|各文档|各个文档|所有文档|全部文档|概述|总览|主要线索|主线|贯穿|整个项目|这些文档之间/i.test(command);
 }
 
 /** The picks shared by document (ANS8-05), each document's in the given
@@ -1714,6 +1801,46 @@ export async function stitchHistory(turns: StitchTurn[], reading: Reading, noteb
 
 const textOf = (m: ModelMessage): string => (typeof m.content === "string" ? m.content : "");
 
+const POINTS_MAX = 8; // points of the last answer the reading passes are told of
+const POINTS_TOKENS = 120;
+
+// The first words of a point's line, as its label: 8 words of Latin text;
+// of CJK text, the first clause up to 24 characters.
+function pointLabel(text: string): string {
+  if (/[㐀-鿿]/.test(text)) return [...text.split(/[，。；：！？,.;:!?]/)[0]].slice(0, 24).join("");
+  return text.split(/\s+/).slice(0, 8).join(" ");
+}
+
+/** The last answer's points, in order (ANS9-02): for each list line of the
+    latest assistant turn (a bullet, a number, a heading), its bold label,
+    else its first words (pointLabel), block tags and markdown dropped, up
+    to POINTS_MAX points and POINTS_TOKENS tokens. The reading passes read
+    the commands and never the answers, so they are told these: "the first
+    thread" and "the second point" then name what they name. [] when the
+    last answer lists nothing. */
+export function answerPoints(history: ModelMessage[]): string[] {
+  const last = [...history].reverse().find((m) => m.role === "assistant");
+  if (!last) return [];
+  const text = textOf(last);
+  const at = text.search(RECORD_START);
+  const out: string[] = [];
+  let used = 0;
+  for (const raw of (at === -1 ? text : text.slice(0, at)).split("\n")) {
+    const m = /^\s*(?:[-*•]|\d+[.)]|#{1,6})\s+(.*)$/.exec(raw);
+    if (!m) continue;
+    const line = m[1].replace(BLOCK_TAG, "").replace(/\s+/g, " ").trim();
+    const bold = /^\*\*([^*]+)\*\*/.exec(line)?.[1] ?? /^__([^_]+)__/.exec(line)?.[1];
+    const plain = (bold ?? line).replace(/[*_`]/g, "").trim();
+    const label = (bold ? plain : pointLabel(plain)).replace(/[\s:：.。;；,，、]+$/, "");
+    if (!label) continue;
+    const cost = estTokens(label) + 2;
+    if (out.length >= POINTS_MAX || used + cost > POINTS_TOKENS) break;
+    out.push(label);
+    used += cost;
+  }
+  return out;
+}
+
 /** The aliases the earlier answers cited, the latest answer's first, once
     each, up to MAX_CITED: what "it" and "the second one" most often name. */
 export function citedAliases(history: ModelMessage[], blockByRef: Map<string, DocBlock>): string[] {
@@ -1789,6 +1916,9 @@ const expandSchema = z.object({
 async function expandWords(input: {
   command: string;
   earlier: string[];
+  // The last answer's points (answerPoints), so "the first thread" expands
+  // to the thread's words (ANS9-02).
+  points?: string[];
   titles: string[];
   usage: { userId: string | null; feature: string };
   signal?: AbortSignal;
@@ -1802,6 +1932,7 @@ async function expandWords(input: {
         content: stitchExpandPrompt({
           command: input.command,
           earlier: input.earlier,
+          points: input.points,
           titles: input.titles.slice(0, 60),
           maxWords: STITCH_EXPAND_WORDS,
         }),
@@ -1856,6 +1987,7 @@ export async function pickBlocks(input: {
     .slice(-STITCH_READ_HISTORY);
   const continued = input.history.length > 0;
   const cited = citedAliases(input.history, blockByRef);
+  const points = answerPoints(input.history);
   // The blocks whose full text names the command's rare names: the select
   // pass is told of them, and a cut keeps their lines.
   const names = nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title), input.reading.words);
@@ -1879,6 +2011,7 @@ export async function pickBlocks(input: {
     (query ??= (known ? Promise.resolve(known) : expandWords({
       command: input.command,
       earlier,
+      points,
       titles: read.map((r) => r.doc.title),
       usage: { userId: input.userId, feature: input.feature },
       signal: input.signal,
@@ -1918,6 +2051,7 @@ export async function pickBlocks(input: {
     const words = await expandWords({
       command: input.command,
       earlier,
+      points,
       titles: read.map((r) => r.doc.title),
       usage: { userId: input.userId, feature: input.feature },
       signal: input.signal,
@@ -1966,7 +2100,7 @@ export async function pickBlocks(input: {
           systemMessage(routeSystem(views, rendered, profile)),
           {
             role: "user",
-            content: stitchRoutePrompt({ documents: documentList, command: input.command, continued, earlier, cited, maxParts: MAX_ROUTED }),
+            content: stitchRoutePrompt({ documents: documentList, command: input.command, continued, earlier, points, cited, maxParts: MAX_ROUTED }),
           },
         ],
         maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
@@ -2024,6 +2158,7 @@ export async function pickBlocks(input: {
               command: input.command,
               continued,
               earlier,
+              points,
               cited: groups.length > 1 ? cited.filter((a) => letters.has(blockLetter(a))) : cited,
               maxBlocks,
               partial: group.shown !== null,
@@ -2206,6 +2341,7 @@ export async function stitch(input: {
     reading.words = await expandWords({
       command: input.command,
       earlier: history.filter((m) => m.role === "user").map(textOf).filter((t) => t.trim()).slice(-STITCH_READ_HISTORY),
+      points: answerPoints(history),
       titles: read.map((r) => r.doc.title),
       usage: { userId: input.userId, feature: "stitch" },
       signal: input.signal,
@@ -2280,6 +2416,9 @@ export async function stitch(input: {
   // The documents a pick left out: the answer pass is told of them, and the
   // box says how many (ANS6-02).
   const notPicked = input.documentIds ? await notPickedOf(input.notebookId, docs.map((d) => d.id), input.command, reading.words) : undefined;
+  // The reader's notes and the replies on links, when the command is about
+  // them (ANS9-04): ranked against the command and its expansion's words.
+  const notes = asksAboutNotes(input.command) ? await notesSection(input.notebookId, [input.command, ...(reading.words ?? [])].join("\n")) : undefined;
 
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
@@ -2296,6 +2435,7 @@ export async function stitch(input: {
       links: existingAliases,
       historyFirstMin: input.historyFirstMin,
       notPicked,
+      notes,
     }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
