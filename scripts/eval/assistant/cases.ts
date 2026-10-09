@@ -242,6 +242,17 @@ export const CASES: AssistantCase[] = [
     expect: { change: false },
     good: "Proposes no change to the words: says in one sentence that the document cannot be changed because a project of another account holds it too. May offer what it can do instead (a note, a highlight) without doing it unasked.",
   },
+  {
+    id: "scope-shared-mark",
+    family: "scope",
+    fixture: "essay-slow-reading",
+    lang: "en",
+    profile: NOVICE,
+    edits: "none",
+    question: "Bold the sentence that says what eleven hours costs.",
+    expect: { change: false },
+    good: "Proposes no change to the styles: says in one sentence that the document cannot be changed because a project of another account holds it too, then offers the one mark it can make, a highlight on that sentence of the fourth paragraph, without making it unasked. Cites the block.",
+  },
 
   // ── edit: an article's blocks ──────────────────────────────────────────
   {
@@ -501,6 +512,22 @@ export const CASES: AssistantCase[] = [
       touch: [],
     },
     good: "One add_section Northwind risks, then one add_note per risk (volume moving to cheaper carriers, fuel reversing, capacity leased at 30 percent above cost), each in that section with a source quote from the risks or fuel blocks.",
+  },
+  {
+    id: "section-docs-limit-notes",
+    family: "section",
+    fixture: "docs-rate-limiting",
+    lang: "en",
+    profile: DEVELOPER,
+    question: "Make a section called \"Limits\" with a note for every limit this page sets, each quoting the page.",
+    expect: {
+      change: true,
+      only: ["add_section", "add_note"],
+      sections: ["Limits"],
+      notes: [{ min: 4, sourced: true, section: "Limits" }],
+      touch: [],
+    },
+    good: "One add_section Limits, then one add_note per limit the page sets anywhere, not only under Limits by endpoint: the key's bucket of 600 refilling at 10 per second, the write bucket of 120 at 2 per second, a search counting 5 tokens, the suspension after 1,000 refusals in an hour, a batch of up to 50 items costing 1 token, 20 keys per account, and the bucket raised to at most 6,000 with the refill rate unchanged; each in that section with a source quote. Nothing else.",
   },
   {
     id: "section-news-note-quote",
