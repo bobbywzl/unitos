@@ -3,11 +3,11 @@
   "score": 0.996,
   "sheets": 1,
   "text": 0.994,
-  "cells": 0.994,
+  "cells": 0.995,
   "formats": 0.974,
   "merges": 1,
   "frozen": 1,
-  "lost": 633,
+  "lost": 629,
   "dom": 0,
   "errors": 0
  },
@@ -143,13 +143,13 @@
    "dom": 0
   },
   "poi-AverageTaxRates": {
-   "score": 0.997,
-   "text": 0.995,
-   "cells": 0.994,
-   "formats": 0.993,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": 1,
    "frozen": 1,
-   "lost": 4,
+   "lost": 0,
    "dom": 0
   },
   "poi-ExcelTables": {

@@ -1076,22 +1076,37 @@ function ssfFallbackCode(code: string): string {
     significant digits, as Excel does; a format ssf refuses is tried once
     more as ssfFallbackCode writes it, and else shows the number as
     General. */
-function formatNumber(n: number, styleId: number | null, styles: Styles, date1904: boolean): string {
+function formatNumber(value: number, styleId: number | null, styles: Styles, date1904: boolean): string {
   const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
-  try {
-    return cleanText(ssf.format(fmt, n, { date1904 }));
-  } catch {
+  const shown = (n: number): string => {
     try {
-      if (typeof fmt === "string") return cleanText(ssf.format(ssfFallbackCode(fmt), n, { date1904 }));
+      return cleanText(ssf.format(fmt, n, { date1904 }));
     } catch {
-      // Neither spelling reads: General below.
+      try {
+        if (typeof fmt === "string") return cleanText(ssf.format(ssfFallbackCode(fmt), n, { date1904 }));
+      } catch {
+        // Neither spelling reads: General below.
+      }
+      try {
+        return cleanText(ssf.format(0, n, { date1904 }));
+      } catch {
+        return String(value);
+      }
     }
-    try {
-      return cleanText(ssf.format(0, n, { date1904 }));
-    } catch {
-      return String(n);
-    }
-  }
+  };
+  const plain = shown(value);
+  // Only a number whose 15 significant digits end in 5 sits on a half.
+  if (Number.isInteger(value) || !Number.isFinite(value) || !/5(?:e|$)/.test(String(Number(value.toPrecision(15))))) return plain;
+  // A half rounds away from zero as the number is written in decimal:
+  // 0.1785 in "0.0%" is 17.9%, and -1.05 in "0.0" is -1.1, as Excel shows
+  // them. In binary both sit a hair under the half, and ssf rounded them
+  // down. The number moved two units in the last place away from zero
+  // shows the half rounded up; that reading is kept when it shows at most
+  // the 15 significant digits Excel keeps, so a format of 15 decimals still
+  // shows the number as it is. Sheets benchmark finding (poi-AverageTaxRates).
+  const nudged = shown(value + Math.sign(value) * Math.abs(value) * 2 * Number.EPSILON);
+  if (nudged === plain) return plain;
+  return nudged.replace(/\D/g, "").replace(/^0+/, "").length <= 15 ? nudged : plain;
 }
 
 /** The sheet trimmed to its used range: empty rows and columns past the
