@@ -254,8 +254,10 @@ try {
       await page.goto(`${BASE}/n/${NB}?graph=1`, { waitUntil: "networkidle", timeout: 300000 });
       await page.waitForSelector(".react-flow__node", { timeout: 120000 });
       await page.waitForTimeout(2000);
-      const counts = page.locator('[data-track="graph-documents"]');
-      const before = await counts.innerText();
+      // [style9] VIEW9-03: the first pill counts the documents alone and the
+      // links count once, on Links; an Accept moves the header's counts there.
+      const counts = page.locator('[data-track="graph-documents"], [data-track="graph-links"]');
+      const before = (await counts.allInnerTexts()).join(" | ");
       await page.locator('[data-track="graph-recommended-links"]').click();
       await page.waitForTimeout(800);
       const accept = page.locator('[data-track="link-accept"]').first();
@@ -265,7 +267,7 @@ try {
         let after = before;
         while (Date.now() - t0 < 2000 && after === before) {
           await page.waitForTimeout(50);
-          after = await counts.innerText();
+          after = (await counts.allInnerTexts()).join(" | ");
         }
         check("WALK4-15 the header counts an Accept at once", after !== before && Date.now() - t0 < 1000, `${before} → ${after} in ${Date.now() - t0} ms`);
       } else console.log("note: no recommended link to accept");

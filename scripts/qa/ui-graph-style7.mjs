@@ -130,13 +130,13 @@ await graph();
     await noteBtn.first().click();
     const discard = page.locator('[data-track="graph-note-gather-discard"]');
     await discard.waitFor({ timeout: 10000 }).catch(() => {});
+    // The dock enters with menu-in (0.16 s, scale 0.98 → 1): measure once it has settled.
+    await page.waitForTimeout(500);
     const [cb, sb] = [await box(discard), await box(page.locator('[data-track="graph-note-gather-save"]'))];
     const want = touch ? 44 : 24;
     check("WALK6-09: the new note's Save and Discard keep their size", !!cb && !!sb && cb.height >= want && sb.height >= want && (!touch || sb.x - (cb.x + cb.width) >= 12), `${cb?.height} ${sb?.height} gap ${sb && cb ? Math.round(sb.x - cb.x - cb.width) : "?"}`);
-    if (cb) {
-      page.once("dialog", (d) => d.accept());
-      await discard.click();
-    }
+    // The page's dialog handler (above) accepts the Discard confirm; a second accept throws.
+    if (cb) await discard.click();
     await page.waitForTimeout(500);
   }
   // WALK7-10: Undo after Remove (writes: the link is hidden in this project, then Undo brings it back).
