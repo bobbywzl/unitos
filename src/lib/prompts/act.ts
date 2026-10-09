@@ -90,7 +90,7 @@ export function actPrompt(ctx: ActCtx): string {
     "",
     `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
     "",
-    "Action types:",
+    "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(ctx.edits ?? "blocks", Boolean(ctx.transcript)),
     "",
     "Rules:",

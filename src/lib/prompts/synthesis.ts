@@ -142,7 +142,7 @@ function actLines(act: PageActions): string[] {
     ...(act.pages?.length ? [`Pages (each page's picture, then the blocks that hold its words):\n${act.pages.join("\n")}`] : []),
     ...(act.transcript ?? []),
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
-    "Action types:",
+    "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(act.edits ?? "blocks", Boolean(act.transcript)),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block that opens with the line ```actions and holds a JSON array of the actions, one action too. Every action has its \"type\". Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, simplify, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes. Example of the block's shape:\n```actions\n[{\"type\": \"comment\", \"blockId\": \"<id>\", \"quote\": \"<exact words>\", \"comment\": \"<note>\", \"description\": \"<one sentence>\"}]\n```",

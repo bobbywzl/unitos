@@ -159,9 +159,13 @@ function clip(text: string, max: number): string {
 function lenient(item: unknown, edits?: DocumentEdits): unknown {
   if (!item || typeof item !== "object" || Array.isArray(item)) return item;
   const fields: Record<string, unknown> = Object.fromEntries(Object.entries(item).filter(([key, value]) => value !== null || key === "afterBlockId"));
-  // A model that forgets the type: read it from the fields the action
+  // A model that names the type under another key ("action", "kind", "op")
+  // or forgets it: read it from that key, else from the fields the action
   // carries. A change of many blocks is the document's own kind of it.
-  if (typeof fields.type !== "string" || !fields.type) fields.type = inferType(fields, edits);
+  if (typeof fields.type !== "string" || !fields.type) {
+    const named = ["action", "kind", "op"].map((key) => fields[key]).find((v): v is string => typeof v === "string" && v in ACTION_LINES);
+    fields.type = named ?? inferType(fields, edits);
+  }
   else fields.type = changeTypeFor(fields.type, edits);
   const ids = Array.isArray(fields.blockIds) ? [...new Set(fields.blockIds.filter((id) => typeof id === "string" && id))] : [];
   if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
