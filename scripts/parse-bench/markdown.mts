@@ -50,8 +50,10 @@
 //   verse's lines, a code block's lines, a paragraph that has none), the
 //   share whose breaks fall at the same words. A hard-wrapped paragraph
 //   kept as its wrapped lines fails here.
-// - links: F1 of [text, absolute href] pairs (a relative link is text by
-//   design, and is not counted).
+// - links: F1 of [text, target] pairs. A web or mail link's target is its
+//   address (ours: a link span, or a citation's reference); a link to a
+//   heading of the file is "#" and the heading's words. A relative link
+//   (another file) is text by design, and is not counted.
 // - score: the mean of the numbers that apply.
 // - ms: parse time, and the import's.
 //
@@ -175,13 +177,28 @@ function breaksOf(text: string): number[] {
 
 type Ours = { units: Unit[]; links: [string, string][]; figures: string[] };
 
-function unitsFromBlocks(blocks: ParsedBlock[], title: string | null): Ours {
+// A link into the file scores as "#" and its target's words; a link to the
+// web, written as a citation (the walk's reference for a link in the text),
+// as its reference's address.
+const targetKey = (text: string) => `#${text.replace(/\s+/g, " ").trim().toLowerCase()}`;
+
+function unitsFromBlocks(blocks: ParsedBlock[], title: string | null, refUrls: Map<string, string>): Ours {
   const units: Unit[] = [];
   const links: [string, string][] = [];
   const figures: string[] = [];
+  const fragmentText = new Map<string, string>();
+  for (const b of blocks) if (b.fragment !== undefined && !fragmentText.has(b.fragment)) fragmentText.set(b.fragment, b.text);
   if (title) units.push({ k: "h", l: 0, t: title, br: [], title: true });
   for (const b of blocks) {
-    for (const l of b.links ?? []) if (l.href) links.push([b.text.slice(l.start, l.end), l.href]);
+    for (const l of b.links ?? []) {
+      const target = l.targetFragment !== undefined ? fragmentText.get(l.targetFragment) : undefined;
+      if (l.href) links.push([b.text.slice(l.start, l.end), l.href]);
+      else if (target !== undefined) links.push([b.text.slice(l.start, l.end), targetKey(target)]);
+    }
+    for (const c of b.citations ?? []) {
+      const url = refUrls.get(c.refId);
+      if (url) links.push([b.text.slice(c.start, c.end), url]);
+    }
     const text = withMath(b);
     switch (b.type) {
       case "HEADING": {
@@ -228,10 +245,11 @@ function unitsFromBlocks(blocks: ParsedBlock[], title: string | null): Ours {
   return { units, links, figures };
 }
 
-function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>): Ours {
+function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>, refUrls: Map<string, string>): Ours {
   const units: Unit[] = [];
-  const links: [string, string][] = [];
+  let links: [string, string][] = [];
   const figures: string[] = [];
+  const blockText = new Map<string, string>();
   type Ctx = { lists: string[]; quote: boolean; cell: { row: number; col: number } | null };
   const inlineText = (node: RichNode): string => {
     let out = "";
@@ -241,7 +259,8 @@ function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>): O
       link = null;
     };
     for (const child of node.content ?? []) {
-      const href = child.marks?.find((m) => m.type === "link")?.attrs?.href;
+      const mark = child.marks?.find((m) => m.type === "link" || m.type === "citation");
+      const href = mark?.type === "citation" ? refUrls.get(String(mark.attrs?.refId)) : mark?.attrs?.href;
       if (typeof href === "string") {
         const current = link as { href: string; start: number } | null;
         if (!current || current.href !== href) {
@@ -265,6 +284,7 @@ function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>): O
         const text = inlineText(node);
         if (!text.trim()) return;
         const t = text.replace(/\s+/g, " ").trim();
+        if (typeof node.attrs?.blockId === "string") blockText.set(node.attrs.blockId, t);
         if (node.attrs?.docStyle === "title") units.push({ k: "h", l: 0, t, br: breaksOf(text), title: true });
         else if (ctx.cell) units.push({ k: "cell", l: 0, t, br: breaksOf(text), row: ctx.cell.row, col: ctx.cell.col });
         else if (ctx.lists.length) units.push({ k: "li", l: ctx.lists.length, t, br: breaksOf(text), lt: ctx.lists.at(-1) });
@@ -273,6 +293,7 @@ function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>): O
       }
       case "heading": {
         const text = inlineText(node);
+        if (typeof node.attrs?.blockId === "string") blockText.set(node.attrs.blockId, text);
         if (text.trim()) units.push({ k: "h", l: Number(node.attrs?.level ?? 1), t: text.replace(/\s+/g, " ").trim(), br: breaksOf(text) });
         return;
       }
@@ -316,6 +337,11 @@ function unitsFromRich(doc: RichNode, figureHtml: Map<string, string | null>): O
     }
   };
   visit(doc, { lists: [], quote: false, cell: null });
+  links = links.flatMap(([t, h]): [string, string][] => {
+    if (!h.startsWith("#heading=")) return [[t, h]];
+    const target = blockText.get(h.slice("#heading=".length));
+    return target === undefined ? [] : [[t, targetKey(target)]];
+  });
   return { units, links, figures };
 }
 
@@ -502,13 +528,39 @@ function score(ref: Ref, ours: Ours, mode: "md" | "txt", refWords: string[], opt
   const order = pairs.length ? inOrder.length / pairs.length : null;
   const ourWords = ours.units.flatMap((u) => words(u.t));
   const w = wordScore(refWords, ourWords, optional);
-  // Links: [words, href] pairs with an absolute or fragment href.
+  // Links: [words, href] pairs with an absolute href, or a fragment that
+  // names a heading of the file (by GitHub's heading ids), scored as "#" and
+  // the heading's words.
   let links: number | null = null;
   if (mode === "md") {
     const norm = (pairsIn: [string, string][]) =>
-      pairsIn.filter(([, h]) => /^(https?:|mailto:)/i.test(h)).map(([t, h]) => `${key(t)}\u0000${h.trim()}`);
-    const a = bag(norm(ref.links));
-    const b = bag(norm(ours.links));
+      pairsIn.filter(([, h]) => /^(https?:|mailto:|#)/i.test(h)).map(([t, h]) => `${key(t)}\u0000${h.trim()}`);
+    const slugText = new Map<string, string>();
+    const seen = new Map<string, number>();
+    for (const u of ref.units) {
+      if (u.k !== "h" || u.title) continue;
+      const base = u.t.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").trim().replace(/\s/g, "-");
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      slugText.set(n === 0 ? base : `${base}-${n}`, u.t);
+    }
+    const refLinks = ref.links.flatMap(([t, h]): [string, string][] => {
+      if (!h.startsWith("#")) return [[t, h]];
+      let fragment = h.slice(1);
+      try {
+        fragment = decodeURIComponent(fragment);
+      } catch {
+        // the fragment as written
+      }
+      const target = slugText.get(fragment.toLowerCase());
+      return target === undefined ? [] : [[t, targetKey(target)]];
+    });
+    const a = bag(norm(refLinks));
+    // A bare address in the text is a link on GitHub (GFM's autolink
+    // literal) and not in CommonMark: ours, when the reference has none, is
+    // not counted.
+    const bare = ([t, h]: [string, string]) => key(t) === key(h.replace(/^mailto:/i, "")) || key(`https://${t}`) === key(h) || key(`http://${t}`) === key(h);
+    const b = bag(norm(ours.links.filter((l) => !bare(l) || a.has(norm([l])[0]))));
     const na = [...a.values()].reduce((s, n) => s + n, 0);
     const nb = [...b.values()].reduce((s, n) => s + n, 0);
     if (na + nb > 0) {
@@ -572,9 +624,10 @@ async function runFile(bytes: Uint8Array, name: string): Promise<Run> {
   if (!clean) blockDocument = true;
   if (clean) deriveBlocks(clean);
   const importMs = performance.now() - t1;
-  const parse = unitsFromBlocks(parsed.blocks, titleFromOriginal ? title : null);
+  const refUrls = new Map((parsed.references ?? []).flatMap((r) => (r.url ? [[r.id, r.url] as [string, string]] : [])));
+  const parse = unitsFromBlocks(parsed.blocks, titleFromOriginal ? title : null, refUrls);
   const figureHtml = new Map(out.figures.map((f) => [f.mediaId, f.html]));
-  return { parse, import: clean ? unitsFromRich(clean, figureHtml) : parse, parseMs, importMs, blockDocument, title, blocks: parsed.blocks };
+  return { parse, import: clean ? unitsFromRich(clean, figureHtml, refUrls) : parse, parseMs, importMs, blockDocument, title, blocks: parsed.blocks };
 }
 
 // ── The run ─────────────────────────────────────────────────────────────────
