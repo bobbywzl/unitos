@@ -603,6 +603,10 @@ export function SortableBoard({
     <DndContext
       id={id}
       sensors={sensors}
+      // The edge scroll: a narrow band (7 % of the scroller's height), and
+      // none while the ring draws, so a hold onto a card near the top or the
+      // bottom of the window stays on it until the merge runs.
+      autoScroll={{ enabled: covered === null, threshold: { x: 0.2, y: 0.07 } }}
       onDragPending={handleDragPending}
       onDragAbort={handleDragAbort}
       onDragStart={handleDragStart}
