@@ -1,8 +1,8 @@
 {
  "total": {
-  "composite": 0.994,
+  "composite": 0.997,
   "words": 0.994,
-  "order": 0.97,
+  "order": 1,
   "bullets": 0.992,
   "tables": 0.997,
   "notes": 1,
@@ -26,9 +26,9 @@
    "lost": 0
   },
   "poi-customGeo": {
-   "composite": 0.985,
+   "composite": 0.986,
    "words": 1,
-   "order": 0.991,
+   "order": 1,
    "bullets": 1,
    "tables": 0.917,
    "notes": 1,
@@ -37,9 +37,9 @@
    "lost": 0
   },
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
-   "composite": 0.99,
+   "composite": 0.994,
    "words": 0.975,
-   "order": 0.965,
+   "order": 0.991,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -59,9 +59,9 @@
    "lost": 0
   },
   "poi-60810": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.995,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -70,9 +70,9 @@
    "lost": 0
   },
   "poi-ca-ubc-cs-people-emhill-presentations-Ho": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.993,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -114,9 +114,9 @@
    "lost": 0
   },
   "poi-alterman-security": {
-   "composite": 0.991,
+   "composite": 1,
    "words": 1,
-   "order": 0.965,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -136,9 +136,9 @@
    "lost": 0
   },
   "poi-LIBRE-OFFICE-100610-0": {
-   "composite": 0.954,
+   "composite": 1,
    "words": 1,
-   "order": 0.722,
+   "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -147,9 +147,9 @@
    "lost": 0
   },
   "poi-aascu-org-hbcu-leadershipsummit-cooper": {
-   "composite": 0.998,
+   "composite": 1,
    "words": 1,
-   "order": 0.991,
+   "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -191,9 +191,9 @@
    "lost": 0
   },
   "poi-layouts": {
-   "composite": 0.994,
+   "composite": 1,
    "words": 1,
-   "order": 0.974,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -719,9 +719,9 @@
    "lost": 0
   },
   "ox-typical": {
-   "composite": 0.994,
+   "composite": 0.998,
    "words": 1,
-   "order": 0.974,
+   "order": 1,
    "bullets": 0.988,
    "tables": 1,
    "notes": 1,
@@ -741,9 +741,9 @@
    "lost": 0
   },
   "ox-o09-Performance-typical": {
-   "composite": 0.996,
+   "composite": 1,
    "words": 1,
-   "order": 0.974,
+   "order": 1,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -1335,9 +1335,9 @@
    "lost": 0
   },
   "lo-group": {
-   "composite": 0.955,
+   "composite": 1,
    "words": 1,
-   "order": 0.818,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -1346,9 +1346,9 @@
    "lost": 0
   },
   "lo-camera-rotation-revolution-nonwps": {
-   "composite": 0.75,
+   "composite": 1,
    "words": 1,
-   "order": 0,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -1357,9 +1357,9 @@
    "lost": 0
   },
   "lo-TextDistancesInsets3": {
-   "composite": 0.986,
+   "composite": 1,
    "words": 1,
-   "order": 0.945,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -1368,9 +1368,9 @@
    "lost": 0
   },
   "lo-tdf114848": {
-   "composite": 0.986,
+   "composite": 1,
    "words": 1,
-   "order": 0.944,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,

@@ -1719,17 +1719,63 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
   };
 }
 
-/** Shapes in reading order: the title first, then top to bottom, left to
-    right (a 4% band decides "same row"). */
+/** Shapes in reading order: the title first; a shape wholly above another
+    before it; of two shapes side by side in one row (each covering half
+    the shorter one's height), the left one first; the rest top to bottom,
+    left to right (a 4% band decides "same row"). A rotated shape counts
+    by the box it covers. Slides benchmark finding: the band alone split a
+    row whose tops differ by a few points (two charts side by side read
+    right then left) and read a left column's boxes in turn with the tall
+    box beside them (Level 1, the text of all levels, Level 2, ...). */
 function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
   const band = ctx.slideH * 0.04;
-  return [...shapes].sort((a, b) => {
+  const key = (a: Placed, b: Placed) => {
     if (a.title !== b.title) return a.title ? -1 : 1;
     const ay = Math.round(a.box.y / band);
     const by = Math.round(b.box.y / band);
     if (ay !== by) return ay - by;
     return a.box.x - b.box.x;
-  });
+  };
+  const sorted = [...shapes].sort(key);
+  const n = sorted.length;
+  if (n < 2) return sorted;
+  const boxes = sorted.map((p) => coveredBox(p.box));
+  // before[i]: the shapes that must come before shape i.
+  const before = sorted.map(() => new Set<number>());
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j || sorted[i].title || sorted[j].title) continue;
+      const a = boxes[i];
+      const b = boxes[j];
+      const overlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      const above = a.y + a.h <= b.y;
+      const leftInRow = overlap > 0.5 * Math.min(a.h, b.h) && a.x + a.w <= b.x;
+      if (above || leftInRow) before[j].add(i);
+    }
+  }
+  // The first shape by the band order whose every predecessor is placed;
+  // when none is free (a staircase of rows), the first by the band order.
+  const out: Placed[] = [];
+  const done = new Set<number>();
+  while (out.length < n) {
+    let pick = -1;
+    for (let i = 0; i < n && pick < 0; i++) {
+      if (!done.has(i) && [...before[i]].every((k) => done.has(k))) pick = i;
+    }
+    if (pick < 0) for (let i = 0; i < n && pick < 0; i++) if (!done.has(i)) pick = i;
+    done.add(pick);
+    out.push(sorted[pick]);
+  }
+  return out;
+}
+
+/** The box a shape covers on the slide: its own, turned by its rotation. */
+function coveredBox(box: Box): { x: number; y: number; w: number; h: number } {
+  if (!box.rot) return box;
+  const r = (box.rot * Math.PI) / 180;
+  const w = Math.abs(box.w * Math.cos(r)) + Math.abs(box.h * Math.sin(r));
+  const h = Math.abs(box.w * Math.sin(r)) + Math.abs(box.h * Math.cos(r));
+  return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
 }
 
 /** Shapes' markup in the order given, each with its z-index, and their
