@@ -160,6 +160,14 @@ export function StitchBox({
     setOpenState(next);
     onOpenChange?.(next);
   };
+  // [style9] REV8-05: the graph opened on kept turns: the box opens folded
+  // to its two rest rows, the head row saying the last command's first
+  // words in place of the scope; the fold button and a send unfold the
+  // conversation. A viewer's box keeps its turns in view (they are all it
+  // shows), and a command on its way is never folded away.
+  const [turnsFolded, setTurnsFolded] = useState(true);
+  const folded = turnsFolded && canEdit && turns.length > 0 && !pending && !running;
+  const lastCommand = folded ? ([...turns].reverse().find((turn) => turn.role === "user")?.content ?? "") : "";
   const [passage, setPassage] = useState<{ blockId: string; citation: StitchCitation } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -233,10 +241,10 @@ export function StitchBox({
     wasOpen.current = open;
   }, [open]);
 
-  // The newest turn stays in view.
+  // The newest turn stays in view (and is in view once the turns unfold).
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [turns.length, running, open, pending]);
+  }, [turns.length, running, open, pending, folded]);
 
   const stop = kept.stop;
 
@@ -268,6 +276,7 @@ export function StitchBox({
     if (text && !running && blocked) sayBlocked(); // [ui5]
     if (!text || running || text.length > COMMAND_MAX || picked.length === 1) return;
     setError(null);
+    setTurnsFolded(false); // [style9] REV8-05: a send unfolds the conversation
     // Retry sends the failed command again: a new command typed since stays.
     if (override === undefined || command.trim() === text) setCommand("");
     setPassage(null);
@@ -405,6 +414,7 @@ export function StitchBox({
       className="relative flex max-h-full min-h-0 w-full flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
       role="region"
       aria-label={t("stitch.stitch")}
+      data-stitch-folded={folded ? turns.length : undefined}
     >
       {passage && (
         <StitchPassageCard
@@ -431,16 +441,23 @@ export function StitchBox({
           {t("stitch.stitch")}
           <span className="sr-only">{`: ${t("stitch.stitchHint")}`}</span>
         </span>
-        {/* The scope: which documents the command reads. */}
+        {/* The scope: which documents the command reads; [style9] REV8-05:
+            folded on kept turns, the last command's first words instead. */}
         {canEdit && (
           <>
-            <span className="font-semibold text-sand-700">
-              {picked.length === 1
-                ? t("stitch.stitchScopePickedOne")
-                : picked.length > 0
-                  ? t("stitch.stitchScopePicked", { n: picked.length })
-                  : t("stitch.stitchScopeAll", { n: everyCount })}
-            </span>
+            {folded ? (
+              <span data-stitch-last-command data-tip={lastCommand} className="min-w-0 max-w-[50%] truncate text-sand-600">
+                {lastCommand}
+              </span>
+            ) : (
+              <span className="font-semibold text-sand-700">
+                {picked.length === 1
+                  ? t("stitch.stitchScopePickedOne")
+                  : picked.length > 0
+                    ? t("stitch.stitchScopePicked", { n: picked.length })
+                    : t("stitch.stitchScopeAll", { n: everyCount })}
+              </span>
+            )}
             {picked.map((n) => (
               <button
                 key={n.id}
@@ -480,22 +497,28 @@ export function StitchBox({
         {turns.length > 0 && !running && (
           <ClearConversation onClear={kept.clear} track="stitch-clear" className="ml-auto" />
         )}
+        {/* [style9] REV8-05: the one fold button: folded on kept turns, it
+            unfolds the conversation; else it folds the box to the pill. */}
         <button
           onClick={() => {
+            if (folded) {
+              setTurnsFolded(false);
+              return;
+            }
             setOpen(false);
             onPickingChange(false);
             setPassage(null);
           }}
           data-track="stitch-collapse"
-          aria-label={t("stitch.stitchCollapse")}
-          data-tip={t("stitch.stitchCollapse")}
+          aria-label={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
+          data-tip={t(folded ? "stitch.stitchExpand" : "stitch.stitchCollapse")}
           className={`${turns.length > 0 && !running ? "" : "ml-auto "}-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-7`}
         >
-          <ChevronDownIcon size={15} />
+          <ChevronDownIcon size={15} className={folded ? "rotate-180" : undefined} />
         </button>
       </div>
 
-      {(turns.length > 0 || pending) && (
+      {(turns.length > 0 || pending) && !folded && (
         // The conversation scrolls inside the box, which the overlay caps
         // (WALK2-04); a screen reader hears each answer land (REV2-11).
         <div ref={bodyRef} role="log" aria-live="polite" className="flex max-h-[40vh] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pt-3">
