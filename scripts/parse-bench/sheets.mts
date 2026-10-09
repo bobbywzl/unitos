@@ -332,7 +332,10 @@ const norm = (s: string) => s.replace(/[   ]/g, " ").replace(/ {2,}/g, " ")
     never show a CR. A number format's double quotes mark literal text and
     never show (ECMA-376 §18.8.31); POI's DataFormatter keeps them after a
     date code (dd"-"mm"-"yyyy" "hh:mm:ss shows as 03"-"08"-"2017" "14:35:00),
-    so a formatted number matches with them dropped. A date Excel cannot
+    so a formatted number matches with them dropped. A backslash shows the
+    character after it and never itself (ECMA-376 §18.8.31); POI keeps it
+    after a date code too (yyyy\年m\月d\日 shows as 2020\年7\月15\日), so
+    a formatted number matches with it dropped. A date Excel cannot
     show is a row of "#" as wide as the cell: the reference writes one "#",
     and any row of "#" matches it. */
 function cellRight(ref: RefCell, got: string | undefined): boolean {
@@ -342,6 +345,7 @@ function cellRight(ref: RefCell, got: string | undefined): boolean {
   if (ref.k !== "n") return g === t;
   if (t === "#") return /^#+$/.test(g.trim());
   if (norm(g) === norm(t) || (!ref.g && t.includes('"') && norm(g) === norm(t.replace(/"/g, "")))) return true;
+  if (!ref.g && t.includes("\\") && norm(g) === norm(t.replace(/"/g, "").replace(/\\([\s\S])/g, "$1"))) return true;
   if (ref.g && ref.v !== undefined && NUMBER.test(g.trim())) {
     const n = Number(g.trim());
     return Math.abs(n - ref.v) <= 1e-9 * Math.max(1, Math.abs(ref.v));
