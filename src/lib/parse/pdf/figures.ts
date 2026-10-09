@@ -699,9 +699,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     (r.box.x1 >= graphic.x1 - r.size && r.box.x2 <= graphic.x2 + r.size) ||
     Math.min(r.box.x2, graphic.x2) - Math.max(r.box.x1, graphic.x1) >= (r.box.x2 - r.box.x1) * 0.6;
   const captionOf = (graphic: Box): TextRun[] => {
-    const under = runs
-      .filter((r) => !taken.has(r) && within(r, graphic) && r.box.y2 <= graphic.y1 + r.size * 0.5)
-      .sort((a, b) => b.box.y2 - a.box.y2);
+    // A caption's next lines start where its first does, though a short
+    // last line starts left of the graphic (parse loop finding: the MML
+    // book p. 298, "(c) Maximum likelihood esti-" took its panel and
+    // "mate." stood apart as a paragraph). Set smaller than the text, a
+    // caption runs to eight lines and 400 characters (p. 295: "(b)
+    // Regression solution: …" lost its fourth line, "the function value at
+    // the corresponding in-"; p. 319's "(b) The orange dots …" holds seven).
+    const under = runs.filter((r) => !taken.has(r) && r.box.y2 <= graphic.y1 + r.size * 0.5).sort((a, b) => b.box.y2 - a.box.y2);
+    const small = (r: TextRun) => r.size < textSize * 0.95;
     const out: TextRun[] = [];
     let bottom = graphic.y1;
     // A step's number, set larger, beside the first line under the graphic:
@@ -715,14 +721,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
         (i) => i.size >= textSize * 1.3 && /^\d{1,2}$/.test(i.str.trim()) && i.x + i.w <= first.box.x1 + i.size * 0.5 && i.y + i.size * 0.7 > first.box.y1 && i.y < first.box.y2,
       );
     for (const r of under) {
+      if (!within(r, graphic) && !(out.length > 0 && Math.abs(r.box.x1 - out[0].box.x1) < 1)) continue;
       if (out.length > 0 && besideNumber(out[0], r)) return [];
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
-      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
+      if (out.length >= (small(r) && out.every(small) ? 8 : 3) || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
       out.push(r);
       bottom = r.box.y1;
     }
     const chars = out.reduce((n, r) => n + r.chars, 0);
-    if (out.length === 0 || chars > 200) return [];
+    if (out.length === 0 || chars > (out.every(small) ? 400 : 200)) return [];
     // A caption is words: a row of numbers under a chart is its axis.
     const letters = out.reduce((n, r) => n + r.items.reduce((m, i) => m + (i.str.match(/\p{L}/gu)?.length ?? 0), 0), 0);
     if (letters < 4 || letters < chars * 0.5) return [];
