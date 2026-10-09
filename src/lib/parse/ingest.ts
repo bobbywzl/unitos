@@ -53,7 +53,7 @@ import { sniffOfficeFile } from "@/lib/parse/office";
 // with a route module.
 export { isZipBytes, sniffOfficeFile } from "@/lib/parse/office";
 import { parseSlides, type SlideImageStore } from "@/lib/parse/slides";
-import { parseDelimited, parseSheets, type Delimiter } from "@/lib/parse/sheets";
+import { parseSheetsFile } from "@/lib/parse/sheets";
 import {
   restoreSlidePictures,
   slidePicturesByPage,
@@ -874,15 +874,8 @@ export async function ingestSlides(
   return { document, deduped: false };
 }
 
-/** The delimiter a sheets file name promises: tabs for a .tsv; otherwise
-    the text decides (lib/parse/sheets.ts sniffDelimiter). */
-function delimiterOf(filename: string): Delimiter | undefined {
-  return /\.tsv$/i.test(filename) ? "\t" : undefined;
-}
-
 async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null): Promise<ParsedDocument> {
-  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, { storeImage: slideImageStore(userId) });
-  return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, delimiterOf(filename));
+  return parseSheetsFile(bytes, filename, { storeImage: slideImageStore(userId) });
 }
 
 // Sheets upload path (SPEC.md §27): a .xlsx, a Google Sheets file Drive

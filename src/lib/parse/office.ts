@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { inflateSync, strFromU8, unzipSync } from "fflate";
 import { JSDOM } from "jsdom";
 import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
@@ -12,6 +12,40 @@ export type OfficeKind = "pptx" | "xlsx" | "docx";
 
 /** A zip's entries by path, every entry decompressed. */
 export type OfficeZip = Map<string, Uint8Array>;
+
+/** A zip entry's name as a part path: some writers store the Windows
+    separator ("xl\\workbook.xml"). */
+function partName(name: string): string {
+  return name.replace(/\\/g, "/");
+}
+
+/** The parts by path, found whatever the case of the name: part names
+    compare case-insensitively (ECMA-376 Part 2, §9.1.1.1), and some writers
+    store "xl/sharedstrings.xml" for the "sharedStrings.xml" the
+    relationships name. An exact name wins. Sheets benchmark finding: two
+    LibreOffice test workbooks of 7,579 and 9,364 cells, stored with these
+    names, read as nothing. */
+class OfficeParts extends Map<string, Uint8Array> {
+  private readonly folded = new Map<string, string>();
+
+  override set(name: string, data: Uint8Array): this {
+    super.set(name, data);
+    const key = name.toLowerCase();
+    if (!this.folded.has(key)) this.folded.set(key, name);
+    return this;
+  }
+
+  override get(name: string): Uint8Array | undefined {
+    const exact = super.get(name);
+    if (exact !== undefined) return exact;
+    const folded = this.folded.get(name.toLowerCase());
+    return folded === undefined ? undefined : super.get(folded);
+  }
+
+  override has(name: string): boolean {
+    return this.get(name) !== undefined;
+  }
+}
 
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 
@@ -31,7 +65,7 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   try {
     unzipSync(bytes, {
       filter: (file) => {
-        names.add(file.name);
+        names.add(partName(file.name).toLowerCase());
         return false;
       },
     });
@@ -44,11 +78,81 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   return null;
 }
 
+/** A zip's mark for a size or an offset stored in its zip64 extra field. */
+const ZIP64_MARK = 0xffffffff;
+
+/** The entries whose sizes sit in a zip64 extra field, read from the
+    central directory. fflate reads that field only when the zip also has
+    a zip64 end record; without one it took the mark for the size and set
+    aside 4 GB for each entry. Sheets benchmark finding: a 4 KB workbook
+    (LibreOffice tdf82984) took half a second alone and up to a minute
+    beside other files. */
+function zip64Entries(bytes: Uint8Array, names: Set<string>): Record<string, Uint8Array> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u16 = (at: number) => view.getUint16(at, true);
+  const u32 = (at: number) => view.getUint32(at, true);
+  const u64 = (at: number) => u32(at) + u32(at + 4) * 2 ** 32;
+  let end = bytes.length - 22;
+  while (end > 0 && u32(end) !== 0x06054b50) end--;
+  let count = u16(end + 10);
+  let at = u32(end + 16);
+  // A zip64 end record, when the file has one, holds the true count and offset.
+  if (end >= 20 && u32(end - 20) === 0x07064b50) {
+    const record = u64(end - 12);
+    if (u32(record) === 0x06064b50) {
+      count = u64(record + 32);
+      at = u64(record + 48);
+    }
+  }
+  const out: Record<string, Uint8Array> = {};
+  for (let i = 0; i < count && u32(at) === 0x02014b50; i++) {
+    const method = u16(at + 10);
+    let packed = u32(at + 20);
+    let size = u32(at + 24);
+    const nameLength = u16(at + 28);
+    const extraLength = u16(at + 30);
+    let offset = u32(at + 42);
+    const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLength), !(u16(at + 8) & 0x800));
+    // The zip64 field (tag 1) holds, in order, each of the size, the packed
+    // size, and the offset that is marked.
+    for (let x = at + 46 + nameLength; x + 4 <= at + 46 + nameLength + extraLength; x += 4 + u16(x + 2)) {
+      if (u16(x) !== 1) continue;
+      let y = x + 4;
+      if (size === ZIP64_MARK) {
+        size = u64(y);
+        y += 8;
+      }
+      if (packed === ZIP64_MARK) {
+        packed = u64(y);
+        y += 8;
+      }
+      if (offset === ZIP64_MARK) offset = u64(y);
+      break;
+    }
+    at += 46 + nameLength + extraLength + u16(at + 32);
+    if (!names.has(name)) continue;
+    const start = offset + 30 + u16(offset + 26) + u16(offset + 28);
+    const data = bytes.subarray(start, start + packed);
+    if (method === 0) out[name] = data.slice();
+    else if (method === 8) out[name] = inflateSync(data, size > 0 && size < ZIP64_MARK ? { out: new Uint8Array(size) } : undefined);
+  }
+  return out;
+}
+
 /** Every entry of the zip, decompressed. Throws on a broken zip. */
 export function unzipOffice(bytes: Uint8Array): OfficeZip {
-  const entries = unzipSync(bytes);
-  const zip: OfficeZip = new Map();
-  for (const [name, data] of Object.entries(entries)) {
+  const marked = new Set<string>();
+  const entries = unzipSync(bytes, {
+    filter: (file) => {
+      if (file.size !== ZIP64_MARK && file.originalSize !== ZIP64_MARK) return true;
+      marked.add(file.name);
+      return false;
+    },
+  });
+  if (marked.size > 0) Object.assign(entries, zip64Entries(bytes, marked));
+  const zip: OfficeZip = new OfficeParts();
+  for (const [stored, data] of Object.entries(entries)) {
+    const name = partName(stored);
     // Directory entries carry no bytes.
     if (name.endsWith("/")) continue;
     zip.set(name, data);
@@ -58,10 +162,32 @@ export function unzipOffice(bytes: Uint8Array): OfficeZip {
 
 const decoder = new TextDecoder("utf-8");
 
+/** The character set an XML part is written in: a byte order mark, else
+    the declaration's encoding, else UTF-8 (XML 1.0, §4.3.3). Sheets
+    benchmark finding: a workbook whose worksheet declares ISO-8859-1 read
+    every accented letter as U+FFFD. */
+function xmlCharset(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+  if (bytes[0] !== 0x3c || bytes[1] !== 0x3f) return "utf-8";
+  let head = "";
+  for (let i = 0; i < Math.min(bytes.length, 200) && bytes[i] !== 0x3e; i++) head += String.fromCharCode(bytes[i]);
+  const declared = /encoding\s*=\s*["']([A-Za-z0-9._-]+)["']/.exec(head)?.[1].toLowerCase();
+  return declared ?? "utf-8";
+}
+
 /** An XML part's text, or null when the zip has no such part. */
 export function partText(zip: OfficeZip, path: string): string | null {
   const bytes = zip.get(path);
-  return bytes ? decoder.decode(bytes) : null;
+  if (!bytes) return null;
+  const charset = xmlCharset(bytes);
+  if (charset === "utf-8") return decoder.decode(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    // A label the decoder does not know: read it as UTF-8, as before.
+    return decoder.decode(bytes);
+  }
 }
 
 // One DOM parser for every part: a JSDOM window per part would be the slow
@@ -91,11 +217,17 @@ export function parseXml(text: string): XMLDocument | null {
   }
 }
 
+// The children are walked by sibling links, never through el.children: an
+// indexed read of jsdom's HTMLCollection looks up named items each time, so a
+// walk over a row of 10,000 cells was quadratic. Sheets benchmark finding: a
+// 2 MB worksheet with no cells took 57 s; walked by siblings it reads in a
+// second.
+
 /** The direct children with this local name, in order. */
 export function children(el: Element | null | undefined, localName: string): Element[] {
   if (!el) return [];
   const out: Element[] = [];
-  for (const child of el.children) if (child.localName === localName) out.push(child);
+  for (let c = el.firstElementChild; c; c = c.nextElementSibling) if (c.localName === localName) out.push(c);
   return out;
 }
 
@@ -104,13 +236,8 @@ export function child(el: Element | null | undefined, ...path: string[]): Elemen
   let at: Element | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next: Element | null = null;
-    for (const c of at.children) {
-      if (c.localName === name) {
-        next = c;
-        break;
-      }
-    }
+    let next: Element | null = at.firstElementChild;
+    while (next && next.localName !== name) next = next.nextElementSibling;
     at = next;
   }
   return at;

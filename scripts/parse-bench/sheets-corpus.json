@@ -1,0 +1,1329 @@
+{
+ "files": [
+  {
+   "id": "poi-SampleSS",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/SampleSS.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "three sheets, a formula, strings and numbers"
+  },
+  {
+   "id": "poi-Formatting",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/Formatting.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "date and number formats, fonts, fills"
+  },
+  {
+   "id": "poi-WithVariousData",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithVariousData.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "strings, numbers, a blank sheet"
+  },
+  {
+   "id": "poi-WithMoreVariousData",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithMoreVariousData.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "strings, numbers, booleans across three sheets"
+  },
+  {
+   "id": "poi-GeneralFormatTests",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/GeneralFormatTests.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "General format on many magnitudes, frozen pane, formulas"
+  },
+  {
+   "id": "poi-NumberFormatTests",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/NumberFormatTests.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "980 cells of number formats: percent, currency, fraction, scientific, custom sections"
+  },
+  {
+   "id": "poi-DateFormatTests",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/DateFormatTests.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "date and time formats: d-m-y, dddd, mmmm, hh:mm:ss.000, AM/PM"
+  },
+  {
+   "id": "poi-ElapsedFormatTests",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/ElapsedFormatTests.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "elapsed time formats [h]:mm:ss, [mm]"
+  },
+  {
+   "id": "poi-FormatConditionTests",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/FormatConditionTests.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "conditional format sections [<100], [Red], [>=1000]"
+  },
+  {
+   "id": "poi-FormatKM",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/FormatKM.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "custom formats with thousands scaling (#,##0, \"K\")"
+  },
+  {
+   "id": "poi-WidthsAndHeights",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WidthsAndHeights.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "hidden rows and a hidden column, custom widths and heights"
+  },
+  {
+   "id": "poi-GroupTest",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/GroupTest.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "grouped and collapsed (hidden) rows"
+  },
+  {
+   "id": "poi-55640",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/55640.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "hidden rows with outline levels"
+  },
+  {
+   "id": "poi-AverageTaxRates",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/AverageTaxRates.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "merges, hidden rows and columns, percent formats, a real report"
+  },
+  {
+   "id": "poi-ExcelTables",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/ExcelTables.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a table part, a hidden column, formulas"
+  },
+  {
+   "id": "poi-WithTable",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithTable.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a table part with a header row"
+  },
+  {
+   "id": "poi-ExcelPivotTableSample",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/ExcelPivotTableSample.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "pivot table cache and pivot output, dates"
+  },
+  {
+   "id": "poi-InlineStrings",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/InlineStrings.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "inline strings with formats, formulas"
+  },
+  {
+   "id": "poi-59746_NoRowNums",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/59746_NoRowNums.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "rows and cells without r= references, inline strings, hidden rows"
+  },
+  {
+   "id": "poi-1_NoIden",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/1_NoIden.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "merged cells, unusual workbook ids"
+  },
+  {
+   "id": "poi-NewlineInFormulas",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/NewlineInFormulas.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "formulas with newlines"
+  },
+  {
+   "id": "poi-shared_formulas",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/shared_formulas.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "shared formulas with cached values"
+  },
+  {
+   "id": "poi-sample",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/sample.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "rich text runs in shared strings"
+  },
+  {
+   "id": "poi-sample.strict",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/sample.strict.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "Strict OOXML namespaces (purl.oclc.org), rich text"
+  },
+  {
+   "id": "poi-WithChart",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithChart.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a line chart over cells"
+  },
+  {
+   "id": "poi-WithThreeCharts",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithThreeCharts.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "three charts with formulas"
+  },
+  {
+   "id": "poi-chart_sheet",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/chart_sheet.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a chart sheet between worksheets"
+  },
+  {
+   "id": "poi-60255_extra_drawingparts",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/60255_extra_drawingparts.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a chart and extra drawing parts"
+  },
+  {
+   "id": "poi-WithDrawing",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithDrawing.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "five pictures in a drawing"
+  },
+  {
+   "id": "poi-picture",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/picture.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a picture, a style openpyxl rejects"
+  },
+  {
+   "id": "poi-49156",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/49156.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "merges, a picture, formats, formulas"
+  },
+  {
+   "id": "poi-57171_57163_57165",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/57171_57163_57165.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "six sheets, a picture"
+  },
+  {
+   "id": "poi-WithTextBox",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/WithTextBox.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a text box shape and no cells"
+  },
+  {
+   "id": "poi-TwoSheetsOneHidden",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/TwoSheetsOneHidden.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a hidden sheet"
+  },
+  {
+   "id": "poi-56278",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/56278.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "ten sheets of inline strings"
+  },
+  {
+   "id": "poi-56702",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/56702.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "4,250 cells, 1,431 inline strings"
+  },
+  {
+   "id": "poi-57523",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/57523.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "1,226 cells with a frozen pane"
+  },
+  {
+   "id": "poi-58896",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/58896.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "1,475 merges, 4,022 formatted cells"
+  },
+  {
+   "id": "poi-bug66675",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/bug66675.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "1,654 merges, frozen pane, dates, inline strings"
+  },
+  {
+   "id": "poi-CVLKRA-KYC_Download_File_Structure_V3.1",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/CVLKRA-KYC_Download_File_Structure_V3.1.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "30 sheets, hidden sheets and columns, rich text, formulas"
+  },
+  {
+   "id": "poi-FormulaEvalTestData_Copy",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/FormulaEvalTestData_Copy.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "1,295 formulas with cached values, four sheets, frozen panes"
+  },
+  {
+   "id": "poi-bug62181",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/bug62181.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "175,000 cells of dates on one sheet (time and memory)"
+  },
+  {
+   "id": "poi-51585",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/51585.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "748 hidden columns, three sheets"
+  },
+  {
+   "id": "poi-64508",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/64508.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "date and number formats"
+  },
+  {
+   "id": "poi-59106",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/59106.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "date formats and formulas"
+  },
+  {
+   "id": "poi-54034",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/54034.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "time formats"
+  },
+  {
+   "id": "poi-xlsx-corrupted",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/xlsx-corrupted.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a damaged workbook part"
+  },
+  {
+   "id": "poi-invalid_cell_reference",
+   "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/invalid_cell_reference.xlsx",
+   "license": "Apache-2.0",
+   "ext": "xlsx",
+   "exercises": "a cell reference that does not parse"
+  },
+  {
+   "id": "lo-cell-value",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/cell-value.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "numbers, strings, formats over three sheets"
+  },
+  {
+   "id": "lo-check-boolean",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/check-boolean.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "boolean format"
+  },
+  {
+   "id": "lo-escape-unicode",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/escape-unicode.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "_xHHHH_ escapes in inline strings"
+  },
+  {
+   "id": "lo-freezePaneStartCell",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/freezePaneStartCell.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "frozen pane with a top-left cell, hidden row and column"
+  },
+  {
+   "id": "lo-hidden_sheets",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/hidden_sheets.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "hidden and very hidden sheets"
+  },
+  {
+   "id": "lo-hyperlinks",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/hyperlinks.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "hyperlinks to web, mail, and cells"
+  },
+  {
+   "id": "lo-sheet-names",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/sheet-names.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "sheet names with quotes, spaces, and symbols"
+  },
+  {
+   "id": "lo-tdf105840_allRowsHidden",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf105840_allRowsHidden.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "every row hidden"
+  },
+  {
+   "id": "lo-tdf120301_xmlSpaceParsing",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf120301_xmlSpaceParsing.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "xml:space whitespace in strings"
+  },
+  {
+   "id": "lo-tdf165180_date1904",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf165180_date1904.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "the 1904 date system"
+  },
+  {
+   "id": "lo-tdf169072_illegalDates",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf169072_illegalDates.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "dates out of range"
+  },
+  {
+   "id": "lo-tdf81939",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf81939.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "escape characters in number formats"
+  },
+  {
+   "id": "lo-too-many-cols-rows",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/too-many-cols-rows.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "cells past Excel's last row and column"
+  },
+  {
+   "id": "lo-universal-content",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/universal-content.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "numbers, formats, a merge, formulas"
+  },
+  {
+   "id": "lo-universal-content-strict",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/universal-content-strict.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "the same workbook in Strict OOXML"
+  },
+  {
+   "id": "lo-cell-multi-line",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/cell-multi-line.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a cell with line breaks"
+  },
+  {
+   "id": "lo-strike-through",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/strike-through.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "rich text strike-through runs"
+  },
+  {
+   "id": "lo-tdf82984_zip64XLSXImport",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf82984_zip64XLSXImport.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a zip64 package"
+  },
+  {
+   "id": "lo-tdf100154",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf100154.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "non-ASCII sheet names with a dot"
+  },
+  {
+   "id": "lo-tdf123026_optimalRowHeight",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf123026_optimalRowHeight.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "row heights, dates, a frozen pane"
+  },
+  {
+   "id": "lo-Spill",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/Spill.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "dynamic array formulas spilling"
+  },
+  {
+   "id": "lo-threadedComment",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/threadedComment.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "threaded comments"
+  },
+  {
+   "id": "lo-external-refs",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/external-refs.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "external references with cached values"
+  },
+  {
+   "id": "lo-data-table_one-variable",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/data-table/one-variable.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a what-if data table"
+  },
+  {
+   "id": "lo-empty",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/empty.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "an empty sheet and a sheet with one formatted cell"
+  },
+  {
+   "id": "lo-xf_default_values",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/xf_default_values.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "default xf values, merges, pictures"
+  },
+  {
+   "id": "lo-tdf76115",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf76115.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a package without xl/workbook.xml"
+  },
+  {
+   "id": "lo-tdf131575",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf131575.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a package without [Content_Types].xml"
+  },
+  {
+   "id": "lo-forcepoint107",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/forcepoint107.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a fuzzed workbook"
+  },
+  {
+   "id": "lo-tdf129985",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf129985.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a date format"
+  },
+  {
+   "id": "lo-tdf162963_TableWithTotalsEnabled",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf162963_TableWithTotalsEnabled.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "a table with a totals row"
+  },
+  {
+   "id": "lo-tdf113271",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/xlsx/tdf113271.xlsx",
+   "license": "MPL-2.0",
+   "ext": "xlsx",
+   "exercises": "1,227 cells with font colors"
+  },
+  {
+   "id": "pd-test1",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/test1.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "four sheets, dates"
+  },
+  {
+   "id": "pd-test_multisheet",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/test_multisheet.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "three sheets, formulas"
+  },
+  {
+   "id": "pd-testmultiindex",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/testmultiindex.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "14 sheets of merged headers"
+  },
+  {
+   "id": "pd-times_1900",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/times_1900.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "times in the 1900 system"
+  },
+  {
+   "id": "pd-times_1904",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/times_1904.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "times in the 1904 system"
+  },
+  {
+   "id": "pd-blank",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/blank.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "three blank sheets"
+  },
+  {
+   "id": "pd-blank_with_header",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/blank_with_header.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "a header and no rows"
+  },
+  {
+   "id": "pd-chartsheet",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/chartsheet.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "a chart sheet and its data"
+  },
+  {
+   "id": "pd-trailing_blanks",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/trailing_blanks.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "blank cells after the data"
+  },
+  {
+   "id": "pd-test_types",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/test_types.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "types: int, float, bool, date, string"
+  },
+  {
+   "id": "pd-testdateoverflow",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/testdateoverflow.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "dates past 9999"
+  },
+  {
+   "id": "pd-test_decimal",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/test_decimal.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "decimal numbers"
+  },
+  {
+   "id": "pd-df_header_oob",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/df_header_oob.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "a merge and a frozen pane past the data"
+  },
+  {
+   "id": "pd-test_none_type",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/excel/test_none_type.xlsx",
+   "license": "BSD-3-Clause",
+   "ext": "xlsx",
+   "exercises": "formatted empty cells"
+  },
+  {
+   "id": "x2c-datetime",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/datetime.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "a datetime"
+  },
+  {
+   "id": "x2c-empty_row",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/empty_row.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "an empty row and a merge"
+  },
+  {
+   "id": "x2c-escape",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/escape.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "quotes and commas in strings"
+  },
+  {
+   "id": "x2c-formatted_inline_string",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/formatted_inline_string.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "a formatted inline string, no shared strings part"
+  },
+  {
+   "id": "x2c-input-weird",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/input-weird.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "24 merges and a frozen pane around one cell"
+  },
+  {
+   "id": "x2c-junk-small",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/junk-small.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "dates and junk values"
+  },
+  {
+   "id": "x2c-namespace",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/namespace.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "prefixed SpreadsheetML namespaces"
+  },
+  {
+   "id": "x2c-no_cell_ids",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/no_cell_ids.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "cells without r= references and a merge"
+  },
+  {
+   "id": "x2c-percentage",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/percentage.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "percent formats"
+  },
+  {
+   "id": "x2c-sheets_order",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/sheets_order.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "sheet order unlike part order, a chart"
+  },
+  {
+   "id": "x2c-timeformat",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/timeformat.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "time formats"
+  },
+  {
+   "id": "x2c-twolettercolumns",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/twolettercolumns.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "columns past Z"
+  },
+  {
+   "id": "x2c-utf8",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/utf8.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "UTF-8 text with rich runs"
+  },
+  {
+   "id": "x2c-variousdelim",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/variousdelim.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "delimiters inside cells"
+  },
+  {
+   "id": "x2c-xlsx2csv-test-file",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/xlsx2csv-test-file.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "five sheets of formats"
+  },
+  {
+   "id": "x2c-sheets",
+   "url": "https://files.pythonhosted.org/packages/source/x/xlsx2csv/xlsx2csv-0.8.6.tar.gz",
+   "member": "xlsx2csv-0.8.6/test/sheets.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "two sheets of formats"
+  },
+  {
+   "id": "tablib-bad_dimensions",
+   "url": "https://files.pythonhosted.org/packages/source/t/tablib/tablib-3.10.0.tar.gz",
+   "member": "tablib-3.10.0/tests/files/bad_dimensions.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "a wrong dimension element"
+  },
+  {
+   "id": "tablib-ragged",
+   "url": "https://files.pythonhosted.org/packages/source/t/tablib/tablib-3.10.0.tar.gz",
+   "member": "tablib-3.10.0/tests/files/ragged.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "ragged rows"
+  },
+  {
+   "id": "csvkit-sheets",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/sheets.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "three sheets, dates"
+  },
+  {
+   "id": "csvkit-ne_1033_data",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/realdata/ne_1033_data.xlsx",
+   "license": "MIT",
+   "ext": "xlsx",
+   "exercises": "14,514 cells with dates"
+  },
+  {
+   "id": "csvkit-test-latin1",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_latin1.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "latin-1",
+    "delimiter": ","
+   },
+   "exercises": "Latin-1 text"
+  },
+  {
+   "id": "csvkit-test-utf16-big",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_utf16_big.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-16",
+    "delimiter": ","
+   },
+   "exercises": "UTF-16 big-endian with a BOM"
+  },
+  {
+   "id": "csvkit-test-utf16-little",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_utf16_little.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-16",
+    "delimiter": ","
+   },
+   "exercises": "UTF-16 little-endian with a BOM"
+  },
+  {
+   "id": "csvkit-test-utf8-bom",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_utf8_bom.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8-sig",
+    "delimiter": ","
+   },
+   "exercises": "UTF-8 with a BOM"
+  },
+  {
+   "id": "csvkit-test-utf8",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_utf8.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "UTF-8 text"
+  },
+  {
+   "id": "csvkit-dummy-tsv",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/dummy.tsv",
+   "license": "MIT",
+   "ext": "tsv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": "\t"
+   },
+   "exercises": "tabs in a .tsv"
+  },
+  {
+   "id": "csvkit-mac-newlines",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/mac_newlines.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "classic Mac line ends (CR only)"
+  },
+  {
+   "id": "csvkit-test-header-newline",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_header_newline.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "quoted newlines and tabs in a header"
+  },
+  {
+   "id": "csvkit-null-byte",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/null_byte.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a NUL byte in a field"
+  },
+  {
+   "id": "csvkit-bad",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/bad.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "rows longer and shorter than the header"
+  },
+  {
+   "id": "csvkit-empty",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/empty.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "an empty file"
+  },
+  {
+   "id": "csvkit-test-locale",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/test_locale.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "European numbers in quotes"
+  },
+  {
+   "id": "csvkit-ks-1033-data",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/realdata/ks_1033_data.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a 212 KB real export"
+  },
+  {
+   "id": "csvkit-FY09-EDU-Recipients-by-State",
+   "url": "https://files.pythonhosted.org/packages/source/c/csvkit/csvkit-2.2.0.tar.gz",
+   "member": "csvkit-2.2.0/examples/realdata/FY09_EDU_Recipients_by_State.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a real report with quoted amounts"
+  },
+  {
+   "id": "pd-sauron-shift-jis",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/parser/data/sauron.SHIFT_JIS.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "shift_jis",
+    "delimiter": ","
+   },
+   "exercises": "Shift-JIS Japanese text"
+  },
+  {
+   "id": "pd-utf16-ex",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/parser/data/utf16_ex.txt",
+   "license": "BSD-3-Clause",
+   "ext": "tsv",
+   "csv": {
+    "encoding": "utf-16",
+    "delimiter": "\t"
+   },
+   "exercises": "UTF-16 tab-delimited text, as Excel saves Unicode Text"
+  },
+  {
+   "id": "pd-unicode-series",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/parser/data/unicode_series.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "latin-1",
+    "delimiter": ","
+   },
+   "exercises": "Latin-1 film titles"
+  },
+  {
+   "id": "pd-salaries",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/parser/data/salaries.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": "\t"
+   },
+   "exercises": "tabs in a .csv"
+  },
+  {
+   "id": "pd-banklist",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/pandas/tests/io/data/csv/banklist.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a real list with quoted names"
+  },
+  {
+   "id": "pd-titanic",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/doc/data/titanic.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "891 rows with quoted names"
+  },
+  {
+   "id": "pd-air-quality-long",
+   "url": "https://raw.githubusercontent.com/pandas-dev/pandas/main/doc/data/air_quality_long.csv",
+   "license": "BSD-3-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "5,272 rows of measurements"
+  },
+  {
+   "id": "lo-fdo48621-broken-quotes",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/csv/fdo48621_broken_quotes.csv",
+   "license": "MPL-2.0",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "broken quotes, CR and LF line ends"
+  },
+  {
+   "id": "lo-numberformat",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/csv/numberformat.csv",
+   "license": "MPL-2.0",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a quoted note"
+  },
+  {
+   "id": "lo-tdf150452",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/csv/tdf150452.csv",
+   "license": "MPL-2.0",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a long single column of ids"
+  },
+  {
+   "id": "lo-tdf48731",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/master/sc/qa/unit/data/csv/tdf48731.csv",
+   "license": "MPL-2.0",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "apostrophes and CRLF"
+  },
+  {
+   "id": "spectrum-comma-in-quotes",
+   "url": "https://raw.githubusercontent.com/max-mapper/csv-spectrum/master/csvs/comma_in_quotes.csv",
+   "license": "BSD-2-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "csv-spectrum: comma in quotes"
+  },
+  {
+   "id": "spectrum-escaped-quotes",
+   "url": "https://raw.githubusercontent.com/max-mapper/csv-spectrum/master/csvs/escaped_quotes.csv",
+   "license": "BSD-2-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "csv-spectrum: escaped quotes"
+  },
+  {
+   "id": "spectrum-newlines-crlf",
+   "url": "https://raw.githubusercontent.com/max-mapper/csv-spectrum/master/csvs/newlines_crlf.csv",
+   "license": "BSD-2-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "csv-spectrum: newlines crlf"
+  },
+  {
+   "id": "spectrum-quotes-and-newlines",
+   "url": "https://raw.githubusercontent.com/max-mapper/csv-spectrum/master/csvs/quotes_and_newlines.csv",
+   "license": "BSD-2-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "csv-spectrum: quotes and newlines"
+  },
+  {
+   "id": "spectrum-utf8",
+   "url": "https://raw.githubusercontent.com/max-mapper/csv-spectrum/master/csvs/utf8.csv",
+   "license": "BSD-2-Clause",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "csv-spectrum: utf8"
+  },
+  {
+   "id": "winequality-red",
+   "url": "https://raw.githubusercontent.com/zygmuntz/wine-quality/master/winequality/winequality-red.csv",
+   "license": "CC-BY-4.0 (UCI)",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ";"
+   },
+   "exercises": "semicolons with quoted headers"
+  },
+  {
+   "id": "cleverscv-imdb",
+   "url": "https://raw.githubusercontent.com/alan-turing-institute/CleverCSV/master/example/imdb.csv",
+   "license": "MIT",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "UTF-8 German titles, 44 columns"
+  },
+  {
+   "id": "covid-countries-aggregated",
+   "url": "https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv",
+   "license": "ODC-PDDL",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "161,568 rows: past the 10,000-row cap (time and memory)"
+  },
+  {
+   "id": "unitos-book",
+   "url": "repo:scripts/qa/fixtures/office/book.xlsx",
+   "license": "this repository",
+   "ext": "xlsx",
+   "exercises": "two sheets, merges, formats, a picture"
+  },
+  {
+   "id": "unitos-charts",
+   "url": "repo:scripts/qa/fixtures/office/charts.xlsx",
+   "license": "this repository",
+   "ext": "xlsx",
+   "exercises": "three charts over cells"
+  },
+  {
+   "id": "unitos-data",
+   "url": "repo:scripts/qa/fixtures/office/data.csv",
+   "license": "this repository",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8",
+    "delimiter": ","
+   },
+   "exercises": "a small csv"
+  },
+  {
+   "id": "derived-imdb-excel-de",
+   "derive": {
+    "frm": "cleverscv-imdb",
+    "encoding": "cp1252",
+    "delimiter": ";",
+    "decimalComma": true,
+    "eol": "\r\n"
+   },
+   "license": "as its source",
+   "ext": "csv",
+   "csv": {
+    "encoding": "cp1252",
+    "delimiter": ";"
+   },
+   "exercises": "Excel (German) CSV: windows-1252, semicolons, decimal commas, CRLF"
+  },
+  {
+   "id": "derived-imdb-excel-fr-utf8",
+   "derive": {
+    "frm": "cleverscv-imdb",
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "decimalComma": true,
+    "eol": "\r\n"
+   },
+   "license": "as its source",
+   "ext": "csv",
+   "csv": {
+    "encoding": "utf-8-sig",
+    "delimiter": ";"
+   },
+   "exercises": "Excel (French) CSV UTF-8: a BOM, semicolons, decimal commas"
+  },
+  {
+   "id": "derived-sauron-gb18030",
+   "derive": {
+    "frm": "pd-sauron-shift-jis",
+    "encoding": "gb18030",
+    "delimiter": ",",
+    "eol": "\r\n"
+   },
+   "license": "as its source",
+   "ext": "csv",
+   "csv": {
+    "encoding": "gb18030",
+    "delimiter": ","
+   },
+   "exercises": "Chinese Windows CSV: GB18030 (GBK superset)"
+  },
+  {
+   "id": "derived-titanic-utf16le-tsv",
+   "derive": {
+    "frm": "pd-titanic",
+    "encoding": "utf-16",
+    "delimiter": "\t",
+    "eol": "\r\n",
+    "ext": "tsv"
+   },
+   "license": "as its source",
+   "ext": "tsv",
+   "csv": {
+    "encoding": "utf-16",
+    "delimiter": "\t"
+   },
+   "exercises": "Excel Unicode Text: UTF-16LE with a BOM, tabs"
+  },
+  {
+   "id": "derived-unicode-series-cp1252-tsv",
+   "derive": {
+    "frm": "pd-unicode-series",
+    "encoding": "cp1252",
+    "delimiter": "\t",
+    "eol": "\r\n",
+    "ext": "tsv"
+   },
+   "license": "as its source",
+   "ext": "tsv",
+   "csv": {
+    "encoding": "cp1252",
+    "delimiter": "\t"
+   },
+   "exercises": "windows-1252 tabs"
+  },
+  {
+   "id": "synth-long",
+   "synth": "synth-long",
+   "license": "generated",
+   "ext": "xlsx",
+   "exercises": "15,000 rows by 12 columns: past the row cap"
+  },
+  {
+   "id": "synth-wide",
+   "synth": "synth-wide",
+   "license": "generated",
+   "ext": "xlsx",
+   "exercises": "300 columns by 40 rows: past the column cap"
+  },
+  {
+   "id": "synth-frozen-merged",
+   "synth": "synth-frozen-merged",
+   "license": "generated",
+   "ext": "xlsx",
+   "exercises": "frozen rows and columns with merges, hidden rows and columns inside the frozen part"
+  }
+ ]
+}

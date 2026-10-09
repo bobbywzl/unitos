@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
+import { decodeTextFile } from "@/lib/parse/charset";
+import { computeFormula, type CellValue } from "@/lib/sheet-formulas";
 import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
 import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
@@ -25,6 +27,7 @@ import {
   relsOfType,
   resolveDrawingColor,
   rgbCss,
+  sniffOfficeFile,
   textGap,
   themeAccents,
   unzipOffice,
@@ -132,6 +135,26 @@ export type SheetsParseOptions = {
   storeImage?: SlideImageStore;
 };
 
+// ── Entry: a sheets file's bytes ─────────────────────────────────────────────
+
+/** A cell's words as the grid shows them: control characters dropped
+    (cleanText), and every line break LF. The html reads a CR LF or a CR as
+    LF, so a CR left in the block's text would break the rule that the
+    replica's DOM text equals it. Sheets benchmark finding: a quoted CSV
+    field written on Windows or a classic Mac, and a cell with an
+    _x000D_ escape. */
+function cellText(text: string): string {
+  return cleanText(text).replace(/\r\n?/g, "\n");
+}
+
+/** A sheets file as the add reads it (lib/parse/ingest.ts): a zip that is a
+    workbook parses as one; anything else is delimited text, tabs for a .tsv
+    and the delimiter sniffed otherwise. */
+export async function parseSheetsFile(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
+  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, opts);
+  return parseDelimited(decodeTextFile(bytes), filename, /\.tsv$/i.test(filename) ? "\t" : undefined);
+}
+
 // ── Entry: .xlsx ─────────────────────────────────────────────────────────────
 
 export async function parseSheets(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
@@ -160,10 +183,17 @@ export type Delimiter = "," | "\t" | ";";
 export async function parseDelimited(text: string, filename: string, delimiter?: Delimiter): Promise<ParsedDocument> {
   const sep = delimiter ?? sniffDelimiter(text);
   const table = parseDelimitedText(text.replace(/^﻿/, ""), sep);
-  const rows: Row[] = table.map((cells) => ({
-    cells: cells.map((value) => ({ text: cleanText(value), kind: valueKind(value), styleId: null })),
-    heightPt: null,
-  }));
+  // The caps a workbook's sheet has (SPEC.md §27): a delimited file had
+  // none, and a file of 161,568 records drew every one of them and
+  // overflowed the stack. Sheets benchmark finding.
+  const rows: Row[] = [];
+  let cellCount = 0;
+  for (const cells of table) {
+    if (rows.length >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) break;
+    const kept = cells.length > SHEET_MAX_COLS ? cells.slice(0, SHEET_MAX_COLS) : cells;
+    cellCount += kept.length;
+    rows.push({ cells: kept.map((value) => ({ text: cellText(value), kind: valueKind(value), styleId: null })), heightPt: null });
+  }
   const title = sheetsTitle(filename);
   const sheet: Sheet = {
     name: title,
@@ -174,7 +204,7 @@ export async function parseDelimited(text: string, filename: string, delimiter?:
     frozenCols: 0,
     defaultRowHeightPt: DEFAULT_ROW_HEIGHT_PT,
     defaultColWidthChars: DEFAULT_COL_WIDTH_CHARS,
-    cutRows: null,
+    cutRows: rows.length < table.length ? table.length : null,
     drawings: [],
   };
   await repairSheet(sheet);
@@ -263,17 +293,36 @@ async function repairSheet(sheet: Sheet): Promise<void> {
   }
 }
 
-/** Which delimiter the text uses: the one that splits the first lines into
-    the same number of fields most often; a comma when nothing tells. */
+const SNIFF_CHARS = 64 * 1024;
+const SNIFF_RECORDS = 20;
+
+/** Which delimiter the text uses: the one that splits the first records
+    into the same number of fields most often; a comma when nothing tells.
+    The records are read with the quoting rules, so a delimiter inside a
+    quoted field is not counted. Sheets benchmark finding: a header whose
+    quoted names hold tabs and newlines was split on tabs, and a file whose
+    quoted fields hold semicolons on semicolons. A file that opens with a
+    one-field title line was read as one column. */
 export function sniffDelimiter(text: string): Delimiter {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(0, 20);
+  const head = text.length > SNIFF_CHARS ? text.slice(0, SNIFF_CHARS) : text;
   let best: Delimiter = ",";
   let bestScore = -1;
   for (const sep of ["\t", ",", ";"] as const) {
-    const counts = lines.map((l) => l.split(sep).length - 1);
-    if (counts.length === 0) continue;
-    const consistent = counts.filter((c) => c > 0 && c === counts[0]).length;
-    const score = consistent * 10 + counts[0];
+    const records = parseDelimitedText(head, sep, SNIFF_RECORDS).filter((r) => r.length > 1 || r[0] !== "");
+    if (records.length === 0) continue;
+    // The field count most records share, not the first record's: a file
+    // may open with a title line of one field.
+    const often = new Map<number, number>();
+    for (const r of records) if (r.length > 1) often.set(r.length - 1, (often.get(r.length - 1) ?? 0) + 1);
+    let mode = 0;
+    let consistent = 0;
+    for (const [count, times] of often) {
+      if (times > consistent || (times === consistent && count > mode)) {
+        mode = count;
+        consistent = times;
+      }
+    }
+    const score = consistent * 10 + mode;
     if (score > bestScore) {
       bestScore = score;
       best = sep;
@@ -282,8 +331,9 @@ export function sniffDelimiter(text: string): Delimiter {
   return best;
 }
 
-/** RFC 4180: quoted fields may hold the delimiter, newlines, and doubled quotes. */
-function parseDelimitedText(text: string, sep: Delimiter): string[][] {
+/** RFC 4180: quoted fields may hold the delimiter, newlines, and doubled
+    quotes. With maxRows, the reading stops after that many records. */
+function parseDelimitedText(text: string, sep: Delimiter, maxRows = Infinity): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -317,13 +367,17 @@ function parseDelimitedText(text: string, sep: Delimiter): string[][] {
       i++;
       continue;
     }
-    if (ch === "\r") {
+    // A record ends at LF, CR LF, or a CR alone (a classic Mac file, and
+    // some exports that mix them). Sheets benchmark finding: a CR-only file
+    // read as one row.
+    if (ch === "\r" && text[i + 1] === "\n") {
       i++;
       continue;
     }
-    if (ch === "\n") {
+    if (ch === "\n" || ch === "\r") {
       row.push(field);
       rows.push(row);
+      if (rows.length >= maxRows) return rows;
       row = [];
       field = "";
       i++;
@@ -587,14 +641,17 @@ function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): str
 }
 
 /** The text of a rich-text element: its own <t> or its runs' <t>, phonetic
-    guides left out. */
+    guides left out. A character XML cannot hold is written _xHHHH_
+    (ECMA-376 Part 1, §22.9.2.19), and "_x005F_" is a literal "_": Excel
+    writes a line break in a cell as "_x000D_" and LF. Sheets benchmark
+    finding (lo-escape-unicode). */
 function richText(el: Element): string {
   let out = "";
   for (const node of Array.from(el.children)) {
     if (node.localName === "t") out += node.textContent ?? "";
     else if (node.localName === "r") out += child(node, "t")?.textContent ?? "";
   }
-  return cleanText(out);
+  return cellText(out.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))));
 }
 
 type Styles = {
@@ -802,14 +859,21 @@ function readSheet(
   // then follow the last one.
   const rows: Row[] = [];
   const hiddenRows = new Set<number>();
+  // The 0-based row a row without its reference takes: the one after the
+  // last. It was the last row itself, so a sheet whose rows carry no "r"
+  // drew every row over row 1 and kept only the last. Sheets benchmark
+  // finding (POI 56278, 59746).
   let rowCursor = 0;
+  // Formula cells stored with no number ("r:c").
+  const uncomputed = new Set<string>();
   let cellCount = 0;
   let totalRows = 0;
   let cut = false;
   const sheetData = child(root, "sheetData");
   for (const rowEl of children(sheetData, "row")) {
-    const r = (intAttr(rowEl, "r") ?? rowCursor + 1) - 1;
-    rowCursor = r;
+    const ref = intAttr(rowEl, "r");
+    const r = ref !== null ? ref - 1 : rowCursor;
+    rowCursor = r + 1;
     totalRows = r + 1;
     if (cut) continue;
     if (r >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) {
@@ -829,11 +893,13 @@ function readSheet(
       const cell = readCell(c, shared, styles, date1904);
       const href = hrefByRef.get(`${columnLetter(col)}${r + 1}`);
       if (href) cell.href = href;
+      if (cell.formula && cell.kind === "empty" && (attr(c, "t") ?? "n") === "n") uncomputed.add(`${r}:${col}`);
       cells[col] = cell;
       cellCount++;
     }
     rows[r] = { cells, heightPt };
   }
+  computeStoredEmpty(rows, uncomputed, styles, date1904);
 
   // Merged ranges.
   const merges: Merge[] = [];
@@ -875,11 +941,13 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
   const base = { styleId, formula, ...(format !== undefined && format !== 0 && format !== "General" ? { format } : {}) };
   switch (type) {
     case "s": {
-      const text = shared[Number(v)] ?? "";
+      // An empty <v/> is an empty cell: Number("") is 0, which read the
+      // first shared string into it. Sheets benchmark finding (poi-64508).
+      const text = v.trim() === "" ? "" : shared[Number(v)] ?? "";
       return { ...base, text, kind: text === "" ? "empty" : "text" };
     }
     case "str":
-      return { ...base, text: cleanText(v), kind: v === "" ? "empty" : "text" };
+      return { ...base, text: cellText(v), kind: v === "" ? "empty" : "text" };
     case "inlineStr": {
       const text = richText(child(c, "is") ?? c);
       return { ...base, text, kind: text === "" ? "empty" : "text" };
@@ -903,24 +971,142 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
   }
 }
 
+/** A formula stored with no value (<v></v> or no <v>, as openpyxl and other
+    libraries write) shows what the formula computes, as Excel shows it on
+    open: lib/sheet-formulas.ts reads it over the sheet's cells, a formula
+    it reads computed first, a loop as empty. A formula the reading does not
+    cover (another sheet, a function it lacks) stays empty, as before.
+    Sheets benchmark finding (unitos-book, synth-long). */
+function computeStoredEmpty(rows: Row[], uncomputed: Set<string>, styles: Styles, date1904: boolean): void {
+  if (uncomputed.size === 0) return;
+  const busy = new Set<string>();
+  const valueAt = (r: number, c: number): CellValue => {
+    const key = `${r}:${c}`;
+    if (uncomputed.has(key)) compute(r, c);
+    const cell = rows[r]?.cells[c];
+    if (!cell) return null;
+    switch (cell.kind) {
+      case "number":
+        return cell.number ?? null;
+      case "bool":
+        return cell.text === "TRUE";
+      case "error":
+        return { error: cell.text };
+      case "empty":
+        return null;
+      default:
+        return cell.text;
+    }
+  };
+  const compute = (r: number, c: number) => {
+    const key = `${r}:${c}`;
+    if (busy.has(key)) return;
+    busy.add(key);
+    const cell = rows[r]?.cells[c];
+    const value = cell?.formula ? computeFormula(cell.formula, valueAt) : undefined;
+    uncomputed.delete(key);
+    if (!cell || value === undefined || value === null) return;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return;
+      Object.assign(cell, { text: formatNumber(value, cell.styleId, styles, date1904), kind: "number", number: value });
+    } else if (typeof value === "boolean") {
+      Object.assign(cell, { text: value ? "TRUE" : "FALSE", kind: "bool" });
+    } else if (typeof value === "string") {
+      if (value !== "") Object.assign(cell, { text: cellText(value), kind: "text" });
+    } else {
+      Object.assign(cell, { text: cleanText(value.error), kind: "error" });
+    }
+  };
+  for (const key of [...uncomputed]) {
+    const [r, c] = key.split(":").map(Number);
+    compute(r, c);
+  }
+}
+
 function dateSerial(date: Date, date1904: boolean): number {
   const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
   return (date.getTime() - epoch) / 86400000;
 }
 
-/** A number as the cell's format shows it. General shows up to 11
-    significant digits, as Excel does; a broken format shows the number. */
-function formatNumber(n: number, styleId: number | null, styles: Styles, date1904: boolean): string {
-  const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
-  try {
-    return cleanText(ssf.format(fmt, n, { date1904 }));
-  } catch {
-    try {
-      return cleanText(ssf.format(0, n, { date1904 }));
-    } catch {
-      return String(n);
+/** A format code ssf refuses, written the way ssf reads it. Two spellings
+    Excel shows and ssf throws on, from the Sheets benchmark (poi-64508,
+    lo-tdf76115):
+    - a thousands separator repeated through the integer digits,
+      "#,###,##0" or "###,###,##0.000": Excel reads any comma between digit
+      placeholders as the one separator, so it is "#,##0".
+    - a bare "." between date parts, "DD.MM.YYYY": ssf takes it for the
+      decimal point of seconds; outside "ss.0" it is a literal "\.".
+    Quoted text, escapes, and [brackets] are left as they are. */
+function ssfFallbackCode(code: string): string {
+  const parts: { text: string; plain: boolean }[] = [];
+  let plain = "";
+  const flush = () => {
+    if (plain) parts.push({ text: plain, plain: true });
+    plain = "";
+  };
+  for (let i = 0; i < code.length; ) {
+    const ch = code[i];
+    let end = -1;
+    if (ch === '"') end = code.indexOf('"', i + 1) + 1 || code.length;
+    else if (ch === "[") end = code.indexOf("]", i) + 1 || code.length;
+    else if (ch === "\\" || ch === "_" || ch === "*") end = Math.min(i + 2, code.length);
+    if (end < 0) {
+      plain += ch;
+      i++;
+      continue;
     }
+    flush();
+    parts.push({ text: code.slice(i, end), plain: false });
+    i = end;
   }
+  flush();
+  const plainText = parts.filter((p) => p.plain).map((p) => p.text).join("");
+  const isDate = /[dy]/i.test(plainText) && !/[#?]/.test(plainText);
+  return parts
+    .map((p) => {
+      if (!p.plain) return p.text;
+      let text = p.text.replace(/(?<![#0,])#[#,]*,[#,]*0(?![#0?])/g, "#,##0");
+      if (isDate) text = text.replace(/(?<![sS])\.(?!0)/g, "\\.");
+      return text;
+    })
+    .join("");
+}
+
+/** A number as the cell's format shows it. General shows up to 11
+    significant digits, as Excel does; a format ssf refuses is tried once
+    more as ssfFallbackCode writes it, and else shows the number as
+    General. */
+function formatNumber(value: number, styleId: number | null, styles: Styles, date1904: boolean): string {
+  const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
+  const shown = (n: number): string => {
+    try {
+      return cleanText(ssf.format(fmt, n, { date1904 }));
+    } catch {
+      try {
+        if (typeof fmt === "string") return cleanText(ssf.format(ssfFallbackCode(fmt), n, { date1904 }));
+      } catch {
+        // Neither spelling reads: General below.
+      }
+      try {
+        return cleanText(ssf.format(0, n, { date1904 }));
+      } catch {
+        return String(value);
+      }
+    }
+  };
+  const plain = shown(value);
+  // Only a number whose 15 significant digits end in 5 sits on a half.
+  if (Number.isInteger(value) || !Number.isFinite(value) || !/5(?:e|$)/.test(String(Number(value.toPrecision(15))))) return plain;
+  // A half rounds away from zero as the number is written in decimal:
+  // 0.1785 in "0.0%" is 17.9%, and -1.05 in "0.0" is -1.1, as Excel shows
+  // them. In binary both sit a hair under the half, and ssf rounded them
+  // down. The number moved two units in the last place away from zero
+  // shows the half rounded up; that reading is kept when it shows at most
+  // the 15 significant digits Excel keeps, so a format of 15 decimals still
+  // shows the number as it is. Sheets benchmark finding (poi-AverageTaxRates).
+  const nudged = shown(value + Math.sign(value) * Math.abs(value) * 2 * Number.EPSILON);
+  if (nudged === plain) return plain;
+  return nudged.replace(/\D/g, "").replace(/^0+/, "").length <= 15 ? nudged : plain;
 }
 
 /** The sheet trimmed to its used range: empty rows and columns past the
@@ -1103,7 +1289,7 @@ function rowHeightPx(pt: number | null, fallback: number): number {
 }
 
 function renderGrid(sheet: Sheet, workbook: Workbook): { text: string; html: string } {
-  const cols = Math.max(1, ...sheet.rows.map((r) => r.cells.length));
+  const cols = sheet.rows.reduce((most, r) => Math.max(most, r.cells.length), 1);
   const widths = Array.from({ length: cols }, (_, c) => colWidthPx(sheet.colWidths[c] ?? null, sheet.defaultColWidthChars));
   const heights = sheet.rows.map((r) => rowHeightPx(r.heightPt, sheet.defaultRowHeightPt));
 
