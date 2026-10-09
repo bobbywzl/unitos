@@ -527,6 +527,11 @@ def smartart_ref(pkg, data_path):
     for pt in desc(doc, "pt"):
         if pt.get("type") not in (None, "node"):
             continue
+        # A node in mc:AlternateContent is written twice, the same modelId
+        # in the Choice and in the Fallback for older readers: the Choice
+        # is the node.
+        if any(isinstance(a.tag, str) and local(a) == "Fallback" for a in pt.iterancestors()):
+            continue
         t = kid(pt, "t")
         if t is None:
             continue

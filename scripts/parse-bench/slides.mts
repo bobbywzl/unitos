@@ -155,13 +155,16 @@ if (stale.length > 0) {
 // A list label at a line's start — a bullet glyph, "1.", "(a)", "iv)" — is
 // the list's drawing, not a word: dropped on both sides alike. Text is
 // compared in its compatibility form (NFKC): an equation's math italic 𝑎 is
-// the letter a, a full-width Ａ is A.
+// the letter a, a full-width Ａ is A. A math letter (U+1D400–U+1D7FF) is
+// one variable, a token of its own: "𝜋𝑟²" is π, r, 2 on both sides, however
+// an equation's parts are spaced.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)])\s+/u;
 function tokens(text: string): string[] {
   const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
   return (
     lines
       .join("\n")
+      .replace(/[\u{1D400}-\u{1D7FF}]/gu, " $& ")
       .normalize("NFKC")
       .toLowerCase()
       .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
