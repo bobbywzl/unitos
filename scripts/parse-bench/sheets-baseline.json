@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.991,
+  "score": 0.994,
   "sheets": 1,
-  "text": 0.987,
-  "cells": 0.986,
-  "formats": 0.938,
+  "text": 0.99,
+  "cells": 0.99,
+  "formats": 0.966,
   "merges": 1,
   "frozen": 1,
-  "lost": 12917,
+  "lost": 10635,
   "dom": 0,
   "errors": 0
  },
@@ -443,13 +443,13 @@
    "dom": 0
   },
   "poi-64508": {
-   "score": 0.724,
-   "text": 0.627,
-   "cells": 0.657,
-   "formats": 0.333,
+   "score": 0.93,
+   "text": 0.763,
+   "cells": 0.886,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 8,
+   "lost": 0,
    "dom": 0
   },
   "poi-59106": {
@@ -743,13 +743,13 @@
    "dom": 0
   },
   "lo-tdf76115": {
-   "score": 0.692,
-   "text": 0.623,
-   "cells": 0.521,
-   "formats": 0.317,
+   "score": 0.921,
+   "text": 0.889,
+   "cells": 0.883,
+   "formats": 0.833,
    "merges": null,
    "frozen": 1,
-   "lost": 2870,
+   "lost": 596,
    "dom": 0
   },
   "lo-tdf131575": {

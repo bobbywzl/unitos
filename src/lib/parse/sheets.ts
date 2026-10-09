@@ -966,13 +966,64 @@ function dateSerial(date: Date, date1904: boolean): number {
   return (date.getTime() - epoch) / 86400000;
 }
 
+/** A format code ssf refuses, written the way ssf reads it. Two spellings
+    Excel shows and ssf throws on, from the Sheets benchmark (poi-64508,
+    lo-tdf76115):
+    - a thousands separator repeated through the integer digits,
+      "#,###,##0" or "###,###,##0.000": Excel reads any comma between digit
+      placeholders as the one separator, so it is "#,##0".
+    - a bare "." between date parts, "DD.MM.YYYY": ssf takes it for the
+      decimal point of seconds; outside "ss.0" it is a literal "\.".
+    Quoted text, escapes, and [brackets] are left as they are. */
+function ssfFallbackCode(code: string): string {
+  const parts: { text: string; plain: boolean }[] = [];
+  let plain = "";
+  const flush = () => {
+    if (plain) parts.push({ text: plain, plain: true });
+    plain = "";
+  };
+  for (let i = 0; i < code.length; ) {
+    const ch = code[i];
+    let end = -1;
+    if (ch === '"') end = code.indexOf('"', i + 1) + 1 || code.length;
+    else if (ch === "[") end = code.indexOf("]", i) + 1 || code.length;
+    else if (ch === "\\" || ch === "_" || ch === "*") end = Math.min(i + 2, code.length);
+    if (end < 0) {
+      plain += ch;
+      i++;
+      continue;
+    }
+    flush();
+    parts.push({ text: code.slice(i, end), plain: false });
+    i = end;
+  }
+  flush();
+  const plainText = parts.filter((p) => p.plain).map((p) => p.text).join("");
+  const isDate = /[dy]/i.test(plainText) && !/[#?]/.test(plainText);
+  return parts
+    .map((p) => {
+      if (!p.plain) return p.text;
+      let text = p.text.replace(/(?<![#0,])#[#,]*,[#,]*0(?![#0?])/g, "#,##0");
+      if (isDate) text = text.replace(/(?<![sS])\.(?!0)/g, "\\.");
+      return text;
+    })
+    .join("");
+}
+
 /** A number as the cell's format shows it. General shows up to 11
-    significant digits, as Excel does; a broken format shows the number. */
+    significant digits, as Excel does; a format ssf refuses is tried once
+    more as ssfFallbackCode writes it, and else shows the number as
+    General. */
 function formatNumber(n: number, styleId: number | null, styles: Styles, date1904: boolean): string {
   const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
   try {
     return cleanText(ssf.format(fmt, n, { date1904 }));
   } catch {
+    try {
+      if (typeof fmt === "string") return cleanText(ssf.format(ssfFallbackCode(fmt), n, { date1904 }));
+    } catch {
+      // Neither spelling reads: General below.
+    }
     try {
       return cleanText(ssf.format(0, n, { date1904 }));
     } catch {
