@@ -480,6 +480,9 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
 
     // Chart values: each value as a number in the slide's words.
     const numbers = new Set((body.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => Number(n.replace(/,/g, ""))));
+    // A number in parentheses ("($277,915)", "$(479,325)") is a negative
+    // one, as an accounting format shows it.
+    for (const m of body.matchAll(/(?:\([$€£¥]?|[$€£¥]\()(\d[\d,]*(?:\.\d+)?)\)/g)) numbers.add(-Number(m[1].replace(/,/g, "")));
     for (const s of slide.shapes) {
       if (s.kind !== "chart") continue;
       for (const v of s.values) {

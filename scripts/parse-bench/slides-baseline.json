@@ -6,7 +6,7 @@
   "bullets": 1,
   "tables": 1,
   "notes": 1,
-  "chartValues": 0.996,
+  "chartValues": 1,
   "replica": 1,
   "lost": 0,
   "files": 325,
@@ -3172,13 +3172,13 @@
    "lost": 0
   },
   "lo-tdf137691-dataTable": {
-   "composite": 0.95,
+   "composite": 1,
    "words": 1,
    "order": null,
    "bullets": 1,
    "tables": null,
    "notes": null,
-   "chartValues": 0.8,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
