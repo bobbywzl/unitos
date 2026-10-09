@@ -4,6 +4,8 @@
 // article, a transcript — and the readers: none set, a novice, an expert, a
 // professional with a purpose. Add a case when a rating shows a poor answer
 // (scripts/eval/import-ratings.ts writes cases/from-ratings.json).
+import type { DocumentEdits, RawAction } from "@/lib/assistant/plan";
+import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import type { SummaryDepth } from "@/lib/types";
@@ -38,7 +40,46 @@ export type EvalCase = {
   range?: { start: number; end: number };
   // What a good answer must contain, for the judge to check against (optional).
   expect?: string;
+  // A command that may change the document (SPEC.md §7): the assistant runs
+  // in This page scope with its actions on, act reads its actions, and the
+  // judge scores the plan the reader approves in the plan card.
+  plan?: PlanCase;
 };
+
+export type PlanCase = {
+  // How the document changes; "blocks" (an article) when absent.
+  edits?: DocumentEdits;
+  // The project's sections, for add_note.
+  sections?: { id: string; title: string }[];
+  // The turns before the command: a confirmation answers a proposal.
+  history?: ChatTurn[];
+  expect: PlanExpect;
+};
+
+// What the plan must be, checked mechanically against the fixture.
+export type PlanExpect = {
+  // No action at all: the command asks only for an answer, or the document
+  // takes no change.
+  none?: boolean;
+  // The action types the plan must hold, each at least once.
+  types?: RawAction["type"][];
+  // No action type outside types.
+  onlyTypes?: boolean;
+  // The blocks (by order, 1-based) the plan must act on.
+  blocks?: number[];
+  // No action on a block outside blocks.
+  onlyBlocks?: boolean;
+  // The blocks' order after the plan's moves, inserts, and removals, by
+  // their order before; a new block is left out.
+  order?: number[];
+  // The command asks to change numbers: an edit need not keep them.
+  changesNumbers?: boolean;
+};
+
+export const MEMO_SECTIONS: PlanCase["sections"] = [
+  { id: "sec-risks", title: "Risks to the rating" },
+  { id: "sec-margin", title: "Margin" },
+];
 
 export const NOVICE: ReaderProfileCtx = {
   background: "First-year student. No training in this field.",
@@ -134,5 +175,23 @@ export const CASES: EvalCase[] = [
   // ── Ask and Find (transcript) ──
   { id: "ask-transcript-provenance", tool: "ask", fixture: "transcript-podcast", lang: "en", profile: null, range: { start: 0, end: 120 }, question: "How do they store where an answer came from?", expect: "Two ways: block and offsets, and the quoted text with context; the quote re-finds its place after a re-parse (1:05)." },
   { id: "ask-transcript-outside", tool: "ask", fixture: "transcript-podcast", lang: "en", profile: null, range: { start: 0, end: 60 }, question: "What do they do when a quote is no longer in the document?", expect: "Not in the range; the answer names 1:58 and says it is outside the range: show the quote with a broken-link mark, never guess." },
+  // ── Plans: the sidebar assistant in This page scope. Accurate multi-block
+  // edits, the right action type for the size of the change, exact quotes,
+  // moves that land where asked, and no action when none is asked. ──
+  { id: "assistant-plan-memo-percent", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "In The numbers section, write percent as % and leave every other word as it is.", expect: "Two edit_block actions, on the two paragraphs of The numbers. Each new text is the old text with \"percent\" written as \"%\" (6 %, 9.1 %, 6.3 %, 14 %), and every other word and number unchanged.", plan: { expect: { types: ["edit_block"], onlyTypes: true, blocks: [3, 4], onlyBlocks: true } } },
+  { id: "assistant-plan-memo-grammar", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: null, question: "Rewrite the whole memo in a less formal register.", expect: "One revise action for the whole document, never edit_block actions; the answer says in one sentence what will change and writes no new text.", plan: { expect: { types: ["revise"], onlyTypes: true } } },
+  { id: "assistant-plan-memo-move", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "Move the Recommendation section, heading and paragraph, to the top of the memo, right after the opening paragraph.", expect: "move_block actions that put the Recommendation heading (block 11) and its paragraph (block 12) after the opening paragraph (block 1), in that order; no words change.", plan: { expect: { types: ["move_block"], onlyTypes: true, blocks: [11, 12], onlyBlocks: true, order: [1, 11, 12, 2, 3, 4, 5, 6, 7, 8, 9, 10] } } },
+  { id: "assistant-plan-memo-summary", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "Add a two-sentence summary at the very start of the memo.", expect: "One insert_paragraph with afterBlockId null. The summary keeps the memo's own numbers (about 1.1 points structural, about 1.7 points fuel and reversing, 7.6 percent modeled, hold, buy below 38 dollars) and adds no number the memo does not state.", plan: { expect: { types: ["insert_paragraph"], onlyTypes: true, order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] } } },
+  { id: "assistant-plan-memo-note", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "Save the volume risk as a note in my Risks to the rating section, with its source.", expect: "One add_note with sectionId sec-risks, citing block 9 with an exact quote; the note keeps shipments down 3 percent, rates up 9 percent, and about 4 percent of revenue per lost customer.", plan: { sections: MEMO_SECTIONS, expect: { types: ["add_note"], onlyTypes: true } } },
+  { id: "assistant-plan-memo-analysis", tool: "assistant", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, question: "Why does the memo say hold and not buy?", expect: "An answer and no actions block: the stock discounts a margin of 9 percent or more while the memo models 7.6 percent; it would buy below 38 dollars.", plan: { expect: { none: true } } },
+  { id: "assistant-plan-docs-confirm", tool: "assistant", fixture: "docs-rate-limiting", lang: "en", profile: DEVELOPER, question: "ok do it", expect: "The highlights proposed in the earlier answer, written in full: gold highlights on the exact words of the 600-request bucket, the write bucket's 120 requests, and the 1,000 refusals that suspend a key for 15 minutes. The answer is one sentence.", plan: { history: [{ role: "user", content: "Which numbers should I not miss on this page?" }, { role: "assistant", content: "Three: the bucket holds at most 600 requests [block docs-rate-limiting-b1], writes have their own bucket of 120 [block docs-rate-limiting-b3], and 1,000 refusals in an hour suspend the key for 15 minutes [block docs-rate-limiting-b5]. Want me to highlight them in gold?" }], expect: { types: ["highlight"], onlyTypes: true, blocks: [1, 3, 5], onlyBlocks: true } } },
+  { id: "assistant-plan-docs-suggest", tool: "assistant", fixture: "docs-rate-limiting", lang: "en", profile: null, question: "Make the Handling 429 section friendlier, and fix any grammar on the page.", expect: "One suggest action that names both changes in its instruction; the answer is one sentence and writes no changed text.", plan: { edits: "suggestions", expect: { types: ["suggest"], onlyTypes: true } } },
+  { id: "assistant-plan-docs-shared", tool: "assistant", fixture: "docs-rate-limiting", lang: "en", profile: null, question: "Fix the typos on this page.", expect: "No action: the document is held by another account's project too, so its words cannot change; the answer says so in one sentence.", plan: { edits: "none", expect: { none: true } } },
+  { id: "assistant-plan-zh-merge", tool: "assistant", fixture: "zh-platform-fees", lang: "zh", profile: null, question: "把“谁受益”一节的两段合成一段，文字不变。", expect: "第 6 段的 edit_block 写入两段原文合在一起的文字，第 7 段的 remove_block；不改任何字和数字。", plan: { expect: { types: ["edit_block", "remove_block"], onlyTypes: true, blocks: [6, 7], onlyBlocks: true, order: [1, 2, 3, 4, 5, 6, 8, 9, 10, 11] } } },
+  // ── Plans: the selection chat. The change applies to the selection. ──
+  { id: "act-plan-memo-shorten", tool: "act", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, selection: { block: 6 }, question: "Shorten this paragraph to two sentences. Keep every number.", expect: "One edit_block on block 6: two sentences that keep 11 percent, 15 percent, about 1.7 percent of revenue, 2.8 points, roughly 1.1 points, 88 million dollars, and 1.2 percent of revenue, with no claim the paragraph does not make.", plan: { expect: { types: ["edit_block"], onlyTypes: true, blocks: [6], onlyBlocks: true } } },
+  { id: "act-plan-paper-bold", tool: "act", fixture: "paper-sparse-routing", lang: "en", profile: ML_ENGINEER, selection: { block: 5 }, question: "Bold every number in this paragraph.", expect: "One style action, bold, per number in block 5 (12 million, 512, 4,096, 128, 3.1), each quote the number's exact words in block 5; no other block.", plan: { expect: { types: ["style"], onlyTypes: true, blocks: [5], onlyBlocks: true } } },
+  { id: "act-plan-news-comment", tool: "act", fixture: "news-rate-decision", lang: "en", profile: null, selection: { block: 5, text: "Two of the nine committee members voted to cut on Thursday." }, question: "Comment on this with the governor's answer to the dissent.", expect: "One comment on the selected sentence in block 5: wage growth of 4.8 percent a year is not consistent with 2 percent inflation, and services prices rose 5.1 percent [block 6].", plan: { expect: { types: ["comment"], onlyTypes: true, blocks: [5], onlyBlocks: true } } },
+  { id: "act-plan-memo-confirm", tool: "act", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, selection: { block: 10 }, question: "go ahead", expect: "The edit proposed in the conversation, in full: one edit_block on block 10 that adds the sentence on the 30 percent spot premium cost, and no other change.", plan: { history: [{ role: "user", content: "Should this paragraph say what leasing would cost?" }, { role: "assistant", content: "Yes. I would add one sentence at its end: \"At that premium, every point of volume that returns costs more to carry than it did before the cut.\" Shall I add it?" }], expect: { types: ["edit_block"], onlyTypes: true, blocks: [10], onlyBlocks: true } } },
   { id: "find-transcript-background", tool: "find", fixture: "transcript-podcast", lang: "en", profile: null, question: "the reader's background in prompts", expect: "The 2:20 to 3:58 stretch." },
 ];
