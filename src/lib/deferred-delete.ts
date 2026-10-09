@@ -11,7 +11,7 @@
 
 import { api, ApiError } from "@/lib/api";
 import { postUndoPill } from "@/lib/notes/undo-pill";
-import { isOffline } from "@/lib/offline/queue";
+import { isOffline, isServerError } from "@/lib/offline/queue";
 
 // A delete whose pill is up is written down in sessionStorage until it lands
 // or Undo takes it back: a reload while the pill shows sends the request on
@@ -55,7 +55,11 @@ function forget(key: string) {
   writePending(readPending().filter((p) => p.key !== key));
 }
 
-async function send(p: Omit<Pending, "key" | "ids">, keepalive: boolean): Promise<boolean> {
+/** landed: the server took it; queued: it waits in the offline queue and
+    lands when the server is back; failed: refused. */
+type Sent = "landed" | "queued" | "failed";
+
+async function send(p: Omit<Pending, "key" | "ids">, keepalive: boolean): Promise<Sent> {
   const { url, method, body } = p;
   let reached = !isOffline();
   try {
@@ -66,27 +70,32 @@ async function send(p: Omit<Pending, "key" | "ids">, keepalive: boolean): Promis
         keepalive,
       });
       // A DELETE of a row already gone has nothing left to do.
-      if (res.ok || (method === "DELETE" && res.status === 404)) return true;
+      if (res.ok || (method === "DELETE" && res.status === 404)) return "landed";
       const json = (await res.json().catch(() => null)) as { error?: string } | null;
       console.error("delete", url, res.status, json?.error);
-      return false;
+      // A server that is down or busy (a 5xx) is no answer: the delete
+      // waits in the queue as it does with no network.
+      if (!isServerError(res.status)) return "failed";
+      reached = false;
     }
   } catch (err) {
     reached = false;
     console.error("delete", url, err);
   }
-  if (reached) return false;
-  // No network: the delete goes in the offline queue, as a delete from the
-  // Annotations tab does (lib/api.ts, lib/offline/queue.ts), and lands when
-  // the network is back; the row stays hidden. A write the queue does not
-  // take fails as before.
+  if (reached) return "failed";
+  // No network, or the server failing: the delete goes in the offline queue,
+  // as a delete from the Annotations tab does (lib/api.ts,
+  // lib/offline/queue.ts), and lands when the server is back; the row stays
+  // hidden. The PATCH of a match or an extraction is taken too (it removes
+  // by id, so a second send changes nothing). A write the queue does not
+  // take (no offline work on this account) fails as before.
   try {
-    await api(url, method, body ?? undefined);
-    return true;
+    const answer = await api<{ queued?: boolean } | null>(url, method, body ?? undefined, { queue: true });
+    return answer?.queued === true ? "queued" : "landed";
   } catch (err) {
-    if (method === "DELETE" && err instanceof ApiError && err.status === 404) return true;
+    if (method === "DELETE" && err instanceof ApiError && err.status === 404) return "landed";
     console.error("delete", url, err);
-    return false;
+    return "failed";
   }
 }
 
@@ -96,8 +105,10 @@ export function resumeDeletes(match: (url: string) => boolean): string[] {
   if (typeof window === "undefined") return [];
   const mine = readPending().filter((p) => match(p.url));
   for (const p of mine) {
-    void send(p, false).then((ok) => {
-      if (ok) forget(p.key);
+    // Queued again: the queue holds it once (it drops a write it holds
+    // already), and the next page still hides the rows until it lands.
+    void send(p, false).then((sent) => {
+      if (sent === "landed") forget(p.key);
     });
   }
   return mine.flatMap((p) => p.ids.filter((id): id is string => typeof id === "string"));
@@ -138,12 +149,11 @@ export function deleteWithUndo({
     },
     // keepalive: the pill runs commit when the page closes too.
     commit: async () => {
-      const ok = await send({ url, method, body }, true);
-      if (ok) {
-        forget(key);
-        return;
-      }
+      const sent = await send({ url, method, body }, true);
+      // Queued: the rows stay hidden, here and after a reload, until it lands.
+      if (sent === "queued") return;
       forget(key);
+      if (sent === "landed") return;
       back();
       failed();
     },
