@@ -12,7 +12,7 @@ import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-l
 import { ArrowLeftIcon, CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { LinkDetail } from "@/components/graph/link-detail";
-import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+import { useNoteOnLink } from "@/components/graph/link-note-composer";
 import { LinkReplies } from "@/components/graph/link-replies";
 import { LinkNotes } from "@/components/graph/graph-notes";
 
@@ -72,10 +72,10 @@ export function LinkPanel({
   const [error, setError] = useState<string | null>(null);
   const [decided, setDecided] = useState<"accepted" | "dismissed" | null>(null);
   const loop = link.fromDocumentId === link.toDocumentId;
-  // [panel6] The action row's Reply and Note on this link open their boxes.
+  // [panel6] The action row's Reply opens its box; [lists9] Note on this
+  // link puts the link's ends into the new note (WALK9-10).
   const [replyRequest, setReplyRequest] = useState(0);
-  const [noteRequest, setNoteRequest] = useState(0);
-  const noteOpener = useRef<HTMLButtonElement>(null);
+  const noteOnLink = useNoteOnLink(link);
   // As ReplyThread: with sign-in off, Reply shows only on a thread that has replies.
   const canReply = canEdit && !link.crossAccount?.outside && (authOn || (link.replies?.length ?? 0) > 0);
   const accepted = !link.recommended || decided === "accepted";
@@ -286,10 +286,9 @@ export function LinkPanel({
                   {t("common.reply")}
                 </button>
               )}
-              {canEdit && (
+              {noteOnLink && (
                 <button
-                  ref={noteOpener}
-                  onClick={() => setNoteRequest((n) => n + 1)}
+                  onClick={noteOnLink}
                   data-track="graph-link-note"
                   data-tip={t("graphNotes.noteOnLinkTitle")}
                   className={ACTION_NOTE}
@@ -311,7 +310,6 @@ export function LinkPanel({
               )}
             </div>
           )}
-          <LinkNoteComposer linkId={link.id} openRequest={noteRequest} opener={noteOpener} />
           <LinkReplies link={link} openRequest={canReply ? replyRequest : undefined} />
           <LinkNotes link={link} />
           <LinkDetail

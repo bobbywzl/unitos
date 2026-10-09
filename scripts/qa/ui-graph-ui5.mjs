@@ -174,17 +174,21 @@ if (ONLY.includes("show") && after) {
     await page.click('[data-track="graph-links"]');
     await page.locator(`[data-graph-links-row="${WILL}"]`).click();
     const panel = page.locator('[data-graph-side-list="link"]');
+    // [lists9] WALK9-10: Note on this link fills the one new note; its saved line takes the earlier one's place.
     await panel.locator('[data-track="graph-link-note"]').click();
-    await panel.locator("textarea").last().fill(`UI5 link note ${tag}`);
-    await panel.locator('[data-track="graph-link-note-save"]').click();
-    await panel.locator('[data-track="graph-link-note-show"]').waitFor({ timeout: 20000 });
-    const savedLines = await page.locator('[data-graph-note-gather-saved], [data-graph-link-note-saved]').count();
-    check(savedLines === 1, "one saved line at a time: the link note's line folds the dock's", String(savedLines));
+    await page.locator("[data-graph-note-gather-words]").fill(`UI5 link note ${tag}`);
+    await page.locator('[data-track="graph-note-gather-save"]').click();
+    let linkNoteId = "";
+    for (let i = 0; i < 80 && (!linkNoteId || linkNoteId === gatherId); i++) {
+      await page.waitForTimeout(250);
+      linkNoteId = (await page.locator("[data-graph-note-gather-saved]").getAttribute("data-graph-note-gather-saved").catch(() => "")) ?? "";
+    }
+    const savedLines = await page.locator("[data-graph-note-gather-saved]").count();
+    check(savedLines === 1 && linkNoteId !== gatherId, "one saved line at a time: the link note's line takes the earlier one's place", `${savedLines} ${linkNoteId}`);
     await shot(page, "WALK5-14-one-line", w);
-    const linkNoteId = await panel.locator("[data-graph-link-note-saved]").getAttribute("data-graph-link-note-saved");
     // Show: the graph stays, the Notes list opens on the note.
     const t0 = Date.now();
-    await panel.locator('[data-track="graph-link-note-show"]').click();
+    await page.locator('[data-track="graph-note-gather-show"]').click();
     const list = page.locator('[data-graph-side-list="notes"]');
     await list.locator(`[data-graph-notes-row="${linkNoteId}"]`).waitFor({ timeout: 10000 }).catch(() => {});
     check((await page.locator(".graph-overlay-in").count()) === 1, "Show keeps the graph open");

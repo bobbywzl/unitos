@@ -183,8 +183,11 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
 /** A queued reply or Note on this link that the server refused on replay
     (a 4xx: the note, the edit, or the link left the project, or the role
     changed): its words go back into the box's draft, after any words typed
-    there since, so the box opens on them (REV8-01, rule zero 6). Other
-    writes are not put back: their box is gone with the 4xx. */
+    there since, so the box opens on them (REV8-01, rule zero 6) — [lists9]
+    a Note on this link's words into the link's draft, which the new note
+    takes up, with the link's ends, when the link opens again (WALK9-10,
+    link-note-composer.tsx). Other writes are not put back: their box is
+    gone with the 4xx. */
 export function keepDroppedWords(account: string | null, path: string, body: unknown) {
   if (!body || typeof body !== "object") return;
   const b = body as Record<string, unknown>;
@@ -240,6 +243,10 @@ export type GatherDraftQuote = {
   text: string;
   /** No quotedText goes to the server: it quotes the block's words (a part's start). */
   whole?: boolean;
+  /** [lists9] The link this quote is an end of (Note on this link, WALK9-10):
+      a note of a link's two ends alone sends `fromLinkId`, so the server
+      quotes the link's own anchors. */
+  linkId?: string;
 };
 export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
 
@@ -256,6 +263,7 @@ function gatherQuote(raw: unknown): GatherDraftQuote | null {
     text: q.text,
     ...(typeof q.blockId === "string" ? { blockId: q.blockId } : {}),
     ...(q.whole === true ? { whole: true } : {}),
+    ...(typeof q.linkId === "string" ? { linkId: q.linkId } : {}),
   };
 }
 

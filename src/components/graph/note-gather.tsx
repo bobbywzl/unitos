@@ -54,6 +54,11 @@ type GatherValue = {
   has: (q: GatherQuote) => boolean;
   /** Adds the quote, or removes it when it is in the note already. */
   toggle: (q: GatherQuote) => void;
+  /** [lists9] Adds the quotes not in the note yet (a link's two ends, Note
+      on this link, WALK9-10), and opens the note. A quote in the note already
+      takes the link the new one names. `carry`: words and a section from
+      the box of before, which go in after the words typed here. */
+  add: (quotes: GatherQuote[], carry?: { content: string; sectionId: string | null }) => void;
   remove: (q: GatherQuote) => void;
   setContent: (text: string) => void;
   setSectionId: (id: string) => void;
@@ -151,6 +156,21 @@ export function NoteGatherProvider({ notebookId, children }: { notebookId: strin
               ? d
               : { ...d, quotes: [...d.quotes, q] },
         );
+      },
+      add: (quotes, carry) => {
+        setOpen(true);
+        update((d) => {
+          let next = d.quotes;
+          for (const q of quotes) {
+            const i = next.findIndex((x) => keyOf(x) === keyOf(q));
+            if (i >= 0) {
+              if (q.linkId && !next[i].linkId) next = next.map((x, j) => (j === i ? { ...x, linkId: q.linkId } : x));
+            } else if (next.length < MAX_NOTE_QUOTES) next = [...next, q];
+          }
+          const words = carry?.content.trim() ?? "";
+          const content = !words || d.content.includes(words) ? d.content : d.content.trim() ? `${d.content.trimEnd()}\n\n${carry?.content ?? ""}` : (carry?.content ?? "");
+          return { content, quotes: next, sectionId: d.sectionId ?? carry?.sectionId ?? null };
+        });
       },
       remove: (q) => update((d) => ({ ...d, quotes: d.quotes.filter((x) => keyOf(x) !== keyOf(q)) })),
       setContent: (text) => update((d, prev, storedWords) => ({ ...d, content: mergeWords(storedWords, prev.content, text) })),
@@ -343,16 +363,29 @@ export function NoteGatherDock({
     const sentQuotes = gather.quotes;
     const sentContent = gather.content;
     const words = sentContent.trim();
+    // [lists9] WALK9-10: one link's two ends alone, with words — Note on this
+    // link — send the link (fromLinkId): the server quotes the link's own
+    // anchors, as before. Any other note sends its quotes, re-found by text.
+    const linkId =
+      words && sentQuotes.length === 2 && sentQuotes[0].linkId && sentQuotes.every((q) => q.linkId === sentQuotes[0].linkId)
+        ? sentQuotes[0].linkId
+        : null;
     try {
-      const note = await api<{ id: string; content: string } | { queued: true }>("/api/notes", "POST", {
-        sectionId: chosen.id,
-        ...(words ? { content: words } : {}),
-        quotes: sentQuotes.map((q) => ({
-          documentId: q.documentId,
-          ...(q.blockId ? { blockId: q.blockId } : {}),
-          ...(q.whole ? {} : { quotedText: q.text }),
-        })),
-      });
+      const note = await api<{ id: string; content: string } | { queued: true }>(
+        "/api/notes",
+        "POST",
+        linkId
+          ? { sectionId: chosen.id, content: words, fromLinkId: linkId }
+          : {
+              sectionId: chosen.id,
+              ...(words ? { content: words } : {}),
+              quotes: sentQuotes.map((q) => ({
+                documentId: q.documentId,
+                ...(q.blockId ? { blockId: q.blockId } : {}),
+                ...(q.whole ? {} : { quotedText: q.text }),
+              })),
+            },
+      );
       // The server has the note, or the offline queue does: the draft goes.
       announceSavedLine("gather"); // [ui5] WALK5-14
       setSaved(
@@ -535,7 +568,7 @@ export function NoteGatherDock({
             data-graph-note-gather-words
             className={`resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 ${TEXT_BODY} outline-none placeholder:text-sand-500`}
           />
-          <span className="flex items-center justify-end gap-1.5">
+          <span className="flex items-center justify-end gap-1.5 pointer-coarse:gap-3">
             {error && (
               <span role="alert" className={`mr-auto ${TEXT_META} text-red-500`}>
                 {error}

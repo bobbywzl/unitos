@@ -27,7 +27,7 @@ import { StitchBox } from "@/components/graph/stitch-box";
 // [graph-notes] The project's notes on the graph and the Notes list.
 import { GraphNotesProvider, type GraphNotesInput } from "@/components/graph/graph-notes";
 import { GraphNotesList, NotesListToggle } from "@/components/graph/graph-notes-list";
-import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+import { NoteOnLink } from "@/components/graph/link-note-composer";
 // [/graph-notes]
 // [view2] The node card, Find, and the last Stitch answer on the graph.
 import { GraphContentProvider, useGraphContentState } from "@/components/graph/graph-content";
@@ -1245,7 +1245,7 @@ export function RecommendedLinkList({
           {open && (
             <div className="mt-2">
               <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
-              <LinkNoteComposer linkId={l.id} />
+              <NoteOnLink link={l} />
             </div>
           )}
           <div className="mt-1.5 flex min-w-0 items-center gap-1.5">

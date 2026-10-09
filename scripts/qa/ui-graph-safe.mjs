@@ -248,18 +248,22 @@ if (after) {
   await openLink(LINK_AB);
   const text = `SAFE offline note ${Date.now()}`;
   await page.route("**/api/notes", (route) => (route.request().method() === "POST" ? route.abort("internetdisconnected") : route.continue()));
+  // [lists9] WALK9-10: Note on this link fills the new note under the side list.
   await panel(LINK_AB).locator('[data-track="graph-link-note"]').click();
-  await panel(LINK_AB).locator("[data-graph-link-note-composer] textarea").fill(text);
-  await panel(LINK_AB).locator('[data-track="graph-link-note-save"]').click();
+  await page.locator("[data-graph-note-gather-words]").fill(text);
+  await page.locator('[data-track="graph-note-gather-save"]').click();
   await page.waitForTimeout(1200);
-  const queued = panel(LINK_AB).locator("[data-graph-link-note-queued]");
+  const queued = page.locator('[data-graph-note-gather-saved=""]');
   check((await queued.count()) === 1, "offline: the line says the note waits in the queue", await queued.innerText().catch(() => ""));
-  check((await panel(LINK_AB).locator('[data-track="graph-link-note-show"]').count()) === 0, "offline: no Show yet");
+  check((await page.locator('[data-track="graph-note-gather-show"]').count()) === 0, "offline: no Show yet");
   await shot(page, "REV2-07-queued");
   await page.unroute("**/api/notes");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await panel(LINK_AB).locator("[data-graph-link-note-saved]").waitFor({ timeout: 30000 }).catch(() => {});
-  const savedId = await panel(LINK_AB).locator("[data-graph-link-note-saved]").getAttribute("data-graph-link-note-saved").catch(() => null);
+  let savedId = null;
+  for (let i = 0; i < 120 && !savedId; i++) {
+    await page.waitForTimeout(250);
+    savedId = (await page.locator("[data-graph-note-gather-saved]").getAttribute("data-graph-note-gather-saved").catch(() => null)) || null;
+  }
   check(savedId !== null && sql(`select content from "Note" where id='${savedId}'`) === text, "landed: Show names the synced note", String(savedId));
   await shot(page, "REV2-07-landed");
   await page.mouse.click(4, 300);
