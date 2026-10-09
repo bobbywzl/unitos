@@ -330,6 +330,45 @@ function dockUnderWords(wordsLeft: number, cw: number) {
   return { left, width };
 }
 
+/** A sheet's card (SPEC.md §6): of the two places beside the selected
+    cells — right of the grid, level with the words, and under the words —
+    the one that covers fewer of the grid's filled cells, a cell's text
+    overflowing into the room beside it included. Null: not a sheet, no
+    room right of the grid, or the place under the words covers fewer. */
+function sheetCardSlot(
+  container: HTMLElement,
+  words: { top: number; bottom: number; left: number; blockId: string },
+  cw: number,
+  height: number,
+): { left: number; top: number; width: number } | null {
+  const el = drawnBlock(container, words.blockId);
+  const grid = el?.classList.contains("reader-sheet") ? el.querySelector("table") : null;
+  if (!el || !grid) return null;
+  const crect = container.getBoundingClientRect();
+  const toX = (x: number) => x - crect.left;
+  const toY = (y: number) => y - crect.top + container.scrollTop;
+  const width = 300;
+  const right = { left: toX(grid.getBoundingClientRect().right) + 12, top: words.top, width };
+  if (right.left + width > cw - 8) return null;
+  const under = { ...dockUnderWords(words.left, cw), top: words.bottom + 8 };
+  const boxes: DOMRect[] = [];
+  const range = document.createRange();
+  for (const cell of el.querySelectorAll("td, th")) {
+    if (!cell.textContent?.trim()) continue;
+    range.selectNodeContents(cell);
+    boxes.push(range.getBoundingClientRect());
+  }
+  const covered = (slot: { left: number; top: number; width: number }) =>
+    boxes.filter(
+      (b) =>
+        toX(b.right) > slot.left &&
+        toX(b.left) < slot.left + slot.width &&
+        toY(b.bottom) > slot.top &&
+        toY(b.top) < slot.top + height,
+    ).length;
+  return covered(right) <= covered(under) ? right : null;
+}
+
 /** The passage's text: the segments' quotes, one paragraph each. */
 function passageText(anchor: Anchor): string {
   return segmentsOf(anchor)
@@ -2389,6 +2428,8 @@ export function ReaderInteractions({
     const col = columnAtRest(measured, cardsRoomRef.current);
     const room = narrowRef.current ? null : cardRoom(col);
     if (!room) {
+      const sheet = words && containerRef.current ? sheetCardSlot(containerRef.current, words, cw, CARD_ESTIMATE) : null;
+      if (sheet) return { ...sheet, side: "right" as const };
       if (words && overBlock(words, containerRef.current?.clientHeight ?? 0)) {
         return { ...dockUnderWords(words.left, cw), top: words.bottom + 8, side: "right" as const };
       }
@@ -4135,7 +4176,7 @@ export function ReaderInteractions({
         el: HTMLElement;
         anchorTop: number;
         anchorBottom: number;
-        over: { bottom: number; left: number } | null;
+        over: { top: number; bottom: number; left: number; blockId: string } | null;
       }[]
     >();
     const paneShown = container.clientHeight;
@@ -4193,6 +4234,7 @@ export function ReaderInteractions({
       }
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
       let overY = -Infinity;
+      let sideY = -Infinity;
       for (const card of cards) {
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         const held = narrowLiftRef.current.get(card.kind);
@@ -4202,7 +4244,15 @@ export function ReaderInteractions({
           if (capView.key === key) recheck.push(card.kind);
         }
         const lifted = !card.over && held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
-        if (card.over) {
+        // A sheet's card stands right of the grid when that covers fewer
+        // cells (sheetCardSlot).
+        const sheet = card.over ? sheetCardSlot(container, card.over, container.clientWidth, CARD_ESTIMATE) : null;
+        if (sheet) {
+          sideY = Math.max(sideY, sheet.top);
+          tops[card.kind] = sideY;
+          docks[card.kind] = { left: sheet.left, width: sheet.width };
+          sideY += card.el.offsetHeight + CARD_GAP;
+        } else if (card.over) {
           overY = Math.max(overY, card.over.bottom + 8);
           tops[card.kind] = overY;
           docks[card.kind] = dockUnderWords(card.over.left, container.clientWidth);
