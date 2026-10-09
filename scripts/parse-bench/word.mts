@@ -129,6 +129,9 @@ type Unit = {
   numId?: string;
   /** A caption beside a picture or a table. */
   nearFloat?: boolean;
+  /** Where in the words a page number the reference leaves out stood (a
+      PAGEREF's "1"): the output may keep it there. */
+  gaps?: number[];
   /** …beside a table and no picture: the page editor has no table caption,
       so an import keeps it a paragraph over the table. */
   nearTable?: boolean;
@@ -230,7 +233,11 @@ function readReference(zip: OfficeZip): Reference {
 
   const ref: Reference = { units: [], tables: [], notes: 0, math: 0, links: [], images: 0, marks: { bold: [], italic: [], underline: [], strike: [], sup: [], sub: [] } };
   const fields: { code: string; result: boolean }[] = [];
-  const skipResult = () => fields.some((f) => f.result && /^\s*(PAGEREF|PAGE|NUMPAGES|SECTIONPAGES)\b/i.test(f.code)) || fields.some((f) => !f.result);
+  const PAGE_FIELD = /^\s*(PAGEREF|PAGE|NUMPAGES|SECTIONPAGES)\b/i;
+  const skipResult = () => fields.some((f) => f.result && PAGE_FIELD.test(f.code)) || fields.some((f) => !f.result);
+  const gap = (ctx: Ctx, code: string) => {
+    if (ctx.unit && PAGE_FIELD.test(code)) (ctx.unit.gaps ??= []).push(ctx.unit.text.length);
+  };
   let listRun = 0;
   let lastWasList = false;
 
@@ -447,6 +454,7 @@ function readReference(zip: OfficeZip): Reference {
           }
         } else if (type === "end") {
           const f = fields.pop();
+          if (f?.result) gap(ctx, f.code);
           const url = f && /^\s*HYPERLINK\s+"?(https?:[^"\s]+|mailto:[^"\s]+)/i.exec(f.code);
           const u = ctx.unit as (Unit & { linkStart?: number }) | null;
           if (url && u && u.linkStart !== undefined) {
@@ -463,6 +471,7 @@ function readReference(zip: OfficeZip): Reference {
         const before = ctx.unit?.text.length ?? 0;
         for (const c of node.children) walk(c, ctx);
         fields.pop();
+        gap(ctx, code);
         if (/^\s*HYPERLINK\s+"?(https?:|mailto:)/i.test(code) && ctx.unit) {
           const words = ctx.unit.text.slice(before);
           if (compact(words)) ref.links.push(words);
@@ -591,6 +600,25 @@ function opensWithCounter(line: string): boolean {
 }
 
 const MARK_TAGS: Record<MarkKind, string> ={ bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
+
+/** A paragraph whose words are all in the output, in order, around the
+    page numbers the reference leaves out (the output keeps a PAGEREF's
+    "1" where Word printed it), with nothing else between them. */
+function keptAround(u: Unit, all: string): boolean {
+  if (!u.gaps?.length) return false;
+  let at = 0;
+  let from = 0;
+  for (const end of [...u.gaps, u.text.length]) {
+    const part = compact(u.text.slice(from, end));
+    from = end;
+    if (!part) continue;
+    // The next words follow at once, or after a page number at most.
+    const found = at === 0 ? all.indexOf(part) : all.indexOf(part, at);
+    if (found < 0 || (at > 0 && found - at > 6)) return false;
+    at = found + part.length;
+  }
+  return true;
+}
 
 function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont, titleStyles?: StyleSpan[]): Reading {
   const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
@@ -806,7 +834,7 @@ function compare(ref: Reference, got: Reading, side: "parse" | "import"): Findin
     // A marker typed before the words ("1.1", "(a)", "•") an import's list
     // draws as its own counter: the words after it are the line's.
     const words = compact(u.text.replace(TYPED, ""));
-    if (c.length >= 3 && !all.includes(c) && !(words.length >= 3 && all.includes(words))) bump(`lost:${u.kind}`, u.text);
+    if (c.length >= 3 && !all.includes(c) && !(words.length >= 3 && all.includes(words)) && !keptAround(u, all)) bump(`lost:${u.kind}`, u.text);
   }
   // Headings, the title.
   for (const u of ref.units) {

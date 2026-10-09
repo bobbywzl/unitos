@@ -15,9 +15,7 @@
   "mark.underline": 49,
   "import.mark.underline": 49,
   "image.missing": 3,
-  "import.image.missing": 3,
-  "lost:body": 1,
-  "import.lost:body": 1
+  "import.image.missing": 3
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -417,9 +415,7 @@
   "lo-tdf149089.docx": {},
   "lo-tdf155707.docx": {},
   "lo-tdf163575.docx": {
-   "lost:body": 1,
    "image.missing": 2,
-   "import.lost:body": 1,
    "import.image.missing": 2
   },
   "lo-tdf49073.docx": {},

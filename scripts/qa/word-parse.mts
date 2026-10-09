@@ -274,6 +274,16 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("the import's Title draws the title underlined", richText.content?.[0]?.attrs?.docStyle === "title" && marks === "underline", JSON.stringify(richText.content?.[0]));
 }
 
+// ── A page reference in a sentence keeps the page number Word printed ──────
+
+{
+  const run = (inner: string) => `<w:r>${inner}</w:r>`;
+  const field = run('<w:fldChar w:fldCharType="begin"/>') + run('<w:instrText xml:space="preserve"> PAGEREF _Toc1 \\h </w:instrText>') + run('<w:fldChar w:fldCharType="separate"/>') + run("<w:t>1</w:t>") + run('<w:fldChar w:fldCharType="end"/>');
+  const body = `<w:p>${run('<w:t xml:space="preserve">See page </w:t>')}${field}${run('<w:t xml:space="preserve">, Select by Polygon.</w:t>')}</w:p>`;
+  const block = (await parse(docx(body)))[0];
+  check("a PAGEREF outside a contents list keeps its number in the sentence", block?.text === "See page 1, Select by Polygon.", JSON.stringify(block?.text));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
