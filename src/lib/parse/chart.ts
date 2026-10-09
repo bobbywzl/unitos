@@ -315,7 +315,10 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const H = Math.max(200, Math.round((1000 * size.height) / Math.max(1, size.width)));
   const font = Math.max(11, Math.min(20, W * 0.02));
   const out: string[] = [];
-  const explicitTitle = richText(child(chart, "title"), "\n");
+  // The title: a rich text, else a cell's cached words (c:strRef). Slides
+  // benchmark finding: a title taken from a cell read as "Chart Title".
+  const explicitTitle =
+    richText(child(chart, "title"), "\n") || cleanText(cacheValues(child(child(chart, "title"), "tx"), palette).text.join(" ")).trim();
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
   // A title element without words is the automatic title: the one series'

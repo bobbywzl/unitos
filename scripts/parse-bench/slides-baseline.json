@@ -3436,8 +3436,8 @@
    "lost": 0
   },
   "sc-tables-009-table": {
-   "composite": 0.998,
-   "words": 0.989,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,
