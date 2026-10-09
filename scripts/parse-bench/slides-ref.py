@@ -4,7 +4,8 @@
 For every slide in the presentation's order (p:sldIdLst), what PowerPoint
 shows as the slide's own words:
 
-- every shape of the slide's shape tree, groups walked with their transform,
+- every shape of the slide's shape tree, groups walked with their transform
+  (a rotated or flipped group turns and flips its children about its center),
   mc:AlternateContent read through its first Choice, a hidden shape
   (cNvPr hidden="1") left out, and the furniture placeholders (slide number,
   footer, date, header) left out, as SPEC.md section 27 skips them;
@@ -576,37 +577,73 @@ def smartart_ref(pkg, data_path):
 # ── Shapes ──────────────────────────────────────────────────────────────────
 
 
-def xfrm_box(xfrm):
+def xfrm_raw(xfrm):
+    """An xfrm as [x, y, w, h, rotation in degrees, flipH, flipV], or None."""
     if xfrm is None:
         return None
     off, ext = kid(xfrm, "off"), kid(xfrm, "ext")
     if off is None or ext is None:
         return None
-    x, y, w, h = iattr(off, "x", 0), iattr(off, "y", 0), iattr(ext, "cx", 0), iattr(ext, "cy", 0)
-    # A rotated shape covers its rotated box: the reading order sees that.
-    rot = math.radians((iattr(xfrm, "rot", 0) or 0) / 60000)
-    if rot:
-        rw = abs(w * math.cos(rot)) + abs(h * math.sin(rot))
-        rh = abs(w * math.sin(rot)) + abs(h * math.cos(rot))
+    return [iattr(off, "x", 0), iattr(off, "y", 0), iattr(ext, "cx", 0), iattr(ext, "cy", 0),
+            (iattr(xfrm, "rot", 0) or 0) / 60000, xfrm.get("flipH") in ("1", "true"), xfrm.get("flipV") in ("1", "true")]
+
+
+def covered(x, y, w, h, rot):
+    """A rotated shape covers its rotated box: the reading order sees that."""
+    r = math.radians(rot)
+    if r:
+        rw = abs(w * math.cos(r)) + abs(h * math.sin(r))
+        rh = abs(w * math.sin(r)) + abs(h * math.cos(r))
         x, y, w, h = x + (w - rw) / 2, y + (h - rh) / 2, rw, rh
     return [x, y, w, h]
 
 
+# A group's transform maps its children's coordinates onto the slide: the
+# child space scaled into the group's box, then flipped and turned about the
+# box's center, as PowerPoint draws a rotated or flipped group (a child turns
+# with it). t = (a, b, c, d, e, f, rot, mirror, sx, sy): the affine map
+# x' = a x + c y + e, y' = b x + d y + f; the turn and the mirror a child
+# takes on; the scale of a child's width and height.
+IDENTITY = (1, 0, 0, 1, 0, 0, 0, False, 1, 1)
+
+
 def apply(box, t):
-    ox, oy, sx, sy, cx, cy = t
-    return [ox + (box[0] - cx) * sx, oy + (box[1] - cy) * sy, box[2] * sx, box[3] * sy]
+    """A child's raw box mapped by the group transform: the box it covers."""
+    a, b, c, d, e, f, rot, mirror, sx, sy = t
+    x, y, w, h, r = box[:5]
+    cx, cy = x + w / 2, y + h / 2
+    mx, my = a * cx + c * cy + e, b * cx + d * cy + f
+    w2, h2 = w * sx, h * sy
+    return covered(mx - w2 / 2, my - h2 / 2, w2, h2, rot + (-r if mirror else r))
 
 
 def group_t(grp, t):
     xfrm = kid(grp, "grpSpPr", "xfrm")
-    box = xfrm_box(xfrm)
+    box = xfrm_raw(xfrm)
     choff, chext = kid(xfrm, "chOff"), kid(xfrm, "chExt")
     if box is None or choff is None or chext is None:
         return t
-    outer = apply(box, t)
-    cw = iattr(chext, "cx", 0) or box[2] or 1
-    ch = iattr(chext, "cy", 0) or box[3] or 1
-    return (outer[0], outer[1], outer[2] / cw, outer[3] / ch, iattr(choff, "x", 0), iattr(choff, "y", 0))
+    x, y, w, h, gr, fh, fv = box
+    cw = iattr(chext, "cx", 0) or w or 1
+    ch = iattr(chext, "cy", 0) or h or 1
+    kx, ky = w / cw, h / ch
+    ox, oy = iattr(choff, "x", 0), iattr(choff, "y", 0)
+    gx, gy = x + w / 2, y + h / 2
+    # Local map: scale into the box, flip and turn about its center.
+    th = math.radians(gr)
+    cos, sin = math.cos(th), math.sin(th)
+    fx, fy = (-1 if fh else 1), (-1 if fv else 1)
+    # p -> (x + (px - ox) kx, ...) -> g + R F (q - g)
+    la, lb, lc, ld = cos * fx * kx, sin * fx * kx, -sin * fy * ky, cos * fy * ky
+    qx0, qy0 = x - ox * kx - gx, y - oy * ky - gy  # q - g at child (0, 0)
+    le = gx + cos * fx * qx0 - sin * fy * qy0
+    lf = gy + sin * fx * qx0 + cos * fy * qy0
+    a, b, c, d, e, f, rot, mirror, sx, sy = t
+    na, nb = a * la + c * lb, b * la + d * lb
+    nc, nd = a * lc + c * ld, b * lc + d * ld
+    ne, nf = a * le + c * lf + e, b * le + d * lf + f
+    lrot, lmirror = (gr + 180, False) if fh and fv else (gr + 180, True) if fv else (gr, fh)
+    return (na, nb, nc, nd, ne, nf, rot + (-lrot if mirror else lrot), mirror != lmirror, sx * kx, sy * ky)
 
 
 def hidden(shape):
@@ -676,9 +713,9 @@ class SlideRef:
         inh = self.inherited(ph)
         box = None
         for el in [sp] + inh:
-            b = xfrm_box(kid(el, "spPr", "xfrm"))
+            b = xfrm_raw(kid(el, "spPr", "xfrm"))
             if b is not None:
-                box = apply(b, t) if el is sp else b
+                box = apply(b, t) if el is sp else covered(*b[:5])
                 break
         chains = [kid(el, "txBody", "lstStyle") for el in [sp] + inh]
         if ph is None:
@@ -692,7 +729,7 @@ class SlideRef:
             self.shapes.append({"kind": "text", "title": bool(ph and ph["type"] == "title"), "box": box, "paras": paras})
 
     def frame(self, fr, t):
-        b = xfrm_box(kid(fr, "xfrm"))
+        b = xfrm_raw(kid(fr, "xfrm"))
         box = apply(b, t) if b else None
         data = kid(fr, "graphic", "graphicData")
         tbl = kid(data, "tbl")
@@ -795,7 +832,7 @@ def reference(path):
         ref = SlideRef(pkg, part)
         tree = desc(kid(doc, "cSld"), "spTree")
         if tree:
-            ref.walk(tree[0], (0, 0, 1, 1, 0, 0))
+            ref.walk(tree[0], IDENTITY)
         out["slides"].append({
             "n": i + 1,
             "hidden": doc.get("show") in ("0", "false"),

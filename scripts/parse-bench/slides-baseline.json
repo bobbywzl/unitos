@@ -2,7 +2,7 @@
  "total": {
   "composite": 0.999,
   "words": 0.999,
-  "order": 0.996,
+  "order": 0.999,
   "bullets": 1,
   "tables": 0.99,
   "notes": 0.999,
@@ -2512,9 +2512,9 @@
    "lost": 0
   },
   "sc-autoshapes-autoshape-case018-rotation": {
-   "composite": 0.875,
+   "composite": 1,
    "words": 1,
-   "order": 0.5,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
