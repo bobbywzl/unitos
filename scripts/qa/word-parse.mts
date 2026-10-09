@@ -71,6 +71,14 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("the import draws the legal list as nested lists", lists === "0:orderedList 1:orderedList 2:orderedList", lists);
 }
 {
+  // A number and a dash: Word's "%1-" (Persian and Arabic files).
+  const blocks = await parse(docx(item("Patience", 1, 0) + item("Prayer", 1, 0), list(level(0, "decimal", "%1-", 720))));
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks });
+  const found = (richText.content ?? []).find((n) => n.type === "orderedList");
+  const format = found ? (JSON.parse(String(found.attrs?.listLevels ?? "[]")) as { format?: string }[])[0]?.format : undefined;
+  check('a "1-" list imports as a numbered list that draws "1-"', format === "%0-", JSON.stringify(found?.attrs ?? null));
+}
+{
   // A level a tenth of an inch in from the level above it.
   const text = listText(await parse(docx(item("One", 1, 0) + item("Two", 1, 1) + item("Three", 1, 0), list(level(0, "bullet", "–", 142) + level(1, "bullet", "–", 284)))));
   check("a level under a tenth of an inch in stands a level deeper", text === "– One\n  – Two\n– Three", JSON.stringify(text));

@@ -573,7 +573,8 @@ export function importWords(block: ParsedBlock): string {
 // A list line's marker, after its indent, as the parse keeps it printed: a
 // bullet ("-", "•", "◦", "▪", "–", "➢", "✓"), a checklist box ("☐", and "☑"
 // or "☒" checked), or a counter and the words around it: "1." "1)" "(1)"
-// "a)." "(iv)" "I." "A-1." "[12]", a number alone (an exercise's "15" or
+// "a)." "(iv)" "I." "A-1." "[12]", a number and a dash ("1-", Word's "%1-"
+// in Persian and Arabic files), a number alone (an exercise's "15" or
 // "*15"), or a legal number ("2.3.1": the numbers above its own before it).
 // Any other line start is words. A counter draws as the page prints it: the
 // outermost list's level at the line's depth takes the counter's glyph
@@ -589,6 +590,7 @@ const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?:[ \t]+|$)/;
 const LIST_CITE = /^\[(\d{1,3})\](?:[ \t]+|$)/;
 const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?:[ \t]+|$)/;
 const LIST_NUMBER = /^(\*?)(\d{1,3})(?:[ \t]+|$)/;
+const LIST_DASHED = /^(\d{1,3})-[ \t]+/;
 // A task line's box after its bullet (lib/parse/markdown-document.ts).
 const TASK_BOX = /^([☐☑☒])[ \t]/;
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
@@ -655,6 +657,7 @@ function counterAt(text: string): { length: number; token: string; before: strin
   if ((m = LIST_CITE.exec(text))) return { length: m[0].length, token: m[1], before: "[", after: "]" };
   // A prefix ("A-1.", an exhibit's items) comes before a number only.
   if ((m = LIST_CLOSED.exec(text)) && (!m[1] || /^\d+$/.test(m[2]))) return { length: m[0].length, token: m[2], before: m[1], after: m[3] };
+  if ((m = LIST_DASHED.exec(text))) return { length: m[0].length, token: m[1], before: "", after: "-" };
   if ((m = LIST_NUMBER.exec(text))) return { length: m[0].length, token: m[2], before: m[1], after: "" };
   return null;
 }
