@@ -115,6 +115,10 @@ function cellSelectionHas(editor: Editor, pos: number): boolean {
   return hit;
 }
 
+/** Shorter than any long press (Android's is 500 ms): a contextmenu this
+    soon after a finger came down came from a tap. */
+const TAP_MS = 400;
+
 export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const [place, setPlace] = useState<Place | null>(null);
 
@@ -122,9 +126,17 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
   // caret moves there first; an image or a table of contents is selected.
   useEffect(() => {
     const dom = editor.view.dom;
+    // A finger opens the menu by a long press. A tap on selected words can
+    // fire contextmenu too, at once: it opens nothing, so the toolbox stays
+    // the words' tools and the next tap lands where it is aimed.
+    let touchAt = -Infinity;
+    const onDown = (e: PointerEvent) => {
+      touchAt = e.pointerType === "touch" ? e.timeStamp : -Infinity;
+    };
     const onContext = (e: MouseEvent) => {
       if (e.shiftKey) return;
       e.preventDefault();
+      if (e.timeStamp - touchAt < TAP_MS) return;
       const view = editor.view;
       const atom = (e.target as Element | null)?.closest<HTMLElement>("figure.docs-img, [data-toc]");
       let spelling: Promise<Misspelling | null> | null = null;
@@ -179,10 +191,12 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
         setPlace((p) => (p === opened ? { ...p, spelling: found } : p));
       });
     };
+    dom.addEventListener("pointerdown", onDown, true);
     dom.addEventListener("contextmenu", onContext);
     dom.addEventListener("mouseup", onUp);
     dom.addEventListener("keydown", onKey, true);
     return () => {
+      dom.removeEventListener("pointerdown", onDown, true);
       dom.removeEventListener("contextmenu", onContext);
       dom.removeEventListener("mouseup", onUp);
       dom.removeEventListener("keydown", onKey, true);

@@ -33,6 +33,13 @@
   }
 }
 
+/* A column card is unseen until it has its place (suggest/layer.tsx
+   placeCards): as the page loads, it never stands at the column's left
+   edge first. */
+[data-page-editor] :is([data-comment-card], [data-suggestion-card]):not([data-placed]) {
+  visibility: hidden;
+}
+
 /* Cards: Unitos's 20 px corners, flat at rest, darker on hover, the card
    color and the float shadow while in use. The border keeps the kind color. */
 [data-page-editor] :is([data-side-card], [data-log-card], [data-annotation-card], [data-comment-card], [data-suggestion-card]) {

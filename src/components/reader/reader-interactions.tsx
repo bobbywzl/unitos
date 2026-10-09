@@ -1042,10 +1042,10 @@ type SuggestionRun = {
   controller: AbortController | null;
 };
 
-// The assistant's bar (SPEC.md §29): on a blank document, the commands on
-// the selected words run from a bar at the bottom of the pane. Its
-// conversation is the selection chat's, anchored to the words; yTop places
-// the chat card it can go on in.
+// The assistant's box (SPEC.md §29): on a blank document, the commands on
+// the selected words run from a box at the words, where the toolbox stood.
+// Its conversation is the selection chat's, anchored to the words; yTop
+// places the chat card it can go on in.
 type AssistantBar = {
   key: string;
   anchor: Anchor;
@@ -1053,6 +1053,12 @@ type AssistantBar = {
   figure?: boolean;
   yTop: number;
   wordsBottom: number; // the selection's last line's bottom, container coords
+  // Where the toolbox stood: beside the page ("right"), else under the words.
+  side?: Popover["side"];
+  x?: number;
+  // The selection's end in the page editor, mapped through every edit, so
+  // the box is placed again under the words as they grow.
+  wordsTo: number | null;
   noteId: string | null;
   messages: ChatMessage[];
   input: string;
@@ -3253,10 +3259,11 @@ export function ReaderInteractions({
   // focus is on the page — the words, the page editor's text in Viewing —
   // Tab goes to its first row, before the marks and chips after the words;
   // Shift+Tab on its first row gives the focus back to the words, the
-  // selection kept. In Editing and Suggesting, Tab with a caret or over
-  // lines is the text's (indent, nest a list, the next cell); over words
-  // inside one line it goes to the toolbox. Alt+F10 or Shift+F10 go to the
-  // first row in every mode and every reader.
+  // selection kept. In Editing and Suggesting, Tab with a caret, over
+  // lines, or in a list line or a table cell is the text's (indent, nest a
+  // list, the next cell); over words inside one line of a paragraph or a
+  // heading it goes to the toolbox; with no toolbox open it is the text's.
+  // Alt+F10 or Shift+F10 go to the first row in every mode and every reader.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -3280,7 +3287,8 @@ export function ReaderInteractions({
         return;
       }
       // Editing and Suggesting: Tab is the text's, but words selected inside
-      // one line go to the toolbox too (tabOpensToolbox, keys.ts).
+      // one line of a paragraph or a heading go to the toolbox too
+      // (tabOpensToolbox, keys.ts).
       const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
       if (pageEditor?.isEditable && active?.closest(".ProseMirror") && !tabOpensToolbox(pageEditor.state)) return;
       const onPage =
@@ -3725,11 +3733,28 @@ export function ReaderInteractions({
     // menu that took the focus gives the page its selection back first.
     const passage = (editor: Editor | null, orParagraph: boolean) => {
       if (editor && !editor.view.hasFocus()) editor.view.focus();
+      drawSelection(editor);
       const captured = captureSelection();
       const caret = editor?.state.selection.$from;
       if (captured || !orParagraph || !editor || !caret?.parent.isTextblock) return captured;
       editor.commands.setTextSelection({ from: caret.start(), to: caret.end() });
+      drawSelection(editor);
       return captureSelection();
+    };
+    // Viewing: the text takes no focus back, so the browser's selection is
+    // drawn again from the editor's, which a menu kept.
+    const drawSelection = (editor: Editor | null) => {
+      const selection = window.getSelection();
+      if (!editor || editor.isEditable || editor.state.selection.empty || !selection) return;
+      if (!selection.isCollapsed && editor.view.dom.contains(selection.anchorNode)) return;
+      const { from, to } = editor.state.selection;
+      const start = editor.view.domAtPos(from);
+      const end = editor.view.domAtPos(to);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      selection.removeAllRanges();
+      selection.addRange(range);
     };
     // The page editor's right-click menu and Search the menus: Add to notes,
     // Explain, and Ask the assistant open the same tools on the selection as
@@ -3757,14 +3782,27 @@ export function ReaderInteractions({
       if (tool === "explain") setPendingExplain(true);
       if (tool === "add-to-notes") setPendingAdd(true);
     };
-    // Ctrl+Alt+G (⌘+Option+G) opens the assistant's bar on the selection.
+    // Ctrl+Alt+G (⌘+Option+G) opens the assistant's box on the selection;
+    // in Viewing, the toolbox's Assistant box, as the right-click row does.
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !matchesCombo(e, "Mod+Alt+G") || e.getModifierState("AltGraph")) return;
       const editor = pageEditorIn(container);
-      if (!editor?.isEditable || !(e.target instanceof Node) || !editor.view.dom.contains(e.target)) return;
+      if (!editor || !(e.target instanceof Node)) return;
+      const words = window.getSelection();
+      const here = editor.isEditable
+        ? editor.view.dom.contains(e.target)
+        : !!words && !words.isCollapsed && editor.view.dom.contains(words.anchorNode);
+      if (!here) return;
       e.preventDefault();
       const captured = passage(editor, true);
-      if (captured) openBarRef.current(captured);
+      if (!captured) return;
+      if (editor.isEditable) {
+        openBarRef.current(captured);
+        return;
+      }
+      popoverRef.current = captured;
+      setPopover(captured);
+      setSubmenu("ai");
     };
     // A toast raised on no page editor shows in every pane.
     // The page editor's messages, some with an action (Switch to Editing).
@@ -3789,7 +3827,8 @@ export function ReaderInteractions({
     container.addEventListener(DOCS_EVENT.comment, onComment);
     container.addEventListener(DOCS_EVENT.tool, onTool);
     container.addEventListener(DOCS_EVENT.figureTools, onFigureTools);
-    container.addEventListener("keydown", onKey);
+    // On the document: in Viewing the focus is on no element of the pane.
+    document.addEventListener("keydown", onKey);
     container.addEventListener("dissect:toast", onToast);
     // The page editor's link box (Ctrl+K) takes the keys: the selection
     // toolbar over the same words closes, so one layer is open at a time.
@@ -3803,7 +3842,7 @@ export function ReaderInteractions({
       container.removeEventListener(DOCS_EVENT.comment, onComment);
       container.removeEventListener(DOCS_EVENT.tool, onTool);
       container.removeEventListener(DOCS_EVENT.figureTools, onFigureTools);
-      container.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey);
       container.removeEventListener("dissect:toast", onToast);
       cancelAnimationFrame(disarm);
     };
@@ -5314,7 +5353,7 @@ export function ReaderInteractions({
     linkCard !== null ||
     annotationCard !== null;
   marginCardOpenRef.current = marginCardOpen;
-  const pageHeld = marginCardOpen || popover !== null;
+  const pageHeld = marginCardOpen || popover !== null || bar !== null;
   const pressedRef = useRef(false);
   useEffect(() => {
     if (!blankDocument) return;
@@ -7777,7 +7816,7 @@ export function ReaderInteractions({
   // A figure's bar opens from its block, with no selection under it: its
   // words' bottom is its top.
   function openBar(
-    target: Pick<Popover, "anchor" | "yTop"> & Partial<Pick<Popover, "y" | "side">>,
+    target: Pick<Popover, "anchor" | "yTop"> & Partial<Pick<Popover, "y" | "side" | "x">>,
     figure = false,
   ): AssistantBar {
     // In the page editor the toolbox stands in the card column, pulled up to
@@ -7786,8 +7825,10 @@ export function ReaderInteractions({
     const container = containerRef.current;
     const editor = figure ? null : pageEditorIn(container);
     let selectionBottom: number | null = null;
+    let wordsTo: number | null = null;
     if (container && editor && !editor.isDestroyed && !editor.state.selection.empty) {
-      const bottom = editor.view.coordsAtPos(editor.state.selection.to, -1).bottom;
+      wordsTo = editor.state.selection.to;
+      const bottom = editor.view.coordsAtPos(wordsTo, -1).bottom;
       selectionBottom = bottom - container.getBoundingClientRect().top + container.scrollTop;
     }
     const opened: AssistantBar = {
@@ -7797,6 +7838,9 @@ export function ReaderInteractions({
       yTop: target.yTop,
       wordsBottom:
         selectionBottom ?? (target.y === undefined ? target.yTop : target.y - (target.side === "below" ? 14 : 6)),
+      side: figure ? undefined : target.side,
+      x: target.x,
+      wordsTo,
       noteId: null,
       messages: [],
       input: readToolbarDraft("assistant", documentId, target.anchor) ?? "",
@@ -7867,7 +7911,7 @@ export function ReaderInteractions({
       else if (same(barRef.current)) barToCard(done);
     } catch (err) {
       // Stopped: a typed instruction comes back to the field.
-      const error = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.assistantFailed");
+      const error = controller.signal.aborted ? null : failureLine(err, t);
       setBar((b) => (same(b) ? { ...b, busy: false, error, input: b.input || (chip ? "" : text) } : b));
     } finally {
       if (barAbortRef.current === controller) barAbortRef.current = null;
@@ -7888,25 +7932,117 @@ export function ReaderInteractions({
     if (inBar) setChatFocusTick((n) => n + 1);
   }
 
-  // The bar never covers the words it acts on (SPEC.md §29): when it opens
-  // over them, the pane scrolls until their last line stands 16px above the
-  // bar, and the suggestions land in view.
-  const barOpenKey = bar?.key ?? null;
-  useEffect(() => {
-    if (!barOpenKey) return;
-    const raf = requestAnimationFrame(() => {
-      const container = containerRef.current;
-      // The bar stands at the pane's foot, beside the scroller, not in it.
-      const el = container?.parentElement?.querySelector<HTMLElement>("[data-assistant-bar]");
-      const current = barRef.current;
-      if (!container || !el || !current) return;
-      const crect = container.getBoundingClientRect();
-      const wordsBottom = current.wordsBottom - container.scrollTop + crect.top;
-      const over = wordsBottom - (el.getBoundingClientRect().top - 16);
+  // The box stands at the words (SPEC.md §29), at the toolbox's width:
+  // beside the page where the toolbox stood, pulled up to fit the pane,
+  // else under the words. Once its edit lands it stands under its own
+  // cards, and it is placed again on every edit, as the words grow, so it
+  // never covers the words it acts on or the cards of its edit.
+  const barBoxRef = useRef<HTMLDivElement | null>(null);
+  const barWordsToRef = useRef<number | null>(null);
+  const barRevealRef = useRef(false);
+  function placeBar() {
+    const el = barBoxRef.current;
+    const container = containerRef.current;
+    const b = barRef.current;
+    if (!el || !container || !b) return;
+    const crect = container.getBoundingClientRect();
+    const toPane = (y: number) => y - crect.top + container.scrollTop;
+    let w = Number(el.dataset.width);
+    const cw = container.clientWidth;
+    const shift = docsShiftRef.current;
+    const geo = pageGeometry(container, shift);
+    let left: number | null = null;
+    if (b.side === "right" && geo) {
+      left = toolbarLeft(geo, shift, w);
+      const need = left === null ? toolbarShift(geo, shift, w) : null;
+      // The page moves left to give the box its room; it is placed again then.
+      if (need !== null && need > shift) {
+        setDocsShift(need);
+        return;
+      }
+      // No room at its width: the toolbox's own width, as Viewing's box keeps.
+      if (left === null) {
+        left = toolbarLeft(geo, shift, Number(el.dataset.restWidth));
+        if (left !== null) w = Number(el.dataset.restWidth);
+      }
+    }
+    el.style.width = `${w}px`;
+    const h = el.offsetHeight;
+    const beside = left !== null;
+    const x =
+      left ?? Math.max(6, Math.min(b.x !== undefined ? b.x - w / 2 : geo ? geo.textLeft - shift : 6, cw - w - 6));
+    // The words' end, and the words its edit struck and wrote.
+    let wordsBottom = b.wordsBottom;
+    const editor = b.figure ? null : pageEditorIn(container);
+    const to = barWordsToRef.current;
+    if (editor && !editor.isDestroyed && to !== null && to <= editor.state.doc.content.size) {
+      wordsBottom = toPane(editor.view.coordsAtPos(to, -1).bottom);
+    }
+    let cardsBottom = -Infinity;
+    const key = barRunKey(b);
+    for (const id of key ? (suggestRunsRef.current.get(key)?.ids ?? []) : []) {
+      const q = CSS.escape(id);
+      for (const mark of container.querySelectorAll(`.ProseMirror [data-suggestion="${q}"]`)) {
+        wordsBottom = Math.max(wordsBottom, toPane(mark.getBoundingClientRect().bottom));
+      }
+      const r = container.querySelector(`[data-suggestion-card="${q}"]`)?.getBoundingClientRect();
+      if (r && r.height > 0 && r.right > crect.left + x && r.left < crect.left + x + w) {
+        cardsBottom = Math.max(cardsBottom, toPane(r.bottom));
+      }
+    }
+    const header = container.querySelector(".docs-header")?.getBoundingClientRect().bottom;
+    const shownTop = container.scrollTop + Math.max(8, header !== undefined ? header - crect.top + 8 : 8);
+    const shownBottom = container.scrollTop + container.clientHeight - 8;
+    let top = Math.max(beside ? b.yTop : wordsBottom + 8, cardsBottom + 8);
+    if (beside && cardsBottom === -Infinity && top + h > shownBottom) top = Math.max(shownTop, shownBottom - h);
+    el.style.left = `${x}px`;
+    el.style.top = `${top}px`;
+    // Opened, or its edit landed: the box's foot comes into view.
+    if (barRevealRef.current) {
+      barRevealRef.current = false;
+      const over = top + h - shownBottom;
       if (over > 0) container.scrollBy({ top: over, behavior: "smooth" });
-    });
-    return () => cancelAnimationFrame(raf);
+    }
+  }
+  const placeBarRef = useRef(placeBar);
+  placeBarRef.current = placeBar;
+  const barOpenKey = bar?.key ?? null;
+  useLayoutEffect(() => {
+    if (!barOpenKey) return;
+    const editor = barRef.current?.figure ? null : pageEditorIn(containerRef.current);
+    barWordsToRef.current = barRef.current?.wordsTo ?? null;
+    barRevealRef.current = true;
+    let raf = 0;
+    // After the layer has placed its cards (a frame after the edit).
+    const later = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => (raf = requestAnimationFrame(() => placeBarRef.current())));
+    };
+    type Edit = { docChanged: boolean; mapping: { map: (pos: number, assoc?: number) => number } };
+    const onTransaction = ({ transaction }: { transaction: Edit }) => {
+      const to = barWordsToRef.current;
+      if (to !== null && transaction.docChanged) barWordsToRef.current = transaction.mapping.map(to, -1);
+      later();
+    };
+    editor?.on("transaction", onTransaction);
+    const resize = new ResizeObserver(later);
+    if (barBoxRef.current) resize.observe(barBoxRef.current);
+    if (editor) resize.observe(editor.view.dom);
+    window.addEventListener("resize", later);
+    placeBarRef.current();
+    return () => {
+      cancelAnimationFrame(raf);
+      editor?.off("transaction", onTransaction);
+      resize.disconnect();
+      window.removeEventListener("resize", later);
+    };
   }, [barOpenKey]);
+  const barLanded = bar ? barRunKey(bar) : null;
+  useLayoutEffect(() => {
+    if (!barOpenKey) return;
+    if (barLanded) barRevealRef.current = true;
+    placeBarRef.current();
+  }, [barOpenKey, barLanded, docsShift]);
 
   // A press anywhere but the bar closes it.
   const barOpen = bar !== null;
@@ -11800,6 +11936,104 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
+      {/* The assistant's box (SPEC.md §29), at the words where the toolbox
+          stood (placeBar): the status of its edit, the field, the commands,
+          and the foot row Viewing's box has. */}
+      <Presence show={bar !== null} exit="pop">
+      {bar && (
+        <div
+          ref={barBoxRef}
+          data-assistant-bar
+          data-selection-popover
+          // The page editor's own control: its header stays while the box has the focus.
+          data-edit-control
+          data-track-surface="ai-toolbar"
+          role="dialog"
+          aria-label={t("docsInsert.askAssistant")}
+          className={`pop-in absolute ${TOOLBOX_LAYER} flex flex-col gap-1.5 rounded-2xl border bg-card p-2 shadow-float`}
+          data-width={coarse ? 300 : 248}
+          data-rest-width={restWidth}
+          style={{ borderColor: annotationKindColor("assistant", null) }}
+        >
+          {bar.busy ? (
+            <ThinkingIndicator
+              label={t("assistant.suggestWriting")}
+              onStop={() => barAbortRef.current?.abort()}
+              className="px-1 text-[12px]"
+            />
+          ) : bar.error ? (
+            <p className="px-1 text-[12px] font-medium text-amber-700 dark:text-amber-400">⚠ {bar.error}</p>
+          ) : (
+            barKey && (
+              <SuggestionRow runKey={barKey} bar={{ onChat: () => barToCard(bar), onSettled: () => setBar(null) }} />
+            )
+          )}
+          <textarea
+            autoFocus
+            value={bar.input}
+            onFocus={caretToEnd}
+            onChange={(e) => setBarInput(e.target.value)}
+            {...ime.props}
+            onKeyDown={(e) => {
+              if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter" || e.shiftKey) return;
+              e.preventDefault();
+              void runBar(bar);
+            }}
+            placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
+            aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
+            rows={2}
+            className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+          />
+          {!barKey && !bar.busy && (
+            <div className="flex flex-wrap items-center gap-1">
+              {barFigure
+                ? FIGURE_CHIPS.map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => void runBar({ ...bar, input: t(chip.command) })}
+                      data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
+                      data-tip={t("reader.figureChipTitle")}
+                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
+                    >
+                      {t(chip.label)}
+                    </button>
+                  ))
+                : SUGGEST_CHIPS.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => void runBar(bar, c)}
+                      data-track={`assistant-command:${c.name}`}
+                      data-tip={t("reader.commandTitle")}
+                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
+                    >
+                      {t(c.key)}
+                    </button>
+                  ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ThinkingChips small />
+            <WebChip small />
+            <span className="ml-auto flex items-center gap-1.5">
+              <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
+              <button
+                type="button"
+                disabled={bar.busy || !bar.input.trim()}
+                onClick={() => void runBar(bar)}
+                data-track="assistant-run"
+                data-tip={t("reader.sendTitle")}
+                className={SEND_CLASS}
+              >
+                {t("reader.send")}
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
+      </Presence>
+
 
       <Presence show={bubble !== null} exit="bubble">
       {bubble && (
@@ -12568,101 +12802,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {t(coarse ? "reader.touchHint" : "reader.editHint")}
         </div>
       )}
-      {/* The assistant's bar (SPEC.md §29), over the page at the bottom of
-          the pane: the status of its edit, the field, and the commands. */}
-      <Presence show={bar !== null} exit="fade">
-      {bar && (
-        <div
-          data-assistant-bar
-          // The page editor's own control: its header stays while the bar has the focus.
-          data-edit-control
-          data-track-surface="ai-toolbar"
-          role="dialog"
-          aria-label={t("docsInsert.askAssistant")}
-          className={`pop-in absolute bottom-5 left-1/2 ${TOOL_LAYER} flex w-[min(640px,calc(100%-32px))] -translate-x-1/2 flex-col gap-2 rounded-[24px] border bg-card px-4 py-2.5 shadow-float`}
-          style={{ borderColor: annotationKindColor("assistant", null) }}
-        >
-          {bar.busy ? (
-            <ThinkingIndicator
-              label={t("assistant.suggestWriting")}
-              onStop={() => barAbortRef.current?.abort()}
-              className="text-[12px]"
-            />
-          ) : bar.error ? (
-            <p className="text-[12px] font-medium text-amber-700 dark:text-amber-400">⚠ {bar.error}</p>
-          ) : (
-            barKey && (
-              <SuggestionRow runKey={barKey} bar={{ onChat: () => barToCard(bar), onSettled: () => setBar(null) }} />
-            )
-          )}
-          <div className="flex items-center gap-2">
-            <span style={{ color: annotationKindColor("assistant", null) }}>
-              <SparkleIcon size={14} />
-            </span>
-            <input
-              autoFocus
-              value={bar.input}
-              onFocus={caretToEnd}
-              onChange={(e) => setBarInput(e.target.value)}
-              {...ime.props}
-              onKeyDown={(e) => {
-                if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter") return;
-                e.preventDefault();
-                void runBar(bar);
-              }}
-              placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
-              aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
-              className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
-            />
-            <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
-            <button
-              type="button"
-              disabled={bar.busy || !bar.input.trim()}
-              onClick={() => void runBar(bar)}
-              data-track="assistant-run"
-              data-tip={t("reader.sendTitle")}
-              className={SEND_CLASS}
-            >
-              {t("reader.send")}
-            </button>
-          </div>
-          {!barKey && !bar.busy && barFigure && (
-            <div className="flex flex-wrap items-center gap-1">
-              {FIGURE_CHIPS.map((chip) => (
-                <button
-                  key={chip.label}
-                  type="button"
-                  onClick={() => void runBar({ ...bar, input: t(chip.command) })}
-                  data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
-                  data-tip={t("reader.figureChipTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                >
-                  {t(chip.label)}
-                </button>
-              ))}
-              <ThinkingChips small className="ml-auto" />
-            </div>
-          )}
-          {!barKey && !bar.busy && !barFigure && (
-            <div className="flex flex-wrap items-center gap-1">
-              {SUGGEST_CHIPS.map((c) => (
-                <button
-                  key={c.name}
-                  type="button"
-                  onClick={() => void runBar(bar, c)}
-                  data-track={`assistant-command:${c.name}`}
-                  data-tip={t("reader.commandTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                >
-                  {t(c.key)}
-                </button>
-              ))}
-              <ThinkingChips small className="ml-auto" />
-            </div>
-          )}
-        </div>
-      )}
-      </Presence>
     </div>
   );
 }

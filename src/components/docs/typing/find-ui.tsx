@@ -14,15 +14,18 @@ import { findState, replaceAll, replaceResult, searchFrom, stepResult, type Find
 // Docs' own (SPEC.md §29, typing). The bar floats at the top right under the
 // toolbar: a 208 px field with "N of M" inside it, Previous, Next, More
 // options, and Close. Esc closes it and leaves the current result selected.
-// On a phone (under 600 px wide) the bar is docked under the toolbar, edge
+// On a phone (under 600 px wide, or under 500 px tall: a phone held
+// sideways) the bar is docked under the toolbar, edge
 // to edge, and Find and replace opens as that bar: its More options shows
 // Replace with, the three boxes, Replace, and Replace all under the field,
 // and the current result scrolls into view below it (find.ts).
 
 export type FindMode = "bar" | "dialog" | null;
 
-/** Under this window width the find bar is docked, and Find and replace is that bar. */
+/** Under this window width, or under DOCKED_FIND_HEIGHT_PX tall, the find
+    bar is docked, and Find and replace is that bar. */
 export const DOCKED_FIND_PX = 600;
+export const DOCKED_FIND_HEIGHT_PX = 500;
 
 /** The search as the plugin holds it, re-read on every transaction. */
 function useFind(editor: Editor) {

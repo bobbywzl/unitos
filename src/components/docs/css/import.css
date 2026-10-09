@@ -142,14 +142,18 @@
   overflow-x: visible;
 }
 /* A narrow pageless column (a phone, a pane beside the notes tray) leaves no
-   gutter for the label: it stands at the right end of the line's first row,
-   and a table keeps its sideways scroll (css/insert.css). */
+   room on the left: the label stands in the gutter right of the line, a
+   size smaller, and takes no room in the line; a table keeps its sideways
+   scroll (css/insert.css). */
 .docs-shell .docs-page[data-narrow] .docs-prose [data-page-label]::before {
-  position: static;
-  float: right;
+  right: auto;
+  left: calc(100% + 3px);
   min-width: 0;
-  margin-left: 10px;
-  padding: 0 0 0 4px;
+  padding: 0;
+  background: none;
+  font-size: 9.5px;
+  letter-spacing: -0.02em;
+  text-align: left;
 }
 .docs-shell .docs-page[data-narrow] .docs-prose .tableWrapper:has([data-page-cell]) {
   overflow-x: auto;

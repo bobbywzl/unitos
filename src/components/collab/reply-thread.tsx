@@ -17,12 +17,25 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 /** When a reply, or the comment it answers, was written, as the thread prints it. */
 export function replyTime(iso: string, lang: string): string {
-  return new Date(iso).toLocaleString(lang === "zh" ? "zh-CN" : undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? date.toLocaleString() : replyFormat(lang).format(date);
+}
+
+// One formatter per language: building one costs about a millisecond, and a
+// card draws its time on every key typed into its suggestion.
+const replyFormats = new Map<string, Intl.DateTimeFormat>();
+function replyFormat(lang: string): Intl.DateTimeFormat {
+  let format = replyFormats.get(lang);
+  if (!format) {
+    format = new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    replyFormats.set(lang, format);
+  }
+  return format;
 }
 
 type Target = { noteId: string } | { blockEditId: string } | { docLinkId: string };
@@ -223,8 +236,9 @@ export function ReplyThread({
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
                   data-tip={t("common.delete")}
-                  // The × stays small; its press area is the card buttons' 28 px (36 on touch).
-                  className="relative text-[11px] text-sand-400 after:absolute after:top-1/2 after:left-1/2 after:size-7 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-red-600 pointer-coarse:after:size-9"
+                  // The × stays small; its press area is the card buttons' 28 px (36 on touch),
+                  // from Resolve's edge (7 px of the 8 px gap) to the right, so it never covers Resolve.
+                  className="relative text-[11px] text-sand-400 after:absolute after:top-1/2 after:-right-[14px] after:-left-[7px] after:h-7 after:-translate-y-1/2 after:content-[''] hover:text-red-600 pointer-coarse:after:-right-[22px] pointer-coarse:after:h-9"
                 >
                   ×
                 </button>

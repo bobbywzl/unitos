@@ -29,6 +29,10 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // card, Google's keys: R reply, J the next comment, K the previous one, E
 // resolve, U back to the text. A press anywhere else closes the card.
 
+/** Each comment's author, time, and replies as last loaded: a card opened
+    again draws them at once, and the routes refresh them after. */
+const threads = new Map<string, { written: { at: string; by: string | null } | null; replies: ReplyView[] }>();
+
 export function CommentCard({
   noteId,
   sourceId,
@@ -68,8 +72,8 @@ export function CommentCard({
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [written, setWritten] = useState<{ at: string; by: string | null } | null>(null);
-  const [replies, setReplies] = useState<ReplyView[]>([]);
+  const [written, setWritten] = useState<{ at: string; by: string | null } | null>(() => threads.get(noteId)?.written ?? null);
+  const [replies, setReplies] = useState<ReplyView[]>(() => threads.get(noteId)?.replies ?? []);
   const [loads, setLoads] = useState(0);
   // A saved edit leaves the field.
   const [shownSaved, setShownSaved] = useState(saved);
@@ -88,8 +92,14 @@ export function CommentCard({
     ])
       .then(([edits, thread]) => {
         if (cancelled) return;
-        if (edits) setWritten({ at: edits.createdAt, by: edits.createdById });
-        if (thread) setReplies(thread.replies);
+        const kept = threads.get(noteId);
+        const next = {
+          written: edits ? { at: edits.createdAt, by: edits.createdById } : (kept?.written ?? null),
+          replies: thread ? thread.replies : (kept?.replies ?? []),
+        };
+        threads.set(noteId, next);
+        setWritten(next.written);
+        setReplies(next.replies);
       })
       .catch(() => {
         // Offline: the card shows the comment alone.
@@ -219,18 +229,7 @@ export function CommentCard({
           {written && <div className="docs-comment-time">{replyTime(written.at, lang)}</div>}
         </div>
         <div className="docs-comment-buttons">
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => void resolve()}
-              data-track="comment-resolve"
-              aria-label={t("common.resolve")}
-              data-tip={t("docsLayer.resolveTitle")}
-              className="docs-comment-button docs-comment-resolve"
-            >
-              <CheckIcon size={20} />
-            </button>
-          )}
+          {/* Delete first, away from ⋯: the head shape of the reader's highlight and comment cards. */}
           {canEdit && (
             <button
               type="button"
@@ -242,6 +241,18 @@ export function CommentCard({
               className="docs-comment-button docs-comment-delete"
             >
               <TrashIcon size={16} />
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => void resolve()}
+              data-track="comment-resolve"
+              aria-label={t("common.resolve")}
+              data-tip={t("docsLayer.resolveTitle")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CheckIcon size={20} />
             </button>
           )}
           <button

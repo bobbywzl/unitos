@@ -109,12 +109,14 @@ export function ToolbarRow({
         used -= list[i];
       }
       // A group the greedy fold took that fits in the room left comes back,
-      // the most used first (on a phone, Undo and Redo). The room here is
-      // the row's own, without the 2 px the fold keeps for rounding.
+      // the most used first (on a phone, Undo and Redo), and only in the
+      // fold's order: the first that does not fit stops it, so a wider
+      // window never shows fewer groups. The room here is the row's own,
+      // without the 2 px the fold keeps for rounding.
       for (const { i } of [...order].reverse()) {
         if (!hide.has(i)) continue;
         const more = hide.size > 1 ? MORE : 0;
-        if (used + list[i] + more > room + 2) continue;
+        if (used + list[i] + more > room + 2) break;
         hide.delete(i);
         used += list[i];
       }
