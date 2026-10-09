@@ -263,6 +263,17 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a Word figure draws its figcaption, its bold label in <strong>", /<figcaption[^>]*><strong>Figure 2\.4\. <\/strong>/.test(html), html);
 }
 
+// ── A Word title keeps its own styles ───────────────────────────────────────
+
+{
+  const title = `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">Interpreting help text</w:t></w:r></w:p>`;
+  const parsed = await parseDocx(docx(title + para("Brackets mark a field to fill.")), "check.docx", { storeImage: async () => "/api/images/check" });
+  check("an underlined Word title keeps its underline as a title style", JSON.stringify(parsed.titleStyles) === JSON.stringify([{ start: 0, end: 22, style: "underline", quotedText: "Interpreting help text" }]), JSON.stringify(parsed.titleStyles));
+  const { richText } = richTextFromImport({ kind: "docx", title: parsed.title ?? "", titleFromOriginal: !parsed.titleFromFile, blocks: parsed.blocks, titleStyles: parsed.titleStyles });
+  const marks = (richText.content?.[0]?.content?.[0]?.marks ?? []).map((m) => m.type).join(",");
+  check("the import's Title draws the title underlined", richText.content?.[0]?.attrs?.docStyle === "title" && marks === "underline", JSON.stringify(richText.content?.[0]));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

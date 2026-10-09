@@ -9,11 +9,11 @@
   "import.mark.bold": 210,
   "mark.bold": 98,
   "import.list.depth": 2,
-  "mark.underline": 51,
-  "import.mark.underline": 51,
   "mark.italic": 26,
   "import.mark.italic": 26,
   "link.missing": 1,
+  "mark.underline": 49,
+  "import.mark.underline": 49,
   "image.missing": 3,
   "import.image.missing": 3,
   "lost:body": 1,
@@ -355,10 +355,7 @@
   },
   "cp-cloud-service-agreement.docx": {},
   "cp-data-processing-agreement.docx": {},
-  "cp-independent-contractor-agreement.docx": {
-   "mark.underline": 1,
-   "import.mark.underline": 1
-  },
+  "cp-independent-contractor-agreement.docx": {},
   "cp-mutual-nda.docx": {},
   "cp-software-license-agreement.docx": {},
   "cp-statement-of-work.docx": {},
@@ -380,10 +377,7 @@
    "import.mark.underline": 48
   },
   "d4j-Eastern_Arabic_numbering.docx": {},
-  "d4j-IndividualContributor.docx": {
-   "mark.underline": 1,
-   "import.mark.underline": 1
-  },
+  "d4j-IndividualContributor.docx": {},
   "d4j-OpenDoPE_Specification.docx": {
    "import.mark.bold": 84
   },

@@ -2663,6 +2663,11 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
   const bodySize = bodyFont ? `<table style="font-size:${bodyFont.size}pt">` : null;
   for (const b of blocks) if (bodySize && b.type === "TABLE" && b.html?.startsWith(bodySize)) b.html = `<table>${b.html.slice(bodySize.length)}`;
   if (titleBlock?.font) parsed.titleFont = titleBlock.font;
+  // The title's own styles (an underlined title), where the title's words
+  // are the paragraph's as it stands: bold and italic over the whole title
+  // are its look already.
+  const titleStyles = titleBlock && titleBlock.text === own ? (titleBlock.styles ?? []).filter((s) => !((s.style === "bold" || s.style === "italic") && titleBlock.font?.[s.style] && s.start === 0 && s.end === own.length)) : [];
+  if (titleStyles.length > 0) parsed.titleStyles = titleStyles;
   const tokens = /^<[a-z0-9]+ class="([^"]*)"/.exec(titleBlock?.html ?? "")?.[1].split(" ") ?? [];
   const titleAlign = tokens.find((t): t is "center" | "right" => t === "center" || t === "right");
   if (titleAlign) parsed.titleAlign = titleAlign;

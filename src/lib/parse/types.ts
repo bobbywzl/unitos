@@ -226,8 +226,9 @@ export type ParsedDocument = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
-  // PDF parses: the title's plain styles (italic, sub, sup, small caps) over
-  // the title's characters; the import's Title keeps them.
+  // PDF and Word parses: the title's plain styles (italic, sub, sup, small
+  // caps; a Word title's underline) over the title's characters; the
+  // import's Title keeps them.
   titleStyles?: StyleSpan[];
   // PDF parses: the title's lines where the writer broke it (a title set as
   // two centered lines), when it has more than one. `title` stays one line:

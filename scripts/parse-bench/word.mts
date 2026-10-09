@@ -59,7 +59,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { unzipSync } from "fflate";
 import { join } from "node:path";
 import type { RichNode } from "@/lib/docs/schema";
-import type { ParsedBlock, TextFont } from "@/lib/parse/types";
+import type { ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const SET = join(ROOT, ".bench", "word", "files");
@@ -592,12 +592,17 @@ function opensWithCounter(line: string): boolean {
 
 const MARK_TAGS: Record<MarkKind, string> ={ bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
 
-function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont): Reading {
+function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont, titleStyles?: StyleSpan[]): Reading {
   const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // The title's look (ParsedDocument.titleFont) is its words' marks: the
   // import's Title style takes it.
   if (title && titleFont?.bold) r.marks.bold += ` ${title}`;
   if (title && titleFont?.italic) r.marks.italic += ` ${title}`;
+  // and its own styles (ParsedDocument.titleStyles) are its words' marks too.
+  for (const st of titleStyles ?? []) {
+    const k = ({ bold: "bold", italic: "italic", underline: "underline", strike: "strike", sup: "sup", sub: "sub" } as Partial<Record<string, MarkKind>>)[st.style];
+    if (title && k) r.marks[k] += ` ${title.slice(st.start, st.end)}`;
+  }
   const texts: string[] = [title ?? ""];
   const links: string[] = [];
   for (const b of blocks) {
@@ -935,7 +940,7 @@ for (const name of files) {
   try {
     const parsed = await parseDocx(bytes, name, { storeImage: async () => "/api/images/bench" });
     const title = parsed.titleFromFile ? null : (parsed.title ?? null);
-    const p = compare(ref, readParse(title, parsed.blocks, parsed.titleFont), "parse");
+    const p = compare(ref, readParse(title, parsed.blocks, parsed.titleFont, parsed.titleStyles), "parse");
     Object.assign(counts, p.counts);
     notes.push(...p.notes);
     try {
