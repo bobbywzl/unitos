@@ -220,7 +220,19 @@ def shown_char(char, font):
 
 
 def math_text(el):
-    return "".join(t.text or "" for t in desc(el, "t") if etree.QName(t).namespace in (NS["m"], "http://purl.oclc.org/ooxml/officeDocument/math"))
+    """An equation's characters: each run's m:t, a space between the parts
+    of a structure (a fraction's numerator and denominator, a script and
+    its base), so the characters of two parts never join into one word."""
+    out = []
+    for c in el:
+        if not isinstance(c.tag, str):
+            continue
+        name = local(c)
+        if name == "r":
+            out.append("".join(t.text or "" for t in kids(c, "t")))
+        elif not name.endswith("Pr"):
+            out.append(" " + math_text(c) + " ")
+    return "".join(out)
 
 
 def clean(s):
