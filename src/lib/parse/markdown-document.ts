@@ -478,6 +478,36 @@ function hasMarkdownMarks(nodes: PhrasingContent[], source: string): boolean {
   });
 }
 
+// A table of values saved as text (a .csv or .tsv file named .txt): every
+// line holds the same count of field separators, two or more, outside
+// double quotes. Its lines are its rows, and stay lines, however long
+// (Markdown benchmark finding: a CSV of 250 rows read as one paragraph).
+const FIELD_SEPARATORS = [",", "\t", ";"];
+const DELIMITED_SHARE_MIN = 0.9;
+
+function fieldSeparators(line: string, separator: string): number {
+  let n = 0;
+  let quoted = false;
+  for (const c of line) {
+    if (c === '"') quoted = !quoted;
+    else if (c === separator && !quoted) n++;
+  }
+  return n;
+}
+
+function isDelimited(lines: string[]): boolean {
+  if (lines.length < 3) return false;
+  return FIELD_SEPARATORS.some((separator) => {
+    const counts = new Map<number, number>();
+    for (const line of lines) {
+      const n = fieldSeparators(line, separator);
+      counts.set(n, (counts.get(n) ?? 0) + 1);
+    }
+    const [n, count] = [...counts].sort((a, b) => b[1] - a[1])[0];
+    return n >= 2 && count >= lines.length * DELIMITED_SHARE_MIN;
+  });
+}
+
 /** A line's first word's shape: each letter as "a", each digit as "0". */
 function openingShape(line: string): string {
   return (/^\S+/.exec(line)?.[0] ?? "").replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "0");
@@ -519,7 +549,7 @@ function keepTextLines(root: Root, source: string) {
     const stops = own.slice(0, -1).filter((line) => TEXT_STOP_RX.test(line)).length;
     const shapes = new Map<string, number>();
     for (const line of own) shapes.set(openingShape(line), (shapes.get(openingShape(line)) ?? 0) + 1);
-    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN;
+    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN || isDelimited(own);
     const marks = own.some((line) => MARKDOWN_MARKS_RX.test(line)) || hasMarkdownMarks(node.children, source);
     if (marks && !(alike && own.length >= TEXT_ALIKE_OVER_MARKS_MIN)) continue;
     const keep =

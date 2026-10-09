@@ -13,8 +13,8 @@
    "lost": 66
   },
   "txt": {
-   "score": 0.945,
-   "parse": 0.945,
+   "score": 0.952,
+   "parse": 0.952,
    "words": 0.997,
    "lost": 1399
   }
@@ -3153,8 +3153,8 @@
    1
   ],
   "country-codes-csv": [
-   0.5,
-   0.5
+   1,
+   1
   ],
   "comma-survey-csv": [
    1,
