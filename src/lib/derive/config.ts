@@ -287,6 +287,19 @@ export const STITCH_EXPAND_WORDS = 15;
 // or replies keep today's reading unchanged (lib/graph/intent.ts).
 export const STITCH_INDEX = process.env.STITCH_INDEX !== "0";
 export const STITCH_INDEX_TOP = 25;
+// Beside a cut (COST10-01, round 10 RETRIEVAL10) the select pass reads the
+// first STITCH_INDEX_TEXTS text matches' text, each cut to its first
+// STITCH_INDEX_TEXT_CHARS characters, under the shown lines: at 200
+// documents the route pass can miss the document that holds the answer,
+// and the matched text holds it (the needed groups held 62% → 88% on the
+// fact commands at 200 documents, no tier losing; about +1,000 tokens per
+// command). Nothing is read under STITCH_CUT_OVER, where every line is read.
+export const STITCH_INDEX_TEXTS = 20;
+export const STITCH_INDEX_TEXT_CHARS = 600;
+// The index query takes the last STITCH_INDEX_QUERY_TOKENS tokens of the
+// ranker's query (the command and its expansion come last; REV10-07: a
+// command of 20,000 words made a 4-second query that found nothing).
+export const STITCH_INDEX_QUERY_TOKENS = 200;
 // Under this many blocks the full text is ranked in memory (7 documents,
 // 500 blocks: 20–40 ms); past it the index names the candidates first
 // (36 documents: 4–13 ms against 120–280 ms in memory; 200 documents:

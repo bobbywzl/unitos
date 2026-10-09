@@ -8,10 +8,20 @@
 // never stale: an edit rewrites it with the row. The query is the same
 // tokenizer as the ranker's (tokenize): Latin words OR'ed, each CJK bigram a
 // phrase (<->), so a block that shares one word with the command is a
-// candidate and ts_rank_cd puts the ones that share more first. No model.
+// candidate. The candidates come back unranked and unsorted: the caller
+// (lib/graph/stitch.ts textMatches) ranks them with BM25 in memory, and
+// ts_rank_cd with an ORDER BY over 2,600–7,800 rows was two thirds of the
+// query's time at 200 documents (COST10-06: 77–130 ms → 9–10 ms). No model.
+//
+// The parser's tokens differ from the query's for dates and decimals: the
+// column holds '-10', '-09' and '3.14' for "2026-10-09 3.14", the query
+// asks '2026' | '10' | '09' | '3' | '14'. A year matches, a month-day or a
+// decimal does not; harmless, since the in-memory rank runs on the
+// candidates' text.
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { STITCH_INDEX_QUERY_TOKENS } from "@/lib/derive/config";
 import { STOP_WORDS, tokenize } from "@/lib/graph/rank";
 
 const CJK = /[぀-ヿ㐀-䶿一-鿿가-힯]/u;
@@ -26,12 +36,16 @@ const STOP = new Set([...STOP_WORDS, "when"]);
 /** The tsquery for a command (and its earlier commands and expansion
     words): the ranker's tokens, Latin words as lexemes OR'ed (function
     words dropped), CJK bigrams as phrases; a CJK single character only
-    when the text has no bigram. Null when the text has no token. */
+    when the text has no bigram. Null when the text has no token. The last
+    STITCH_INDEX_QUERY_TOKENS tokens only: the ranker's query puts the
+    earlier commands first and the command and its expansion last, so a
+    long paste in an earlier command drops before the words that matter
+    (REV10-07: 20,000 OR'ed terms took 4.3–4.6 s for 0 hits). */
 export function searchQuery(text: string): string | null {
   const latin = new Set<string>();
   const bigrams = new Set<string>();
   const singles = new Set<string>();
-  for (const t of tokenize(text)) {
+  for (const t of tokenize(text).slice(-STITCH_INDEX_QUERY_TOKENS)) {
     if (!CJK.test(t)) {
       if (!STOP.has(t)) latin.add(t);
       continue;
@@ -50,7 +64,7 @@ export function searchQuery(text: string): string | null {
   return parts.length > 0 ? parts.join(" | ") : null;
 }
 
-export type SearchHit = { id: string; documentId: string; score: number };
+export type SearchHit = { id: string; documentId: string };
 
 // Whether the index can be queried in this process: the column exists
 // (the migration block_search ran) and no query has failed. Probed once;
@@ -71,24 +85,25 @@ export function searchAvailable(): Promise<boolean> {
     }));
 }
 
-/** The blocks of the documents most like the query, best first, up to
-    `limit`: the index's candidates for the select pass. Empty when the
-    query has no token or no block shares one with it; null when the index
-    is not available (no column, or a failed query, logged once), so the
-    caller ranks every block instead. A failed search never fails a
-    command. */
+/** The blocks of the documents that share a token with the query, in no
+    order, up to `limit`: the index's candidates for the select pass, which
+    the caller ranks (textMatches). `limit` is a guard, not a filter: past
+    it the first blocks the scan meets come back (the widest query at 200
+    documents met 4,041 of 5,000). Empty when the query has no token or no
+    block shares one with it; null when the index is not available (no
+    column, or a failed query, logged once), so the caller ranks every
+    block instead. A failed search never fails a command. */
 export async function searchBlocks(documentIds: string[], query: string, limit: number): Promise<SearchHit[] | null> {
   if (!(await searchAvailable())) return null;
   const tsq = searchQuery(query);
   if (!tsq || documentIds.length === 0) return [];
   try {
-    return await db.$queryRaw<{ id: string; documentId: string; score: number }[]>(Prisma.sql`
-      SELECT b.id, b."documentId", ts_rank_cd(b.search, q)::float8 AS score
-      FROM "Block" b, to_tsquery('simple', ${tsq}) q
+    return await db.$queryRaw<{ id: string; documentId: string }[]>(Prisma.sql`
+      SELECT b.id, b."documentId"
+      FROM "Block" b
       WHERE b."documentId" IN (${Prisma.join(documentIds)})
         AND b.type NOT IN ('VIDEO', 'PAGE')
-        AND b.search @@ q
-      ORDER BY score DESC, b."documentId", b."order"
+        AND b.search @@ to_tsquery('simple', ${tsq})
       LIMIT ${limit}`);
   } catch (error) {
     console.warn("[stitch] index query failed; ranking every block in memory from now on:", error);
