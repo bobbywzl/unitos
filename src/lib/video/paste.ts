@@ -103,14 +103,16 @@ function looseCues(text: string): Open[] {
   return opens;
 }
 
-const WEBVTT_SIGNATURE = /^﻿?WEBVTT(?:[ \t\n\r]|$)/;
+const WEBVTT_SIGNATURE = /^\uFEFF?WEBVTT(?:[ \t\n\r]|$)/;
+// A timestamp tag inside cue text: <00:00:01.490>.
+const INLINE_TIME = /<(?:\d+:)?\d{2}:\d{2}\.\d{3}>/;
 
 // The cues of a WebVTT file, by the standard's parser: blocks part at blank
 // lines; a block whose first line, or whose second line after an identifier,
 // holds "-->" is a cue, and its text runs to a blank line or to the next line
 // that holds "-->". The header block and every other block are dropped.
 function webVttCues(text: string): Open[] {
-  const lines = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n");
   const cues: Open[] = [];
   let at = 1;
   // One block from `at`. In the header, a line with "-->" ends the block and
@@ -138,13 +140,30 @@ function webVttCues(text: string): Open[] {
       if (line === "") break;
       buffer.push(line.trim());
     }
-    const words = cue ? webVttCueText(buffer.join("\n")) : "";
-    if (cue) cues.push({ ...cue, text: words === "" ? [] : [words] });
+    if (cue) blocks.push({ start: cue.start, end: cue.end, lines: [...buffer] });
   };
+  const blocks: { start: number; end: number | null; lines: string[] }[] = [];
   if (at < lines.length && lines[at] !== "") block(true);
   while (at < lines.length) {
     if (lines[at] === "") at += 1;
     else block(false);
+  }
+  // YouTube's automatic captions roll: each cue shows the line before it
+  // again above its new words, and times each new word inline. In a file
+  // with inline times, a cue's first line that repeats the last line of the
+  // cue before is not new words.
+  const rolling = blocks.some((b) => b.lines.some((l) => INLINE_TIME.test(l)));
+  let before: string | null = null;
+  for (const b of blocks) {
+    if (!rolling) {
+      const words = webVttCueText(b.lines.join("\n"));
+      cues.push({ start: b.start, end: b.end, text: words === "" ? [] : [words] });
+      continue;
+    }
+    const shown = b.lines.map(webVttCueText).filter((l) => l !== "");
+    const fresh = shown.length > 0 && shown[0] === before ? shown.slice(1) : shown;
+    if (shown.length > 0) before = shown[shown.length - 1];
+    cues.push({ start: b.start, end: b.end, text: fresh });
   }
   return cues;
 }
