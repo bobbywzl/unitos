@@ -153,7 +153,6 @@ export function StitchBox({
     }
     writeChatDraft(draftKey, draftText);
   }, [command, draftText, draftKey]);
-  const [error, setError] = useState<string | null>(null);
   const [openState, setOpenState] = useState(true);
   const open = openProp ?? openState;
   const setOpen = (next: boolean) => {
@@ -280,7 +279,6 @@ export function StitchBox({
     const text = (override ?? command).trim();
     if (text && !running && blocked) sayBlocked(); // [ui5]
     if (!text || running || text.length > COMMAND_MAX || picked.length === 1) return;
-    setError(null);
     setTurnsFolded(false); // [style9] REV8-05: a send unfolds the conversation
     // Retry sends the failed command again: a new command typed since stays.
     if (override === undefined || command.trim() === text) setCommand("");
@@ -330,16 +328,14 @@ export function StitchBox({
       onProposed?.([...(result.linkIds ?? []), ...(result.existingLinkIds ?? [])]); // [view2] new links and the existing ones the answer is about (ANS5-05)
       // The graph's new curves and the generated list arrive with a refresh.
       if (result.linkCount > 0 || result.document) router.refresh();
-    } catch (err) {
+    } catch {
       // The command goes back into the text box, unless the reader typed a
       // new one meanwhile. Stopped: nothing more is stored, and no error.
       if (!commandRef.current.trim()) setCommand(text);
-      if (controller.signal.aborted) {
-        setPending(null);
-      } else {
-        setPending({ text, failed: true });
-        setError(err instanceof Error ? err.message : t("common.requestFailed"));
-      }
+      // [style10] TOOL16-06: the failure line under the bubble says one thing
+      // (assistant.failedServer); the server's reason is not shown.
+      if (controller.signal.aborted) setPending(null);
+      else setPending({ text, failed: true });
     } finally {
       kept.end(controller);
     }
@@ -594,8 +590,10 @@ export function StitchBox({
                 {pending.text}
               </p>
               {pending.failed && (
-                <p className="flex items-center gap-2 text-xs text-red-500">
-                  <span>{error}</span>
+                // [style10] TOOL16-06: one failure line, never the raw diagnostic; the words are
+                // back in the text box (the catch above) and Retry sends them again.
+                <p className="flex items-center gap-2 text-xs text-red-500" data-stitch-failed>
+                  <span>{t("assistant.failedServer")}</span>
                   <button
                     type="button"
                     onClick={() => void send(pending.text)}

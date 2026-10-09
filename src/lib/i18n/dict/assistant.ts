@@ -164,6 +164,9 @@ const en = {
   assistantFailedStatus: "Assistant failed ({status})",
   taskFailed: "Task failed",
   taskFailedStatus: "Task failed ({status})",
+  // [style10] TOOL16-06: the one failure line under a command the assistant did not answer (the Stitch box; the
+  // interaction loop uses the same key and words). The raw diagnostic stays out of the page.
+  failedServer: "No answer: the assistant had a problem. Try again.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -302,6 +305,7 @@ const zh: Record<keyof typeof en, string> = {
   assistantFailedStatus: "助手请求失败（{status}）",
   taskFailed: "任务失败",
   taskFailedStatus: "任务失败（{status}）",
+  failedServer: "没有回答：助手出了问题。请重试。",
 };
 
 export const assistant = { en, zh } as const;
