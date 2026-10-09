@@ -26,9 +26,10 @@ import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
 // reads the note as the editor holds it, its document whole, and the
 // reader's other notes. A change comes back as the note as it should read,
 // shown under the reply with Apply and Discard. Apply puts it into the
-// editor's draft, which saves like any edit; Undo puts the draft back, and
-// Cancel on the note restores what it said before the editor opened. The
-// panel never writes to the note itself.
+// editor's draft, which saves like any edit; Undo puts the draft back while
+// the note still reads as the change left it (after that the row reads
+// Accepted alone), and Cancel on the note restores what it said before the
+// editor opened. The panel never writes to the note itself.
 //
 // The panel starts folded to one Assistant chip, so the open note keeps its
 // room for the note; a press opens it, and the choice is remembered in this
@@ -80,6 +81,9 @@ function writeTyped(noteId: string, text: string) {
 }
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+/** The note still reads as the change left it (spacing aside). */
+const readsAs = (draft: string, content: string) =>
+  draft.replace(/\s+/g, " ").trim() === content.replace(/\s+/g, " ").trim();
 
 /** How many of the note's quotes the change takes out. */
 function quotesLost(before: string, after: string): number {
@@ -124,6 +128,14 @@ export function NoteAssistant({
     setInput(typed);
   }, [noteId]);
 
+  // Back online: the offline line goes, as the header's offline pill does.
+  useEffect(() => {
+    const offline = t("common.offlineAi");
+    const onOnline = () => setError((line) => (line === offline ? null : line));
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [t]);
+
   // The newest turn in view: the conversation scrolls to its end, and the
   // panel into the tray's view when the card runs past it.
   useEffect(() => {
@@ -158,7 +170,9 @@ export function NoteAssistant({
     // The document open in the reader (?doc=): the note's own document wins
     // on the server.
     const documentId = new URLSearchParams(window.location.search).get("doc") ?? undefined;
-    // The words leave the box only once the server has them.
+    // The box empties now; the browser's draft holds the words until the
+    // answer lands, and a failure puts them back in the box.
+    setInput("");
     const controller = kept.begin();
     try {
       const answer = await api<NoteAssistantAnswer>(
@@ -167,7 +181,8 @@ export function NoteAssistant({
         { message, draft, history, documentId, thinking, web },
         { signal: controller.signal },
       );
-      type("");
+      // Answered: the draft holds what the box holds now.
+      writeTyped(noteId, inputRef.current?.value ?? "");
       setTurns((prev) => [
         ...prev,
         {
@@ -180,8 +195,11 @@ export function NoteAssistant({
       ]);
       if (answer.content === null && answer.warnings.length > 0) setError(answer.warnings.join(" "));
     } catch (err) {
-      // The message stays in the box: nothing was answered.
+      // Nothing was answered: the message goes back into the box, after
+      // whatever was typed since.
       setTurns((prev) => (prev[prev.length - 1]?.content === message ? prev.slice(0, -1) : prev));
+      const now = inputRef.current?.value ?? "";
+      type(now.trim() ? `${now}\n\n${message}` : message);
       if (!controller.signal.aborted) setError(failureLine(err, t));
     } finally {
       kept.end(controller);
@@ -199,8 +217,13 @@ export function NoteAssistant({
       onApply(proposal.content);
       next = { ...proposal, state, before: draft };
     } else {
-      // Undo: the draft as it stood before Apply.
-      if (state === "open" && proposal.before !== undefined) onApply(proposal.before);
+      // Undo: the draft as it stood before Apply — only while the note still
+      // reads as the change left it, so Undo never takes out words written
+      // after the change (CLAUDE.md rule zero 1).
+      if (state === "open") {
+        if (!readsAs(draft, proposal.content)) return;
+        if (proposal.before !== undefined) onApply(proposal.before);
+      }
       next = { ...proposal, state, before: undefined };
     }
     setTurns((prev) =>
@@ -238,7 +261,7 @@ export function NoteAssistant({
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />
         <span className="sr-only">{t("assistant.noteAssistant")}</span>
         {/* Web sits in the head row, so the box takes the whole row under it. */}
-        <WebChip small className="ml-auto shrink-0" />
+        <WebChip small className="ml-auto h-6 shrink-0 pointer-coarse:h-9" />
         {turns.length > 0 && !busy && <ClearConversation onClear={kept.clear} track="note-assistant-clear" />}
         <button
           type="button"
@@ -246,7 +269,7 @@ export function NoteAssistant({
           data-track="note-assistant-close"
           aria-label={t("assistant.noteAssistantClose")}
           data-tip={t("assistant.noteAssistantClose")}
-          className="rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          className="flex size-6 shrink-0 items-center justify-center rounded-full text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9"
         >
           ✕
         </button>
@@ -271,7 +294,7 @@ export function NoteAssistant({
                     lost={quotesLost(turn.data.proposal.before ?? draft, turn.data.proposal.content)}
                     onApply={() => settle(i, "applied")}
                     onDiscard={() => settle(i, "discarded")}
-                    onUndo={() => settle(i, "open")}
+                    onUndo={readsAs(draft, turn.data.proposal.content) ? () => settle(i, "open") : null}
                   />
                 )}
               </div>
@@ -339,7 +362,8 @@ function ProposalCard({
   lost: number;
   onApply: () => void;
   onDiscard: () => void;
-  onUndo: () => void;
+  /** Null once the note moved on from the change: the row reads Accepted alone. */
+  onUndo: (() => void) | null;
 }) {
   const t = useT();
   const shown = splitNote(proposal.content);
@@ -392,14 +416,16 @@ function ProposalCard({
         {proposal.state === "applied" && (
           <>
             <span className="text-[11.5px] text-sage-700">{t("assistant.noteAssistantApplied")}</span>
-            <button
-              type="button"
-              onClick={onUndo}
-              data-track="note-assistant-undo"
-              className={REJECT_CLASS}
-            >
-              {t("assistant.noteAssistantUndo")}
-            </button>
+            {onUndo && (
+              <button
+                type="button"
+                onClick={onUndo}
+                data-track="note-assistant-undo"
+                className={REJECT_CLASS}
+              >
+                {t("assistant.noteAssistantUndo")}
+              </button>
+            )}
           </>
         )}
       </div>
