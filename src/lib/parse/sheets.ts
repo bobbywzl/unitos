@@ -275,15 +275,23 @@ async function repairSheet(sheet: Sheet): Promise<void> {
   }
 }
 
-/** Which delimiter the text uses: the one that splits the first lines into
-    the same number of fields most often; a comma when nothing tells. */
+const SNIFF_CHARS = 64 * 1024;
+const SNIFF_RECORDS = 20;
+
+/** Which delimiter the text uses: the one that splits the first records
+    into the same number of fields most often; a comma when nothing tells.
+    The records are read with the quoting rules, so a delimiter inside a
+    quoted field is not counted. Sheets benchmark finding: a header whose
+    quoted names hold tabs and newlines was split on tabs, and a file whose
+    quoted fields hold semicolons on semicolons. */
 export function sniffDelimiter(text: string): Delimiter {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(0, 20);
+  const head = text.length > SNIFF_CHARS ? text.slice(0, SNIFF_CHARS) : text;
   let best: Delimiter = ",";
   let bestScore = -1;
   for (const sep of ["\t", ",", ";"] as const) {
-    const counts = lines.map((l) => l.split(sep).length - 1);
-    if (counts.length === 0) continue;
+    const records = parseDelimitedText(head, sep, SNIFF_RECORDS).filter((r) => r.length > 1 || r[0] !== "");
+    if (records.length === 0) continue;
+    const counts = records.map((r) => r.length - 1);
     const consistent = counts.filter((c) => c > 0 && c === counts[0]).length;
     const score = consistent * 10 + counts[0];
     if (score > bestScore) {
@@ -294,8 +302,9 @@ export function sniffDelimiter(text: string): Delimiter {
   return best;
 }
 
-/** RFC 4180: quoted fields may hold the delimiter, newlines, and doubled quotes. */
-function parseDelimitedText(text: string, sep: Delimiter): string[][] {
+/** RFC 4180: quoted fields may hold the delimiter, newlines, and doubled
+    quotes. With maxRows, the reading stops after that many records. */
+function parseDelimitedText(text: string, sep: Delimiter, maxRows = Infinity): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -336,6 +345,7 @@ function parseDelimitedText(text: string, sep: Delimiter): string[][] {
     if (ch === "\n") {
       row.push(field);
       rows.push(row);
+      if (rows.length >= maxRows) return rows;
       row = [];
       field = "";
       i++;

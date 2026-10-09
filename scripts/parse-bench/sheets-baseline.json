@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.958,
+  "score": 0.962,
   "sheets": 0.981,
-  "text": 0.948,
-  "cells": 0.938,
+  "text": 0.952,
+  "cells": 0.945,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 77989,
+  "lost": 77984,
   "dom": 1,
   "errors": 1
  },
@@ -1193,13 +1193,13 @@
    "dom": 0
   },
   "csvkit-test-header-newline": {
-   "score": 0.455,
-   "text": 0.364,
-   "cells": 0,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 6,
+   "lost": 1,
    "dom": 1
   },
   "csvkit-null-byte": {
