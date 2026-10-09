@@ -23,6 +23,7 @@ import java.util.Locale;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.FormulaError;
 import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
@@ -33,6 +34,7 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.PaneInformation;
 import org.apache.poi.xssf.usermodel.XSSFCell;
 import org.apache.poi.xssf.usermodel.XSSFChartSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class SheetsRef {
   static final int MAX_ROWS = 10_000;
@@ -212,8 +214,22 @@ public class SheetsRef {
     switch (type) {
       case STRING:
         return new RefCell(cell.getCellType() == CellType.FORMULA ? cell.getRichStringCellValue().getString() : formatter.formatCellValue(cell), "s", general, null);
-      case NUMERIC:
-        return new RefCell(formatter.formatCellValue(cell), "n", general, cell.getNumericCellValue());
+      case NUMERIC: {
+        double value = cell.getNumericCellValue();
+        long step = timeStep(format);
+        // Excel rounds a time to the second (or to the tenths, hundredths,
+        // or thousandths "ss.0" shows) before it shows the hours and
+        // minutes, and the rounding carries: 0.36458 (08:44:59.7) shows
+        // 08:45 in "hh:mm". DataFormatter cuts the seconds off and showed
+        // 08:44; POI's own Excel formatter, CellFormat, rounds and shows
+        // 08:45, 00:00 for 0.999999, and 01:00.0 for 59.99 seconds.
+        if (step > 0 && value >= 0 && DateUtil.isCellDateFormatted(cell)) {
+          double rounded = Math.round(value * step) / (double) step;
+          boolean date1904 = cell.getSheet().getWorkbook() instanceof XSSFWorkbook x && x.isDate1904();
+          return new RefCell(formatter.formatRawCellContents(rounded, cell.getCellStyle().getDataFormat(), format, date1904), "n", general, value);
+        }
+        return new RefCell(formatter.formatCellValue(cell), "n", general, value);
+      }
       case BOOLEAN:
         return new RefCell(cell.getBooleanCellValue() ? "TRUE" : "FALSE", "b", general, null);
       case ERROR: {
@@ -228,6 +244,25 @@ public class SheetsRef {
       default:
         return null;
     }
+  }
+
+  /** The steps in a day a time format rounds to: 86,400 for a format that
+      shows hours or seconds, times ten for each "0" after "ss."; 0 for a
+      format that shows no time. Quoted text, escapes, and bracketed colors
+      and conditions are left out; [h], [m], and [s] are kept. */
+  static long timeStep(String format) {
+    if (format == null) return 0;
+    String plain = format
+        .replaceAll("\"[^\"]*\"", "")
+        .replaceAll("\\\\.", "")
+        .replaceAll("_.|\\*.", "")
+        .replaceAll("(?i)\\[(?![hms]+\\])[^\\]]*\\]", "");
+    int decimals = 0;
+    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)s\\.(0{1,3})").matcher(plain);
+    while (m.find()) decimals = Math.max(decimals, m.group(1).length());
+    String shown = plain.replaceAll("(?i)s\\.0{1,3}", "s");
+    if (!shown.matches("(?is).*[hs].*") || shown.matches("(?s).*[#?0].*") || shown.toLowerCase(Locale.ROOT).contains("general")) return 0;
+    return 86_400L * (long) Math.pow(10, decimals);
   }
 
   static String str(String s) {
