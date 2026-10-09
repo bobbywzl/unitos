@@ -9,11 +9,13 @@
 // The corpus is slides-corpus.json: each file's source URL (pinned to a
 // commit), its license, and what it exercises. Two kinds of files: decks
 // from public test suites (Apache POI, LibreOffice, Open XML SDK,
-// python-pptx, Tika) and real-world decks committed to permissively licensed
-// repositories (course and workshop decks, talk decks, Chinese, Japanese and
-// Korean decks, decks of 100 and more slides, Google Slides and LibreOffice
-// exports). The files are other people's and are never committed: the first
-// run downloads them into .bench/slides/files/ from the corpus alone. --dir
+// python-pptx, Tika, Aspose, ShapeCrawler) and real-world decks committed to
+// permissively licensed repositories (course and workshop decks, conference
+// talk decks, Chinese, Japanese and Korean decks, Hebrew and Arabic decks,
+// math-heavy lecture decks, decks of 100 and more slides, Google Slides,
+// LibreOffice and WPS exports). The files are other people's and are never
+// committed: the first run downloads them into .bench/slides/files/ from the
+// corpus alone. --dir
 // scores every .pptx under a folder instead (ids are the paths), to look for
 // new fixtures.
 //
