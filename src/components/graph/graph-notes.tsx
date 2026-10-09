@@ -351,7 +351,15 @@ export function NodeNotes({ documentId }: { documentId: string }) {
 
 /** The node card's notes (graph-view.tsx NodeCard): the newest five notes
     that belong to the document, each a row that shows it in the tray. */
-export function NodeNotesRows({ documentId }: { documentId: string }) {
+export function NodeNotesRows({
+  documentId,
+  tabStops = true,
+}: {
+  documentId: string;
+  /** [style9] VIEW9-07: false in the hover card, whose rows are not Tab
+      stops (the pinned card, opened with Enter, lists the same rows). */
+  tabStops?: boolean;
+}) {
   const ctx = useGraphNotes();
   const t = useT();
   const notes = ctx?.view.byDocument.get(documentId)?.notes;
@@ -363,7 +371,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
         {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
       </p>
       {shown.map((g) => (
-        <GraphNoteRow key={g.note.id} note={g} hereId={documentId} />
+        <GraphNoteRow key={g.note.id} note={g} hereId={documentId} tabIndex={tabStops ? undefined : -1} />
       ))}
       {notes.length > CARD_ROWS && (
         <p className={`px-2 pt-0.5 ${TEXT_META} text-sand-500`}>
@@ -377,7 +385,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
 /** One note in a list on the graph: its line, its section, and the other
     documents it quotes as chips. A click shows it in the tray; hovering a
     chip lights that document too. */
-export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: string | null }) {
+export function GraphNoteRow({ note: g, hereId, tabIndex }: { note: GraphNote; hereId: string | null; tabIndex?: -1 }) {
   const ctx = useGraphNotes();
   const t = useT();
   if (!ctx) return null;
@@ -395,6 +403,7 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
     >
       <button
         onClick={() => ctx.showNote(g.note.id)}
+        tabIndex={tabIndex}
         data-track="graph-note-show"
         data-tip={t("graphNotes.showNote")}
         className="flex min-h-6 items-start gap-1.5 text-left pointer-coarse:min-h-10"
@@ -510,6 +519,7 @@ export function CurveMarks({
   links,
   count,
   at,
+  waits = false,
   onEnter,
   onLeave,
   onClick,
@@ -520,6 +530,10 @@ export function CurveMarks({
   count: number;
   /** Where the marks sit until the canvas has placed them. */
   at: Point;
+  /** [style9] VIEW9-01: one of the pair's links waits on this account
+      (useWaitsForReply, the rule the head and the Links list keep): the
+      replies mark ends with "?", as a node's comments chip does. */
+  waits?: boolean;
   onEnter?: () => void;
   onLeave?: () => void;
   onClick?: () => void;
@@ -562,6 +576,11 @@ export function CurveMarks({
             >
               <CommentIcon size={11} />
               <span data-n>{open}</span>
+              {waits && (
+                <span data-graph-curve-waits aria-label={t("graphCover.commentWaitsTitle")} className="-ml-0.5">
+                  ?
+                </span>
+              )}
               {/* [layer5] A reply another person wrote since this account last opened the link. */}
               {fresh && (
                 <span data-graph-curve-new aria-label={t("graphCover.newRepliesTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />

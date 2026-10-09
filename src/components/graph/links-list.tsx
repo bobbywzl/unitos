@@ -7,7 +7,6 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
-import { NoReplyToggle, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
 import { waitingReply } from "@/lib/graph/coverage-view";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -23,11 +22,12 @@ import { ListName } from "@/components/graph/list-name"; // [lists7]
 // listed: they are the generated document's, not the reader's. A filter at
 // the top keeps the links whose documents, reason or [lists8] replies hold its words; opened
 // while a node card is pinned, it starts on that document (WALK3-15).
-// [panel6] Waiting on you (WALK6-06): the switch keeps the links waiting on
-// this account; the links whose last open reply is another person's come
-// first, and every such row shows that reply's first words and its person
-// in place of the passage. The list's purpose is the Links pill's tooltip,
-// not a paragraph here (VIEW6-06).
+// [panel6] WALK6-06: a link whose last open reply is another person's shows
+// that reply's first words and its person in place of the passage. [style9]
+// WALK9-03: the Waiting on you switch left this list: the Documents head's
+// "N waiting on you" lists every waiting link and comment (coverage.tsx,
+// AllComments). The list's purpose is the Links pill's tooltip, not a
+// paragraph here (VIEW6-06).
 
 export function LinksList({
   edges,
@@ -47,10 +47,6 @@ export function LinksList({
   const t = useT();
   const setRowLit = useGraphNotes()?.setRowLit;
   const [filter, setFilter] = useState(initialFilter);
-  const [noReply, setNoReply] = useState(false); // [cover4] No reply (VIEW4-01)
-  // [layer5] No reply keeps the links waiting for this account's reply: no
-  // open reply, or the last open one is another person's (WALK5-07).
-  const waits = useWaitsForReply();
   // The asker's badge from the people map, as a reply thread draws it: none for an unknown author.
   const { myId, people } = useCollab();
   const asks = (l: GraphEdgeLink) => waitingReply(l, myId);
@@ -60,18 +56,8 @@ export function LinksList({
     .filter((g) => g.links.length > 0)
     .sort((x, y) => y.links.length - x.links.length);
   const total = all.reduce((n, g) => n + g.links.length, 0);
-  const asked = (g: { links: GraphEdgeLink[] }) => g.links.filter((l) => asks(l) !== null).length;
-  const kept = noReply
-    ? all
-        .map((g) => ({
-          ...g,
-          links: g.links.filter(waits).sort((x, y) => Number(asks(y) !== null) - Number(asks(x) !== null)),
-        }))
-        .filter((g) => g.links.length > 0)
-        .sort((x, y) => asked(y) - asked(x))
-    : all;
   const groups = words
-    ? kept
+    ? all
         .map(({ edge, links }) => {
           const titles = `${titleOf.get(edge.a) ?? ""} ${titleOf.get(edge.b) ?? ""}`.toLowerCase();
           return {
@@ -85,7 +71,7 @@ export function LinksList({
           };
         })
         .filter((g) => g.links.length > 0)
-    : kept;
+    : all;
   const light = (e: GraphEdge | null) => setRowLit?.(e ? new Set([e.a, e.b]) : null);
   return (
     <aside
@@ -99,19 +85,16 @@ export function LinksList({
       <div className={LIST_HEAD /* [lists8] WALK8-09 */}>
         <ListName grow={total <= 1}>{t("panes.graphLinks")}</ListName>
         {total > 1 && (
-          <>
-            <input
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={t("panes.graphLinksFilter")}
-              aria-label={t("panes.graphLinksFilter")}
-              data-track="graph-links-filter"
-              maxLength={100}
-              className={`min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 ${TEXT_BODY} text-ink placeholder:text-sand-500 focus:border-clay-400`}
-            />
-            <NoReplyToggle on={noReply} onChange={setNoReply} />
-          </>
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("panes.graphLinksFilter")}
+            aria-label={t("panes.graphLinksFilter")}
+            data-track="graph-links-filter"
+            maxLength={100}
+            className={`min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 ${TEXT_BODY} text-ink placeholder:text-sand-500 focus:border-clay-400`}
+          />
         )}
         <button
           onClick={onClose}
@@ -125,7 +108,7 @@ export function LinksList({
       </div>
       {total === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphLinksEmpty")}</p>}
       {total > 0 && groups.length === 0 && (
-        <p className={`${TEXT_BODY} text-sand-600`}>{noReply && kept.length === 0 ? t("graphCover.noReplyNone") : t("panes.graphLinksFilterNone")}</p>
+        <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphLinksFilterNone")}</p>
       )}
       {groups.map(({ edge, links }) => (
         <div

@@ -25,7 +25,7 @@ export function FindBox({ find }: { find: FindState }) {
   return (
     <label
       data-graph-find
-      className={`flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 ${TEXT_BODY} text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]`}
+      className={`flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 ${TEXT_BODY} text-sand-600 focus-within:border-clay-600 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]`}
     >
       <SearchIcon size={13} />
       <input

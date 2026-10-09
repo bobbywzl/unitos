@@ -87,7 +87,8 @@ for (const lang of ["en", "zh"]) {
     const modelCalls = [];
     page.on("request", (r) => {
       // The Stitch box's warm on open (/stitch/warm, SPEC.md §22) is the box's, not the card's or Find's.
-      if (/\/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/warm)/.test(r.url())) modelCalls.push(r.url());
+      // [style9] /api/assistant/kept reads the kept turns (PR #23); no model runs.
+      if (/\/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/(warm|kept))/.test(r.url())) modelCalls.push(r.url());
     });
     page.on("response", async (r) => {
       const u = r.url();
@@ -266,7 +267,7 @@ for (const lang of ["en", "zh"]) {
     // reported, not judged.
     const usageAfter = usage();
     const served = LOG ? fs.readFileSync(LOG, "utf8").slice(logAt).split("\n") : [];
-    const modelServed = served.filter((l) => /(POST|GET) \/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/warm)/.test(l));
+    const modelServed = served.filter((l) => /(POST|GET) \/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/(warm|kept))/.test(l));
     check(
       `${tag} card and Find: no model call`,
       modelCalls.length === 0 && modelServed.length === 0,
@@ -278,6 +279,19 @@ for (const lang of ["en", "zh"]) {
       const before = new Set(psql(`SELECT id FROM "DocLink" WHERE "notebookId" = '${NB}' AND recommended`).split("\n").filter(Boolean));
       // The chip fills the box (WALK4-02); Send asks. The suggestions show
       // while the empty field has the focus (WALK6-02).
+      // [style9] PR #23 keeps the turns across reloads, and the chips show
+      // only on an empty conversation: a kept one (this step's own send, the
+      // run before) is cleared first, through Clear conversation (it asks).
+      const clear = page.locator('[data-track="stitch-clear"]');
+      if ((await clear.count()) > 0) {
+        const accept = (d) => void d.accept();
+        page.on("dialog", accept);
+        await clear.first().click();
+        await page
+          .waitForFunction(() => !document.querySelector("[data-stitch-folded]") && !document.querySelector('[data-track="stitch-clear"]'), null, { timeout: 15000 })
+          .catch(() => {});
+        page.off("dialog", accept);
+      }
       await page.locator("[data-stitch-slot] textarea").focus();
       await page.locator('[data-track="stitch-suggest:contradict"]').click();
       await page.locator('[data-track="stitch-send"]').click();

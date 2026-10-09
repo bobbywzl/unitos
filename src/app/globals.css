@@ -2056,6 +2056,18 @@ ellipse.anchor-flash {
   r: calc(var(--ring-dot, 7px) + max(3.5px, calc(3px / var(--graph-zoom, 1))));
   stroke-width: max(2px, calc(1px / var(--graph-zoom, 1)));
 }
+/* [style9] VIEW9-01: zoomed out, the comments chip hides (below), so a node
+   with a comment waiting on this account draws its ring in the comment
+   color instead: the track lighter, the noted arc full, both at the arc's
+   width. The ring keeps its size on screen, so every waiting node is marked
+   at 7 and at 40 documents, on a phone too, with no chip to overlap. */
+.corpus-graph[data-far] .graph-coverage-ring[data-waits] circle {
+  stroke: color-mix(in srgb, var(--kind-comment) 45%, transparent);
+  stroke-width: max(2px, calc(2px / var(--graph-zoom, 1)));
+}
+.corpus-graph[data-far] .graph-coverage-ring[data-waits] circle[data-arc] {
+  stroke: var(--kind-comment);
+}
 .corpus-graph .graph-coverage-ring circle[data-arc] {
   stroke-width: max(2px, calc(2px / var(--graph-zoom, 1)));
 }

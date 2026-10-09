@@ -102,16 +102,14 @@ async function cover(lang, width, height) {
     check(`${w} Gaps only hides notes`, (await page.locator("[data-graph-documents-list] [data-graph-note-row]").count()) === 0);
     await shot(page, `VIEW4-01-gaps-${w}`);
     await page.locator("[data-graph-gaps-only]").click();
-    // The Links list's No reply.
+    // The Links list. [style9] WALK9-03: its Waiting on you switch is gone;
+    // the Documents head's "N waiting on you" is the press that lists every
+    // waiting link and comment, and it is absent here (nothing waits, WALK7-04).
     await page.locator('[data-track="graph-links"]').click();
     await page.locator('[data-graph-side-list="links"]').waitFor();
     const all = await page.locator("[data-graph-links-row]").count();
-    await page.locator("[data-graph-links-no-reply]").click();
-    await page.waitForTimeout(300);
-    const kept = await page.locator("[data-graph-links-row]").count();
-    // [lists7] WALK7-04: Waiting on you keeps only links another person asked on: none here.
-    const none = await page.locator('[data-graph-side-list="links"]').innerText();
-    check(`${w} Waiting on you keeps 0 of 5 links and says so`, all === 5 && kept === 0 && /No link is waiting on you|没有待你回复的链接/.test(none), `${all} → ${kept}`);
+    const toggles = await page.locator("[data-graph-links-no-reply]").count();
+    check(`${w} Links lists 5 links and no Waiting on you switch`, all === 5 && toggles === 0, `${all} rows, ${toggles} switch`);
     await shot(page, `VIEW4-01-noreply-${w}`);
   }
   await ctx.close();

@@ -57,7 +57,7 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
 import { useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
-import { CoverageRing, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
+import { CoverageRing, useDocumentCoverage, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
 import { NodeComments, nodeCommentsWidth, useProjectCoverage } from "@/components/graph/coverage";
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
@@ -325,8 +325,11 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
 
 // The clay of a curve from the pair's link count, depth 0..1: one link a
 // light line, eight or more the deepest.
+// [style9] VIEW9-02: from clay-600, not clay-400: a one-link curve (most
+// curves) drew at 1.74:1 on the paper, fainter than the note curves and the
+// recommended dashes; clay-600 holds 3.77:1 light, 6.55:1 dark.
 function edgeTone(depth: number): string {
-  return `color-mix(in srgb, var(--clay-400) ${Math.round((1 - depth) * 100)}%, var(--clay-900))`;
+  return `color-mix(in srgb, var(--clay-600) ${Math.round((1 - depth) * 100)}%, var(--clay-900))`;
 }
 
 /** Where a floating card goes: beside a point of the canvas, kept inside
@@ -381,6 +384,10 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   // [view2] A pair holding a link the last Stitch answer proposed: a violet halo.
   const { proposedLinkIds } = useGraphContent();
   const proposed = proposedLinkIds.size > 0 && links.some((l) => proposedLinkIds.has(l.id));
+  // [style9] VIEW9-01: a link of the pair waits on this account (the rule
+  // the head and the Links list keep): the replies mark says "?".
+  const waitsForReply = useWaitsForReply();
+  const waits = links.some((l) => !l.recommended && !l.provenance && waitsForReply(l));
   return (
     <g className="graph-curve" data-rec={recommendedOnly ? "" : undefined}>
       {proposed && (
@@ -430,6 +437,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
         links={links}
         count={count}
         at={loop ? { x: midX, y: midY } : anchor}
+        waits={waits}
         onEnter={() => hoverEdge(id)}
         onLeave={scheduleClear}
         onClick={() => pinEdge(id)}
@@ -787,7 +795,10 @@ function NodeCard({
       <p className={`mt-0.5 ${TEXT_META} text-sand-500`}>
         {t(picking ? "panes.graphCardPick" : clickSelects ? "graphView.cardHintSelect" : "graphView.cardHintOpen")}
       </p>
-      {!picking && <NodeNotesRows documentId={node.id} />}
+      {/* [style9] VIEW9-07: the rows are not Tab stops here: the card opens
+          220 ms after a node takes the focus, and Tab was landing on a row of
+          a card it had not drawn yet; the pinned card lists the same rows. */}
+      {!picking && <NodeNotesRows documentId={node.id} tabStops={false} />}
     </div>,
     floatHost,
   );
@@ -881,7 +892,7 @@ function GraphKey({
             )}
             {row(
               <span className={`flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 ${TEXT_META} font-bold tabular-nums text-[var(--kind-comment)]`}>
-                <CommentIcon size={11} />2
+                <CommentIcon size={11} />2?
               </span>,
               "graphNotes.keyCurveReplies",
             )}
@@ -2247,6 +2258,53 @@ function GraphCanvas({
       </p>
       <SpotlightContext.Provider value={spotlight}>
       <MarkPlacesContext.Provider value={markPlaces}>
+      {/* [style9] VIEW9-07: the zoom stack comes before the canvas in the
+          DOM, so Tab meets it where it is drawn (top left, before the
+          nodes), not after the focused node. It is a reactflow Panel: the
+          store comes from ReactFlowProvider, and its place on screen is the
+          same (absolute in the wrapper). */}
+      {/* Top left, clear of the Stitch box at the foot of the canvas. The
+          zoom buttons carry the UI language's names (WALK2-17). */}
+      <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
+        <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} data-tip={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
+          <PlusIcon size={14} className="graph-stroke-icon" />
+        </ControlButton>
+        <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} data-tip={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
+          <MinusGlyph size={14} />
+        </ControlButton>
+        <ControlButton
+          onClick={() => {
+            userMoved.current = false;
+            fitNow(400);
+          }}
+          data-tip={t("panes.graphFit")}
+          aria-label={t("panes.graphFit")}
+          data-track="graph-fit"
+        >
+          <MaximizeIcon size={13} className="graph-stroke-icon" />
+        </ControlButton>
+        {generatedIds.size > 0 && (
+          <ControlButton
+            onClick={() => setShowProvenance(!showProvenance)}
+            data-tip={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
+            aria-label={t("panes.graphProvenanceShow")}
+            aria-pressed={showProvenance}
+            data-track="graph-provenance"
+            className={showProvenance ? "graph-control-on" : undefined}
+          >
+            <PageIcon size={13} className="graph-stroke-icon" />
+          </ControlButton>
+        )}
+        <ControlButton
+          onClick={() => setKeyOpen((v) => !v)}
+          data-tip={t("panes.graphKeyTitle")}
+          aria-label={t("panes.graphKeyTitle")}
+          aria-expanded={keyOpen}
+          data-track="graph-key"
+        >
+          <QuestionIcon size={15} className="graph-stroke-icon" />
+        </ControlButton>
+      </Controls>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -2290,48 +2348,6 @@ function GraphCanvas({
         <LabelScale target={wrapRef} lodZoom={lodZoom} />
         <LabelEdges target={wrapRef} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
-        {/* Top left, clear of the Stitch box at the foot of the canvas. The
-            zoom buttons carry the UI language's names (WALK2-17). */}
-        <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
-          <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} data-tip={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
-            <PlusIcon size={14} className="graph-stroke-icon" />
-          </ControlButton>
-          <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} data-tip={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
-            <MinusGlyph size={14} />
-          </ControlButton>
-          <ControlButton
-            onClick={() => {
-              userMoved.current = false;
-              fitNow(400);
-            }}
-            data-tip={t("panes.graphFit")}
-            aria-label={t("panes.graphFit")}
-            data-track="graph-fit"
-          >
-            <MaximizeIcon size={13} className="graph-stroke-icon" />
-          </ControlButton>
-          {generatedIds.size > 0 && (
-            <ControlButton
-              onClick={() => setShowProvenance(!showProvenance)}
-              data-tip={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
-              aria-label={t("panes.graphProvenanceShow")}
-              aria-pressed={showProvenance}
-              data-track="graph-provenance"
-              className={showProvenance ? "graph-control-on" : undefined}
-            >
-              <PageIcon size={13} className="graph-stroke-icon" />
-            </ControlButton>
-          )}
-          <ControlButton
-            onClick={() => setKeyOpen((v) => !v)}
-            data-tip={t("panes.graphKeyTitle")}
-            aria-label={t("panes.graphKeyTitle")}
-            aria-expanded={keyOpen}
-            data-track="graph-key"
-          >
-            <QuestionIcon size={15} className="graph-stroke-icon" />
-          </ControlButton>
-        </Controls>
       </ReactFlow>
       </MarkPlacesContext.Provider>
       {hoveredNodeId && hoveredNodeId !== focusedId /* [view2] its card is pinned */ && !dragging && (

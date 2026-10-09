@@ -476,7 +476,8 @@ const en = {
   graphOneDocument: "One document so far. Add another, and the graph draws the links between them.",
   graphNoLinks: "No links yet. Select a passage in the reader and press Link, or press Scan for links to have the AI propose some.",
   // Accepted links only: recommended links count under Recommended links.
-  graphCounts: "{docs} document{ds} · {links} link{ls}",
+  // [style9] VIEW9-03: the links count is the Links pill's, said once.
+  graphCounts: "{docs} document{ds}",
   graphCountsGenerated: " · {n} generated document{s}",
 
   // Recommended links (annotations-panel.tsx)
@@ -1007,7 +1008,7 @@ const zh: Record<keyof typeof en, string> = {
   graphEmpty: "还没有文档。向项目添加文档，图谱会画出它们和它们之间的链接。",
   graphOneDocument: "目前只有一个文档。再添加一个，图谱会画出它们之间的链接。",
   graphNoLinks: "还没有链接。在阅读器中选中一段文字并按“链接”，或按“扫描推荐链接”让 AI 提出链接。",
-  graphCounts: "{docs} 个文档 · {links} 条链接",
+  graphCounts: "{docs} 个文档",
   graphCountsGenerated: " · {n} 个生成文档",
 
   recommendScan: "扫描推荐链接",

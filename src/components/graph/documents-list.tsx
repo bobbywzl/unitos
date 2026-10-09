@@ -28,7 +28,7 @@
 
 import { ACTION, CLOSE, LIST_HEAD, TEXT_BODY, TEXT_HIT, TEXT_META, TEXT_NAME } from "./graph-ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import type { PartTitle, ProjectPartTitles } from "@/lib/graph/outline-titles";
 import { clipWords } from "@/lib/markdown-preview";
@@ -43,7 +43,7 @@ import { useGraphGeneration } from "@/components/graph/graph-generation";
 import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's layer: comments, gap reasons, the reader's documents first.
 import { DocumentComments, GapReasons, gapReasonLines, useProjectCoverage } from "@/components/graph/coverage";
-import { AllComments, useCommentWaits } from "@/components/graph/coverage"; // [lists8]
+import { AllComments, useCommentWaits, type DocumentsListing } from "@/components/graph/coverage"; // [lists8]
 import { ListName } from "@/components/graph/list-name";
 import { openComments } from "@/lib/graph/coverage-view";
 
@@ -52,6 +52,7 @@ const titlesKept = new Map<string, { titles: ProjectPartTitles; gen: number }>()
 // Where the list was scrolled, and its filter, per project, for Back from a document.
 const scrollKept = new Map<string, number>();
 const filterKept = new Map<string, string>();
+const listingKept = new Map<string, DocumentsListing>(); // [style9] VIEW9-05
 // [chrome6] The rows opened, per project: Back from a link or a document
 // finds them open, and the focus finds its row (VIEW6-04).
 const openKept = new Map<string, Set<string>>();
@@ -240,8 +241,18 @@ export function DocumentsList({
     return ids.size;
   }, [ordered, notesCtx]);
   const setRowLit = notesCtx?.setRowLit;
-  // [lists8] WALK8-02: the head's open comments, pressed, list every one in place of the rows.
-  const [allComments, setAllComments] = useState(false);
+  // [lists8] WALK8-02: the head's open comments, pressed, list every one in
+  // place of the rows; [style9] VIEW9-05: its "N waiting on you", pressed,
+  // lists every thread waiting on you (links and comments). Kept per
+  // project, as the filter is: Back from a link answered finds the listing.
+  const [listing, setListingState] = useState<DocumentsListing>(() => listingKept.get(notebookId) ?? "rows");
+  const setListing = useCallback(
+    (next: DocumentsListing) => {
+      listingKept.set(notebookId, next);
+      setListingState(next);
+    },
+    [notebookId],
+  );
 
   const ref = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -331,26 +342,33 @@ export function DocumentsList({
         </button>
       </div>
       {/* [cover4] What the notes cover, and Gaps only (VIEW4-01). */}
-      <CoverageHead
-        documentIds={ordered.map((n) => n.id)}
-        links={edges.flatMap((e) => e.links)}
-        commentsOn={allComments}
-        onToggleComments={() => setAllComments((v) => !v)}
-      />
-      {allComments && <AllComments notebookId={notebookId} documents={matched} onOpenDocument={onOpenDocument} />}
+      <CoverageHead documentIds={ordered.map((n) => n.id)} links={edges.flatMap((e) => e.links)} listing={listing} onListing={setListing} />
+      {listing !== "rows" && (
+        <AllComments
+          notebookId={notebookId}
+          documents={matched}
+          onOpenDocument={onOpenDocument}
+          waitingOnly={listing === "waiting"}
+          edges={edges}
+          openLinkId={openLinkId}
+          onOpenLink={onOpenLink}
+          filtered={words !== ""}
+        />
+      )}
       {ordered.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphDocumentsEmpty")}</p>}
-      {!allComments && gaps.on && matched.length > 0 && shown.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("graphCover.gapsNone")}</p>}
+      {listing === "rows" && gaps.on && matched.length > 0 && shown.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("graphCover.gapsNone")}</p>}
       {ordered.length > 0 && matched.length === 0 && (
         <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphDocumentsFilterNone")}</p>
       )}
-      {words && matched.length > 0 && (
+      {/* [style9] WALK9-08: a listing in place of the rows counts its own rows. */}
+      {listing === "rows" && words && matched.length > 0 && (
         <p role="status" className={`${TEXT_META} text-sand-600`} data-graph-documents-found>
           {t("panes.graphDocumentsFound", { n: matched.length, total: ordered.length, ts: s(ordered.length) })}
         </p>
       )}
       <ul
         ref={listRef}
-        hidden={allComments}
+        hidden={listing !== "rows"}
         role="list"
         aria-label={t("panes.graphDocuments")}
         onKeyDown={onRowKeys}
@@ -471,16 +489,19 @@ function DocumentRow({
     gapsOn
       ? gapReasonLines(t, coverage)
       : [
-          coverage && coverage.parts.length > 0 && !whole
-            ? t("graphCover.partsNoted", { n: notedParts, m: coverage.parts.length })
-            : parts.length > 0
-              ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
-              : null,
-          coverage && !coverage.opened ? t("graphCover.notOpened") : null,
+          // [style9] VIEW9-04: the open comments first, so a cut line never
+          // drops their "?"; the parts last, in the head's short form
+          // ("1/2 parts noted"), so fewer lines cut at all.
           // [layer5] the open comments, with a "?" when one waits on you
           openList.length === 0
             ? null
             : `${openList.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openList.length })}${openList.some(waits) ? " ?" : ""}`,
+          coverage && !coverage.opened ? t("graphCover.notOpened") : null,
+          coverage && coverage.parts.length > 0 && !whole
+            ? t("graphCover.headParts", { n: notedParts, m: coverage.parts.length })
+            : parts.length > 0
+              ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
+              : null,
           // [lists8] WALK8-03: the links and notes counts went to the opened row, which lists both.
         ]
   ).filter((c): c is string => c !== null);
