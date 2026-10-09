@@ -623,11 +623,70 @@ function marginDepth(text: string): Heading["depth"] {
   return Math.min(6, parts + 1) as Heading["depth"];
 }
 
+// 6. Words set in four spaces or more (a poem's stanzas, an old RFC's
+//    sections, a letter or a quote set in) are Markdown's indented code,
+//    but a text file's words: in a file with no "#" heading and no fenced
+//    code, an indented code block whose lines are words is the file's
+//    paragraphs, one per run of lines between blank lines, and the lines
+//    rule reads each (a stanza keeps its lines, wrapped prose joins). A
+//    line of words holds no sign code writes ({ } = < > | \ ` ^ $ ~), no
+//    gap of three spaces (a table's columns, a contents line's leaders), and
+//    letters for most of its characters; nine lines in ten are such lines,
+//    and one has six words or more. Before, a poem indented five spaces read
+//    as one code block, and an RFC's indented sections as code with their
+//    headings inside (Markdown benchmark finding: the Rime of the Ancient
+//    Mariner, RFC 1122).
+const CODE_SIGN_RX = /[{}=<>|\\`^$~]/;
+const COLUMN_GAP_RX = /\S {3,}\S/;
+const WORDS_LINES_SHARE_MIN = 0.9;
+const WORDS_LINE_LETTERS_MIN = 0.6;
+const PROSE_LINE_WORDS_MIN = 6;
+
+function isWordsLine(line: string): boolean {
+  const text = line.trim();
+  if (CODE_SIGN_RX.test(text) || COLUMN_GAP_RX.test(text)) return false;
+  const letters = text.match(/\p{L}/gu)?.length ?? 0;
+  return letters >= text.replace(/\s/g, "").length * WORDS_LINE_LETTERS_MIN;
+}
+
+function setInWordsAsParagraphs(root: Root, lines: string[]) {
+  if (lines.some((line) => FENCE_RX.test(line))) return;
+  root.children = root.children.flatMap((node): RootContent[] => {
+    if (node.type !== "code" || node.lang || !node.position) return [node];
+    const from = node.position.start.line;
+    const own = lines.slice(from - 1, node.position.end.line);
+    const filled = own.filter((line) => line.trim());
+    if (filled.length === 0) return [node];
+    if (filled.filter(isWordsLine).length < filled.length * WORDS_LINES_SHARE_MIN) return [node];
+    if (!filled.some((line) => line.trim().split(/\s+/).length >= PROSE_LINE_WORDS_MIN)) return [node];
+    // One paragraph per run of lines between blank lines.
+    const out: RootContent[] = [];
+    let start = -1;
+    own.forEach((line, i) => {
+      const blank = !line.trim();
+      if (!blank && start < 0) start = i;
+      if (start >= 0 && (blank || i === own.length - 1)) {
+        const end = blank ? i - 1 : i;
+        out.push({
+          type: "paragraph",
+          children: [{ type: "text", value: own.slice(start, end + 1).map((l) => l.trim()).join("\n") }],
+          position: { start: { line: from + start, column: 1 }, end: { line: from + end, column: own[end].length + 1 } },
+        });
+        start = -1;
+      }
+    });
+    return out;
+  });
+}
+
 function shapeTextOutline(root: Root, source: string) {
   const lines = source.split("\n");
   // The lines rule runs in a file with no "#" heading: an underlined
   // heading does not make a text file Markdown.
-  if (!hasHashHeading(root, lines)) keepTextLines(root, source);
+  if (!hasHashHeading(root, lines)) {
+    setInWordsAsParagraphs(root, lines);
+    keepTextLines(root, source);
+  }
   if (hasHeading(root)) return;
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
