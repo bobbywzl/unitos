@@ -12,7 +12,8 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // note, section, annotation, and reply routes) and uploads (the file bytes,
 // replayed through the same single-request or chunked path an online upload
 // takes). Syncing is at-least-once: a record leaves the queue when the server
-// answers, drops with a warning on a 4xx other than 401 (stale by then), and
+// answers, drops with a warning on a 4xx other than 401 (stale by then; the
+// reader's words are kept: keepDroppedWords, lib/note-drafts.ts), and
 // stays for the next attempt on a network failure, a 401 (signed out: it
 // waits for the sign-in), a 409 that says another account signed in (it
 // waits for its own account), or a 5xx — a 5xx drops only on its
@@ -237,7 +238,10 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
     const kept = Number(res.headers.get(QUOTES_KEPT_HEADER) ?? 0);
     if (res.ok && kept > 0) quotesKept += kept;
     const sent = await outcome(res, record, record.path);
-    if (sent === "done" && !res.ok && record.method === "POST") keepDroppedWords(record.account, record.path, record.body);
+    // Dropped (stale by then): the reader's words are kept all the same —
+    // in the box's draft, else in the not-saved list the pill offers to
+    // copy (REV8-01, REV9-03).
+    if (sent === "done" && !res.ok) keepDroppedWords(record.account, record.path, record.body, record.method, record.queuedAt);
     return sent;
   } catch {
     return "wait";
@@ -338,7 +342,9 @@ export async function syncQueue(): Promise<void> {
       for (const store of [WRITES, UPLOADS] as const) {
         let after: IDBValidKey | null = null;
         for (;;) {
-          const head = await nextRecord<QueuedWrite | QueuedUpload>(store, after);
+          const head: { key: IDBValidKey; record: QueuedWrite | QueuedUpload } | null = await nextRecord<
+            QueuedWrite | QueuedUpload
+          >(store, after);
           if (!head) break;
           after = head.key;
           const result =

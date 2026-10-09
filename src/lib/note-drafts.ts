@@ -13,6 +13,10 @@
 // belongs to the composer of one section: a new note being written, with the
 // id of the note the composer created on the server once it has one.
 
+// A relative path: the QA checks import this module straight, outside the
+// app's path alias (scripts/qa/reply-drafts-check.ts).
+import { addNotSaved } from "./offline/not-saved";
+
 const NOTE_PREFIX = "unitos-note-draft:";
 const COMPOSE_PREFIX = "unitos-note-compose:";
 // A draft nobody replayed in this long is stale: the note was deleted, or the
@@ -200,29 +204,67 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteDraftKey(account, linkId));
 }
 
-/** A queued reply or Note on this link that the server refused on replay
-    (a 4xx: the note, the edit, or the link left the project, or the role
-    changed): its words go back into the box's draft, after any words typed
-    there since, so the box opens on them (REV8-01, rule zero 6). Other
-    writes are not put back: their box is gone with the 4xx. */
-export function keepDroppedWords(account: string | null, path: string, body: unknown) {
+/** A queued write that the server refused on replay (a 4xx: the note, the
+    edit, the section, or the link left the project, the words left the
+    block, or the role changed): the reader's words are kept. A reply or a
+    Note on this link goes back into its box's draft, after any words typed
+    there since, so the box opens on them (REV8-01, rule zero 6). Every
+    other write with words — a comment, a note's edit, a gathered note, a
+    block's edit — goes to the account's not-saved list with its quotes,
+    which the offline pill offers to copy (lib/offline/not-saved.ts,
+    REV9-03). A write without words (a delete, an order) has nothing to
+    keep. */
+export function keepDroppedWords(
+  account: string | null,
+  path: string,
+  body: unknown,
+  method: "POST" | "PATCH" | "DELETE" = "POST",
+  queuedAt: number = Date.now(),
+) {
   if (!body || typeof body !== "object") return;
   const b = body as Record<string, unknown>;
   const words = typeof b.content === "string" ? b.content.trim() : "";
-  if (!words) return;
   const id = account ?? "";
   const join = (kept?: string) => (!kept?.trim() ? words : kept.includes(words) ? kept : `${kept.trimEnd()}\n\n${words}`);
-  if (path === "/api/replies") {
+  if (words && path === "/api/replies") {
     const target =
       typeof b.noteId === "string" ? `note:${b.noteId}` : typeof b.blockEditId === "string" ? `edit:${b.blockEditId}` : typeof b.docLinkId === "string" ? `link:${b.docLinkId}` : null;
     if (!target) return;
     writeReplyDraft(id, target, join(readReplyDraft(id, target) ?? undefined));
     announceKept(replyDraftKey(id, target));
-  } else if (path === "/api/notes" && typeof b.fromLinkId === "string") {
+    return;
+  }
+  if (words && path === "/api/notes" && typeof b.fromLinkId === "string") {
     const kept = readLinkNoteDraft(id, b.fromLinkId);
     writeLinkNoteDraft(id, b.fromLinkId, join(kept?.content), kept?.sectionId ?? (typeof b.sectionId === "string" ? b.sectionId : null));
     announceKept(linkNoteDraftKey(id, b.fromLinkId));
+    return;
   }
+  const text = droppedWords(b);
+  if (text) addNotSaved(account, { at: queuedAt, path, method, words: text });
+}
+
+/** The reader's words in a dropped write's body — `content` (a note), `comment`
+    (a comment), `text` (a block's edit), or `title` (a section) — with its
+    quotes under them as quote lines: the comment's anchor, a gathered
+    note's quotes. */
+function droppedWords(b: Record<string, unknown>): string {
+  const own = [b.content, b.comment, b.text, b.title].find((v): v is string => typeof v === "string" && v.trim() !== "")?.trim() ?? "";
+  const quotes: string[] = [];
+  const anchor = b.anchor;
+  if (anchor && typeof anchor === "object" && typeof (anchor as Record<string, unknown>).quotedText === "string") {
+    quotes.push((anchor as Record<string, string>).quotedText);
+  }
+  if (Array.isArray(b.quotes)) {
+    for (const q of b.quotes) {
+      if (!q || typeof q !== "object") continue;
+      const v = q as Record<string, unknown>;
+      const quote = typeof v.quotedText === "string" ? v.quotedText : typeof v.text === "string" ? v.text : null;
+      if (quote) quotes.push(quote);
+    }
+  }
+  const lines = quotes.filter((q) => q.trim()).map((q) => q.split("\n").map((l) => (l ? `> ${l}` : ">")).join("\n"));
+  return [own, ...lines].filter(Boolean).join("\n\n");
 }
 
 // [ui5] WALK5-13: whether this browser holds unsent words on a link for the

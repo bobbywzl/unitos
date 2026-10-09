@@ -1,5 +1,6 @@
 // REV3-04: reply drafts and Note on this link drafts belong to the account
-// that typed them (lib/note-drafts.ts). Runs on a fake localStorage:
+// that typed them (lib/note-drafts.ts); a dropped write's words are kept
+// (REV8-01, REV9-03). Runs on a fake localStorage:
 //   npx tsx scripts/qa/reply-drafts-check.ts
 class MemoryStorage {
   private map = new Map<string, string>();
@@ -96,10 +97,35 @@ async function main() {
   check(dropped?.content === "note words" && dropped.sectionId === "s1", "a dropped Note on this link opens its composer on the words and the section");
   d.keepDroppedWords(null, "/api/replies", { docLinkId: "l19", content: "sign-in off" });
   check(d.readReplyDraft("", "link:l19") === "sign-in off" && d.readReplyDraft("ua", "link:l19") === "typed on the train", "with no account the words go to the local draft, not another account's");
-  const before = store.keys().length;
+
+  // 7. Every other dropped write with words goes to the account's not-saved
+  // list, with its quotes (REV9-03): the pill offers to copy them.
+  const ns = await import("../../src/lib/offline/not-saved");
+  check(ns.readNotSaved("ua").length === 0, "the not-saved list starts empty");
   d.keepDroppedWords("ua", "/api/notes", { sectionId: "s1", content: "a plain note" });
-  d.keepDroppedWords("ua", "/api/sections", { content: "x" });
-  check(store.keys().length === before, "other writes are not put back");
+  check(ns.readNotSaved("ua").map((e) => e.words).join("|") === "a plain note", "a dropped plain note's words are kept");
+  d.keepDroppedWords("ua", "/api/notes", { sectionId: "s1", content: "gathered", quotes: [{ documentId: "d", blockId: "b", quotedText: "one\ntwo" }, { documentId: "d" }] }, "POST", 123);
+  check(ns.readNotSaved("ua")[1]?.words === "gathered\n\n> one\n> two" && ns.readNotSaved("ua")[1]?.at === 123, "a dropped gathered note keeps its words and its quotes as quote lines, and when it was queued");
+  d.keepDroppedWords("ua", "/api/notes/n2", { content: "edited words" }, "PATCH");
+  check(ns.readNotSaved("ua")[2]?.words === "edited words" && ns.readNotSaved("ua")[2]?.method === "PATCH", "a dropped note edit (PATCH) keeps its words");
+  d.keepDroppedWords("ua", "/api/annotations", { notebookId: "p", documentId: "d", anchor: { blockId: "b", startOffset: 0, endOffset: 4, quotedText: "Pity", prefix: "", suffix: "" }, comment: "typed on the train" });
+  check(ns.readNotSaved("ua")[3]?.words === "typed on the train\n\n> Pity", "a dropped comment keeps its words with the quote under them");
+  d.keepDroppedWords("ua", "/api/blocks/b1", { text: "the block as edited" }, "PATCH");
+  check(ns.readNotSaved("ua")[4]?.words === "the block as edited", "a dropped block edit keeps its text");
+  d.keepDroppedWords("ua", "/api/annotations", { notebookId: "p", documentId: "d", anchor: { blockId: "b", startOffset: 0, endOffset: 4, quotedText: "Pity", prefix: "", suffix: "" }, color: "clay" });
+  check(ns.readNotSaved("ua")[5]?.words === "> Pity", "a dropped highlight keeps its quote");
+  const n = ns.readNotSaved("ua").length;
+  d.keepDroppedWords("ua", "/api/notes/n2", { content: "edited words" }, "PATCH");
+  check(ns.readNotSaved("ua").length === n, "a second drop of the same words adds nothing");
+  d.keepDroppedWords("ua", "/api/notes/n2", { order: 3 }, "PATCH");
+  d.keepDroppedWords("ua", "/api/notes/n2", undefined, "DELETE");
+  check(ns.readNotSaved("ua").length === n, "a write without words keeps nothing");
+  check(ns.readNotSaved("uc").length === 0, "another account's list stays empty");
+  d.keepDroppedWords(null, "/api/notes", { sectionId: "s1", content: "sign-in off" });
+  check(ns.readNotSaved(null)[0]?.words === "sign-in off" && ns.readNotSaved("ua").length === n, "with no account the words go to the local list");
+  check(ns.notSavedText(ns.readNotSaved("ua")).startsWith("a plain note\n\ngathered"), "the clipboard text joins the entries");
+  ns.clearNotSaved("ua");
+  check(ns.readNotSaved("ua").length === 0 && ns.readNotSaved(null).length === 1, "Copy clears the account's list alone");
 
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);

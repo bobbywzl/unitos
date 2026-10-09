@@ -131,6 +131,13 @@ const en = {
   offlineSyncing: "Syncing {n} offline changes…",
   offlineQuoteKeptOne: "Note synced. 1 quote is no longer in its document: kept as text",
   offlineQuotesKept: "Notes synced. {n} quotes are no longer in their documents: kept as text",
+  // Writes the queue dropped on replay (REV9-03): the server refused them,
+  // and their words wait in the pill until the reader copies them.
+  offlineNotSavedOne: "1 offline change could not be saved · Copy its words",
+  offlineNotSaved: "{n} offline changes could not be saved · Copy their words",
+  offlineNotSavedTip:
+    "The server refused these changes when they synced: your role changed, or what they changed is gone. Copy puts their words on the clipboard.",
+  offlineNotSavedCopied: "Copied",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "Offline",
   offlinePageBody: "Only projects saved for offline are shown. Everything else needs a connection.",
@@ -224,6 +231,10 @@ const zh: Record<keyof typeof en, string> = {
   offlineSyncing: "正在同步 {n} 项离线更改…",
   offlineQuoteKeptOne: "笔记已同步。1 条引文已不在其文档中，以文字保留",
   offlineQuotesKept: "笔记已同步。{n} 条引文已不在其文档中，以文字保留",
+  offlineNotSavedOne: "1 项离线更改无法保存 · 复制其文字",
+  offlineNotSaved: "{n} 项离线更改无法保存 · 复制其文字",
+  offlineNotSavedTip: "同步时服务器拒绝了这些更改：你的角色已更改，或更改的对象已不存在。复制会把其文字放到剪贴板。",
+  offlineNotSavedCopied: "已复制",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "离线",
   offlinePageBody: "只显示已离线保存的项目。其他内容需要网络。",
