@@ -35,6 +35,7 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.PaneInformation;
 import org.apache.poi.xssf.usermodel.XSSFCell;
 import org.apache.poi.xssf.usermodel.XSSFChartSheet;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class SheetsRef {
@@ -203,12 +204,23 @@ public class SheetsRef {
     out.append(']');
     int frozenRows = 0, frozenCols = 0;
     PaneInformation pane = sheet.getPaneInformation();
-    if (pane != null && pane.isFreezePane()) {
+    if (pane != null && (pane.isFreezePane() || frozenSplit(sheet))) {
       for (int r = 0; r < pane.getHorizontalSplitPosition() && r <= usedRow; r++) if (rowMap[r] >= 0) frozenRows++;
       for (int c = 0; c < pane.getVerticalSplitPosition() && c <= maxCol; c++) if (colMap[c] >= 0) frozenCols++;
     }
     out.append(",\"frozenRows\":").append(frozenRows).append(",\"frozenCols\":").append(frozenCols);
     if (totalRows > MAX_ROWS) out.append(",\"cutRows\":").append(totalRows);
+  }
+
+  /** A pane in the state frozenSplit is frozen: "Panes are frozen, but
+      were not before being frozen they were split" (ECMA-376 Part 1,
+      §18.18.52, ST_PaneState). POI counts only the state frozen. */
+  static boolean frozenSplit(Sheet sheet) {
+    if (!(sheet instanceof XSSFSheet x)) return false;
+    var views = x.getCTWorksheet().getSheetViews();
+    if (views == null || views.sizeOfSheetViewArray() == 0) return false;
+    var pane = views.getSheetViewArray(0).getPane();
+    return pane != null && pane.getState() == org.openxmlformats.schemas.spreadsheetml.x2006.main.STPaneState.FROZEN_SPLIT;
   }
 
   static RefCell cellOf(Cell cell, DataFormatter formatter) {
