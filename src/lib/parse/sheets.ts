@@ -138,6 +138,11 @@ export type SheetsParseOptions = {
   // Where a sheet's pictures go (lib/parse/slides.ts SlideImageStore); no
   // store = pictures are left out.
   storeImage?: SlideImageStore;
+  // A re-parse of a delimited file: the grid text it stored (its SHEET
+  // block's text). The document keeps no filename, so a .tsv re-parsed
+  // under its title lost its tab hint; the delimiter that gives this grid
+  // back is kept instead.
+  storedGrid?: string;
 };
 
 // ── Entry: a sheets file's bytes ─────────────────────────────────────────────
@@ -157,7 +162,37 @@ function cellText(text: string): string {
     and the delimiter sniffed otherwise. */
 export async function parseSheetsFile(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
   if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, opts);
-  return parseDelimited(decodeTextFile(bytes), filename, /\.tsv$/i.test(filename) ? "\t" : undefined);
+  const text = decodeTextFile(bytes);
+  if (/\.tsv$/i.test(filename)) return parseDelimited(text, filename, "\t");
+  const sniffed = await parseDelimited(text, filename);
+  // A re-parse reads the file under the document's title, which has no
+  // extension: a .tsv the add read on tabs would be sniffed, and a file
+  // whose quoted fields hold commas could split another way, moving the
+  // reader's anchors. The grid the add stored tells: the tab reading is
+  // taken when it gives back more of the stored grid's lines.
+  if (opts.storedGrid === undefined || sniffDelimiter(text) === "\t") return sniffed;
+  const tabbed = await parseDelimited(text, filename, "\t");
+  return gridLinesKept(tabbed, opts.storedGrid) > gridLinesKept(sniffed, opts.storedGrid) ? tabbed : sniffed;
+}
+
+/** How many lines of the stored grid text the parse's grid gives back, in
+    order (the longest common run of lines). */
+function gridLinesKept(parsed: ParsedDocument, stored: string): number {
+  const grid = parsed.blocks.find((b) => b.type === "SHEET")?.text ?? "";
+  if (grid === stored) return Number.POSITIVE_INFINITY;
+  const a = grid.split("\n");
+  const b = stored.split("\n");
+  const want = new Map<string, number>();
+  for (const line of b) want.set(line, (want.get(line) ?? 0) + 1);
+  let kept = 0;
+  for (const line of a) {
+    const n = want.get(line) ?? 0;
+    if (n > 0) {
+      kept++;
+      want.set(line, n - 1);
+    }
+  }
+  return kept;
 }
 
 // ── Entry: .xlsx ─────────────────────────────────────────────────────────────
