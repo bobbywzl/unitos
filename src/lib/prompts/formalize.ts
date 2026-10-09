@@ -9,7 +9,7 @@ export function formalizePrompt(ctx: PromptCtx): string {
   const shared = [
     profileLines(ctx.profile),
     "",
-    `The document "${ctx.documentTitle}" is a spoken recording. Its timed transcript is above; every transcript block is tagged [block <id>] (TRANSCRIPT <start>s–<end>s).`,
+    `The document "${ctx.documentTitle}" is a spoken recording. Its timed transcript is above; every transcript block is tagged [block <id>] (TRANSCRIPT <start>–<end>), its times as m:ss.`,
     "",
   ];
   if (ctx.format === "article") {

@@ -19,7 +19,7 @@ export function askPrompt(ctx: PromptCtx): string {
   return [
     profileLines(ctx.profile),
     "",
-    `The reader is asking about ${range} of the ${kind} "${ctx.documentTitle}". The full timed transcript is above; every transcript block is tagged [block <id>] (TRANSCRIPT <start>s–<end>s).`,
+    `The reader is asking about ${range} of the ${kind} "${ctx.documentTitle}". The full timed transcript is above; every transcript block is tagged [block <id>] (TRANSCRIPT <start>–<end>), its times as m:ss.`,
     "",
     "Transcript at that range:",
     ctx.video?.transcriptExcerpt || "(no transcript for this range)",

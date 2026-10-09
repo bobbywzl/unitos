@@ -4,12 +4,14 @@ import { ANNOTATIONS_SECTION_TITLE } from "@/lib/derive/config";
 import { USER_ID } from "@/lib/constants";
 import { documentReferences } from "@/lib/parse/types";
 import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
+import { formatTimeRange } from "@/lib/video/types";
 
 // The document rendered as the cached prompt prefix (SPEC.md §2). Byte-identical across
 // every derivation on the same document, so all types reuse one cache entry.
 // Block ids are included so DISTILL and SALIENCE can reference them.
-// Timed blocks tag their seconds — `(TRANSCRIPT 12.4s–18.2s)` — so FIND can
-// resolve answers to time ranges (SPEC.md §11).
+// Timed blocks tag their times as m:ss — `(TRANSCRIPT 0:12–0:18)`, the times
+// the reader sees on the line — so FIND can resolve answers to time ranges
+// (SPEC.md §11) and an answer names a line the way the reader reads it.
 // The reference list is appended so in-text citations stay explainable — pass
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
@@ -44,14 +46,14 @@ function cellPlace(cell: unknown): { table: number; row: number; column: number 
 }
 
 // One rendering of blocks for every prompt, the digest, and Stitch: `[block
-// <id>] (TYPE)` tags, timed blocks tagging their seconds, a table cell's
+// <id>] (TYPE)` tags, timed blocks tagging their times as m:ss, a table cell's
 // paragraph its place, an import's row its page: `(PARAGRAPH, table 2, row 3,
 // column 1, p. 7)`.
 export function renderBlockLines(blocks: PrefixBlock[], pageName: PageName | null): string {
   return blocks
     .map((b) => {
       if (b.startTime != null && b.endTime != null) {
-        return `[block ${b.id}] (${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)\n${b.text}`;
+        return `[block ${b.id}] (${b.type} ${formatTimeRange(b.startTime, b.endTime)})\n${b.text}`;
       }
       const place = cellPlace(b.cell);
       const name = pageName && b.page != null ? pageName(b.page) : "";

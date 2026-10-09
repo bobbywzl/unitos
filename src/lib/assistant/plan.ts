@@ -237,7 +237,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   highlight: '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
   comment: "- comment {blockId, quote, comment, description} — annotate exact text with a note.",
   add_note:
-    "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. A new sectionTitle creates the section.",
+    "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. content: the passage's point in plain words, one to three sentences, never a label alone and never the quote said again. quote: the sentence or sentences of one block that content restates, never a neighbouring sentence: write content first, then quote the words it came from. Every note of one plan has the same shape. A new sectionTitle creates the section.",
   add_section: "- add_section {title, description} — an empty section.",
   link: "- link {blockId, quote, toDocumentId? or href?, description} — hyperlink exact text to another attached document (toDocumentId) or to a web address (href).",
   format_block: '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3"|"list"|"numbered", description} — change a block\'s format: a paragraph, a heading level, or a list.',

@@ -104,7 +104,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
   const plan = ctx.target === "plan";
   const rules = [
     "Do what the command asks and nothing else. Change no word the command does not ask you to change.",
-    "Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them.",
+    "Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A change of register, tone, or wording changes the words that carry it and keeps every other word of the sentence as printed; a sentence with none of them stays word for word. A plain-words rewrite keeps a sentence that is already short and plain word for word.",
     "Keep every claim the document makes. New words may explain, connect, or restate; a new number, name, date, or finding appears only when the command asks for it or the material states it.",
     "Copy find exactly, character for character. Never paraphrase it.",
     "One op per change. Use the smallest op: replace_words for a word, a phrase, or a sentence; rewrite_block when most of a block changes.",

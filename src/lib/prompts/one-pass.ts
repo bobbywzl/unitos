@@ -66,7 +66,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     "Rules:",
     "1. Do what the command asks and nothing else. A block the command does not ask to change stays as its id alone. Never retype a block to keep it.",
     "2. Remove a block only when the command asks for it: erase, delete, cut, remove, or keep only something else. When the command says to keep a kind of text (quotes, names, numbers, a part), every block and every word of that kind stays as it is.",
-    "3. Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A quotation stays word for word.",
+    "3. Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A quotation stays word for word. A change of register, tone, or wording changes the words that carry it and keeps every other word of the sentence as printed; a sentence with none of them stays word for word. A plain-words rewrite keeps a sentence that is already short and plain word for word.",
     "4. Keep every claim the document makes unless the command asks to cut it. New words may explain, connect, or restate; a new number, name, date, or finding appears only when the command asks for it or the material states it.",
     "5. text: one paragraph, plain words, no blank line. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces more per level of nesting. To split a block, change it and add new blocks after it.",
     ctx.plan
