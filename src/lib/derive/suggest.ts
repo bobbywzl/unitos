@@ -2,7 +2,7 @@ import type { Block } from "@prisma/client";
 import type { ModelMessage } from "ai";
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
-import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { documentPrefix, pageNames, type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { ResolvedOp, SuggestResult } from "@/lib/docs/assistant-suggestions";
@@ -25,6 +25,7 @@ import { suggestPrompt } from "@/lib/prompts/suggest";
 import { suggestCheckPrompt, type CheckedOp } from "@/lib/prompts/suggest-check";
 import { z } from "zod";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import { figureWordsMarkdown, type FigureWords } from "@/lib/assistant/plan";
 
 // The assistant's suggestions (SPEC.md §29), the one code path: the command
 // and its scope → lib/prompts/suggest.ts under the cached document prefix →
@@ -257,4 +258,27 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
     ],
     summary: result.data.summary,
   };
+}
+
+/** Words read from the selected figure, put under it (SPEC.md §7): one
+    insert_blocks op after the figure, resolved like the model's ops. The
+    words come from the figure's picture, which the document's text cannot
+    ground, so no grounding check holds them; the reader accepts or rejects
+    the suggestion. */
+export function figureWordsSuggestion(
+  words: FigureWords[],
+  figureBlockId: string,
+  document: SuggestDocument,
+  t: TFunc,
+): { ops: ResolvedOp[]; warnings: string[] } {
+  const markdown = figureWordsMarkdown(words);
+  if (!markdown) return { ops: [], warnings: [] };
+  const why = words.map((w) => w.description).join(" ");
+  const resolved = resolveOps([{ op: "insert_blocks", afterBlockId: figureBlockId, markdown, why }], {
+    rows: document.rows,
+    places: document.places,
+    scope: { kind: "blocks", blockIds: [figureBlockId] },
+    budget: { chars: SUGGEST_MAX_NEW_CHARS },
+  });
+  return { ops: resolved.ops, warnings: resolved.skipped.map((s) => t(SKIPPED[s.reason], { why: s.why })) };
 }

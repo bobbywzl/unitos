@@ -22,7 +22,7 @@ import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
 // A revise action reads its windows within the route's time: those not
 // started by then are reported (lib/assistant/revise.ts).
 const REVISE_DEADLINE_MS = 150_000;
-import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
+import { figureWordsSuggestion, runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { svgChartCall } from "@/lib/derive/svg-chart";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
@@ -42,7 +42,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, fitActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
@@ -134,6 +134,10 @@ const requestSchema = z.object({
   // suggestions run with the chip's command and no chat model; `command` is
   // the chip's label, stored as the reader's message.
   suggestCommand: z.enum(Object.keys(SUGGEST_COMMANDS) as [SuggestCommand, ...SuggestCommand[]]).optional(),
+  // A figure with no words to anchor to (an image pasted into the page
+  // editor, SPEC.md §7 words from a figure): the selection is the figure
+  // itself, sent in place of an anchor.
+  figureBlockId: z.string().min(1).max(64).optional(),
 });
 
 // The matches (SPEC.md §7): the passages across the document that deal
@@ -299,36 +303,44 @@ async function handle(req: Request, t: TFunc) {
   if (chip && shared) return importSharedResponse(t);
   if (chip && edits !== "suggestions") return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
   if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
+  // A selected figure carries the figure itself: image bytes when there is
+  // one, an SVG chart's source, or the PDF page it sits on. The model sees
+  // it, so words read from it can go under it (figureBlockId).
+  let figureBlockId: string | null = null;
+  const selectFigure = async (blockId: string): Promise<boolean> => {
+    const block = await db.block.findFirst({
+      where: { id: blockId, documentId: document.id },
+      select: { type: true, html: true, text: true, page: true, region: true },
+    });
+    const figure = figureContent(block);
+    if (!figure || !block) return false;
+    const visual = await figureVisual(figure, block, document.id, document.sourceUrl);
+    attachedImage = visual?.image ?? null;
+    svgSource = figure.svgSource ?? null;
+    if (attachedImage || svgSource) figureBlockId = blockId;
+    selectionBlock = [
+      `The reader has selected the figure in block ${blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
+      ...(visual
+        ? [
+            visual.page
+              ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
+              : "The figure's image is attached.",
+          ]
+        : []),
+      ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
+      ...(figure.kind === "video"
+        ? ["The figure is a video you cannot watch. Work from the caption and the document."]
+        : []),
+      "The command applies to this figure unless it says otherwise.",
+    ].join("\n");
+    return true;
+  };
   if (anchor && anchored && layer === "core") {
     selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText, true);
   } else if (anchor && anchored) {
-    const anchoredBlock = await db.block.findUnique({
-      where: { id: anchor.blockId },
-      select: { type: true, html: true, text: true, page: true, region: true },
-    });
-    const figure = figureContent(anchoredBlock);
-    if (figure && anchoredBlock) {
-      const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
-      attachedImage = visual?.image ?? null;
-      svgSource = figure.svgSource ?? null;
-      selectionBlock = [
-        `The reader has selected the figure in block ${anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
-        ...(visual
-          ? [
-              visual.page
-                ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
-                : "The figure's image is attached.",
-            ]
-          : []),
-        ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
-        ...(figure.kind === "video"
-          ? ["The figure is a video you cannot watch. Work from the caption and the document."]
-          : []),
-        "The command applies to this figure unless it says otherwise.",
-      ].join("\n");
-    } else {
-      selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
-    }
+    if (!(await selectFigure(anchor.blockId))) selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
+  } else if (data.figureBlockId) {
+    if (!(await selectFigure(data.figureBlockId))) return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
     // client could capture it; the transcript for the range grounds the words.
@@ -413,6 +425,7 @@ async function handle(req: Request, t: TFunc) {
     sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
     pages: pageLines(document.blocks),
     transcript: transcript?.lines ?? null,
+    figureBlockId,
   });
 
   const messages: ModelMessage[] = [
@@ -477,9 +490,17 @@ async function handle(req: Request, t: TFunc) {
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
     sources: [data.command, ...history.map((turn) => turn.content)],
+    figureBlockId,
     t,
   };
-  const enriched = enrichActions(fitActions(result.data.actions, edits), planContext);
+  // Words read from the selected figure and put under it (SPEC.md §7): on a
+  // document with rich text they become one suggestion of new blocks after
+  // the figure, landed with the other suggestions; on a document without it
+  // they stay insert_paragraph actions, which the reader shows under the
+  // figure as the assistant's suggestion.
+  const fitted = fitActions(result.data.actions, edits);
+  const figureWords = edits === "suggestions" ? splitFigureWords(fitted, figureBlockId) : { words: [], rest: fitted };
+  const enriched = enrichActions(figureWords.rest, planContext);
   let actions = enriched.actions;
   const warnings = enriched.warnings;
 
@@ -644,6 +665,17 @@ async function handle(req: Request, t: TFunc) {
         return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
       }
     }
+  }
+
+  if (figureBlockId && figureWords.words.length > 0) {
+    const under = await figureWordsSuggestion(figureWords.words, figureBlockId, suggestDocument({ ...document, richText: await storedRichText() }), t);
+    // Its index follows the command's other ops: each op's index is its own.
+    const first = Math.max(-1, ...(suggestions?.ops ?? []).map((op) => op.i)) + 1;
+    suggestions = {
+      ops: [...(suggestions?.ops ?? []), ...under.ops.map((op) => ({ ...op, i: first + op.i }))],
+      warnings: [...(suggestions?.warnings ?? []), ...under.warnings],
+      summary: suggestions?.summary || result.data.reply || figureWords.words[0].description,
+    };
   }
 
   // An anchored conversation persists like the tools' output: one note in the

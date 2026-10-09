@@ -104,7 +104,7 @@ export default async function NotebookPage(props: {
     include: {
       collaborators: true,
       // The project's folders (SPEC.md §6); the tree is drawn client-side.
-      folders: { select: { id: true, title: true, parentId: true, createdAt: true } },
+      folders: { select: { id: true, title: true, parentId: true, position: true, createdAt: true } },
       documents: {
         // Attach order. Without it the rows come back in scan order, and the
         // first row picks the document a bare project URL opens.
@@ -214,6 +214,8 @@ export default async function NotebookPage(props: {
     figureRenderAt: nd.document.figureRenderAt?.toISOString() ?? null,
     figureRenderError: nd.document.figureRenderError,
     folderId: nd.folderId,
+    // Its place in its list under Custom order (SPEC.md §6); null = never placed.
+    position: nd.position,
     // Re-parse of an edited import asks first (document-bar.tsx).
     importEdited: editedSinceImport(nd.document),
     kind: kindOf(nd),
