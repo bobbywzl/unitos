@@ -118,7 +118,7 @@ export function actPrompt(ctx: ActCtx): string {
       : ["9. matches: return an empty list. The reader has no selection."]),
     ...(ctx.edits === "suggestions"
       ? [
-          "10. A command that asks to change the document's words, styles, or order: one suggest action, reply null, and matches an empty list. A change of order (group by theme, organize, put in order) sets reorder: true on it. The suggestions carry the change: never write the changed text in reply.",
+          "10. A command that asks to change the document's words, styles, or order: one suggest action, reply null, and matches an empty list. A change of order (group by theme, organize, put in order) sets reorder: true on it. The suggestions carry the change: never write the changed text in reply. A page draws TeX only in an equation block: an inline formula ($…$) in a paragraph shows as its raw characters, so a command to fix it, clean it up, or make it readable asks for the same words as plain text (Unicode subscripts, arrows, and Greek letters), with no dollar signs, backslashes, or braces.",
         ]
       : ctx.edits === "none"
         ? [

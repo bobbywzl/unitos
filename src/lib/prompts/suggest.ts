@@ -118,7 +118,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
           "Never change a FIGURE, PAGE, or VIDEO block, and never remove or replace an equation, a slide, a sheet, a table, or a transcript line.",
         ]
       : [
-          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",
+          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline formula stands in its block's words as $TeX$ and shows as its raw characters (a page draws TeX only in an equation block): replace_words with find the whole $TeX$ changes it. A command to fix it, clean it up, or make it readable asks for the same words as plain text: Unicode subscripts, arrows, and Greek letters, with no dollar signs, backslashes, or braces. In an equation block, write TeX that KaTeX draws.",
           "Never remove, move, or replace a figure, an image, an equation, a smart chip, or a footnote number. A table cell's words change with replace_words, a table's rows and columns with the row and column ops.",
         ]),
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,

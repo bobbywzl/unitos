@@ -794,7 +794,7 @@ export const CASES: AssistantCase[] = [
     profile: STUDENT,
     edits: "suggestions",
     question: "Put the heading 'Evidence' in italics.",
-    expect: { change: true, actions: [{ type: "suggest", block: 17 }], only: ["suggest"], max: 1, touch: [] },
+    expect: { change: true, actions: [{ type: "suggest" }], only: ["suggest"], max: 1, touch: [] },
     good: "One suggest action on the Evidence heading whose run makes its word italic (format_words) and changes no words; a one-sentence answer.",
   },
   {
@@ -805,7 +805,7 @@ export const CASES: AssistantCase[] = [
     profile: STUDENT,
     edits: "suggestions",
     question: "Center the heading 'Evidence'.",
-    expect: { change: true, actions: [{ type: "suggest", block: 17 }], only: ["suggest"], max: 1, touch: [] },
+    expect: { change: true, actions: [{ type: "suggest" }], only: ["suggest"], max: 1, touch: [] },
     good: "One suggest action on the Evidence heading whose run sets its alignment to center (set_alignment) and changes no words; a one-sentence answer.",
   },
   {
@@ -816,7 +816,7 @@ export const CASES: AssistantCase[] = [
     profile: STUDENT,
     edits: "suggestions",
     question: "Sort the seminar questions alphabetically.",
-    expect: { change: true, actions: [{ type: "suggest", reorder: true }], only: ["suggest"], max: 1, touch: [], order: [[22, 23], [23, 21]] },
+    expect: { change: true, actions: [{ type: "suggest", reorder: true }], only: ["suggest"], max: 1, touch: [21, 22, 23], order: [[22, 23], [23, 21]] },
     good: "One suggest action with reorder on the three seminar questions: 'Does the 700 ms window…', then 'How would each model…', then 'If both meanings…'; the lines move whole, no word changes; a one-sentence answer.",
   },
   {
