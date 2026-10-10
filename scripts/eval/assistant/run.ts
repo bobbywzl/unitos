@@ -560,8 +560,10 @@ async function score(): Promise<void> {
     }
     // The act route's reply for a suggest run with a null reply: the
     // suggestions' summary when any landed, else why none did.
-    if (c.chat === "selection" && suggest && edits === "suggestions" && landed && text === "") {
-      text = landed.ops.length > 0 ? landed.summary || t("api.suggestMade") : landed.warnings[0] ? t("api.suggestNoneLanded", { why: landed.warnings[0] }) : t("api.suggestNoChange");
+    if (c.chat === "selection" && suggest && edits === "suggestions" && landed) {
+      const made = landed.ops.length > 0;
+      const reply = text || (made ? landed.summary : landed.warnings[0] ? t("api.suggestNoneLanded", { why: landed.warnings[0] }) : t("api.suggestNoChange"));
+      text = [reply, made ? t("api.suggestMade") : ""].filter(Boolean).join(" ");
     }
     const pending = pendingCalls(dir);
     const sim = simulate(ctx.blocks, actions, ctx.transcript?.speakers ?? [], fixtureSections(notes));

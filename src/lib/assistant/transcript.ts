@@ -56,7 +56,7 @@ export async function transcriptContext(documentId: string): Promise<TranscriptC
       speakers.length === 0
         ? []
         : [
-            `Speakers (id — name):\n${speakers.map((s) => `${s.id} — ${s.name}`).join("\n")}`,
+            `Speakers (id — name):\n${speakers.map((s) => `${s.id} — ${s.name}`).join("\n")}\nName a speaker as this list does, or as the lecturer, the host, or the guest when it gives no name; never he or she unless the recording gives it.`,
             `Who speaks, each voice from the line named until the next: ${turns.slice(0, TURNS_MAX).join(", ")}${turns.length > TURNS_MAX ? ", …" : ""}`,
           ],
     chapterStarts: new Set(contentsEntries(document?.contents ?? null).map((e) => e.blockId)),

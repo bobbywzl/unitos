@@ -177,19 +177,44 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
     change itself, "Change “old” to “new”", when a stretch of the block
     changes, else "Rewrite the paragraph that starts …"; never the pass's
     one why repeated on every edit, which names no block and no words. */
-function editDescription(t: TFunc, before: string, after: string): string {
+export function editDescription(t: TFunc, before: string, after: string): string {
   const cut = (text: string, n = 60) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
   // Every changed stretch, so an edit that changes three places names all
-  // three, and two edits of one kind read differently on the card.
-  const spans = changedSpans(before, after).filter((s) => s.before && s.after);
-  const changed = spans.reduce((sum, s) => sum + s.before.length, 0);
-  const small = spans.length > 0 && spans.length === changedSpans(before, after).length && changed <= Math.max(60, before.length * 0.6);
-  if (small && spans.length === 1) return t("api.editChange", { from: cut(spans[0].before), to: cut(spans[0].after) });
-  if (small && spans.length === 2) return t("api.editChangeTwo", { a: cut(spans[0].before, 40), b: cut(spans[0].after, 40), c: cut(spans[1].before, 40), d: cut(spans[1].after, 40) });
+  // three, and two edits of one kind read differently on the card. A
+  // stretch of one or two words reads as its sentence: "I" to "this essay"
+  // names no block, the sentence that holds it does.
+  const raw = changedSpans(before, after).filter((s) => s.before && s.after);
+  const wide = raw.map((s) => (words(s.before) < 3 ? { before: sentenceAround(before, s.before), after: sentenceAround(after, s.after), wide: true } : { ...s, wide: false }));
+  // Two short spans of one sentence read as that sentence once.
+  const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
+  const changed = raw.reduce((sum, s) => sum + s.before.length, 0);
+  const small = raw.length > 0 && raw.length === changedSpans(before, after).length && changed <= Math.max(60, before.length * 0.6);
+  const n = (k: number, plain: number) => (spans[k].wide ? 100 : plain);
+  if (small && spans.length === 1) return t("api.editChange", { from: cut(spans[0].before, n(0, 60)), to: cut(spans[0].after, n(0, 60)) });
+  if (small && spans.length === 2) return t("api.editChangeTwo", { a: cut(spans[0].before, n(0, 40)), b: cut(spans[0].after, n(0, 40)), c: cut(spans[1].before, n(1, 40)), d: cut(spans[1].after, n(1, 40)) });
   if (small && spans.length === 3) {
-    return t("api.editChangeThree", { a: cut(spans[0].before, 30), b: cut(spans[0].after, 30), c: cut(spans[1].before, 30), d: cut(spans[1].after, 30), e: cut(spans[2].before, 30), f: cut(spans[2].after, 30) });
+    return t("api.editChangeThree", { a: cut(spans[0].before, n(0, 30)), b: cut(spans[0].after, n(0, 30)), c: cut(spans[1].before, n(1, 30)), d: cut(spans[1].after, n(1, 30)), e: cut(spans[2].before, n(2, 30)), f: cut(spans[2].after, n(2, 30)) });
   }
   return t("api.editRewrite", { start: cut(before.replace(/\s+/g, " ").trim(), 40) });
+}
+
+const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+/** The sentence of `text` that holds `part` (its first occurrence), as
+    printed; `part` itself when it is not in the text. */
+function sentenceAround(text: string, part: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const at = part ? flat.indexOf(part) : -1;
+  if (at < 0) return part;
+  let start = 0;
+  for (const m of flat.matchAll(/[.!?。！？]["”)]?\s+/g)) {
+    const end = m.index + m[0].length;
+    if (end <= at) start = end;
+    else break;
+  }
+  const tail = flat.slice(at + part.length).match(/[.!?。！？]["”)]?(\s|$)/);
+  const end = tail ? at + part.length + (tail.index ?? 0) + tail[0].trimEnd().length : flat.length;
+  return flat.slice(start, end).trim();
 }
 
 const anchorIn = (text: string, blockId: string, start: number, end: number): AssistantAnchor => ({

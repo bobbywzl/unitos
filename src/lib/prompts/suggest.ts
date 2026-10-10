@@ -123,7 +123,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
         ]),
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
     "why: one sentence on what the op changes and why.",
-    "summary: one or two sentences on what the suggestions change. When the command asks no change, return no ops and say so in summary.",
+    "summary: one sentence on what the suggestions change, without the new words and without what stays as it is. When the command asks no change, return no ops and say so in summary.",
     ...(ctx.reorder
       ? [
           "Another pass of this command moves the blocks and adds a heading for each group. Never move, reorder, or group blocks, and add no heading for a group. Change only the words the command asks to change; when the command asks for nothing but a new order, return no ops.",
