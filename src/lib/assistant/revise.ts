@@ -186,16 +186,29 @@ export function editDescription(t: TFunc, before: string, after: string): string
   const raw = changedSpans(before, after).filter((s) => s.before && s.after);
   // One short span reads as its sentence; two or three read with a few words
   // around each, so the description stays one sentence of under 40 words.
-  const short = raw.filter((s) => words(s.before) < 3);
-  const oneSentence = short.length === raw.length && new Set(raw.map((s) => sentenceAround(before, s.before))).size === 1;
-  const near = raw.length === 1 || oneSentence ? 0 : raw.length === 2 ? 3 : 2;
+  // Each span is found from where the one before it ended, so the same
+  // words changed twice in a block read with their own surroundings.
+  const flatBefore = before.replace(/\s+/g, " ").trim();
+  const flatAfter = after.replace(/\s+/g, " ").trim();
+  let fromBefore = 0;
+  let fromAfter = 0;
+  const placed = raw.map((s) => {
+    const atBefore = Math.max(0, flatBefore.indexOf(s.before, fromBefore));
+    const atAfter = Math.max(0, flatAfter.indexOf(s.after, fromAfter));
+    fromBefore = atBefore + s.before.length;
+    fromAfter = atAfter + s.after.length;
+    return { ...s, atBefore, atAfter };
+  });
+  const short = placed.filter((s) => words(s.before) < 3);
+  const oneSentence = short.length === placed.length && new Set(placed.map((s) => sentenceAround(flatBefore, s.before, s.atBefore))).size === 1;
+  const near = placed.length === 1 || oneSentence ? 0 : placed.length === 2 ? 3 : 2;
   // A sentence too long to show whole reads as the words around the change.
-  const wide = raw.map((s) =>
+  const wide = placed.map((s) =>
     words(s.before) < 3
-      ? near === 0 && sentenceAround(before, s.before).length <= 100
-        ? { before: sentenceAround(before, s.before), after: sentenceAround(after, s.after), wide: true }
-        : { before: wordsAround(before, s.before, near || 4), after: wordsAround(after, s.after, near || 4), wide: true }
-      : { ...s, wide: false },
+      ? near === 0 && sentenceAround(flatBefore, s.before, s.atBefore).length <= 100
+        ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true }
+        : { before: wordsAround(flatBefore, s.before, near || 4, s.atBefore), after: wordsAround(flatAfter, s.after, near || 4, s.atAfter), wide: true }
+      : { before: s.before, after: s.after, wide: false },
   );
   // Two short spans of one sentence read as that sentence once.
   const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
@@ -212,11 +225,11 @@ export function editDescription(t: TFunc, before: string, after: string): string
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
-/** The sentence of `text` that holds `part` (its first occurrence), as
-    printed; `part` itself when it is not in the text. */
-function sentenceAround(text: string, part: string): string {
+/** The sentence of `text` that holds `part` (its first occurrence from
+    `from`), as printed; `part` itself when it is not in the text. */
+function sentenceAround(text: string, part: string, from = 0): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  const at = part ? flat.indexOf(part) : -1;
+  const at = part ? flat.indexOf(part, from) : -1;
   if (at < 0) return part;
   let start = 0;
   for (const m of flat.matchAll(/[.!?。！？]["”)]?\s+/g)) {
@@ -231,10 +244,12 @@ function sentenceAround(text: string, part: string): string {
 
 /** `part` with up to `n` words of its sentence on each side, as printed
     (the spaces and the punctuation between them kept). */
-function wordsAround(text: string, part: string, n: number): string {
-  const sentence = sentenceAround(text, part);
-  const at = sentence.indexOf(part);
-  if (at < 0) return part;
+function wordsAround(text: string, part: string, n: number, from = 0): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const sentence = sentenceAround(flat, part, from);
+  const start = flat.indexOf(sentence, Math.max(0, from - sentence.length));
+  const at = flat.indexOf(part, from) - (start < 0 ? 0 : start);
+  if (at < 0 || at >= sentence.length) return part;
   const before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
   const after = new RegExp(`^(?:\\s*\\S+){0,${n}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
   return `${before}${part}${after}`.trim();
