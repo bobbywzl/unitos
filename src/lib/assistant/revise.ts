@@ -184,7 +184,19 @@ export function editDescription(t: TFunc, before: string, after: string): string
   // stretch of one or two words reads as its sentence: "I" to "this essay"
   // names no block, the sentence that holds it does.
   const raw = changedSpans(before, after).filter((s) => s.before && s.after);
-  const wide = raw.map((s) => (words(s.before) < 3 ? { before: sentenceAround(before, s.before), after: sentenceAround(after, s.after), wide: true } : { ...s, wide: false }));
+  // One short span reads as its sentence; two or three read with a few words
+  // around each, so the description stays one sentence of under 40 words.
+  const short = raw.filter((s) => words(s.before) < 3);
+  const oneSentence = short.length === raw.length && new Set(raw.map((s) => sentenceAround(before, s.before))).size === 1;
+  const near = raw.length === 1 || oneSentence ? 0 : raw.length === 2 ? 3 : 2;
+  // A sentence too long to show whole reads as the words around the change.
+  const wide = raw.map((s) =>
+    words(s.before) < 3
+      ? near === 0 && sentenceAround(before, s.before).length <= 100
+        ? { before: sentenceAround(before, s.before), after: sentenceAround(after, s.after), wide: true }
+        : { before: wordsAround(before, s.before, near || 4), after: wordsAround(after, s.after, near || 4), wide: false }
+      : { ...s, wide: false },
+  );
   // Two short spans of one sentence read as that sentence once.
   const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
   const changed = raw.reduce((sum, s) => sum + s.before.length, 0);
@@ -215,6 +227,16 @@ function sentenceAround(text: string, part: string): string {
   const tail = flat.slice(at + part.length).match(/[.!?。！？]["”)]?(\s|$)/);
   const end = tail ? at + part.length + (tail.index ?? 0) + tail[0].trimEnd().length : flat.length;
   return flat.slice(start, end).trim();
+}
+
+/** `part` with up to `n` words of its sentence on each side. */
+function wordsAround(text: string, part: string, n: number): string {
+  const sentence = sentenceAround(text, part);
+  const at = sentence.indexOf(part);
+  if (at < 0) return part;
+  const beforeWords = sentence.slice(0, at).trim().split(/\s+/).filter(Boolean);
+  const afterWords = sentence.slice(at + part.length).trim().split(/\s+/).filter(Boolean);
+  return [...beforeWords.slice(-n), part, ...afterWords.slice(0, n)].join(" ");
 }
 
 const anchorIn = (text: string, blockId: string, start: number, end: number): AssistantAnchor => ({

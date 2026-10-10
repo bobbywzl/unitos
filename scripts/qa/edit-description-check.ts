@@ -21,6 +21,11 @@ check("near spans merge", changedSpans("one two three four five six", "uno two t
 const t = translatorFor("en");
 check("a one-word span reads as its sentence", editDescription(t, "Look up on any street. I think the wires are ugly. They hum.", "Look up on any street. This essay holds that the wires are ugly. They hum."), 'Change “I think the wires are ugly.” to “This essay holds that the wires are ugly.”.');
 check("a clause added to a sentence reads as the sentence", editDescription(t, "The margin held at 7.6 percent in the quarter.", "The margin held at 7.6 percent in the quarter, down from 9 a year earlier."), 'Change “The margin held at 7.6 percent in the quarter.” to “The margin held at 7.6 percent in the quarter, down from 9 a year earlier.”.');
-check("a longer span reads as itself", editDescription(t, "We stop noticing them the way we stop noticing a hum.", "People stop noticing them the way they stop noticing a hum."), 'Change “We stop noticing them the way we stop noticing a hum.” to “People stop noticing them the way they stop noticing a hum.”.');
+check("two short spans of one sentence read as the sentence once", editDescription(t, "We stop noticing them the way we stop noticing a hum.", "People stop noticing them the way they stop noticing a hum."), 'Change “We stop noticing them the way we stop noticing a hum.” to “People stop noticing them the way they stop noticing a hum.”.');
+check(
+  "spans in two sentences read as themselves, a short one with a few words around it",
+  editDescription(t, "I will take the first view. The city is old. I do not want to wave it away.", "This essay takes the first view. The city is old. It should not be dismissed."),
+  'Change “I will take” to “This essay takes” and “I do not want to wave it away.” to “It should not be dismissed.”.',
+);
 console.log(failed === 0 ? "all checks pass" : `${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
