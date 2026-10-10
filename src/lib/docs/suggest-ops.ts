@@ -314,6 +314,8 @@ const TEXT_ROWS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 type Claim =
   | { kind: "words"; row: number; from: number; to: number }
   | { kind: "style"; row: number; attr: "style" | "alignment" | "spacing" | "indent" }
+  // A block's words written anew: the block stays, so a style on it lands too.
+  | { kind: "text"; row: number }
   | { kind: "rows"; rows: number[] }
   | { kind: "gap"; after: number };
 
@@ -330,7 +332,11 @@ function conflicts(a: Claim, b: Claim): boolean {
   }
   if (a.kind === "words" && b.kind === "words") return a.row === b.row && a.from <= b.to && b.from <= a.to;
   if (a.kind === "style" && b.kind === "style") return a.row === b.row && a.attr === b.attr;
-  if ((a.kind === "style" && b.kind === "words") || (a.kind === "words" && b.kind === "style")) return false;
+  // A style and the words of one block are two changes: both land.
+  if (a.kind === "style" || b.kind === "style") {
+    const other = a.kind === "style" ? b : a;
+    if (other.kind === "words" || other.kind === "text") return false;
+  }
   const rowsOf = (c: Claim) => (c.kind === "rows" ? c.rows : c.kind === "gap" ? [] : [c.row]);
   return rowsOf(a).some((k) => rowsOf(b).includes(k));
 }
@@ -499,7 +505,7 @@ export function resolveOps(
       }
       if (row.type === "EQUATION" && texError(text) !== null) return "tex";
       if (!text || text === row.text.trim()) return null;
-      return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: text.length };
+      return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "text", row: k }, chars: text.length };
     }
     if (figure(op.blockId)) return "object";
     const k = order.get(op.blockId);
@@ -531,7 +537,7 @@ export function resolveOps(
       // A new paragraph is replace_blocks.
       if (/\n\s*\n/.test(op.text)) return "notText";
       if (op.text.trim() === row.text.trim()) return null;
-      return { op: { i, op: op.op, blockId: row.id, base: row.text, text: op.text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: op.text.length };
+      return { op: { i, op: op.op, blockId: row.id, base: row.text, text: op.text, why: op.why }, claim: { kind: "text", row: k }, chars: op.text.length };
     }
     // Code takes no formatting and no footnote; a footnote holds none.
     if ((op.op === "format_words" || op.op === "insert_footnote") && row.type === "CODE") return "notText";
