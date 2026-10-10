@@ -194,7 +194,7 @@ export function editDescription(t: TFunc, before: string, after: string): string
     words(s.before) < 3
       ? near === 0 && sentenceAround(before, s.before).length <= 100
         ? { before: sentenceAround(before, s.before), after: sentenceAround(after, s.after), wide: true }
-        : { before: wordsAround(before, s.before, near || 4), after: wordsAround(after, s.after, near || 4), wide: false }
+        : { before: wordsAround(before, s.before, near || 4), after: wordsAround(after, s.after, near || 4), wide: true }
       : { ...s, wide: false },
   );
   // Two short spans of one sentence read as that sentence once.
@@ -229,14 +229,15 @@ function sentenceAround(text: string, part: string): string {
   return flat.slice(start, end).trim();
 }
 
-/** `part` with up to `n` words of its sentence on each side. */
+/** `part` with up to `n` words of its sentence on each side, as printed
+    (the spaces and the punctuation between them kept). */
 function wordsAround(text: string, part: string, n: number): string {
   const sentence = sentenceAround(text, part);
   const at = sentence.indexOf(part);
   if (at < 0) return part;
-  const beforeWords = sentence.slice(0, at).trim().split(/\s+/).filter(Boolean);
-  const afterWords = sentence.slice(at + part.length).trim().split(/\s+/).filter(Boolean);
-  return [...beforeWords.slice(-n), part, ...afterWords.slice(0, n)].join(" ");
+  const before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
+  const after = new RegExp(`^(?:\\s*\\S+){0,${n}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
+  return `${before}${part}${after}`.trim();
 }
 
 const anchorIn = (text: string, blockId: string, start: number, end: number): AssistantAnchor => ({
