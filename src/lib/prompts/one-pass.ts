@@ -76,7 +76,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
       : "6. new: markdown with # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url).",
     '7. A group the command asks for gets a heading: {"new": "## <what the group has in common>"} before its blocks, a level below the heading of the scope. A heading of the document that the new order makes wrong goes in remove.',
     "8. Keep together what belongs together: a quote and the words that comment on it, a sentence and the list it introduces, steps in their order.",
-    `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one sentence on what changes, without the new words and without what stays as it is. why: one sentence on why.`,
+    `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one sentence whose subject is the suggestions, on what they change ("The suggestions write the two formulas as plain text."), without the new words and without what stays as it is. why: one sentence on why.`,
     "10. When the command asks no change, return document as the blocks stand, remove empty, and say so in summary.",
     "",
     "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",

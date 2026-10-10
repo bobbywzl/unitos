@@ -685,9 +685,10 @@ async function handle(req: Request, t: TFunc) {
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  // With suggestions, the reply shown and stored is their summary, and it
-  // says the suggestions are in the document. A suggest run that landed
-  // nothing says why, not what it meant to change.
+  // With suggestions, the reply shown is their summary, one sentence whose
+  // subject is the suggestions; the stored turn adds that they are in the
+  // document, so a later confirmation reads as answered. A suggest run that
+  // landed nothing says why, not what it meant to change.
   const landed = suggestions ? suggestions.ops.length > 0 : false;
   const answer =
     result.data.reply ??
@@ -700,7 +701,7 @@ async function handle(req: Request, t: TFunc) {
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed.");
-  const replyText = [answer, landed ? t("api.suggestMade") : ""].filter(Boolean).join(" ");
+  const replyText = answer;
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
   // suggestions are in the document, and the turn says so.
@@ -710,7 +711,7 @@ async function handle(req: Request, t: TFunc) {
     { role: "user", content: data.command },
     {
       role: "assistant",
-      content: [replyText, proposed.length > 0 ? `Proposed actions: ${proposed.join("; ")}` : ""].filter(Boolean).join("\n\n"),
+      content: [replyText, landed ? t("api.suggestMade") : "", proposed.length > 0 ? `Proposed actions: ${proposed.join("; ")}` : ""].filter(Boolean).join("\n\n"),
     },
   ];
   if (data.sideChatOf) {
