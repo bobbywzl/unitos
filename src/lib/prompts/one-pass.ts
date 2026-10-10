@@ -50,7 +50,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     ...(ctx.material ? ["The assistant's answer, which the command may ask you to use:", ctx.material] : []),
     ctx.scope.whole ? "Scope: the whole document." : `Scope: ${ctx.scope.runs.map(span).join(", ")}.`,
     "Change only blocks in the scope. The rest of the document is context.",
-    ...(ctx.together.length > 0 ? [`These blocks move as one (a list, a table): ${ctx.together.map(span).join(", ")}.`] : []),
+    ...(ctx.together.length > 0 ? [`These blocks move as one (a table, a list line with the lines nested under it): ${ctx.together.map(span).join(", ")}.`] : []),
     ...(ctx.fixed.length > 0 ? [`These blocks keep their place and their words: ${ctx.fixed.map((id) => `[block ${id}]`).join(", ")}.`] : []),
     ...(ctx.caretBlockId ? [`The caret stands in [block ${ctx.caretBlockId}]. "Here" means right after it.`] : []),
     ...(ctx.history.length > 0

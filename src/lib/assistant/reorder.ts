@@ -55,6 +55,8 @@ export type OrderUnit = {
   fixed: boolean;
   /** One heading row alone: the answer may drop it. */
   heading: boolean;
+  /** One item of a list: it moves alone, and sooner than a block beside it. */
+  item?: boolean;
 };
 
 /** An item of the new sequence: a unit by its index, a new heading, or new blocks. */
@@ -135,10 +137,14 @@ export type MoveRun = { after: number | null; items: SequenceItem[] };
 /** The fewest moves that make the sequence: the longest run of units already
     in order stays, and every other unit and every new heading moves in runs,
     each run right after the unit before it in the sequence, which stays.
-    `before`: the unit just before the scope, or null at the document's start. */
-export function moveRuns(sequence: SequenceItem[], before: number | null): MoveRun[] {
-  const units = sequence.flatMap((item, k) => ("unit" in item ? [{ k, u: item.unit }] : []));
-  const stays = new Set(longestIncreasing(units.map((x) => x.u)).map((i) => units[i].k));
+    `before`: the unit just before the scope, or null at the document's start.
+    With `units`, a list item moves sooner than a block beside it when either
+    would do (a line put after a paragraph, not the paragraph put before the
+    line): a block cannot land between the lines of a list. */
+export function moveRuns(sequence: SequenceItem[], before: number | null, units?: readonly OrderUnit[]): MoveRun[] {
+  const placed = sequence.flatMap((item, k) => ("unit" in item ? [{ k, u: item.unit }] : []));
+  const weights = units ? placed.map((x) => (units[x.u]?.item ? 1 : 2)) : undefined;
+  const stays = new Set(longestIncreasing(placed.map((x) => x.u), weights).map((i) => placed[i].k));
   const runs: MoveRun[] = [];
   let after = before;
   let open: MoveRun | null = null;
@@ -154,8 +160,29 @@ export function moveRuns(sequence: SequenceItem[], before: number | null): MoveR
   return runs;
 }
 
-/** The indexes of a longest strictly increasing subsequence. */
-export function longestIncreasing(values: number[]): number[] {
+/** The indexes of a longest strictly increasing subsequence; with weights,
+    of a heaviest one (each value counts its weight), the earliest on a tie. */
+export function longestIncreasing(values: number[], weights?: number[]): number[] {
+  if (weights) {
+    // best[i]: the heaviest increasing run that ends at i.
+    const best = values.map((_, i) => weights[i]);
+    const back = new Array<number>(values.length).fill(-1);
+    values.forEach((v, i) => {
+      for (let j = 0; j < i; j++) {
+        if (values[j] < v && best[j] + weights[i] > best[i]) {
+          best[i] = best[j] + weights[i];
+          back[i] = j;
+        }
+      }
+    });
+    let end = -1;
+    best.forEach((w, i) => {
+      if (end < 0 || w > best[end]) end = i;
+    });
+    const out: number[] = [];
+    for (let i = end; i >= 0; i = back[i]) out.push(i);
+    return out.reverse();
+  }
   // tails[l]: the index of the smallest last value of a run of length l + 1.
   const tails: number[] = [];
   const back = new Array<number>(values.length).fill(-1);

@@ -78,7 +78,7 @@ async function main() {
   const make = () => new Editor({ element: document.createElement("div"), extensions: docsExtensions(), content: start, injectCSS: false });
   const rows = deriveBlocks(start).map((b) => ({ id: b.id, type: b.type, text: b.text }));
   const units = richTextUnits(start, rows);
-  check(units.length === 7 && units[5].rowIds.join() === "l1,l2", "a list is one unit");
+  check(units.length === 8 && units[5].rowIds.join() === "l1" && units[6].rowIds.join() === "l2", "each item of a list is a unit");
   // Group by theme: animals, then geology.
   const plan = planOrder(units, units.map((_, u) => u), {
     order: [
@@ -193,6 +193,82 @@ async function main() {
     check(JSON.stringify(words(again.getJSON() as RichNode)) === JSON.stringify(before), "Reject all gives the document back");
     again.destroy();
   }
+  // 4. List lines (lib/assistant/reorder-run.ts richTextUnits: each item of
+  // a top-level list is a unit): a line moves within its list, out of it,
+  // into another list, and a block put after a line splits the list.
+  const lists = (doc: RichNode) => (doc.content ?? []).filter((n) => n.type === "bulletList").map((n) => (n.content ?? []).length);
+  const run = (
+    what: string,
+    doc: RichNode,
+    order: { blockId: string }[],
+    want: string[],
+    wantLists: number[],
+  ) => {
+    const rows2 = deriveBlocks(doc).map((b) => ({ id: b.id, type: b.type, text: b.text }));
+    const units2 = richTextUnits(doc, rows2);
+    const scope2 = units2.map((_, u) => u);
+    const plan2 = planOrder(units2, scope2, { order, removeHeadings: [] });
+    check(plan2 !== null, `${what}: the order plans`);
+    if (!plan2) return;
+    const ops3 = orderSuggestOps(units2, scope2, plan2, rows2, what);
+    const before2 = words(doc);
+    const editor = new Editor({ element: document.createElement("div"), extensions: docsExtensions(), content: doc, injectCSS: false });
+    const landed = applyAssistantOps(editor, ops3, author);
+    check(landed.skipped.length === 0, `${what}: every op lands (skipped: ${JSON.stringify(landed.skipped)})`);
+    let valid = true;
+    try {
+      editor.state.doc.check();
+    } catch {
+      valid = false;
+    }
+    check(valid, `${what}: the document is valid while the move is pending`);
+    if (process.env.DEBUG_MOVE && what.includes(process.env.DEBUG_MOVE)) console.log("OPS " + JSON.stringify(ops3) + "\n" + JSON.stringify(editor.getJSON(), null, 1));
+    check(JSON.stringify(words(editor.getJSON() as RichNode)) === JSON.stringify(before2), `${what}: the index reads the document as it was while the move is pending`);
+    settleSuggestions(editor, true);
+    const accepted = words(editor.getJSON() as RichNode);
+    check(JSON.stringify(accepted) === JSON.stringify(want), `${what}: Accept all gives the new order\n     got  ${JSON.stringify(accepted)}\n     want ${JSON.stringify(want)}`);
+    const got = lists(editor.getJSON() as RichNode);
+    check(JSON.stringify(got) === JSON.stringify(wantLists), `${what}: the lists after Accept all are ${JSON.stringify(got)} (want ${JSON.stringify(wantLists)})`);
+    editor.destroy();
+    const again = new Editor({ element: document.createElement("div"), extensions: docsExtensions(), content: doc, injectCSS: false });
+    applyAssistantOps(again, ops3, author);
+    settleSuggestions(again, false);
+    check(JSON.stringify(words(again.getJSON() as RichNode)) === JSON.stringify(before2) && JSON.stringify(lists(again.getJSON() as RichNode)) === JSON.stringify(lists(doc)), `${what}: Reject all gives the document back`);
+    again.destroy();
+  };
+  const id = (blockId: string) => ({ blockId });
+  run("a line moves within its list", start, ["h1", "q1", "c1", "q2", "c2", "l2", "l1", "q3"].map(id), [before[0], before[1], before[2], before[3], before[4], "Cats climb", "Cats purr", before[7]], [2]);
+  run("a line moves out of its list to the end", start, ["h1", "q1", "c1", "q2", "c2", "l2", "q3", "l1"].map(id), [before[0], before[1], before[2], before[3], before[4], "Cats climb", before[7], "Cats purr"], [1, 1]);
+  // A block between two lines: the lines move around it (lib/assistant/reorder.ts moveRuns prefers to move an item), so the list splits in two.
+  run("a block between two lines", start, ["h1", "q1", "c1", "q2", "l1", "c2", "l2", "q3"].map(id), [before[0], before[1], before[2], before[3], "Cats purr", before[4], "Cats climb", before[7]], [1, 1]);
+  {
+    // A new block cannot go between the lines of a list: that move is skipped and nothing changes.
+    const order: import("@/lib/assistant/reorder").OrderEntry[] = [id("h1"), id("q1"), id("c1"), id("q2"), id("c2"), id("l1"), { heading: "Between", level: 2 }, id("l2"), id("q3")];
+    const plan2 = planOrder(units, units.map((_, u) => u), { order, removeHeadings: [] })!;
+    const ops3 = orderSuggestOps(units, units.map((_, u) => u), plan2, rows, "A heading between two lines.");
+    const editor = make();
+    const landed = applyAssistantOps(editor, ops3, author);
+    check(landed.skipped.length === 1 && landed.skipped[0].reason === "notText" && JSON.stringify(words(editor.getJSON() as RichNode)) === JSON.stringify(before), `a new block put between the lines of a list is skipped (${JSON.stringify(landed.skipped)})`);
+    editor.destroy();
+  }
+  const two: RichNode = {
+    type: "doc",
+    content: [
+      h("h1", "Two lists"),
+      list([
+        ["a1", "Apples"],
+        ["a2", "Apricots"],
+      ]),
+      p("p1", "Between the lists."),
+      list([
+        ["b1", "Beans"],
+        ["b2", "Beets"],
+      ]),
+    ],
+  };
+  run("a line moves into another list", two, ["h1", "a1", "p1", "b1", "a2", "b2"].map(id), ["Two lists", "Apples", "Between the lists.", "Beans", "Apricots", "Beets"], [1, 3]);
+  run("a list every line of which moves goes with them", two, ["h1", "p1", "b1", "b2", "a1", "a2"].map(id), ["Two lists", "Between the lists.", "Beans", "Beets", "Apples", "Apricots"], [4]);
+  run("a line moves to the start of the next list", two, ["h1", "a1", "p1", "a2", "b1", "b2"].map(id), ["Two lists", "Apples", "Between the lists.", "Apricots", "Beans", "Beets"], [1, 3]);
   console.log(failures === 0 ? "reorder-page: all passed" : `reorder-page: ${failures} failed`);
   process.exit(failures === 0 ? 0 : 1);
 }

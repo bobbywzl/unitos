@@ -36,29 +36,37 @@ export function blockUnits(blocks: Row[], shape: DocumentShape): OrderUnit[] {
 // image (its media is one object), the footnotes and their numbers (they
 // count in the text's order), a bookmark (a link points at it), a page break.
 const STAYS = new Set(["figure", "image", "footnotes", "footnoteReference", "bookmark", "pageBreak", "tableOfContents"]);
+// A list at the top level: its items are the units.
+const LIST_NODES = new Set(["bulletList", "orderedList", "taskList"]);
 
-/** A document with rich text: each top-level node is a unit (a list or a
-    table moves whole), its index rows in order, read the way the paragraph
+/** A document with rich text: each top-level node is a unit (a table moves
+    whole), and each item of a top-level list is a unit of its own (a line
+    moves within its list, to another list, or out of it, with the lines
+    nested under it), its index rows in order, read the way the paragraph
     index reads it: the assistant's suggestions as not made, and a block a
     person's suggestion removes left out. A node with no row is no unit. */
 export function richTextUnits(doc: RichNode, rows: Row[]): OrderUnit[] {
   const indexed = new Set(rows.map((r) => r.id));
   const [readable] = withoutSuggestions([doc], isAssistantSuggestion);
   const units: OrderUnit[] = [];
-  for (const top of readable?.content ?? []) {
+  const unit = (node: RichNode, top: RichNode) => {
     const rowIds: string[] = [];
     let stays = STAYS.has(top.type);
-    const walk = (node: RichNode) => {
-      if (node.marks?.some((m) => m.type === "deletion")) return;
-      if (STAYS.has(node.type)) stays = true;
-      if (INDEXED_NODE_TYPES.has(node.type)) {
-        const id = node.attrs?.blockId;
+    const walk = (n: RichNode) => {
+      if (n.marks?.some((m) => m.type === "deletion")) return;
+      if (STAYS.has(n.type)) stays = true;
+      if (INDEXED_NODE_TYPES.has(n.type)) {
+        const id = n.attrs?.blockId;
         if (typeof id === "string" && indexed.has(id)) rowIds.push(id);
       }
-      for (const child of node.content ?? []) walk(child);
+      for (const child of n.content ?? []) walk(child);
     };
-    walk(top);
-    if (rowIds.length > 0) units.push({ rowIds, fixed: stays, heading: top.type === "heading" && rowIds.length === 1 });
+    walk(node);
+    if (rowIds.length > 0) units.push({ rowIds, fixed: stays, heading: top.type === "heading" && rowIds.length === 1, item: node !== top });
+  };
+  for (const top of readable?.content ?? []) {
+    if (LIST_NODES.has(top.type)) for (const item of top.content ?? []) unit(item, top);
+    else unit(top, top);
   }
   return units;
 }
@@ -164,7 +172,7 @@ export function orderBlockActions(
   const id = (u: number) => units[u].rowIds[0];
   const moves: AssistantAction[] = [];
   const headings: AssistantAction[] = [];
-  for (const run of moveRuns(plan.sequence, unitBefore(scope))) {
+  for (const run of moveRuns(plan.sequence, unitBefore(scope), units)) {
     let after: string | null = run.after === null ? null : id(run.after);
     for (const item of run.items) {
       if ("unit" in item) {
@@ -197,7 +205,7 @@ export function orderSuggestOps(units: OrderUnit[], scope: number[], plan: Order
         ? { markdown: `${"#".repeat(entry.level)} ${entry.heading}` }
         : { markdown: entry.markdown };
   let i = first;
-  const ops: ResolvedOp[] = moveRuns(plan.sequence, unitBefore(scope)).map((run) => ({
+  const ops: ResolvedOp[] = moveRuns(plan.sequence, unitBefore(scope), units).map((run) => ({
     i: i++,
     op: "move_blocks",
     afterBlockId: run.after === null ? null : units[run.after].rowIds[0],

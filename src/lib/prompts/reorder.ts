@@ -41,7 +41,7 @@ export function reorderPrompt(ctx: ReorderCtx): string {
     ...(ctx.material ? ["The assistant's answer, which the command may ask you to use:", ctx.material] : []),
     ctx.scope.whole ? "Scope: the whole document." : `Scope: ${ctx.scope.runs.map(span).join(", ")}.`,
     "Order only blocks in the scope. The rest of the document is context and keeps its place.",
-    ...(ctx.together.length > 0 ? [`These blocks move as one (a list, a table): ${ctx.together.map(span).join(", ")}. Name the first block of each.`] : []),
+    ...(ctx.together.length > 0 ? [`These blocks move as one (a table, a list line with the lines nested under it): ${ctx.together.map(span).join(", ")}. Name the first block of each.`] : []),
     ...(ctx.fixed.length > 0 ? [`These blocks keep their place: ${ctx.fixed.map((id) => `[block ${id}]`).join(", ")}. Leave them out of the order.`] : []),
     ...(ctx.history.length > 0
       ? ["The conversation so far:", ...ctx.history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`)]
