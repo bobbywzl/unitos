@@ -69,7 +69,7 @@ export async function runSuggestAction(input: {
       if (windows.length > 1) cut.push(t("api.suggestTooLong"));
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole };
-      const rowsInScope = whole ? [] : scopeOf(rows, doc.places, action.blockIds!);
+      const rowsInScope = whole || action.reorder ? [] : scopeOf(rows, doc.places, action.blockIds!);
       if (fitsOnePass(rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null) {
@@ -80,9 +80,8 @@ export async function runSuggestAction(input: {
       return { ops: [...pass.ops, ...moves], warnings: pass.warnings, summary: pass.summary };
     }
     const units = action.reorder ? richTextUnits(richText, rows) : [];
-    const selected = [...new Set(input.passage.map((segment) => segment.blockId))];
     const ordering = action.reorder
-      ? runOrderPass({ ...base, document: { title: doc.title, references: null, rows, pageName: null }, units, scopeRowIds: action.blockIds ? scopeOf(rows, doc.places, action.blockIds) : selected }).catch(
+      ? runOrderPass({ ...base, document: { title: doc.title, references: null, rows, pageName: null }, units, scopeRowIds: [] }).catch(
           (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
         )
       : null;

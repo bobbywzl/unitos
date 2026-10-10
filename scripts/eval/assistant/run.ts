@@ -167,7 +167,7 @@ type CaseResult = {
   warnings: string[];
   checks: Check[];
   changed: { id: string; before: string; after: string }[];
-  added: { id: string; text: string }[];
+  added: { id: string; text: string; kind?: string }[];
   removed: string[];
   annotations: Simulation["annotations"];
   notes: Simulation["notes"];
@@ -588,7 +588,7 @@ async function score(): Promise<void> {
       warnings,
       checks,
       changed,
-      added: sim.blocks.filter((b) => b.fresh).map((b) => ({ id: b.id, text: b.text })),
+      added: sim.blocks.filter((b) => b.fresh).map((b) => ({ id: b.id, text: b.text, kind: b.kind ?? blockKind(b.type, b.html, b.text) })),
       removed: ctx.blocks.filter((b) => !afterById.has(b.id)).map((b) => b.id),
       annotations: sim.annotations,
       notes: sim.notes,
@@ -656,7 +656,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
       : []),
     ...(r.warnings.length > 0 ? ["", "What the server refused or could not read (shown to the reader as warnings):", ...r.warnings.map((w) => `- ${w}`)] : []),
     ...(r.changed.length > 0 ? ["", "Blocks whose words the plan changes (before → after):", ...r.changed.map((x) => `- ${x.id}\n  before: ${x.before}\n  after:  ${x.after}`)] : []),
-    ...(r.added.length > 0 ? ["", "Blocks the plan adds:", ...r.added.map((x) => `- ${x.text}`)] : []),
+    ...(r.added.length > 0 ? ["", "Blocks the plan adds, each after a line of >>> (a LIST block's text carries its own markers):", ...r.added.flatMap((x) => [`>>> ${x.kind ?? "block"}`, ...x.text.split("\n").map((line) => `    ${line}`)])] : []),
     ...(r.removed.length > 0 ? ["", `Blocks the plan removes: ${r.removed.join(", ")}`] : []),
     ...(r.annotations.length > 0 ? ["", "Marks the plan makes:", ...r.annotations.map((m) => `- ${m.kind}${m.color ? ` ${m.color}` : ""} on ${m.blockId}: "${m.quote}"${m.comment ? ` — ${m.comment}` : ""}`)] : []),
     ...(r.notes.length > 0 ? ["", "Notes the plan makes:", ...r.notes.map((n) => `- in ${n.section}${n.sourced ? ` (source: "${n.quote}")` : " (no source)"}: ${n.content}`)] : []),

@@ -130,7 +130,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
         // A scope that fits one call: the one pass, the whole document read
         // at once and its answer by reference (lib/assistant/one-pass.ts).
-        if (fitsOnePass(doc.rows, whole ? [] : scope)) {
+        // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
+        if (fitsOnePass(doc.rows, whole || data.reorder ? [] : scope)) {
           send({ windows: 1 });
           const units = richTextUnits(doc.richText!, doc.rows);
           const pass = await runOnePass({
@@ -138,7 +139,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
             units,
             places: doc.places,
-            scopeRowIds: whole ? [] : scope,
+            scopeRowIds: whole || data.reorder ? [] : scope,
             profile,
             lang,
             t,
@@ -166,7 +167,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               userId,
               document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
               units,
-              scopeRowIds: whole ? [] : scope,
+              scopeRowIds: [],
               profile,
               lang,
               t,

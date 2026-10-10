@@ -581,7 +581,8 @@ async function handle(req: Request, t: TFunc) {
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole: whole && !targeted };
       // A scope that fits one call goes by the one pass (lib/assistant/one-pass.ts).
-      const rowsInScope = whole ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
+      const rowsInScope = whole || suggest!.reorder ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
       if (!chip && fitsOnePass(doc.rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null && suggest) {
@@ -615,13 +616,12 @@ async function handle(req: Request, t: TFunc) {
       // A command that moves blocks: the order pass runs beside the window,
       // and its moves land after the window's words (lib/assistant/reorder.ts).
       const units = suggest?.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
-      const selected = [...new Set(passage.map((segment) => segment.blockId))];
       const ordering = suggest?.reorder
         ? runOrderPass({
             userId: user.id,
             document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
             units,
-            scopeRowIds: suggest.blockIds ? scopeOf(doc.rows, doc.places, suggest.blockIds) : selected,
+            scopeRowIds: [],
             profile,
             lang,
             t,
