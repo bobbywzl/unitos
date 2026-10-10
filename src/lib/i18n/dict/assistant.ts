@@ -4,6 +4,9 @@
 const en = {
   // Recommended functions
   recommended: "Recommended",
+  habits: "You often ask",
+  habitsHint: "Asked {n} times in the last two months, on two documents or more",
+  habitsHide: "Hide",
   recLaymanLabel: "Layman summary",
   recLaymanHint: "The core of the document, in plain words",
   recProfessionalLabel: "Professional summary",
@@ -167,6 +170,9 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   recommended: "推荐",
+  habits: "你常问",
+  habitsHint: "最近两个月问过 {n} 次，涉及两篇及以上文档",
+  habitsHide: "隐藏",
   recLaymanLabel: "通俗摘要",
   recLaymanHint: "用大白话讲出文档的核心",
   recProfessionalLabel: "专业摘要",
