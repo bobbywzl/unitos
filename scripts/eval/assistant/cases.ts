@@ -44,8 +44,10 @@ export type ActionExpect = {
   color?: string;
   style?: string;
   reorder?: boolean;
-  // suggest and revise: no blockIds (the whole document).
+  // suggest and revise: no blockIds and no sections (the whole document).
   whole?: boolean;
+  // suggest and revise: this heading's whole section is in scope (in sections).
+  section?: number;
   name?: string;
 };
 

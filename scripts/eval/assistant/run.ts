@@ -258,6 +258,7 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
   if (e.style !== undefined && !(a.type === "style" && a.style === e.style)) return false;
   if (e.reorder !== undefined && !((a.type === "suggest" || a.type === "revise") && Boolean(a.reorder) === e.reorder)) return false;
   if (e.whole !== undefined && !((a.type === "suggest" || a.type === "revise") && (!a.blockIds?.length && !a.sections?.length) === e.whole)) return false;
+  if (e.section !== undefined && !((a.type === "suggest" || a.type === "revise") && (a.sections ?? []).includes(idOf(e.section)))) return false;
   if (e.name !== undefined) {
     const name = a.type === "rename_speaker" ? a.name : a.type === "set_speaker" ? a.name : "";
     if (!has(name, e.name)) return false;
