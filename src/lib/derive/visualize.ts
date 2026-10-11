@@ -51,7 +51,7 @@ export const diagramSchema = z.object({
   edges: z.array(edgeSchema).max(48),
 });
 
-const visualSchema = z.object({
+export const visualSchema = z.object({
   kind: z.enum(["diagram", "simulation", "picture", "animation"]),
   caption: z.string().min(1).max(400),
   diagram: diagramSchema.nullish(),
@@ -88,10 +88,13 @@ export type VisualizeOutput = z.infer<typeof visualizeOutputSchema>;
 export type Visual = NonNullable<VisualizeOutput["visual"]>;
 export type Diagram = z.infer<typeof diagramSchema>;
 
-/** The annotation's markdown: the image, then the caption under it. */
-export function visualizationMarkdown(imageId: string, caption: string): string {
+/** The annotation's markdown: the image, then the caption under it, then
+    the warning when the model was not certain the picture is accurate and
+    the reader confirmed it anyway (SPEC.md §20). */
+export function visualizationMarkdown(imageId: string, caption: string, warning: string | null = null): string {
   const alt = caption.replace(/[[\]\n]/g, " ").trim();
-  return `![${alt}](${imageUrl(imageId)})\n\n*${caption.replace(/\n+/g, " ").trim()}*`;
+  const line = `![${alt}](${imageUrl(imageId)})\n\n*${caption.replace(/\n+/g, " ").trim()}*`;
+  return warning ? `${line}\n\n*${warning.trim()}*` : line;
 }
 
 /** The SVG of one visual: laid out for a diagram, integrated for a

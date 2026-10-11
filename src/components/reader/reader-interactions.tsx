@@ -585,8 +585,9 @@ type ExplainBubble = ToolChat & {
   text: string;
   streaming: boolean;
   error: string | null;
-  // VISUALIZE only (SPEC.md §20): the model declined to draw, and this is why.
-  declined: string | null;
+  // VISUALIZE only (SPEC.md §20): the model is not certain the picture would
+  // be accurate, and this is why. The card asks the reader to confirm.
+  unsure: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
@@ -3451,7 +3452,7 @@ export function ReaderInteractions({
           text: stored.content,
           streaming: false,
           error: null,
-          declined: null,
+          unsure: null,
           anchor,
           noteId: stored.noteId,
         });
@@ -4326,9 +4327,9 @@ export function ReaderInteractions({
     return segments.length > 1 ? { segments: segments.map(anchorBody) } : {};
   }
 
-  function deriveBody(type: string, anchor: Anchor) {
+  function deriveBody(type: string, anchor: Anchor, extra: Record<string, unknown> = {}) {
     // The Web toggle (SPEC.md §7): the route searches for EXPLAIN and ANALYZE.
-    return JSON.stringify({ type, documentId, notebookId, web, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+    return JSON.stringify({ type, documentId, notebookId, web, anchor: anchorBody(anchor), ...segmentsBody(anchor), ...extra });
   }
 
   // DEFINE (SPEC.md §4, §6): the meaning of the selected word in its
@@ -4449,7 +4450,7 @@ export function ReaderInteractions({
       await runVisualize(anchor, slot, replaceNoteId);
       return;
     }
-    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null });
+    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, unsure: null, anchor, noteId: null });
     explainAbortRef.current?.abort();
     const controller = new AbortController();
     explainAbortRef.current = controller;
@@ -4591,7 +4592,8 @@ export function ReaderInteractions({
   // VISUALIZE (SPEC.md §20, Unitos Ultra): the selection as a picture, into
   // the same card as EXPLAIN. The server answers behind a heartbeat stream
   // with the annotation's markdown (the picture and its caption), or with the
-  // reason the model declined to draw; a decline persists nothing.
+  // reason the picture may not be accurate; that persists nothing, and the
+  // card asks the reader to confirm. A confirmed run draws the picture anyway.
   async function visualize() {
     if (!popover || busy) return;
     if (!ultra) {
@@ -4605,7 +4607,7 @@ export function ReaderInteractions({
     markFreshAnchor(anchor);
     await runVisualize(anchor, claimSideSlot("explain", yTop));
   }
-  async function runVisualize(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
+  async function runVisualize(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null, confirm = false) {
     setBubble({
       ...slot,
       ...NO_CHAT,
@@ -4613,7 +4615,7 @@ export function ReaderInteractions({
       text: "",
       streaming: true,
       error: null,
-      declined: null,
+      unsure: null,
       anchor,
       noteId: null,
     });
@@ -4625,7 +4627,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody("VISUALIZE", anchor),
+        body: deriveBody("VISUALIZE", anchor, confirm ? { confirm: true } : {}),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -4642,15 +4644,15 @@ export function ReaderInteractions({
         parsed = null;
       }
       const payload = parsed as {
-        declined?: boolean;
+        unsure?: boolean;
         reason?: string;
         noteId?: string;
         content?: string;
       } | null;
       if (!payload) throw new Error(t("reader.emptyResponse"));
-      if (payload.declined) {
+      if (payload.unsure && !payload.content) {
         const reason = payload.reason ?? "";
-        setBubble((b) => (b ? { ...b, streaming: false, declined: reason } : b));
+        setBubble((b) => (b ? { ...b, streaming: false, unsure: reason } : b));
         return;
       }
       const content = payload.content ?? "";
@@ -8630,11 +8632,23 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           </div>
           {bubble.error ? (
             <p className="text-sm text-red-600">{bubble.error}</p>
-          ) : bubble.declined !== null ? (
+          ) : bubble.unsure !== null ? (
             <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
-              <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
-              {bubble.declined && <p className="mt-1">{bubble.declined}</p>}
-              <p className="mt-1 text-sand-600">{t("reader.visualizeDeclinedHint")}</p>
+              <p className="font-semibold">{t("reader.visualizeUnsure")}</p>
+              {bubble.unsure && <p className="mt-1 text-sand-600">{bubble.unsure}</p>}
+              {/* Confirm: the picture is drawn anyway, marked "May not be accurate." */}
+              <button
+                onClick={() => {
+                  if (!bubble.anchor) return;
+                  const { left, top, width, side, anchor } = bubble;
+                  void runVisualize(anchor, { left, top, width, side }, null, true);
+                }}
+                data-track="visualize-confirm"
+                className="mt-3 rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
+                data-tip={t("reader.visualizeConfirmTitle")}
+              >
+                {t("reader.visualizeConfirm")}
+              </button>
             </div>
           ) : bubble.text ? (
             <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
@@ -8644,7 +8658,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ) : (
             <ThinkingIndicator className="py-1 text-[12.5px]" />
           )}
-          {bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null && (
+          {bubble.noteId && !bubble.streaming && !bubble.error && bubble.unsure === null && (
             <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
               <RatingButtons
                 tool={bubble.kind}
@@ -8667,7 +8681,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               )}
             </div>
           )}
-          {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
+          {bubble.unsure === null && toolChatFoot("explain", bubble, bubble.kind)}
         </div>
       )}
       </Presence>
@@ -9379,7 +9393,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           busy={bubble.busy}
           after={<QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />}
           foot={
-            bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
+            bubble.unsure === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
           }
           onClose={closeConversationView}
         />

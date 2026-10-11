@@ -19,6 +19,9 @@ export function visualizeCheckPrompt(ctx: {
   // The finished SVG. Null for a simulation: its frames are the server's,
   // computed from the spec, so the spec is what there is to check.
   svg: string | null;
+  // The reader confirmed a picture that may not be accurate (SPEC.md §20):
+  // the check keeps or fixes the picture, and never withdraws it.
+  confirmed?: boolean;
 }): string {
   const lang = languageName(ctx.lang);
   return [
@@ -48,7 +51,9 @@ export function visualizeCheckPrompt(ctx: {
     "Then answer:",
     "- All five hold: keep it. keep true, visual null.",
     "- One fails and you can fix it: keep false and give the corrected visual whole — every node and edge, or the whole SVG. It replaces the picture, so a patch is not enough. The same rules as before hold for it.",
-    "- One fails and you cannot fix it: keep false, visual null. The run declines and the reader is told why. A picture that misleads is worse than no picture.",
+    ctx.confirmed
+      ? "- One fails and you cannot fix it: keep true. The reader was told the picture may not be accurate and confirmed, so the picture stands; say in reason what it may get wrong."
+      : "- One fails and you cannot fix it: keep false, visual null. The reader is told the picture may not be accurate, reads your reason, and confirms to have it drawn anyway.",
     "Do not replace a picture that holds. A different picture that is no better is a worse answer than the one that stands.",
     "",
     `Write reason, caption, node labels, node details, edge labels, and SVG text in ${lang}.`,

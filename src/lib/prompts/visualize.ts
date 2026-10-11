@@ -8,8 +8,11 @@ import { languageName, profileLines, type PromptCtx } from "@/lib/prompts/types"
 // in motion, lib/derive/simulate.ts), a picture (an SVG drawing), or an
 // animation (an SVG with SMIL). It weighs the passage's own structure against the best analogy
 // it can find, and takes whichever carries the idea; the reader's background
-// says which analogies the reader already knows. A refusal is a valid output
-// and the card shows its reason. Runs on VISUALIZE_MODEL (lib/derive/config.ts).
+// says which analogies the reader already knows. The model never refuses:
+// when it is not certain, the card says the picture may not be accurate,
+// shows its reason, and asks the reader to confirm; a confirmed run
+// (ctx.confirmed) draws the best picture anyway. Runs on VISUALIZE_MODEL
+// (lib/derive/config.ts).
 export function visualizePrompt(ctx: PromptCtx): string {
   const lang = languageName(ctx.lang);
   return [
@@ -26,7 +29,13 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "Context after the selection:",
     ctx.contextAfter || "(end of document)",
     "",
-    "Task: turn the selected passage into one picture that delivers its core idea at a glance — or refuse.",
+    "Task: turn the selected passage into one picture that delivers its core idea at a glance.",
+    ...(ctx.confirmed
+      ? [
+          "",
+          "The reader was told that a picture of this passage may not be accurate, and confirmed. Draw the best picture you can: visual is never null in this run. Set certain to false when it still may not be accurate, and write in reason what the picture may get wrong — never that it cannot be done.",
+        ]
+      : []),
     "",
     "Step 1. Place the passage in the article, then find its core idea. Read the whole document above, not the passage alone. Say for yourself what the passage does there: it states a problem; it extends a problem stated earlier; it solves a problem stated earlier; it offers an alternative to a structure, a method, or an explanation given earlier; it is one step of a process the article builds up; it is an example of a claim made earlier; or it stands on its own. The core idea is the passage's point as it sits in the article, in one sentence — what the passage adds to what the article set up. When the passage answers, extends, or replaces something stated elsewhere, the picture shows both: the problem and this solution, the earlier structure and this alternative, the process and this step — because a reader who sees this passage's part alone does not see what it is for. Everything below serves that one idea; a picture that shows a side point of the passage is a wrong picture, not a partial one.",
     "",
@@ -34,7 +43,7 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "- The equation in motion: when the passage is a law of change — an equation with a time derivative, or a description of how a state evolves under a rule — the picture is the state evolving under that law, the way a textbook animates the heat equation or a wave packet: the state at t = 0, the boundary, the law acting, over time. The server integrates the equation from your spec (the simulation kind below), so the motion is the equation's own, not a drawing of it. This is the picture for a PDE, an ODE, a rate law, a diffusion, a wave, a population, an oscillation. Never hand-draw the frames of such a thing as an animation: a drawn curve is a guess, an integrated one is the truth.",
     "- The literal picture: the passage's own structure — a sequence, a flow, a hierarchy, a cause and its effects, parts and how they fit, one quantity changing with another, a mechanism, a physical arrangement.",
     "- The analogy: a familiar thing that shares the idea's shape, drawn in place of it.",
-    "Work out all three before you choose. A law of change takes the equation in motion. A passage whose own structure carries the idea takes the literal picture — an analogy there only adds a second thing to understand. A passage whose idea is abstract, unfamiliar, or has no drawable structure of its own is where the analogy earns its place: it is often the only picture that can carry such a passage, and reaching for one is the difference between a picture and a refusal. A formula that is not a law of change — a definition, an identity, a closed form — is drawn as what it does, never as its symbols: the shape it describes, the quantity it conserves, the state before and after.",
+    "Work out all three before you choose. A law of change takes the equation in motion. A passage whose own structure carries the idea takes the literal picture — an analogy there only adds a second thing to understand. A passage whose idea is abstract, unfamiliar, or has no drawable structure of its own is where the analogy earns its place: it is often the only picture that can carry such a passage, and reaching for one is the difference between a picture the reader trusts and one that may not be accurate. A formula that is not a law of change — a definition, an identity, a closed form — is drawn as what it does, never as its symbols: the shape it describes, the quantity it conserves, the state before and after.",
     "",
     "Step 3. When an analogy is in play, find the best one, not the first one. Name three candidates to yourself, then take the one that passes all five:",
     "1. Every part of the picture maps to a part of the passage, and you can say which to which.",
@@ -42,14 +51,14 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "3. The reader knows the analogue already, without being taught it. The reader context above says what they know — an analogy from their own field beats a general one.",
     "4. It breaks late. Every analogy breaks somewhere; the best one breaks outside what the passage says.",
     "5. It carries the idea better than the literal picture would.",
-    "When no candidate passes all five, drop the analogy: use the literal picture, or refuse. An analogy the reader has to be taught first, or that carries a claim the passage does not make, is worse than no picture at all.",
+    "When no candidate passes all five, drop the analogy: use the literal picture. An analogy the reader has to be taught first, or that carries a claim the passage does not make, is worse than a literal picture.",
     "",
     "Step 4. Decide whether to draw at all. Draw only when all four hold for the picture you chose:",
     "1. A picture shows this better than words do.",
     "2. You can draw it without inventing anything: every element and every relation is stated in the passage, in its context, or elsewhere in the document, or is the analogy's own and maps to something stated. What the article states elsewhere is there to be drawn — the problem this passage solves, the structure it replaces — and drawing it is not inventing.",
     "3. A reader who sees the picture without the passage takes away the passage's core idea, and not a different point.",
     "4. You are certain this picture is the best way to show it, not merely a possible way.",
-    "When any one does not hold: set certain to false, set visual to null, and write in reason why a picture would not carry the passage's core idea — name what you tried, the literal picture and the analogies, so the reader knows the passage was worked on and not skipped. Do not draw a weak picture to have something to show. A refusal is the right output for a passage of opinion, of definitions, of narrative without structure, or of a claim whose whole content is in its words.",
+    "When any one does not hold: set certain to false, set visual to null, and write in reason, in one or two sentences, what a picture of this passage may get wrong — name what you tried, the literal picture and the analogies, so the reader knows the passage was worked on and not skipped. Never write that it cannot be done: the reader is told the picture may not be accurate and asked to confirm, and a confirmed run draws it. A passage of opinion, of definitions, of narrative without structure, or of a claim whose whole content is in its words is where certain is false.",
     "",
     "Step 5. Pick the one kind that fits:",
     "- simulation: a law of change, integrated by the server and drawn as the state evolving over time — a loop of 8 seconds covering duration units of the law's time, with the state at t = 0 kept faint under the motion and a time bar. Give:",
@@ -76,7 +85,7 @@ export function visualizePrompt(ctx: PromptCtx): string {
     "",
     "Step 6. Write the caption: one sentence, the picture's point, so the reader knows what they are looking at. When the picture shows the passage against what the article set up, the caption says the relation — the fix this passage gives to the problem above, the alternative it offers to the method before. When the picture is an analogy the caption says so and says what stands for what.",
     "",
-    "Step 7. Check your own picture before you write it out. Read it as a reader who has not seen the passage: does it deliver the core idea from Step 1, does every part map to something stated, does any part overlap, run off the viewBox, or go unlabeled? Fix what fails. When it cannot be fixed, refuse instead — a refusal with a reason is a better answer than a picture that misleads.",
+    "Step 7. Check your own picture before you write it out. Read it as a reader who has not seen the passage: does it deliver the core idea from Step 1, does every part map to something stated, does any part overlap, run off the viewBox, or go unlabeled? Fix what fails. When it cannot be fixed, set certain to false and say in reason what the picture may get wrong — the reader decides whether to see it.",
     "",
     `Write reason, caption, node labels, node details, edge labels, and SVG text in ${lang}.`,
     "",
@@ -85,7 +94,7 @@ export function visualizePrompt(ctx: PromptCtx): string {
     '  "judgment": {',
     '    "structure": "<one sentence: what the passage does in the article, its core idea, and the picture you chose for it — literal or the analogy, named — or none>",',
     '    "certain": true | false,',
-    '    "reason": "<one or two sentences: why this picture is, or why no picture is, the best way to show this passage>"',
+    '    "reason": "<one or two sentences: why this picture is the best way to show this passage, or what a picture of it may get wrong>"',
     "  },",
     '  "visual": null | {',
     '    "kind": "diagram" | "simulation" | "picture" | "animation",',
