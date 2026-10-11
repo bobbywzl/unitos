@@ -1491,7 +1491,7 @@ export const CASES: AssistantCase[] = [
     profile: STUDENT,
     question: "Join the \"Three lessons from the cases\" line with the line right after it, so the lessons and the closing point are one line.",
     expect: { change: true, actions: [{ type: "join_lines", block: 55, next: 56 }], only: ["join_lines"], max: 1, touch: [55, 56] },
-    good: "One join_lines of the 24:48 line and the line after it (the same voice, next to each other); nothing else.",
+    good: "One join_lines of the 24:51 line (\"Three lessons from the cases\") and the line after it (the same voice, next to each other); nothing else.",
   },
   {
     id: "section-lecture-summary-doc",
