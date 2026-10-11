@@ -68,7 +68,7 @@ export function textSelectionBlock(blockId: string, text: string, core = false):
   // A core is the block collapsed to what it really says (SPEC.md §28): the
   // reader selected in the core, not in the block's own words.
   const where = core ? `the core of block ${blockId} (the block collapsed to what it really says, in plain words)` : `block ${blockId}`;
-  return `The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+  return `This is the selection chat. The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
 }
 
 export function actPrompt(ctx: ActCtx): string {
@@ -113,7 +113,7 @@ export function actPrompt(ctx: ActCtx): string {
           "   d. Every claim in reply that rests on a passage cites it as [block <id>].",
           ctx.history.length > 0
             ? "   e. This message continues the conversation: return matches only when the message asks where else the document deals with something. Otherwise return an empty list."
-            : "   e. This is the first message of the conversation: always return matches.",
+            : "   e. This is the first message of the conversation: return matches, except where rule 10 asks for an empty list.",
         ]
       : ["9. matches: return an empty list. The reader has no selection."]),
     ...(ctx.edits === "suggestions"
