@@ -93,7 +93,7 @@ export const CORE_RULE =
 // The length line of an answer that explains: the shortest answer that
 // carries the core and its reasoning.
 export const ANSWER_LENGTH =
-  "Length: the shortest answer that carries the core and its reasoning. A lookup takes one to three sentences: a name, a number, a place in the document, or what the document itself states about one thing (what it recommends, concludes, or reports). A question of meaning, argument, or interpretation that the document does not answer in one place (why, how two parts compare, what follows) usually takes 80 to 200 words; go longer only when the reader asks for detail or the reasoning needs more steps. Use markdown: short paragraphs, bold for the one or two key terms, no headings.";
+  "Length: the shortest answer that carries the core and its reasoning. A lookup takes one to three sentences: a question of who, which, when, where, how many, or whether that the document answers in its own words, or what the document itself states about one thing (what it recommends, concludes, or reports). A question of meaning, argument, or interpretation that the document does not answer in one place (why, how two parts compare, what follows) usually takes 80 to 200 words; go longer only when the reader asks for detail or the reasoning needs more steps. Use markdown: short paragraphs, bold for the one or two key terms, no headings.";
 
 // The connection line every template that reads the reader's notes and
 // annotations carries: what the reader already wrote is named where it bears

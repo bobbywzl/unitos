@@ -17,7 +17,7 @@ import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
-import { changedSpans } from "@/lib/assistant/diff-window";
+import { changedSpansAt } from "@/lib/assistant/diff-window";
 
 // The revise action (SPEC.md §7): a change to many blocks of a document
 // without rich text, the spelling or the grammar across it, its register, a
@@ -174,11 +174,12 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
 };
 
 /** The plan card's description of an edit a pass made (SPEC.md §7): the
-    change itself, "Change “old” to “new”", when up to three stretches of
-    the block change; the first two and the count of the rest when more
-    change and the block keeps most of its words; else "Rewrite the
-    paragraph that starts …". Never the pass's one why repeated on every
-    edit, which names no block and no words. */
+    change itself, "Change “old” to “new”", when up to four stretches of
+    the block change; the three largest and the count of the rest when more
+    change; "Rewrite the paragraph that starts …" when most of its words are
+    replaced or as many are added, with its length when that moves far.
+    Never the pass's one why repeated on every edit, which names no block
+    and no words. */
 export function editDescription(t: TFunc, before: string, after: string): string {
   const description = describeEdit(t, before, after);
   // A quote that ends its sentence ends the description too: no second period.
@@ -196,62 +197,94 @@ function cutWords(text: string, n: number): string {
   return `${head.replace(/[\s,;:(]+$/, "")}…`;
 }
 
+/** Where word `i` of `list` starts in the words joined by single spaces. */
+const offsetOf = (list: string[], i: number): number => (i === 0 ? 0 : list.slice(0, i).join(" ").length + 1);
+
 function describeEdit(t: TFunc, before: string, after: string): string {
   const cut = (text: string, n = 60) => cutWords(text, n);
-  // Every changed stretch, so an edit that changes three places names all
-  // three, and two edits of one kind read differently on the card. A
-  // stretch of one or two words reads as its sentence: "I" to "this essay"
-  // names no block, the sentence that holds it does.
-  const raw = changedSpans(before, after).filter((s) => s.before && s.after);
-  // One short span reads as its sentence; two or three read with a few words
-  // around each, so the description stays one sentence of under 40 words.
-  // Each span is found from where the one before it ended, so the same
-  // words changed twice in a block read with their own surroundings.
   const flatBefore = before.replace(/\s+/g, " ").trim();
   const flatAfter = after.replace(/\s+/g, " ").trim();
-  let fromBefore = 0;
-  let fromAfter = 0;
-  const placed = raw.map((s) => {
-    const atBefore = Math.max(0, flatBefore.indexOf(s.before, fromBefore));
-    const atAfter = Math.max(0, flatAfter.indexOf(s.after, fromAfter));
-    fromBefore = atBefore + s.before.length;
-    fromAfter = atAfter + s.after.length;
-    return { ...s, atBefore, atAfter };
+  // Every changed stretch, so an edit that changes three places names all
+  // three, and two edits of one kind read differently on the card.
+  const found = changedSpansAt(before, after);
+  if (found.length === 0) return t("api.editRewrite", { start: cut(flatBefore, 40) });
+  // Most of the words replaced, or as many added (a plain-words rewrite that
+  // grows by half): a rewrite, which no list of changes names. A short block
+  // counts as 25 words, so a clause added to one sentence stays a change.
+  const total = Math.max(25, words(flatBefore));
+  if (found.reduce((sum, s) => sum + words(s.before), 0) > total * 0.6 || found.reduce((sum, s) => sum + words(s.after), 0) > total * 0.6) {
+    return rewriteDescription(t, flatBefore, flatAfter);
+  }
+  // A stretch that only adds or only removes words reads with the word
+  // before it (after it, at the start), so both sides name its place.
+  const a = flatBefore.split(" ");
+  const b = flatAfter.split(" ");
+  const placed = found.map((s) => {
+    const left = (s.before && s.after) || (s.from > 0 && s.fromB > 0);
+    const from = s.before && s.after ? s.from : left ? s.from - 1 : s.from;
+    const to = s.before && s.after ? s.to : left ? s.to : s.to + 1;
+    const fromB = s.before && s.after ? s.fromB : left ? s.fromB - 1 : s.fromB;
+    const toB = s.before && s.after ? s.toB : left ? s.toB : s.toB + 1;
+    return {
+      before: a.slice(from, to).join(" "),
+      after: b.slice(fromB, toB).join(" "),
+      atBefore: offsetOf(a, from),
+      atAfter: offsetOf(b, fromB),
+      size: words(s.before) + words(s.after),
+    };
   });
+  // A stretch of one or two words reads as its sentence when it is the only
+  // change and the sentence is short ("I" to "this essay" names no block, the
+  // sentence that holds it does); else as the shortest phrase around it that
+  // names one place in the block. Two short stretches of one sentence read
+  // as that sentence once.
   const short = placed.filter((s) => words(s.before) < 3);
   const oneSentence = short.length === placed.length && new Set(placed.map((s) => sentenceAround(flatBefore, s.before, s.atBefore))).size === 1;
   const alone = placed.length === 1 || oneSentence;
-  // A short change alone reads as its sentence when the sentence is short;
-  // else as the shortest phrase around it that names one place in the block.
   const wide = placed.map((s) =>
     words(s.before) < 3
       ? alone && sentenceAround(flatBefore, s.before, s.atBefore).length <= 60
-        ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true }
-        : { ...uniquePhrase(flatBefore, flatAfter, s), wide: true }
-      : { before: s.before, after: s.after, wide: false },
+        ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true, size: s.size }
+        : { ...uniquePhrase(flatBefore, flatAfter, s), wide: true, size: s.size }
+      : { before: s.before, after: s.after, wide: false, size: s.size },
   );
-  // Two short spans of one sentence read as that sentence once.
-  const first = wide.map((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
-  const spans = wide.filter((_, k) => first[k]);
-  const changed = raw.reduce((sum, s) => sum + s.before.length, 0);
-  const small = raw.length > 0 && raw.length === changedSpans(before, after).length && changed <= Math.max(60, before.length * 0.6);
-  const n = (k: number, plain: number) => (spans[k].wide ? 100 : plain);
-  if (small && spans.length === 1) return t("api.editChange", { from: cut(spans[0].before, n(0, 60)), to: cut(spans[0].after, n(0, 60)) });
-  if (small && spans.length === 2) return t("api.editChangeTwo", { a: cut(spans[0].before, n(0, 40)), b: cut(spans[0].after, n(0, 40)), c: cut(spans[1].before, n(1, 40)), d: cut(spans[1].after, n(1, 40)) });
-  if (small && spans.length === 3) {
-    return t("api.editChangeThree", { a: cut(spans[0].before, n(0, 30)), b: cut(spans[0].after, n(0, 30)), c: cut(spans[1].before, n(1, 30)), d: cut(spans[1].after, n(1, 30)), e: cut(spans[2].before, n(2, 30)), f: cut(spans[2].after, n(2, 30)) });
+  const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
+  // Each change in full, cut only past a length that keeps one sentence
+  // of under 40 words.
+  const pair = (k: number, plain: number) => ({ from: cut(spans[k].before, spans[k].wide ? Math.max(plain, 60) : plain), to: cut(spans[k].after, spans[k].wide ? Math.max(plain, 60) : plain) });
+  if (spans.length === 1) {
+    const p = pair(0, spans[0].wide ? 100 : 60);
+    return t("api.editChange", { from: p.from, to: p.to });
   }
-  // Many changes that keep most of the block's words (a register, a style
-  // of address): the first two, and the count of the rest.
-  const all = changedSpans(before, after).length;
-  const kept = raw.reduce((sum, s) => sum + words(s.before), 0) <= words(before) * 0.6;
-  if (spans.length > 3 && kept) {
-    const third = first.reduce((at, isFirst, k) => (at < 0 && isFirst && first.slice(0, k + 1).filter(Boolean).length === 3 ? k : at), -1);
-    const more = all - third;
-    const m = (k: number) => (spans[k].wide ? 50 : 30);
-    return t("api.editChangeMore", { a: cut(spans[0].before, m(0)), b: cut(spans[0].after, m(0)), c: cut(spans[1].before, m(1)), d: cut(spans[1].after, m(1)), n: more, s: more === 1 ? "" : "s" });
+  if (spans.length <= 4) {
+    const ps = spans.map((_, k) => pair(k, 60));
+    if (ps.length === 2) return t("api.editChangeTwo", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to });
+    if (ps.length === 3) return t("api.editChangeThree", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to });
+    return t("api.editChangeFour", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, g: ps[3].from, h: ps[3].to });
   }
-  return t("api.editRewrite", { start: cut(before.replace(/\s+/g, " ").trim(), 40) });
+  // More: the three largest, in the block's order, and the count of the
+  // rest; the larger changes are the ones the command made (a recast
+  // sentence), the small ones its echoes (a word for a word).
+  const largest = spans
+    .map((s, k) => ({ k, size: s.size }))
+    .sort((x, y) => y.size - x.size || x.k - y.k)
+    .slice(0, 3)
+    .map((x) => x.k)
+    .sort((x, y) => x - y);
+  const ps = largest.map((k) => pair(k, 60));
+  const more = spans.length - 3;
+  return t("api.editChangeMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, n: more, s: more === 1 ? "" : "s" });
+}
+
+/** A rewrite: the block's opening, and its length when it moves by a quarter
+    and by ten words or more. Words are not counted in CJK text. */
+function rewriteDescription(t: TFunc, flatBefore: string, flatAfter: string): string {
+  const start = cutWords(flatBefore, 40);
+  const from = words(flatBefore);
+  const to = words(flatAfter);
+  const cjk = /[\u3400-\u9fff]/.test(flatBefore);
+  if (!cjk && Math.abs(to - from) >= Math.max(10, from * 0.25)) return t("api.editRewriteLength", { start, from, to });
+  return t("api.editRewrite", { start });
 }
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;

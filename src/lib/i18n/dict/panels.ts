@@ -124,6 +124,7 @@ const en = {
   documentFallback: "document",
   // Markdown block chips
   jumpToBlock: "Jump to this block in the document",
+  jumpToBlocks: "Jump to these {n} blocks in the document",
   showCitedNote: "Show this note in the notes tray",
 };
 
@@ -234,6 +235,7 @@ const zh: Record<keyof typeof en, string> = {
   formatCode: "代码",
   documentFallback: "文档",
   jumpToBlock: "跳转到文档中的此块",
+  jumpToBlocks: "跳转到文档中的这 {n} 个块",
   showCitedNote: "在笔记栏中显示这条笔记",
 };
 

@@ -171,6 +171,9 @@ type CaseResult = {
   warnings: string[];
   checks: Check[];
   changed: { id: string; before: string; after: string }[];
+  // Blocks whose kind the plan changes (a heading made a paragraph, a list
+  // line made a checklist line), whatever happens to their words.
+  restyled?: { id: string; before: string; after: string }[];
   added: { id: string; text: string; kind?: string; time?: string }[];
   removed: string[];
   // Blocks whose place the plan changes: the fewest that moved to make the
@@ -618,6 +621,10 @@ async function score(): Promise<void> {
     const before = new Map(ctx.blocks.map((b) => [b.id, b]));
     const afterById = new Map(sim.blocks.map((b) => [b.id, b]));
     const changed = ctx.blocks.filter((b) => afterById.has(b.id) && afterById.get(b.id)!.text !== b.text).map((b) => ({ id: b.id, before: b.text, after: afterById.get(b.id)!.text }));
+    const kindNow = (b: (typeof sim.blocks)[number]) => b.kind ?? blockKind(b.type, b.html, b.text);
+    const restyled = ctx.blocks
+      .filter((b) => afterById.has(b.id) && kindNow(afterById.get(b.id)!) !== blockKind(b.type, b.html, b.text))
+      .map((b) => ({ id: b.id, before: blockKind(b.type, b.html, b.text), after: kindNow(afterById.get(b.id)!) }));
     const result: CaseResult = {
       id: c.id,
       family: c.family,
@@ -630,6 +637,7 @@ async function score(): Promise<void> {
       warnings,
       checks,
       changed,
+      ...(restyled.length > 0 ? { restyled } : {}),
       // A split's second line is listed with the blocks the plan adds, so the
       // judge reads both halves as the plan card shows them.
       added: sim.blocks
@@ -715,7 +723,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     "",
     `What a good turn does (from the case's author):\n${c.good}`,
     "",
-    "The assistant's answer (what the reader reads). In the app a [block <id>] tag renders as a ¶ chip that scrolls to the block and shows none of its words, and a [note <id>] tag as a ✎ chip: the words around a chip are all the reader reads of which block is meant.",
+    "The assistant's answer (what the reader reads). In the app a [block <id>] tag renders as a ¶ chip that scrolls to the block and shows none of its words, and a [note <id>] tag as a ✎ chip: the words around a chip are all the reader reads of which block is meant. Block tags side by side (only spaces or commas between them) render as one chip with their count (¶3), which scrolls to the first of those blocks and flashes each.",
     "",
     r.answer || "(empty)",
     "",
@@ -737,6 +745,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
       : []),
     ...(r.warnings.length > 0 ? ["", "What the server refused or could not read (shown to the reader as warnings):", ...r.warnings.map((w) => `- ${w}`)] : []),
     ...(r.changed.length > 0 ? ["", "Blocks whose words the plan changes (before → after):", ...r.changed.map((x) => `- ${x.id}\n  before: ${x.before}\n  after:  ${x.after}`)] : []),
+    ...(r.restyled?.length ? ["", "Blocks whose kind the plan changes (before → after):", ...r.restyled.map((x) => `- ${x.id}: ${x.before} → ${x.after}`)] : []),
     ...(r.added.length > 0 ? ["", "Blocks the plan adds, each after a line of >>> (a LIST block's text carries its own markers):", ...r.added.flatMap((x) => [`>>> ${x.kind ?? "block"}${x.time ? ` (${x.time})` : ""}`, ...x.text.split("\n").map((line) => `    ${line}`)])] : []),
     ...(r.removed.length > 0 ? ["", `Blocks the plan removes: ${r.removed.join(", ")}`] : []),
     ...(r.moved?.length ? ["", "Blocks the plan moves, each with the block it now follows:", ...r.moved.map((m) => `- ${m.id} ("${clipWords(m.text)}") now after ${m.after}`)] : []),

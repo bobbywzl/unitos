@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import { CommentIcon, LinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
+import { BLOCK_HREF, BLOCKS_HREF, linkifyBlockTags, NOTE_HREF } from "@/lib/block-tags";
 import { imageWidth } from "@/lib/note-markup";
 import {
   annotationReferenceHref,
@@ -24,18 +25,10 @@ import { sourceOfQuote } from "@/lib/notes/quote-sources";
 import { splitHits } from "@/lib/search-hits";
 import type { SourceChip } from "@/lib/types";
 
-// AI text cites document blocks as [block <id>] — the tags the model sees in
-// its document context. They render as ¶ chips that scroll the reader to the
-// block and flash it (the reader listens for dissect:flash-block).
-const BLOCK_TAG = /\[block ([a-zA-Z0-9]+)\]/g;
-
-// A note or an annotation is cited as [note <id>]: a chip that opens it
-// (showCitedNote), never the bare id.
-const NOTE_TAG = /\[note ([a-zA-Z0-9]+)\]/g;
-
-function linkifyBlockTags(text: string): string {
-  return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)").replace(NOTE_TAG, "[✎](#dissect-note-$1)");
-}
+// AI text cites document blocks as [block <id>] and notes as [note <id>]:
+// chips (lib/block-tags.ts). A ¶ chip scrolls the reader to the block and
+// flashes it (the reader listens for dissect:flash-block); a chip for blocks
+// named together carries their count and flashes each.
 
 // Note style tags: <u> underlines, <clay>/<sage>/<gold>/<plum> color the text
 // (the note editor writes them). react-markdown drops raw HTML, so they become
@@ -515,7 +508,7 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     if (styleTags.includes("u")) painted = <u>{painted}</u>;
     return painted;
   }
-  const noteId = href?.startsWith("#dissect-note-") ? href.slice("#dissect-note-".length) : null;
+  const noteId = href?.startsWith(NOTE_HREF) ? href.slice(NOTE_HREF.length) : null;
   if (noteId) {
     return (
       <button
@@ -528,7 +521,20 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
       </button>
     );
   }
-  const blockId = href?.startsWith("#dissect-block-") ? href.slice("#dissect-block-".length) : null;
+  const blockIds = href?.startsWith(BLOCKS_HREF) ? href.slice(BLOCKS_HREF.length).split(",") : null;
+  if (blockIds) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId: blockIds[0], blockIds } }))}
+        data-tip={t("panels.jumpToBlocks", { n: blockIds.length })}
+        className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center gap-px rounded-full bg-clay-100 px-1.5 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
+      >
+        ¶<span className="text-[10px] tabular-nums">{blockIds.length}</span>
+      </button>
+    );
+  }
+  const blockId = href?.startsWith(BLOCK_HREF) ? href.slice(BLOCK_HREF.length) : null;
   if (blockId) {
     return (
       <button

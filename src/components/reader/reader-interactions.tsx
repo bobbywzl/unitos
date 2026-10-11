@@ -4121,10 +4121,11 @@ export function ReaderInteractions({
 
   // ¶ chips in AI text (Markdown) jump to the block they cite. A part of the
   // contents lands on the core of a collapsed block (SPEC.md §28); every
-  // other jump lands on the block's words.
+  // other jump lands on the block's words. A chip for blocks named together
+  // (blockIds) lands on the first and flashes each of the others too.
   useEffect(() => {
     const onFlashBlock = (e: Event) => {
-      const { blockId, part } = (e as CustomEvent<{ blockId: string; part?: boolean }>).detail;
+      const { blockId, part, blockIds } = (e as CustomEvent<{ blockId: string; part?: boolean; blockIds?: string[] }>).detail;
       const container = containerRef.current;
       const el = container?.querySelector<HTMLElement>(
         `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
@@ -4141,6 +4142,10 @@ export function ReaderInteractions({
       }
       if (!part) {
         jumpToWords(blockId, 10);
+        for (const other of blockIds ?? []) {
+          const words = other === blockId || !container ? null : wordsOf(container, other);
+          if (words) flashElement(words);
+        }
         return;
       }
       el.scrollIntoView({ behavior: "smooth", block: "center" });

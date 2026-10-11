@@ -43,13 +43,40 @@ check(
   'Rewrite the paragraph that starts “Each side must give something in…”.',
 );
 check(
-  "many small changes that keep most of the words name the first two and count the rest",
+  "many small changes that keep most of the words name the three largest and count the rest",
   editDescription(
     t,
     "Overhead lines are exposed to everything the weather and the road can throw at them. Wind snaps branches onto the wires, and a single car can take down a pole. When a branch lands on the line, every customer downstream goes dark until a crew arrives. Crews can't start work until the road is clear, and that takes a lot of time.",
     "Overhead lines are exposed to everything that the weather and the road can inflict on them. Wind snaps branches onto the wires, and a single car can topple a pole. When a branch lands on the line, every customer downstream loses power until a crew arrives. Crews cannot start work until the road is clear, and that takes considerable time.",
   ),
-  'Change “throw at” to “inflict on”, “take down” to “topple”, and 4 more changes.',
+  'Change “throw at” to “inflict on”, “goes dark” to “loses power”, “a lot of” to “considerable”, and 3 more changes.',
+);
+check(
+  "words only added read with the word before them, so a few changes are each named, never a rewrite",
+  editDescription(
+    t,
+    "Overhead lines are exposed to everything the weather and the road can throw at them. Wind snaps branches onto the wires, ice loads the spans until they sag or break, and a single car can take down a pole and the power to a whole block.",
+    "Overhead lines are exposed to every hazard that the weather and the road can pose. Wind snaps branches onto the wires, ice loads the spans until they sag or break, and a single car can topple a pole and cut the power to a whole block.",
+  ),
+  'Change “everything” to “every hazard that”, “throw at them.” to “pose.”, “take down” to “topple”, and “pole and” to “pole and cut”.',
+);
+check(
+  "a change's new words stay whole",
+  editDescription(
+    t,
+    "Poles also take up space, and a street with space to spare looks better and works better. The strip can hold a bench or a bike rack, chosen for their looks.",
+    "Poles also occupy space, and a street with space to spare is more attractive and more functional. The strip can hold a bench or a bicycle rack, chosen for their appearance.",
+  ),
+  'Change “take up” to “occupy”, “looks better and works better.” to “is more attractive and more functional.”, “bike” to “bicycle”, and “their looks” to “their appearance”.',
+);
+check(
+  "a rewrite that grows by half names its length",
+  editDescription(
+    t,
+    "Each side must give something in exchange for the other's promise: a promise, an act, or a forbearance. The courts ask only whether the exchange exists, not whether it is fair. In Chappell & Co v Nestlé (1960), three chocolate wrappers were part of the price of a record. Past consideration does not count: a promise to pay for work already finished, with no request beforehand, is a gift.",
+    "Each side must give something in exchange for the other's promise. That something is called consideration. It can be a promise, an act, or a forbearance, which means choosing not to do something. The courts ask only whether the exchange exists, not whether it is fair. Chappell & Co v Nestlé (1960) shows that the exchange does not have to be fair: three chocolate wrappers were part of the price of a record. Past consideration, meaning something done before the promise was made, does not count. A promise to pay for work already finished, if nobody asked for the work beforehand, is a gift.",
+  ),
+  'Rewrite the paragraph that starts “Each side must give something in…”, from 69 words to 104.',
 );
 console.log(failed === 0 ? "all checks pass" : `${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

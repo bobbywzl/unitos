@@ -42,17 +42,26 @@ export function changeWindow(before: string, after: string, radius = 36): Change
 
 export type ChangedSpan = { before: string; after: string };
 
+/** A changed span with where it sits: the word indexes of its old words in
+    `before` (from, to) and of its new words in `after` (fromB, toB). */
+export type PlacedSpan = ChangedSpan & { from: number; to: number; fromB: number; toB: number };
+
 /** Every stretch of words that differs between `before` and `after`, in
     order, as the old words and the new (either side "" for words only added
     or only removed); stretches a word or two apart are one. Texts past
     `maxWords` on either side give one span, their whole difference. */
 export function changedSpans(before: string, after: string, maxWords = 400): ChangedSpan[] {
+  return changedSpansAt(before, after, maxWords).map((s) => ({ before: s.before, after: s.after }));
+}
+
+/** changedSpans, each with the word indexes it sits at. */
+export function changedSpansAt(before: string, after: string, maxWords = 400): PlacedSpan[] {
   const a = before.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   const b = after.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   if (a.join(" ") === b.join(" ")) return [];
   if (a.length > maxWords || b.length > maxWords) {
     const w = changeWindow(before, after, 0);
-    return [{ before: w.before, after: w.after }];
+    return [{ before: w.before, after: w.after, from: 0, to: a.length, fromB: 0, toB: b.length }];
   }
   // The longest common subsequence of the words, then the gaps between
   // common words are the changes.
@@ -94,5 +103,5 @@ export function changedSpans(before: string, after: string, maxWords = 400): Cha
       last.toB = span.toB;
     } else merged.push({ ...span });
   }
-  return merged.map((s) => ({ before: a.slice(s.from, s.to).join(" "), after: b.slice(s.fromB, s.toB).join(" ") }));
+  return merged.map((s) => ({ before: a.slice(s.from, s.to).join(" "), after: b.slice(s.fromB, s.toB).join(" "), ...s }));
 }
