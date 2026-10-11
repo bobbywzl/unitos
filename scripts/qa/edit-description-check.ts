@@ -78,5 +78,13 @@ check(
   ),
   'Rewrite the paragraph that starts “Each side must give something in…”, from 69 words to 104.',
 );
+{
+  const long = editDescription(
+    t,
+    "Look up on almost any city street and you will see the same thing: a row of wooden poles, a tangle of wires, and a transformer hanging like a grey bucket from a crossarm. We stop noticing them the way we stop noticing a hum in the walls. But the poles are a choice. Ours run on pumps, screens, and heat pumps, and the choice has outlived its reasons.",
+    "Look up on almost any city street, the same sight appears overhead: a row of wooden poles, a tangle of wires, and a transformer hanging like a grey bucket from a crossarm. People cease to notice them the way they cease to notice a hum in the walls. However, the poles are a choice. Present-day cities run on pumps, screens, and heat pumps, and the choice has outlived its reasons.",
+  );
+  check("a description stays one sentence of at most 40 words", long.split(/\s+/).length <= 40, true);
+}
 console.log(failed === 0 ? "all checks pass" : `${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

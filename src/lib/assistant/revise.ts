@@ -249,31 +249,38 @@ function describeEdit(t: TFunc, before: string, after: string): string {
       : { before: s.before, after: s.after, wide: false, size: s.size },
   );
   const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
-  // Each change in full, cut only past a length that keeps one sentence
-  // of under 40 words.
+  // Each change in full, cut only past 60 characters.
   const pair = (k: number, plain: number) => ({ from: cut(spans[k].before, spans[k].wide ? Math.max(plain, 60) : plain), to: cut(spans[k].after, spans[k].wide ? Math.max(plain, 60) : plain) });
   if (spans.length === 1) {
     const p = pair(0, spans[0].wide ? 100 : 60);
     return t("api.editChange", { from: p.from, to: p.to });
   }
-  if (spans.length <= 4) {
-    const ps = spans.map((_, k) => pair(k, 60));
-    if (ps.length === 2) return t("api.editChangeTwo", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to });
-    if (ps.length === 3) return t("api.editChangeThree", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to });
-    return t("api.editChangeFour", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, g: ps[3].from, h: ps[3].to });
-  }
-  // More: the three largest, in the block's order, and the count of the
-  // rest; the larger changes are the ones the command made (a recast
-  // sentence), the small ones its echoes (a word for a word).
-  const largest = spans
+  // Up to four changes, each named; more, or a list past one sentence of
+  // 40 words, names the largest that fit and counts the rest. The larger
+  // changes are the ones the command made (a recast sentence), the small
+  // ones its echoes (a word for a word).
+  const bySize = spans
     .map((s, k) => ({ k, size: s.size }))
     .sort((x, y) => y.size - x.size || x.k - y.k)
-    .slice(0, 3)
-    .map((x) => x.k)
-    .sort((x, y) => x - y);
-  const ps = largest.map((k) => pair(k, 60));
-  const more = spans.length - 3;
-  return t("api.editChangeMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, n: more, s: more === 1 ? "" : "s" });
+    .map((x) => x.k);
+  const named = (shown: number): string => {
+    const ks = bySize.slice(0, shown).sort((x, y) => x - y);
+    const ps = ks.map((k) => pair(k, 60));
+    const more = spans.length - shown;
+    const s = more === 1 ? "" : "s";
+    if (more === 0 && shown === 2) return t("api.editChangeTwo", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to });
+    if (more === 0 && shown === 3) return t("api.editChangeThree", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to });
+    if (more === 0 && shown === 4) return t("api.editChangeFour", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, g: ps[3].from, h: ps[3].to });
+    if (shown === 3) return t("api.editChangeMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, n: more, s });
+    if (shown === 2) return t("api.editChangeTwoMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, n: more, s });
+    return t("api.editChangeOneMore", { a: ps[0].from, b: ps[0].to, n: more, s });
+  };
+  const fits = (text: string) => (/[\u3400-\u9fff]/.test(text) ? text.length <= 90 : words(text) <= 40);
+  for (let shown = Math.min(spans.length <= 4 ? spans.length : 3, spans.length); shown > 1; shown--) {
+    const text = named(shown);
+    if (fits(text)) return text;
+  }
+  return named(1);
 }
 
 /** A rewrite: the block's opening, and its length when it moves by a quarter

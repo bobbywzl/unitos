@@ -1782,13 +1782,13 @@ export const CASES: AssistantCase[] = [
     question: "Add a row to the table for a 5-year bond: duration 4.6, price $913.41, change −8.7%.",
     expect: {
       change: true,
-      actions: [{ type: "edit_block", block: 6 }],
-      only: ["edit_block"],
+      actions: [{ type: "insert_paragraph", after: 6 }],
+      only: ["insert_paragraph"],
       max: 1,
-      touch: [6],
-      after: [{ block: 6, includes: ["5-year", "4.6", "$913.41", "−8.7%", "2-year", "10-year", "30-year", "$845.57"] }],
+      fresh: true,
+      exists: [{ includes: ["5-year", "4.6", "$913.41", "−8.7%"] }],
     },
-    good: "One edit_block on the table: a 5-year row between the 2-year and the 10-year rows, its four cells as given (5-year, 4.6, $913.41, −8.7%); every other row, cell, and tab stays. The answer is one sentence that names the row and where it goes.",
+    good: "The table is an article's table, which keeps its rows (the prompt's table rule), so no row is added: the answer says so in one clause and, in the same answer, proposes the nearest change: one paragraph right after the table with the 5-year bond's duration 4.6, price $913.41, and change −8.7% as given. Never an offer to do it later.",
   },
   {
     id: "section-raft-glossary-doc",

@@ -407,7 +407,9 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
   const ids = new Set(ctx.blocks.map((b) => b.id));
   const bad = blockTags(answer).filter((id) => !ids.has(id));
   checks.push({ name: "block tags resolve", ok: bad.length === 0, detail: bad.length > 0 ? `unknown: ${bad.join(", ")}` : `${blockTags(answer).length} tags` });
-  const share = cjkShare(answer);
+  // The tags are ids, not words of the answer: a Chinese answer full of
+  // [block …] tags is still Chinese.
+  const share = cjkShare(answer.replace(/\[(?:block|note) [^\]]+\]/g, ""));
   checks.push({ name: "answer language", ok: c.lang === "zh" ? share > 0.3 : share < 0.2, detail: `CJK share ${share.toFixed(2)}` });
   if (e.change && actions.length > 0) {
     // One sentence: 40 words, or 90 characters of Chinese (wordCount counts
