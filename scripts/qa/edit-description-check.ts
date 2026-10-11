@@ -28,14 +28,14 @@ check(
   'Change “I will take” to “This essay takes” and “I do not want to wave it away.” to “It should not be dismissed.”',
 );
 check(
-  "the same word changed three times reads with its own surroundings each time",
+  "the same word changed three times reads as the shortest phrase that names each place, the words before it first",
   editDescription(t, "A batch takes 1 token, not 50. Reads cost 50 tokens as single requests. A write costs 1 token as a batch.", "A batch takes 1 credit, not 50. Reads cost 50 credits as single requests. A write costs 1 credit as a batch."),
-  'Change “takes 1 token, not 50.” to “takes 1 credit, not 50.”, “cost 50 tokens as single” to “cost 50 credits as single”, and “costs 1 token as a” to “costs 1 credit as a”.',
+  'Change “takes 1 token” to “takes 1 credit”, “tokens” to “credits”, and “costs 1 token” to “costs 1 credit”.',
 );
 check(
-  "a long sentence reads as the words around the change, never ending inside a bracket",
+  "a change in a long sentence reads as the shortest phrase around it, never stopping inside a bracket",
   editDescription(t, "Each response carries X-RateLimit-Limit (the bucket size), X-RateLimit-Remaining (tokens left), and X-RateLimit-Reset (seconds until full).", "Each response carries X-RateLimit-Limit (the bucket size), X-RateLimit-Remaining (credits left), and X-RateLimit-Reset (seconds until full)."),
-  'Change “X-RateLimit-Remaining (tokens left), and X-RateLimit-Reset” to “X-RateLimit-Remaining (credits left), and X-RateLimit-Reset”.',
+  'Change “X-RateLimit-Remaining (tokens left)” to “X-RateLimit-Remaining (credits left)”.',
 );
 check(
   "a rewrite's opening is cut at a whole word",
@@ -49,7 +49,7 @@ check(
     "Overhead lines are exposed to everything the weather and the road can throw at them. Wind snaps branches onto the wires, and a single car can take down a pole. When a branch lands on the line, every customer downstream goes dark until a crew arrives. Crews can't start work until the road is clear, and that takes a lot of time.",
     "Overhead lines are exposed to everything that the weather and the road can inflict on them. Wind snaps branches onto the wires, and a single car can topple a pole. When a branch lands on the line, every customer downstream loses power until a crew arrives. Crews cannot start work until the road is clear, and that takes considerable time.",
   ),
-  'Change “road can throw at them.” to “road can inflict on them.”, “car can take down a pole.” to “car can topple a pole.”, and 4 more changes.',
+  'Change “throw at” to “inflict on”, “take down” to “topple”, and 4 more changes.',
 );
 console.log(failed === 0 ? "all checks pass" : `${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

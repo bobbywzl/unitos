@@ -220,13 +220,14 @@ function describeEdit(t: TFunc, before: string, after: string): string {
   });
   const short = placed.filter((s) => words(s.before) < 3);
   const oneSentence = short.length === placed.length && new Set(placed.map((s) => sentenceAround(flatBefore, s.before, s.atBefore))).size === 1;
-  const near = placed.length === 1 || oneSentence ? 0 : placed.length === 2 ? 3 : 2;
-  // A sentence too long to show whole reads as the words around the change.
+  const alone = placed.length === 1 || oneSentence;
+  // A short change alone reads as its sentence when the sentence is short;
+  // else as the shortest phrase around it that names one place in the block.
   const wide = placed.map((s) =>
     words(s.before) < 3
-      ? near === 0 && sentenceAround(flatBefore, s.before, s.atBefore).length <= 60
+      ? alone && sentenceAround(flatBefore, s.before, s.atBefore).length <= 60
         ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true }
-        : { before: wordsAround(flatBefore, s.before, near || 3, s.atBefore), after: wordsAround(flatAfter, s.after, near || 3, s.atAfter), wide: true }
+        : { ...uniquePhrase(flatBefore, flatAfter, s), wide: true }
       : { before: s.before, after: s.after, wide: false },
   );
   // Two short spans of one sentence read as that sentence once.
@@ -272,16 +273,35 @@ function sentenceAround(text: string, part: string, from = 0): string {
   return flat.slice(start, end).trim();
 }
 
-/** `part` with up to `n` words of its sentence on each side, as printed
-    (the spaces and the punctuation between them kept). */
-function wordsAround(text: string, part: string, n: number, from = 0): string {
+/** The shortest phrase around a short change that names one place in the
+    block: the change alone, then a word more on the left, on the right, or
+    both, until the phrase occurs once in the block's text. Punctuation that
+    ends the phrase is left off. */
+function uniquePhrase(flatBefore: string, flatAfter: string, s: { before: string; after: string; atBefore: number; atAfter: number }): { before: string; after: string } {
+  // The words before a change name its place better than the words after it.
+  const steps: [number, number][] = [[0, 0], [1, 0], [2, 0], [1, 1], [0, 1], [2, 1], [1, 2], [2, 2], [3, 3]];
+  const bare = (phrase: string) => phrase.replace(/[.,;:!?。，；：！？]+$/, "");
+  const once = (text: string, phrase: string) => phrase.length > 0 && text.indexOf(phrase) === text.lastIndexOf(phrase);
+  // A phrase never stops inside a bracket.
+  const balanced = (phrase: string) => (phrase.match(/\(/g) ?? []).length === (phrase.match(/\)/g) ?? []).length;
+  for (const [left, right] of steps) {
+    const before = bare(wordsAround(flatBefore, s.before, left, s.atBefore, right));
+    if ((once(flatBefore, before) && balanced(before)) || left === 3) return { before, after: bare(wordsAround(flatAfter, s.after, left, s.atAfter, right)) };
+  }
+  return { before: s.before, after: s.after };
+}
+
+/** `part` with up to `n` words of its sentence before it and `right` (`n`
+    when left out) after it, as printed (the spaces and the punctuation
+    between them kept). */
+function wordsAround(text: string, part: string, n: number, from = 0, right = n): string {
   const flat = text.replace(/\s+/g, " ").trim();
   const sentence = sentenceAround(flat, part, from);
   const start = flat.indexOf(sentence, Math.max(0, from - sentence.length));
   const at = flat.indexOf(part, from) - (start < 0 ? 0 : start);
   if (at < 0 || at >= sentence.length) return part;
   let before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
-  let after = new RegExp(`^(?:\\s*\\S+){0,${n}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
+  let after = new RegExp(`^(?:\\s*\\S+){0,${right}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
   // The words around never end inside a bracket they open, nor start inside
   // one they close.
   const open = after.lastIndexOf("(");
