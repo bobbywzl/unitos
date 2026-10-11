@@ -27,6 +27,7 @@ import { parseJson } from "@/lib/derive/json";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
+import { longestIncreasing } from "@/lib/assistant/reorder";
 import { blockKind } from "@/lib/block-kind";
 import { formatTimeRange } from "@/lib/video/types";
 import { EXTERNAL_PENDING } from "@/lib/derive/external-call";
@@ -170,6 +171,9 @@ type CaseResult = {
   changed: { id: string; before: string; after: string }[];
   added: { id: string; text: string; kind?: string; time?: string }[];
   removed: string[];
+  // Blocks whose place the plan changes: the fewest that moved to make the
+  // new order, each with the block (or the new block) it now follows.
+  moved?: { id: string; text: string; after: string }[];
   annotations: Simulation["annotations"];
   notes: Simulation["notes"];
   sections: string[];
@@ -635,6 +639,7 @@ async function score(): Promise<void> {
           ...(b.split && b.startTime != null && b.endTime != null ? { time: formatTimeRange(b.startTime, b.endTime) } : {}),
         })),
       removed: ctx.blocks.filter((b) => !afterById.has(b.id)).map((b) => b.id),
+      moved: movedBlocks(ctx.blocks, sim.blocks),
       annotations: sim.annotations,
       notes: sim.notes,
       sections: sim.sections,
@@ -648,6 +653,24 @@ async function score(): Promise<void> {
     const failed = checks.filter((k) => !k.ok);
     console.log(`${c.id.padEnd(32)} ${pending.length > 0 ? `PENDING ${pending.length} calls` : failed.length === 0 ? "checks ok" : `FAIL: ${failed.map((k) => `${k.name}${k.detail ? ` (${k.detail})` : ""}`).join("; ")}`}`);
   }
+}
+
+const clipWords = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s).replace(/\s+/g, " ");
+
+/** The blocks a plan moved: the old blocks still there, in their new order;
+    those off the longest run still in the old order moved, each named with
+    the block it now follows (a new block by its words). */
+function movedBlocks(before: { id: string }[], after: { id: string; text: string; fresh?: boolean }[]): { id: string; text: string; after: string }[] {
+  const oldAt = new Map(before.map((b, i) => [b.id, i]));
+  const kept = after.filter((b) => oldAt.has(b.id) && !b.fresh);
+  // Weighted, as the plan's own moves are (lib/assistant/reorder.ts moveRuns): the earliest run on a tie stays.
+  const stays = new Set(longestIncreasing(kept.map((b) => oldAt.get(b.id)!), kept.map(() => 1)).map((i) => kept[i].id));
+  return after.flatMap((b, i) => {
+    if (!oldAt.has(b.id) || b.fresh || stays.has(b.id)) return [];
+    const prev = after[i - 1];
+    const follows = !prev ? "the start of the document" : prev.fresh || !oldAt.has(prev.id) ? `the new block "${clipWords(prev.text, 60)}"` : prev.id;
+    return [{ id: b.id, text: b.text, after: follows }];
+  });
 }
 
 /** The calls under a case directory whose answers are not there yet. */
@@ -714,6 +737,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     ...(r.changed.length > 0 ? ["", "Blocks whose words the plan changes (before → after):", ...r.changed.map((x) => `- ${x.id}\n  before: ${x.before}\n  after:  ${x.after}`)] : []),
     ...(r.added.length > 0 ? ["", "Blocks the plan adds, each after a line of >>> (a LIST block's text carries its own markers):", ...r.added.flatMap((x) => [`>>> ${x.kind ?? "block"}${x.time ? ` (${x.time})` : ""}`, ...x.text.split("\n").map((line) => `    ${line}`)])] : []),
     ...(r.removed.length > 0 ? ["", `Blocks the plan removes: ${r.removed.join(", ")}`] : []),
+    ...(r.moved?.length ? ["", "Blocks the plan moves, each with the block it now follows:", ...r.moved.map((m) => `- ${m.id} ("${clipWords(m.text)}") now after ${m.after}`)] : []),
     ...(r.annotations.length > 0 ? ["", "Marks the plan makes:", ...r.annotations.map((m) => `- ${m.kind}${m.color ? ` ${m.color}` : ""} on ${m.blockId}: "${m.quote}"${m.comment ? ` — ${m.comment}` : ""}`)] : []),
     ...(r.notes.length > 0 ? ["", "Notes the plan makes:", ...r.notes.map((n) => `- in ${n.section}${n.sourced ? ` (${n.more?.length ? "sources" : "source"}: ${[n.quote, ...(n.more ?? [])].map((q) => `"${q}"`).join("; ")})` : " (no source)"}: ${n.content}`)] : []),
     ...(r.sections.length > 0 ? ["", `Sections the plan makes: ${r.sections.join("; ")}`] : []),
