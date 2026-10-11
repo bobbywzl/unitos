@@ -1214,8 +1214,11 @@ export const CASES: AssistantCase[] = [
     profile: NOVICE,
     edits: "suggestions",
     question: "Fix spelling and grammar across the document.",
-    expect: { change: true, actions: [{ type: "suggest", whole: true }], only: ["suggest"], max: 1, touch: [] },
-    good: "One suggest action over the whole document, reorder false, instruction: fix spelling and grammar only, change nothing else.",
+    // The essay has no spelling errors. Its two "Reading …" openings in
+    // b3 dangle (the warning does not read): a fix of those two is right,
+    // and so is leaving them; any other change is not.
+    expect: { change: true, actions: [{ type: "suggest", whole: true }], only: ["suggest"], max: 1, touch: [3] },
+    good: "One suggest action over the whole document, reorder false, instruction: fix spelling and grammar only, change nothing else. The essay has no spelling errors; its only grammar errors are the two dangling openings in b3 ('Reading at speed, the warning registered…', 'Reading slowly, it turned out…'): a fix of those two that keeps their meaning, or no change, is right; any other change is not.",
   },
   {
     id: "suggest-essay-question",
