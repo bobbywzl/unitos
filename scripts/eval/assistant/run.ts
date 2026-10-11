@@ -86,7 +86,7 @@ function prepare(): void {
     // The selection chat's own prompt (src/app/api/assistant/act/route.ts):
     // the document prefix as the system message, the act prompt as the user
     // message, the conversation inside it.
-    const picked = c.chat === "selection" && c.selection ? rowSelection(blocks, c.selection) : null;
+    const picked = c.chat === "selection" && c.selection ? rowSelection(blocks, c.selection, c, f) : null;
     const actUser =
       c.chat === "selection"
         ? actPrompt({
@@ -146,10 +146,12 @@ const actAnswerSchema = z.object({
   matches: z.array(z.unknown()).optional(),
 });
 
-/** The words a selection-chat case selects: a block by its order among the
-    case's blocks, and the text selected in it (the whole block when none). */
-function rowSelection(blocks: PlanContext["blocks"], selection: { block: number; text?: string }) {
-  const block = blocks[selection.block - 1];
+/** The words a selection-chat case selects: a block by its order, counted
+    as the case's expectations count it (a recording's lines from 1, its
+    video aside), and the text selected in it (the whole block when none). */
+function rowSelection(blocks: PlanContext["blocks"], selection: { block: number; text?: string }, c: AssistantCase, f: Fixture) {
+  const rows = c.edits === "suggestions" || c.edits === "none";
+  const block = rows ? blocks[selection.block - 1] : blocks.find((b) => b.id === f.blocks[selection.block - 1]?.id);
   if (!block) throw new Error(`block ${selection.block} is not in the document`);
   const start = selection.text ? block.text.indexOf(selection.text) : 0;
   if (start === -1) throw new Error(`"${selection.text}" is not in block ${selection.block}`);
@@ -559,7 +561,7 @@ async function score(): Promise<void> {
         material: text.slice(0, 20_000) || null,
         history: history.map((turn) => ({ role: turn.role, content: turn.content })),
         // The act route: a revise that names no blocks and no sections covers the selected block.
-        blockIds: revise.blockIds ?? (c.chat === "selection" && c.selection && !revise.sections ? [rowSelection(ctx.blocks, c.selection).blockId] : undefined),
+        blockIds: revise.blockIds ?? (c.chat === "selection" && c.selection && !revise.sections ? [rowSelection(ctx.blocks, c.selection, c, f).blockId] : undefined),
         sections: revise.sections,
         reorder: revise.reorder,
         caretBlockId: c.caret ? f.blocks[c.caret - 1].id : null,
@@ -578,7 +580,7 @@ async function score(): Promise<void> {
     const suggest = actions.find((a): a is Extract<AssistantAction, { type: "suggest" }> => a.type === "suggest");
     let landed: Landed | null = null;
     if (suggest && edits === "suggestions") {
-      const picked = c.chat === "selection" && c.selection ? rowSelection(ctx.blocks, c.selection) : null;
+      const picked = c.chat === "selection" && c.selection ? rowSelection(ctx.blocks, c.selection, c, f) : null;
       const got = await runSuggestAction({
         dir,
         title: f.title,
