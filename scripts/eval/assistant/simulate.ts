@@ -15,12 +15,15 @@ export type SimBlock = PlanContext["blocks"][number] & {
   links: { quote: string; to: string }[];
   // True for a block the plan added.
   fresh?: boolean;
+  // True for the second line a split_line made: the words of a line that
+  // stays, shown to the judge beside the blocks the plan adds.
+  split?: boolean;
 };
 
 export type Simulation = {
   blocks: SimBlock[];
   annotations: { kind: "highlight" | "comment"; blockId: string; quote: string; color?: string; comment?: string }[];
-  notes: { section: string; content: string; sourced: boolean; quote?: string }[];
+  notes: { section: string; content: string; sourced: boolean; quote?: string; more?: string[] }[];
   sections: string[];
   documents: { title: string; markdown: string }[];
   speakers: { id: string; name: string }[];
@@ -142,7 +145,13 @@ export function simulate(
           sim.sections.push(title);
           known.add(title.toLowerCase());
         }
-        sim.notes.push({ section: title, content: a.content, sourced: Boolean(a.source), quote: a.source?.quotedText });
+        sim.notes.push({
+          section: title,
+          content: a.content,
+          sourced: Boolean(a.source),
+          quote: a.source?.quotedText,
+          ...(a.moreSources?.length ? { more: a.moreSources.map((m) => m.quotedText) } : {}),
+        });
         break;
       }
       case "join_lines": {
@@ -164,7 +173,7 @@ export function simulate(
           const tail = b.text.slice(a.offset).trim();
           const share = b.startTime != null && b.endTime != null ? b.startTime + ((b.endTime - b.startTime) * a.offset) / Math.max(1, b.text.length) : null;
           blocks[i] = { ...b, text: head, endTime: share ?? b.endTime };
-          blocks.splice(i + 1, 0, { ...b, id: `${b.id}-split`, text: tail, startTime: share ?? b.startTime, styles: [], links: [] });
+          blocks.splice(i + 1, 0, { ...b, id: `${b.id}-split`, text: tail, startTime: share ?? b.startTime, styles: [], links: [], split: true });
         }
         break;
       }

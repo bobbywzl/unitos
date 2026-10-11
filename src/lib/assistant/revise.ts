@@ -178,7 +178,24 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
     changes, else "Rewrite the paragraph that starts …"; never the pass's
     one why repeated on every edit, which names no block and no words. */
 export function editDescription(t: TFunc, before: string, after: string): string {
-  const cut = (text: string, n = 60) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+  const description = describeEdit(t, before, after);
+  // A quote that ends its sentence ends the description too: no second period.
+  return description.replace(/([.!?。！？])”[.。]$/, "$1”");
+}
+
+/** `text` cut to `n` characters at a whole word, never inside a bracket it opens. */
+function cutWords(text: string, n: number): string {
+  if (text.length <= n) return text;
+  let head = text.slice(0, n - 1);
+  const space = head.lastIndexOf(" ");
+  if (space > n / 2) head = head.slice(0, space);
+  const open = head.lastIndexOf("(");
+  if (open > head.lastIndexOf(")") && open > n / 3) head = head.slice(0, open);
+  return `${head.replace(/[\s,;:(]+$/, "")}…`;
+}
+
+function describeEdit(t: TFunc, before: string, after: string): string {
+  const cut = (text: string, n = 60) => cutWords(text, n);
   // Every changed stretch, so an edit that changes three places names all
   // three, and two edits of one kind read differently on the card. A
   // stretch of one or two words reads as its sentence: "I" to "this essay"
@@ -205,9 +222,9 @@ export function editDescription(t: TFunc, before: string, after: string): string
   // A sentence too long to show whole reads as the words around the change.
   const wide = placed.map((s) =>
     words(s.before) < 3
-      ? near === 0 && sentenceAround(flatBefore, s.before, s.atBefore).length <= 100
+      ? near === 0 && sentenceAround(flatBefore, s.before, s.atBefore).length <= 60
         ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true }
-        : { before: wordsAround(flatBefore, s.before, near || 4, s.atBefore), after: wordsAround(flatAfter, s.after, near || 4, s.atAfter), wide: true }
+        : { before: wordsAround(flatBefore, s.before, near || 3, s.atBefore), after: wordsAround(flatAfter, s.after, near || 3, s.atAfter), wide: true }
       : { before: s.before, after: s.after, wide: false },
   );
   // Two short spans of one sentence read as that sentence once.
@@ -250,8 +267,14 @@ function wordsAround(text: string, part: string, n: number, from = 0): string {
   const start = flat.indexOf(sentence, Math.max(0, from - sentence.length));
   const at = flat.indexOf(part, from) - (start < 0 ? 0 : start);
   if (at < 0 || at >= sentence.length) return part;
-  const before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
-  const after = new RegExp(`^(?:\\s*\\S+){0,${n}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
+  let before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
+  let after = new RegExp(`^(?:\\s*\\S+){0,${n}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
+  // The words around never end inside a bracket they open, nor start inside
+  // one they close.
+  const open = after.lastIndexOf("(");
+  if (open >= 0 && after.indexOf(")", open) < 0) after = after.slice(0, open).replace(/[\s,;:]+$/, "");
+  const close = before.indexOf(")");
+  if (close >= 0 && before.lastIndexOf("(", close) < 0) before = before.slice(close + 1).replace(/^[\s,;:]+/, "");
   return `${before}${part}${after}`.trim();
 }
 

@@ -439,6 +439,9 @@ export type AssistantAction =
       sectionId?: string;
       sectionTitle?: string;
       source?: AssistantAnchor & { documentId: string };
+      // The passages of further blocks the note draws on, in the document's
+      // order after source: each becomes a source of the note too.
+      moreSources?: AssistantAnchor[];
       description: string;
     }
   | { type: "add_section"; title: string; description: string }

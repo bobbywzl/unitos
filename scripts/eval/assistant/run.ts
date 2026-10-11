@@ -28,6 +28,7 @@ import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
 import { blockKind } from "@/lib/block-kind";
+import { formatTimeRange } from "@/lib/video/types";
 import { EXTERNAL_PENDING } from "@/lib/derive/external-call";
 import { corpusSystem } from "@/lib/digest/render";
 import { translatorFor } from "@/lib/i18n/dictionaries";
@@ -167,7 +168,7 @@ type CaseResult = {
   warnings: string[];
   checks: Check[];
   changed: { id: string; before: string; after: string }[];
-  added: { id: string; text: string; kind?: string }[];
+  added: { id: string; text: string; kind?: string; time?: string }[];
   removed: string[];
   annotations: Simulation["annotations"];
   notes: Simulation["notes"];
@@ -176,6 +177,9 @@ type CaseResult = {
   words: number;
   // A suggest action's run: what landed on the page, and what did not.
   suggestions?: { count: number; summary: string; skipped: string[] };
+  // A revise action the answer proposed: the revise pass turned it into
+  // the block actions above, which is what the plan card lists.
+  revised?: { instruction: string; blockIds: string[]; reorder: boolean; rows: number };
 };
 
 const lower = (s: string) => s.toLowerCase();
@@ -407,7 +411,12 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
 const short = (id: string) => id.replace(/^.*-b/, "b");
 
 /** The plan as the plan card shows it: the label, the description, the target. */
-function renderPlan(actions: AssistantAction[], before: Map<string, { text: string }>): string {
+// What the judge needs to read a suggest action's real target: in the
+// selection chat an action with no blockIds runs on the selected words (the
+// act route's wordsScope), and a heading in blockIds brings its section.
+type PlanView = { selection: boolean; headings: ReadonlySet<string> };
+
+function renderPlan(actions: AssistantAction[], before: Map<string, { text: string }>, view: PlanView = { selection: false, headings: new Set() }): string {
   const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s).replace(/\s+/g, " ");
   return actions
     .map((a) => {
@@ -434,12 +443,20 @@ function renderPlan(actions: AssistantAction[], before: Map<string, { text: stri
           case "link":
             return `${short(a.anchor.blockId)}: "${clip(a.anchor.quotedText)}" → ${a.href ?? a.toDocumentId}`;
           case "add_note":
-            return `into ${a.sectionTitle ?? a.sectionId}${a.source ? ` (source ${short(a.source.blockId)}: "${clip(a.source.quotedText, 60)}")` : " (no source)"}: ${clip(a.content, 200)}`;
+            return `into ${a.sectionTitle ?? a.sectionId}${a.source ? ` (${a.moreSources?.length ? "sources" : "source"} ${[a.source, ...(a.moreSources ?? [])].map((x) => `${short(x.blockId)}: "${clip(x.quotedText, 60)}"`).join("; ")})` : " (no source)"}: ${clip(a.content, 200)}`;
           case "add_section":
             return `"${a.title}"`;
           case "suggest":
-          case "revise":
-            return `${a.blockIds?.length ? a.blockIds.map(short).join(", ") : "the whole document"}${a.reorder ? ", reorder" : ""}: ${clip(a.instruction, 300)}`;
+          case "revise": {
+            const target = a.blockIds?.length
+              ? a.blockIds.map((id) => `${short(id)}${view.headings.has(id) ? " (a heading: its whole section is in scope)" : ""}`).join(", ")
+              : view.selection && a.type === "suggest"
+                ? "the selected words (the route runs the action on them)"
+                : "the whole document";
+            const order = a.reorder ? ", reorder (the order pass reads the whole document: blocks move in or out of the scope)" : "";
+            // The instruction whole: the judge reads every clause the pass read.
+            return `${target}${order}: ${a.instruction.replace(/\s+/g, " ")}`;
+          }
           case "join_lines":
             return `${short(a.blockId)} + ${short(a.nextBlockId)}`;
           case "split_line":
@@ -506,6 +523,7 @@ async function score(): Promise<void> {
     // A revise action runs its passes now, on the external model: its
     // prompts land under calls/, and the agent's answers are read back.
     const revise = actions.find((a): a is Extract<AssistantAction, { type: "revise" }> => a.type === "revise");
+    let revisedInfo: CaseResult["revised"];
     if (revise && edits === "blocks") {
       process.env.EVAL_EXTERNAL_DIR = dir;
       const signal = AbortSignal.timeout(120_000);
@@ -531,6 +549,7 @@ async function score(): Promise<void> {
       const at = actions.indexOf(revise);
       actions = [...actions.slice(0, at), ...revised.actions, ...actions.slice(at + 1)];
       warnings.push(...revised.warnings);
+      revisedInfo = { instruction: revise.instruction, blockIds: revise.blockIds ?? [], reorder: Boolean(revise.reorder), rows: revised.actions.length };
     }
     // A suggest action on a document with rich text runs its passes now, as
     // the act route does, and its resolved ops land on the simulated blocks.
@@ -587,7 +606,16 @@ async function score(): Promise<void> {
       warnings,
       checks,
       changed,
-      added: sim.blocks.filter((b) => b.fresh).map((b) => ({ id: b.id, text: b.text, kind: b.kind ?? blockKind(b.type, b.html, b.text) })),
+      // A split's second line is listed with the blocks the plan adds, so the
+      // judge reads both halves as the plan card shows them.
+      added: sim.blocks
+        .filter((b) => b.fresh || b.split)
+        .map((b) => ({
+          id: b.id,
+          text: b.text,
+          kind: b.split ? "the line the split makes, after the line it came from" : (b.kind ?? blockKind(b.type, b.html, b.text)),
+          ...(b.split && b.startTime != null && b.endTime != null ? { time: formatTimeRange(b.startTime, b.endTime) } : {}),
+        })),
       removed: ctx.blocks.filter((b) => !afterById.has(b.id)).map((b) => b.id),
       annotations: sim.annotations,
       notes: sim.notes,
@@ -595,6 +623,7 @@ async function score(): Promise<void> {
       documents: sim.documents,
       words: wordCount(text),
       ...(landed ? { suggestions: { count: landed.ops.length, summary: landed.summary, skipped: landed.warnings } } : {}),
+      ...(revisedInfo ? { revised: revisedInfo } : {}),
     };
     writeJson(join(dir, "result.json"), result);
     if (pending.length === 0) writeFileSync(join(dir, "judge-prompt.md"), judgePrompt(c, f, result, before, ctx.blocks));
@@ -630,6 +659,8 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     `The document the assistant read, every block tagged [block <id>] (document title: ${f.title}):`,
     "",
     fixtureText(f, blocks.filter((b) => b.type !== "VIDEO")),
+    // Who speaks each line, as the assistant's prompt gives it.
+    ...(fixtureTranscript(f)?.lines.length ? ["", ...fixtureTranscript(f)!.lines] : []),
     ...(notes.length > 0 ? ["", "The reader's notes in the project:", ...notes] : []),
     "",
     `The reader context:\n${profile}`,
@@ -645,7 +676,15 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     "",
     r.answer || "(empty)",
     "",
-    r.actions.length > 0 ? `The plan the reader sees in the plan card (each action with its description and its real target):\n${renderPlan(r.actions, before)}` : "The plan: no actions.",
+    ...(r.revised
+      ? [
+          `The answer proposed one revise action (${r.revised.blockIds.length ? `blocks ${r.revised.blockIds.map(short).join(", ")}` : "the whole document"}${r.revised.reorder ? ", reorder" : ""}; instruction: ${r.revised.instruction}). The revise pass turned it into the ${r.revised.rows} rows below, which is what the plan card lists; the rows are that one action's work, not actions the answer wrote.`,
+          "",
+        ]
+      : []),
+    r.actions.length > 0
+      ? `The plan the reader sees in the plan card (each action with its description and its real target):\n${renderPlan(r.actions, before, { selection: c.chat === "selection", headings: new Set(blocks.filter((b) => b.type === "HEADING").map((b) => b.id)) })}`
+      : "The plan: no actions.",
     ...(r.suggestions
       ? [
           "",
@@ -655,10 +694,10 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
       : []),
     ...(r.warnings.length > 0 ? ["", "What the server refused or could not read (shown to the reader as warnings):", ...r.warnings.map((w) => `- ${w}`)] : []),
     ...(r.changed.length > 0 ? ["", "Blocks whose words the plan changes (before → after):", ...r.changed.map((x) => `- ${x.id}\n  before: ${x.before}\n  after:  ${x.after}`)] : []),
-    ...(r.added.length > 0 ? ["", "Blocks the plan adds, each after a line of >>> (a LIST block's text carries its own markers):", ...r.added.flatMap((x) => [`>>> ${x.kind ?? "block"}`, ...x.text.split("\n").map((line) => `    ${line}`)])] : []),
+    ...(r.added.length > 0 ? ["", "Blocks the plan adds, each after a line of >>> (a LIST block's text carries its own markers):", ...r.added.flatMap((x) => [`>>> ${x.kind ?? "block"}${x.time ? ` (${x.time})` : ""}`, ...x.text.split("\n").map((line) => `    ${line}`)])] : []),
     ...(r.removed.length > 0 ? ["", `Blocks the plan removes: ${r.removed.join(", ")}`] : []),
     ...(r.annotations.length > 0 ? ["", "Marks the plan makes:", ...r.annotations.map((m) => `- ${m.kind}${m.color ? ` ${m.color}` : ""} on ${m.blockId}: "${m.quote}"${m.comment ? ` — ${m.comment}` : ""}`)] : []),
-    ...(r.notes.length > 0 ? ["", "Notes the plan makes:", ...r.notes.map((n) => `- in ${n.section}${n.sourced ? ` (source: "${n.quote}")` : " (no source)"}: ${n.content}`)] : []),
+    ...(r.notes.length > 0 ? ["", "Notes the plan makes:", ...r.notes.map((n) => `- in ${n.section}${n.sourced ? ` (${n.more?.length ? "sources" : "source"}: ${[n.quote, ...(n.more ?? [])].map((q) => `"${q}"`).join("; ")})` : " (no source)"}: ${n.content}`)] : []),
     ...(r.sections.length > 0 ? ["", `Sections the plan makes: ${r.sections.join("; ")}`] : []),
     ...(r.documents.length > 0 ? ["", "Documents the plan makes (title, then the markdown; a > line is a passage linked back to the document):", ...r.documents.map((d) => `### ${d.title}\n${d.markdown}`)] : []),
     "",

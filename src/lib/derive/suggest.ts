@@ -131,7 +131,7 @@ function checkedOp(op: ResolvedOp, text: (id: string) => string): CheckedOp | nu
     case "remove_blocks":
       return { i: op.i, kind: "remove blocks", blockIds: op.blockIds, before: op.base.join("\n"), after: "", why: op.why };
     case "insert_blocks":
-      return { i: op.i, kind: "new blocks after", blockIds: op.afterBlockId ? [op.afterBlockId] : [], before: "", after: op.markdown, why: op.why };
+      return { i: op.i, kind: op.afterBlockId ? "new blocks after" : "new blocks at the start", blockIds: op.afterBlockId ? [op.afterBlockId] : [], before: "", after: op.markdown, why: op.why };
     case "insert_footnote":
       return { i: op.i, kind: "new footnote", blockIds: [op.blockId], before: "", after: op.text, why: op.why };
     case "insert_row":

@@ -257,10 +257,21 @@ export async function runOnePass(run: OnePassRun): Promise<OnePassResult> {
     ...run.history.map((m) => m.content),
   ]);
   const read = readOnePass(result.data, { rows: document.rows, units, places: run.places, scope, grounding, t });
-  // The check reads the new blocks as new blocks after the one before them.
+  // The check reads the new blocks as new blocks after the block before
+  // them in the answer's document (none: at the start).
+  const after = new Map<number, string | null>();
+  // A scoped answer starts mid-document: before its first block stands the
+  // block before that one.
+  const firstId = read.entries.find((e): e is { blockId: string } => "blockId" in e)?.blockId;
+  const firstAt = firstId ? document.rows.findIndex((r) => r.id === firstId) : -1;
+  let last: string | null = firstAt > 0 ? document.rows[firstAt - 1].id : null;
+  for (const e of read.entries) {
+    if ("fresh" in e) after.set(e.fresh, last);
+    else if ("blockId" in e) last = e.blockId;
+  }
   const checked = await checkOps(run, prefix, [
     ...read.ops,
-    ...read.fresh.map((f): ResolvedOp => ({ i: f.i, op: "insert_blocks", afterBlockId: null, markdown: f.markdown, why: read.why })),
+    ...read.fresh.map((f, n): ResolvedOp => ({ i: f.i, op: "insert_blocks", afterBlockId: after.get(n) ?? null, markdown: f.markdown, why: read.why })),
   ]);
   const dropped = new Set(checked.keys());
   const ops = read.ops.filter((op) => !dropped.has(op.i));

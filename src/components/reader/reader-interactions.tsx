@@ -6333,10 +6333,16 @@ export function ReaderInteractions({
             }
             // Assistant notes carry their authorship. The plan was approved,
             // so the note lands accepted (SPEC.md §1).
+            // A note that draws on several blocks sends every passage as a
+            // segment, the source first: each becomes a source of the note.
+            const segments = action.source && action.moreSources?.length
+              ? [action.source, ...action.moreSources].map((a) => ({ blockId: a.blockId, startOffset: a.startOffset, endOffset: a.endOffset, quotedText: a.quotedText, prefix: a.prefix, suffix: a.suffix }))
+              : undefined;
             const note = await api<{ id: string }>("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
+              ...(segments ? { segments } : {}),
               origin: "assistant",
               pending: false,
             });

@@ -66,6 +66,8 @@ export const actionSchema = z.discriminatedUnion("type", [
     sectionTitle: z.string().max(200).optional(),
     blockId: z.string().optional(),
     quote: quote.optional(),
+    // A note that draws on more than one block: every passage, one per block.
+    sources: z.array(z.object({ blockId: z.string().min(1), quote })).max(12).optional(),
     description,
   }),
   z.object({ type: z.literal("add_section"), title: z.string().min(1).max(200), description }),
@@ -242,14 +244,14 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   highlight: '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
   comment: "- comment {blockId, quote, comment, description} — annotate exact text with a note.",
   add_note:
-    "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. content: the passage's point in plain words, one to three sentences, never a label alone and never the quote said again. quote: the sentence or sentences of one block that content restates, never a neighbouring sentence: write content first, then quote the words it came from. Every note of one plan has the same shape. A note that summarizes a named part of the document (a section, a method, a chapter) draws on every block under that heading and keeps every number of it. A note that answers a question from the document: content is the answer, quote is the passage that gives it, never the question's own line. A new sectionTitle creates the section.",
+    "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, sources?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. content: the passage's point in plain words, in fewer words than the passage, one to three sentences, never a label alone and never the quote said again. quote: the sentence or sentences of one block that content restates, never a neighbouring sentence: write content first, then quote the words it came from. The quote begins at the sentence that states the note's first claim, never at the last line of a discussion. sources: when content draws on more than one block, every passage it draws on as {blockId, quote}, one per block, in place of blockId and quote: every claim of content has its passage. content keeps the words that limit its claim (on average, at most, for a cut from 20% to 15%) and every name its passage prints. Every note of one plan has the same shape. A note that summarizes a named part of the document (a section, a method, a chapter) draws on every block under that heading, each in sources, and keeps every number of it. A note that answers a question from the document: content is the answer, quote is the passage that gives it, never the question's own line. A new sectionTitle creates the section.",
   add_section: "- add_section {title, description} — an empty section.",
   link: "- link {blockId, quote, toDocumentId? or href?, description} — hyperlink exact text to another attached document (toDocumentId) or to a web address (href).",
   format_block: '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3"|"list"|"numbered", description} — change a block\'s format: a paragraph, a heading level, or a list.',
   style: '- style {blockId, quote, style: "bold"|"italic"|"underline", description} — bold, italicize, or underline exact text.',
   move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
-    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: what the pass must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result (for a reorder, the groups with their headings and the order; for a merge, one paragraph in place of the lines; for a cut, the point that stays; for a vague word such as fix, clean up, or sort out, what the passage has and what it should have instead), under 150 words. The words the message itself gives (a term renamed, a language) are named; the pass finds and writes everything else: never list the errors found, the sentences to change, or the words that replace them. blockIds: the block whose words the message names or quotes (a paragraph by its words, a heading by its title, a line by its words), and only that; a heading's own words or style take the heading's id, and the instruction says the heading itself; a heading otherwise stands for its section. In the selection chat a command about the selection leaves blockIds out: the selected words are the scope. A change the message asks for across the document (every, all, throughout, the document, the notes) leaves blockIds out, even when the blocks it would touch are in view: the pass reads every block. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
+    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: what the pass must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result (for a reorder, the groups with their headings and the order; for a merge, one paragraph in place of the lines; for a cut, the point that stays; for a vague word such as fix, clean up, or sort out, what the passage has and what it should have instead), under 150 words. The words the message itself gives (a term renamed, a language) are named; the pass finds and writes everything else: never list the errors found, the sentences to change, or the words that replace them. blockIds: the block whose words the message names or quotes (a paragraph by its words, a heading by its title, a line by its words), and only that; a heading's own words or style take the heading's id, and the instruction says the heading itself; a change to the lines or paragraphs under a heading names those blocks, not the heading; a heading stands for its whole section only when the message names the section as a whole (\"rewrite the Evidence section\"). In the selection chat a command about the selection leaves blockIds out: the selected words are the scope. A change the message asks for across the document (every, all, throughout, the document, the notes) leaves blockIds out, even when the blocks it would touch are in view: the pass reads every block. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
   join_lines:
     "- join_lines {blockId, nextBlockId, description} — two transcript lines of one voice, the second right after the first, become one line: its time runs from the first line's start to the second line's end.",
   split_line:
@@ -259,7 +261,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   create_document:
     "- create_document {title, markdown, description} — a new document of the project written from the material: a summary, a study guide, action items, an outline, a glossary. markdown: the whole new document; ## headings for its parts, paragraphs and - lists in plain words, and > quote lines, each one passage of one block copied word for word (a sentence or more), which becomes a link back to its place; a quote that is not the document's exact words is left out. Only when the message asks for a new document, page, or doc; never for notes, and never for words added to the open document.",
   revise:
-    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: what the passes must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result, under 150 words; never the changed text itself, the errors found, or the sentences to change: the passes find them. blockIds: the blocks whose words the message names or quotes, and only those; a heading stands for its section. A change the message asks for across the document (every, all, throughout, the document) leaves blockIds out. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
+    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: what the passes must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result, under 150 words; never the changed text itself, the errors found, or the sentences to change: the passes find them. blockIds: the blocks whose words the message names or quotes, and only those; a change to the lines or paragraphs under a heading names those blocks; a heading stands for its whole section only when the message names the section as a whole. A change the message asks for across the document (every, all, throughout, the document) leaves blockIds out. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
 };
 
 // A video's or an audio's transcript lines (SPEC.md §11): the rule the
@@ -457,19 +459,28 @@ export function enrichActions(
       }
       case "add_note": {
         const sectionId = action.sectionId && ctx.sectionIds.has(action.sectionId) ? action.sectionId : undefined;
-        let source: (AssistantAnchor & { documentId: string }) | undefined;
-        if (action.blockId && action.quote) {
-          const block = blockById.get(action.blockId);
-          const anchor = block ? buildAnchor(block.text, action.quote, block.id) : null;
-          if (anchor) source = { documentId: ctx.documentId, ...anchor };
-          else warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
+        // Every passage the note draws on, one per block, in the document's
+        // order: the first is the note's source, the rest its further sources.
+        const passages = [...(action.blockId && action.quote ? [{ blockId: action.blockId, quote: action.quote }] : []), ...(action.sources ?? [])];
+        const anchors: AssistantAnchor[] = [];
+        let lost = false;
+        for (const passage of passages) {
+          const block = blockById.get(passage.blockId);
+          const anchor = block ? buildAnchor(block.text, passage.quote, block.id) : null;
+          if (!anchor) lost = true;
+          else if (!anchors.some((a) => a.blockId === anchor.blockId)) anchors.push(anchor);
         }
+        if (lost) warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
+        const order = new Map(ctx.blocks.map((b, i) => [b.id, i]));
+        anchors.sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0));
+        const [first, ...rest] = anchors;
         actions.push({
           type: "add_note",
           content: action.content,
           sectionId,
           sectionTitle: sectionId ? undefined : (action.sectionTitle ?? "Notes"),
-          source,
+          source: first ? { documentId: ctx.documentId, ...first } : undefined,
+          ...(rest.length > 0 ? { moreSources: rest } : {}),
           description: action.description,
         });
         continue;
