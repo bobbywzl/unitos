@@ -25,7 +25,8 @@ export const maxDuration = 300;
 
 // The assistant's suggestions over blocks or the whole document (SPEC.md
 // §29): the panel's suggest action, run by the reader. The scope is the
-// named blocks (a heading grows to its section), else the whole document,
+// named blocks (a heading the heading alone) and the named sections (a
+// heading with its section), else the whole document,
 // cut into windows; each window is one runSuggest call, SUGGEST_PARALLEL at
 // once, and its ops stream to the page as it finishes. A command over the
 // whole document, or over more than one window, first keeps the stored text
@@ -42,6 +43,8 @@ const requestSchema = z.object({
   // What the panel's answer passed on: the change to make.
   instruction: z.string().trim().min(1).max(4000).optional(),
   blockIds: z.array(z.string().min(1).max(64)).max(200).optional(),
+  // The headings whose whole section the change covers.
+  sections: z.array(z.string().min(1).max(64)).max(200).optional(),
   // The block the caret stands in: "here".
   caretBlockId: z.string().min(1).max(64).optional(),
   // The panel's answer, which the command may ask to use.
@@ -100,8 +103,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ stage: "read" });
         const [profile, lang] = await Promise.all([loadProfile(data.notebookId), currentLang()]);
         const doc = suggestDocument(document);
-        const whole = !data.blockIds?.length;
-        const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds!);
+        const whole = !data.blockIds?.length && !data.sections?.length;
+        const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds ?? [], data.sections);
         if (scope.length === 0) throw new Error(t("api.blockNotInDocument"));
         let all = windowsOf(doc.rows, doc.places, scope);
         // A scope past the windows of one command: the target pass names the

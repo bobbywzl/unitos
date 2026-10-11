@@ -42,5 +42,14 @@ check(
   editDescription(t, "Each side must give something in exchange for the other's promise, and the law calls that consideration.", "Both sides must trade something of value; the law calls this consideration, and a promise with nothing given back binds no one."),
   'Rewrite the paragraph that starts “Each side must give something in…”.',
 );
+check(
+  "many small changes that keep most of the words name the first two and count the rest",
+  editDescription(
+    t,
+    "Overhead lines are exposed to everything the weather and the road can throw at them. Wind snaps branches onto the wires, and a single car can take down a pole. When a branch lands on the line, every customer downstream goes dark until a crew arrives. Crews can't start work until the road is clear, and that takes a lot of time.",
+    "Overhead lines are exposed to everything that the weather and the road can inflict on them. Wind snaps branches onto the wires, and a single car can topple a pole. When a branch lands on the line, every customer downstream loses power until a crew arrives. Crews cannot start work until the road is clear, and that takes considerable time.",
+  ),
+  'Change “road can throw at them.” to “road can inflict on them.”, “car can take down a pole.” to “car can topple a pole.”, and 4 more changes.',
+);
 console.log(failed === 0 ? "all checks pass" : `${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

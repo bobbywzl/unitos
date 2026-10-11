@@ -460,6 +460,8 @@ function blocksOnSide(
 }
 
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
+// The lines of a new list the plan card shows.
+const LIST_PREVIEW_LINES = 8;
 
 // Format targets of a format_block action, shown in the plan card.
 const FORMAT_KIND_KEY: Record<BlockKind, TKey> = {
@@ -498,8 +500,17 @@ function actionDetail(
       const window = changeWindow(blockText(action.blockId), action.newText);
       return t("reader.detailChange", { before: clip(window.before, 120), after: clip(window.after, 120) });
     }
-    case "insert_paragraph":
-      return `${action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : ""}“${clip(action.text)}”`;
+    case "insert_paragraph": {
+      const kind = action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : "";
+      // A new list shows each of its lines, so the reader sees where every
+      // point and every sentence goes before Apply.
+      if (action.kind === "list" || action.kind === "numbered") {
+        const lines = action.text.split("\n").map((line) => line.replace(/^\s*(?:[-*+]|\d{1,3}[.)])\s+/, "").trim()).filter(Boolean);
+        const shown = lines.slice(0, LIST_PREVIEW_LINES).map((line, k) => `${action.kind === "numbered" ? `${k + 1}.` : "•"} ${clip(line, 120)}`);
+        return [kind.replace(/ · $/, ""), ...shown, ...(lines.length > shown.length ? ["…"] : [])].join("\n");
+      }
+      return `${kind}“${clip(action.text)}”`;
+    }
     case "remove_block":
       return `“${clip(blockText(action.blockId))}”`;
     case "link": {
@@ -5797,6 +5808,7 @@ export function ReaderInteractions({
           command: request.command,
           instruction: request.instruction,
           blockIds: request.blockIds,
+          sections: request.sections,
           reorder: request.reorder,
           caretBlockId: typeof caret === "string" && caret ? caret : undefined,
           material: request.material,
@@ -9351,7 +9363,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   </span>
                   {action.description}
                   {actionDetail(action, blocks, attachedDocuments, t) && (
-                    <span className="mt-0.5 block text-[11px] text-sand-500">
+                    <span className="mt-0.5 block whitespace-pre-line text-[11px] text-sand-500">
                       {actionDetail(action, blocks, attachedDocuments, t)}
                     </span>
                   )}

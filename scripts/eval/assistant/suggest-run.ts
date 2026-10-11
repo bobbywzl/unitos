@@ -61,15 +61,16 @@ export async function runSuggestAction(input: {
     let window: { n: number; of: number; whole: boolean } | null = null;
     const cut: string[] = [];
     let onePassRows: string[] | null = null;
-    if (!action.blockIds && input.passage.length > 0) scope = wordsScope(rows, input.passage);
+    const named = Boolean(action.blockIds || action.sections);
+    if (!named && input.passage.length > 0) scope = wordsScope(rows, input.passage);
     else {
-      const whole = !action.blockIds;
-      const inScope = whole ? rows.map((r) => r.id) : scopeOf(rows, doc.places, action.blockIds!);
+      const whole = !named;
+      const inScope = whole ? rows.map((r) => r.id) : scopeOf(rows, doc.places, action.blockIds ?? [], action.sections);
       const windows = windowsOf(rows, doc.places, inScope);
       if (windows.length > 1) cut.push(t("api.suggestTooLong"));
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole };
-      const rowsInScope = whole || action.reorder ? [] : scopeOf(rows, doc.places, action.blockIds!);
+      const rowsInScope = whole || action.reorder ? [] : inScope;
       if (fitsOnePass(rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null) {

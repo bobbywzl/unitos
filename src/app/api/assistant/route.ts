@@ -436,6 +436,7 @@ async function handle(req: Request, t: TFunc) {
             .slice(-20)
             .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 8000) })),
           blockIds: revise.blockIds,
+          sections: revise.sections,
           reorder: revise.reorder,
           caretBlockId: data.caretBlockId ?? null,
           thinking: resolvedThinking(data.thinking, depthInput),

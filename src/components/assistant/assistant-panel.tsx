@@ -1126,6 +1126,7 @@ export function AssistantPanel({
       command: command.slice(0, 4000),
       instruction: action.instruction,
       blockIds: action.blockIds,
+      sections: action.sections,
       reorder: action.reorder,
       material: material.slice(0, 20_000),
       history: history

@@ -68,11 +68,11 @@ export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<
 }
 
 /** The blocks the revision reads, in document order: the named ones (a
-    heading grows to its section), else the whole document; only blocks
-    whose words it may change. */
-export function reviseScope(blocks: RevisedBlock[], places: Map<string, BlockPlace>, blockIds: string[] | undefined): string[] {
+    heading of `sections` grows to its section), else the whole document;
+    only blocks whose words it may change. */
+export function reviseScope(blocks: RevisedBlock[], places: Map<string, BlockPlace>, blockIds: string[] | undefined, sections: string[] = []): string[] {
   const takes = (b: RevisedBlock) => places.has(b.id) || b.type === "EQUATION";
-  const named = blockIds?.length ? new Set(scopeOf(blocks, places, blockIds)) : null;
+  const named = blockIds?.length || sections.length ? new Set(scopeOf(blocks, places, blockIds ?? [], sections)) : null;
   return blocks.filter((b) => takes(b) && (!named || named.has(b.id))).map((b) => b.id);
 }
 
@@ -174,9 +174,11 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
 };
 
 /** The plan card's description of an edit a pass made (SPEC.md §7): the
-    change itself, "Change “old” to “new”", when a stretch of the block
-    changes, else "Rewrite the paragraph that starts …"; never the pass's
-    one why repeated on every edit, which names no block and no words. */
+    change itself, "Change “old” to “new”", when up to three stretches of
+    the block change; the first two and the count of the rest when more
+    change and the block keeps most of its words; else "Rewrite the
+    paragraph that starts …". Never the pass's one why repeated on every
+    edit, which names no block and no words. */
 export function editDescription(t: TFunc, before: string, after: string): string {
   const description = describeEdit(t, before, after);
   // A quote that ends its sentence ends the description too: no second period.
@@ -228,7 +230,8 @@ function describeEdit(t: TFunc, before: string, after: string): string {
       : { before: s.before, after: s.after, wide: false },
   );
   // Two short spans of one sentence read as that sentence once.
-  const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
+  const first = wide.map((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
+  const spans = wide.filter((_, k) => first[k]);
   const changed = raw.reduce((sum, s) => sum + s.before.length, 0);
   const small = raw.length > 0 && raw.length === changedSpans(before, after).length && changed <= Math.max(60, before.length * 0.6);
   const n = (k: number, plain: number) => (spans[k].wide ? 100 : plain);
@@ -236,6 +239,16 @@ function describeEdit(t: TFunc, before: string, after: string): string {
   if (small && spans.length === 2) return t("api.editChangeTwo", { a: cut(spans[0].before, n(0, 40)), b: cut(spans[0].after, n(0, 40)), c: cut(spans[1].before, n(1, 40)), d: cut(spans[1].after, n(1, 40)) });
   if (small && spans.length === 3) {
     return t("api.editChangeThree", { a: cut(spans[0].before, n(0, 30)), b: cut(spans[0].after, n(0, 30)), c: cut(spans[1].before, n(1, 30)), d: cut(spans[1].after, n(1, 30)), e: cut(spans[2].before, n(2, 30)), f: cut(spans[2].after, n(2, 30)) });
+  }
+  // Many changes that keep most of the block's words (a register, a style
+  // of address): the first two, and the count of the rest.
+  const all = changedSpans(before, after).length;
+  const kept = raw.reduce((sum, s) => sum + words(s.before), 0) <= words(before) * 0.6;
+  if (spans.length > 3 && kept) {
+    const third = first.reduce((at, isFirst, k) => (at < 0 && isFirst && first.slice(0, k + 1).filter(Boolean).length === 3 ? k : at), -1);
+    const more = all - third;
+    const m = (k: number) => (spans[k].wide ? 50 : 30);
+    return t("api.editChangeMore", { a: cut(spans[0].before, m(0)), b: cut(spans[0].after, m(0)), c: cut(spans[1].before, m(1)), d: cut(spans[1].after, m(1)), n: more, s: more === 1 ? "" : "s" });
   }
   return t("api.editRewrite", { start: cut(before.replace(/\s+/g, " ").trim(), 40) });
 }
@@ -547,7 +560,10 @@ export type ReviseRun = {
   instruction: string;
   material: string | null;
   history: ChatTurn[];
+  // The blocks themselves (a heading the heading alone), and the headings
+  // whose whole section the change covers; neither: the whole document.
   blockIds: string[] | undefined;
+  sections?: string[];
   caretBlockId: string | null;
   thinking: Exclude<Thinking, "auto">;
   // The change moves blocks too: the order pass runs beside the windows
@@ -558,6 +574,9 @@ export type ReviseRun = {
   deadline: AbortSignal;
 };
 
+/** The run names its blocks or sections; else it covers the whole document. */
+const scoped = (run: Pick<ReviseRun, "blockIds" | "sections">): boolean => Boolean(run.blockIds?.length || run.sections?.length);
+
 /** The order pass of a revise action: the moves, the new headings, and the
     headings that go, as block actions. The moves run one after another, so
     one the document does not take would leave the order half made: then
@@ -566,7 +585,7 @@ async function reviseOrder(run: ReviseRun): Promise<{ actions: AssistantAction[]
   const { t, shape } = run;
   const blocks = run.document.blocks;
   const units = blockUnits(blocks, shape);
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, revisePlaces(blocks, shape), run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, revisePlaces(blocks, shape), run.blockIds ?? [], run.sections ?? []) : [];
   try {
     const order = await runOrderPass({
       userId: run.userId,
@@ -617,7 +636,7 @@ async function reviseOnePass(run: ReviseRun): Promise<{ actions: AssistantAction
   const blocks = run.document.blocks;
   const units = blockUnits(blocks, shape);
   const places = revisePlaces(blocks, shape);
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, places, run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, places, run.blockIds ?? [], run.sections ?? []) : [];
   try {
     const pass = await runOnePass({
       userId: run.userId,
@@ -658,7 +677,7 @@ export async function runRevise(run: ReviseRun): Promise<{ actions: AssistantAct
   // recording, or pages): the one pass, the whole document read at once.
   const blocks = run.document.blocks;
   const plain = !run.shape.format && !run.shape.media && run.shape.pages === 0;
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, revisePlaces(blocks, run.shape), run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, revisePlaces(blocks, run.shape), run.blockIds ?? [], run.sections ?? []) : [];
   if (plain && fitsOnePass(blocks, scopeRowIds)) return reviseOnePass(run);
   if (!run.reorder) return runWindows(run);
   const [order, words] = await Promise.all([reviseOrder(run), runWindows(run)]);
@@ -672,10 +691,10 @@ async function runWindows(run: ReviseRun): Promise<{ actions: AssistantAction[];
   const { t } = run;
   const blocks = run.document.blocks;
   const places = revisePlaces(blocks, run.shape);
-  const scope = reviseScope(blocks, places, run.blockIds);
+  const scope = reviseScope(blocks, places, run.blockIds, run.sections ?? []);
   if (scope.length === 0) return { actions: [], warnings: [t("api.reviseNoBlocks")] };
   let all = windowsOf(blocks, places, scope);
-  let whole = !run.blockIds?.length;
+  let whole = !scoped(run);
   // A scope past the windows of one command: the target pass names the
   // blocks the command changes, and the windows run over those alone
   // (lib/assistant/target.ts).

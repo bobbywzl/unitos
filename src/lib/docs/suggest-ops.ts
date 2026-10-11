@@ -195,17 +195,19 @@ export function blockPlaces(doc: RichNode): Map<string, BlockPlace> {
 const levelOf = (style: SuggestStyle | null | undefined): number =>
   style === "title" ? 1 : style && /^h[1-6]$/.test(style) ? Number(style.slice(1)) : 0;
 
-/** The blocks a command names, in document order: a heading grows to its
-    section, down to the next heading of its level or above. */
-export function scopeOf(rows: IndexRow[], places: Map<string, BlockPlace>, blockIds: string[]): string[] {
+/** The blocks a command names, in document order: each named block as
+    itself (a heading the heading alone), and each heading of `sections`
+    with its section, down to the next heading of its level or above. */
+export function scopeOf(rows: IndexRow[], places: Map<string, BlockPlace>, blockIds: string[], sections: string[] = []): string[] {
   const named = new Set(blockIds);
+  const grown = new Set(sections);
   const out: string[] = [];
   let open = 0;
   for (const row of rows) {
     const level = row.type === "HEADING" ? levelOf(places.get(row.id)?.style) : 0;
     if (level && level <= open) open = 0;
-    if (level && !open && named.has(row.id)) open = level;
-    if (open || named.has(row.id)) out.push(row.id);
+    if (level && !open && grown.has(row.id)) open = level;
+    if (open || named.has(row.id) || grown.has(row.id)) out.push(row.id);
   }
   return out;
 }

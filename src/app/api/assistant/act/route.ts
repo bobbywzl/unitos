@@ -509,7 +509,8 @@ async function handle(req: Request, t: TFunc) {
 
   // A revise action (a document without rich text, SPEC.md §7) is read part
   // by part now, as the sidebar's is: the plan carries the block actions it
-  // finds in its place. It covers the selected blocks when it names none.
+  // finds in its place. It covers the selected blocks when it names no
+  // blocks and no sections.
   const revise = actions.find((a): a is Extract<AssistantAction, { type: "revise" }> => a.type === "revise");
   if (revise) {
     const selected = [...new Set(passage.map((segment) => segment.blockId))];
@@ -525,7 +526,8 @@ async function handle(req: Request, t: TFunc) {
       instruction: revise.instruction,
       material: result.data.reply,
       history,
-      blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
+      blockIds: revise.blockIds ?? (!revise.sections && selected.length > 0 ? selected : undefined),
+      sections: revise.sections,
       reorder: revise.reorder,
       caretBlockId: null,
       thinking: resolvedThinking(data.thinking, depthInput),
@@ -550,10 +552,11 @@ async function handle(req: Request, t: TFunc) {
     let window: { n: number; of: number; whole: boolean } | null = null;
     const cut: string[] = [];
     let onePassRows: string[] | null = null;
-    if (!suggest?.blockIds && passage.length > 0) scope = wordsScope(document.blocks, passage);
+    const named = Boolean(suggest?.blockIds || suggest?.sections);
+    if (!named && passage.length > 0) scope = wordsScope(document.blocks, passage);
     else {
-      const whole = !suggest?.blockIds;
-      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      const whole = !named;
+      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds ?? [], suggest!.sections);
       let windows = windowsOf(doc.rows, doc.places, inScope);
       let targeted = false;
       // A scope past one window and the one pass: the target pass names the
@@ -582,7 +585,7 @@ async function handle(req: Request, t: TFunc) {
       window = { n: 1, of: windows.length, whole: whole && !targeted };
       // A scope that fits one call goes by the one pass (lib/assistant/one-pass.ts).
       // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
-      const rowsInScope = whole || suggest!.reorder ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      const rowsInScope = whole || suggest!.reorder ? [] : inScope;
       if (!chip && fitsOnePass(doc.rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null && suggest) {

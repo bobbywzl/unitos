@@ -103,6 +103,9 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("suggest"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    // The headings whose whole section the change covers; a heading in
+    // blockIds is the heading alone.
+    sections: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
     // The change moves blocks across the document: the order pass runs
     // beside the windows (lib/assistant/reorder.ts).
     reorder: z.boolean().optional(),
@@ -121,6 +124,7 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("revise"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    sections: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
     reorder: z.boolean().optional(),
     description,
   }),
@@ -154,8 +158,9 @@ function clip(text: string, max: number): string {
 }
 
 /** One action as a model writes it, read the way the schema takes it: a
-    field written null is left out; blockIds that is no list, an empty list,
-    or past BLOCK_IDS_MAX ids means the whole document; a description or an
+    field written null is left out; blockIds or sections that is no list, an
+    empty list, or past BLOCK_IDS_MAX ids is left out (neither: the whole
+    document); a description or an
     instruction past its length is cut to it; a suggest action with no
     description takes its instruction's words. */
 function lenient(item: unknown, edits?: DocumentEdits): unknown {
@@ -169,9 +174,12 @@ function lenient(item: unknown, edits?: DocumentEdits): unknown {
     fields.type = named ?? inferType(fields, edits);
   }
   else fields.type = changeTypeFor(fields.type, edits);
-  const ids = Array.isArray(fields.blockIds) ? [...new Set(fields.blockIds.filter((id) => typeof id === "string" && id))] : [];
-  if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
-  else delete fields.blockIds;
+  for (const key of ["blockIds", "sections"] as const) {
+    const list = fields[key];
+    const ids = Array.isArray(list) ? [...new Set(list.filter((id) => typeof id === "string" && id))] : [];
+    if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields[key] = ids;
+    else delete fields[key];
+  }
   if (typeof fields.instruction === "string") fields.instruction = clip(fields.instruction, INSTRUCTION_MAX);
   if (typeof fields.reorder === "string") fields.reorder = fields.reorder.trim().toLowerCase() === "true";
   if (typeof fields.description === "string") fields.description = clip(fields.description, DESCRIPTION_MAX);
@@ -238,11 +246,11 @@ export const actionsSchema = z.unknown().transform((value) => readActions(value)
 // lines for the selection chat and the sidebar assistant.
 const ACTION_LINES: Record<RawAction["type"], string> = {
   edit_block:
-    "- edit_block {blockId, newText, description} — replace a block's text. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces per level of nesting: a line nests or unnests by its spaces.",
+    "- edit_block {blockId, newText, description} — replace a block's text. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces per level of nesting: a line nests or unnests by its spaces. A shorter text cuts words first: the words that carry no figure, name, or claim (a phrase that announces what follows, a point said twice), then joins sentences; it has fewer words than the old text, not only fewer sentences.",
   insert_paragraph: '- insert_paragraph {afterBlockId, text, kind?: "paragraph"|"h1"|"h2"|"h3"|"list"|"numbered", description} — add a block after a block; afterBlockId null adds it at the document\'s start; a paragraph when kind is left out.',
   remove_block: "- remove_block {blockId, description} — delete a block.",
   highlight: '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
-  comment: "- comment {blockId, quote, comment, description} — annotate exact text with a note.",
+  comment: "- comment {blockId, quote, comment, description} — annotate exact text with a note. comment: its point once, in one or two sentences, never a sentence of the block said again.",
   add_note:
     "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, sources?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. content: the passage's point in plain words, in fewer words than the passage, one to three sentences, never a label alone and never the quote said again. quote: the sentence or sentences of one block that content restates, never a neighbouring sentence: write content first, then quote the words it came from. The quote begins at the sentence that states the note's first claim, never at the last line of a discussion. sources: when content draws on more than one block, every passage it draws on as {blockId, quote}, one per block, in place of blockId and quote: every claim of content has its passage. content keeps the words that limit its claim (on average, at most, for a cut from 20% to 15%) and every name its passage prints. Every note of one plan has the same shape. A note that summarizes a named part of the document (a section, a method, a chapter) draws on every block under that heading, each in sources, and keeps every number of it. A note that answers a question from the document: content is the answer, quote is the passage that gives it, never the question's own line. A new sectionTitle creates the section.",
   add_section: "- add_section {title, description} — an empty section.",
@@ -251,7 +259,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   style: '- style {blockId, quote, style: "bold"|"italic"|"underline", description} — bold, italicize, or underline exact text.',
   move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
-    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: what the pass must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result (for a reorder, the groups with their headings and the order; for a merge, one paragraph in place of the lines; for a cut, the point that stays; for a vague word such as fix, clean up, or sort out, what the passage has and what it should have instead), under 150 words. The words the message itself gives (a term renamed, a language) are named; the pass finds and writes everything else: never list the errors found, the sentences to change, or the words that replace them. blockIds: the block whose words the message names or quotes (a paragraph by its words, a heading by its title, a line by its words), and only that; a heading's own words or style take the heading's id, and the instruction says the heading itself; a change to the lines or paragraphs under a heading names those blocks, not the heading; a heading stands for its whole section only when the message names the section as a whole (\"rewrite the Evidence section\"). In the selection chat a command about the selection leaves blockIds out: the selected words are the scope. A change the message asks for across the document (every, all, throughout, the document, the notes) leaves blockIds out, even when the blocks it would touch are in view: the pass reads every block. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
+    "- suggest {instruction, blockIds?, sections?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: what the pass must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result (for a reorder, the groups with their headings and the order; for a merge, one paragraph in place of the lines; for a cut, the point that stays; for a vague word such as fix, clean up, or sort out, what the passage has and what it should have instead), under 150 words. The words the message itself gives (a term renamed, a language) are named; the pass finds and writes everything else: never list the errors found, the sentences to change, or the words that replace them. blockIds: the blocks whose words the message names or quotes (a paragraph by its words, a heading by its title, a line by its words), and only those; a heading in blockIds is the heading alone: its words or its style. sections: the headings whose whole section the change covers, only when the message names a section as a whole (\"rewrite the Evidence section\", \"cut the Background section\"); a section is its heading and every block under it, down to the next heading of its level. A change to some lines or paragraphs under a heading names those blocks in blockIds, never the heading in sections. In the selection chat a command about the selection leaves blockIds and sections out: the selected words are the scope. A change the message asks for across the document (every, all, throughout, the document, the notes) leaves blockIds and sections out, even when the blocks it would touch are in view: the pass reads every block. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
   join_lines:
     "- join_lines {blockId, nextBlockId, description} — two transcript lines of one voice, the second right after the first, become one line: its time runs from the first line's start to the second line's end.",
   split_line:
@@ -261,7 +269,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   create_document:
     "- create_document {title, markdown, description} — a new document of the project written from the material: a summary, a study guide, action items, an outline, a glossary. markdown: the whole new document; ## headings for its parts, paragraphs and - lists in plain words, and > quote lines, each one passage of one block copied word for word (a sentence or more), which becomes a link back to its place; a quote that is not the document's exact words is left out. Only when the message asks for a new document, page, or doc; never for notes, and never for words added to the open document.",
   revise:
-    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: what the passes must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result, under 150 words; never the changed text itself, the errors found, or the sentences to change: the passes find them. blockIds: the blocks whose words the message names or quotes, and only those; a change to the lines or paragraphs under a heading names those blocks; a heading stands for its whole section only when the message names the section as a whole. A change the message asks for across the document (every, all, throughout, the document) leaves blockIds out. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
+    "- revise {instruction, blockIds?, sections?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: what the passes must do, in the assistant's words, so that it runs without the message: the kind of change, where, and the shape of the result, under 150 words; never the changed text itself, the errors found, or the sentences to change: the passes find them. blockIds: the blocks whose words the message names or quotes, and only those; a heading in blockIds is the heading alone. sections: the headings whose whole section the change covers, only when the message names a section as a whole (\"rewrite the Evidence section\"); a section is its heading and every block under it, down to the next heading of its level. A change to some lines or paragraphs under a heading names those blocks in blockIds, never the heading in sections. In the selection chat a command about the selection leaves blockIds and sections out: the selected blocks are the scope. A change the message asks for across the document (every, all, throughout, the document) leaves blockIds and sections out. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
 };
 
 // A video's or an audio's transcript lines (SPEC.md §11): the rule the
@@ -343,11 +351,16 @@ type CommandAction = Extract<RawAction, { type: "suggest" | "revise" }>;
     all; one that names no blocks covers the whole document. */
 function joinCommands(list: CommandAction[]): CommandAction {
   if (list.length === 1) return list[0];
-  const blockIds = list.every((a) => a.blockIds) ? [...new Set(list.flatMap((a) => a.blockIds ?? []))] : [];
+  // Every action names its scope: the joined one covers them all; one that
+  // names none covers the whole document.
+  const scoped = list.every((a) => a.blockIds || a.sections);
+  const blockIds = scoped ? [...new Set(list.flatMap((a) => a.blockIds ?? []))] : [];
+  const sections = scoped ? [...new Set(list.flatMap((a) => a.sections ?? []))] : [];
   return {
     type: list[0].type,
     instruction: clip(list.map((a) => a.instruction).join("\n"), INSTRUCTION_MAX),
     ...(blockIds.length > 0 && blockIds.length <= BLOCK_IDS_MAX ? { blockIds } : {}),
+    ...(sections.length > 0 && sections.length <= BLOCK_IDS_MAX ? { sections } : {}),
     ...(list.some((a) => a.reorder) ? { reorder: true } : {}),
     description: clip(list.map((a) => a.description).join(" "), DESCRIPTION_MAX),
   };
@@ -438,10 +451,11 @@ export function enrichActions(
     switch (action.type) {
       case "suggest":
       case "revise": {
-        // Named blocks must be the document's.
+        // Named blocks must be the document's; a section is named by its heading.
         const blockIds = action.blockIds?.filter((id) => blockById.has(id));
-        if (action.blockIds && !blockIds?.length) missing(action.description);
-        else actions.push({ ...action, blockIds });
+        const sections = action.sections?.filter((id) => blockById.get(id)?.type === "HEADING");
+        if ((action.blockIds || action.sections) && !blockIds?.length && !sections?.length) missing(action.description);
+        else actions.push({ ...action, blockIds: blockIds?.length ? blockIds : undefined, sections: sections?.length ? sections : undefined });
         continue;
       }
       case "add_section":

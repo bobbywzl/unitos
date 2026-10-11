@@ -179,7 +179,7 @@ type CaseResult = {
   suggestions?: { count: number; summary: string; skipped: string[] };
   // A revise action the answer proposed: the revise pass turned it into
   // the block actions above, which is what the plan card lists.
-  revised?: { instruction: string; blockIds: string[]; reorder: boolean; rows: number };
+  revised?: { instruction: string; blockIds: string[]; sections: string[]; reorder: boolean; rows: number };
 };
 
 const lower = (s: string) => s.toLowerCase();
@@ -209,7 +209,7 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
         return null;
     }
   };
-  const idsOf = (): string[] => (a.type === "suggest" || a.type === "revise" ? (a.blockIds ?? []) : [blockOf() ?? ""]);
+  const idsOf = (): string[] => (a.type === "suggest" || a.type === "revise" ? [...(a.blockIds ?? []), ...(a.sections ?? [])] : [blockOf() ?? ""]);
   if (e.block !== undefined && !idsOf().includes(idOf(e.block))) return false;
   if (e.blockAny && !e.blockAny.some((n) => idsOf().includes(idOf(n)))) return false;
   if (e.after !== undefined) {
@@ -257,7 +257,7 @@ function matchesExpect(a: AssistantAction, e: ActionExpect, idOf: (n: number) =>
   if (e.color !== undefined && !(a.type === "highlight" && a.color === e.color)) return false;
   if (e.style !== undefined && !(a.type === "style" && a.style === e.style)) return false;
   if (e.reorder !== undefined && !((a.type === "suggest" || a.type === "revise") && Boolean(a.reorder) === e.reorder)) return false;
-  if (e.whole !== undefined && !((a.type === "suggest" || a.type === "revise") && !a.blockIds?.length === e.whole)) return false;
+  if (e.whole !== undefined && !((a.type === "suggest" || a.type === "revise") && (!a.blockIds?.length && !a.sections?.length) === e.whole)) return false;
   if (e.name !== undefined) {
     const name = a.type === "rename_speaker" ? a.name : a.type === "set_speaker" ? a.name : "";
     if (!has(name, e.name)) return false;
@@ -412,8 +412,9 @@ const short = (id: string) => id.replace(/^.*-b/, "b");
 
 /** The plan as the plan card shows it: the label, the description, the target. */
 // What the judge needs to read a suggest action's real target: in the
-// selection chat an action with no blockIds runs on the selected words (the
-// act route's wordsScope), and a heading in blockIds brings its section.
+// selection chat an action that names no blocks and no sections runs on the
+// selected words (the act route's wordsScope); a heading in blockIds is the
+// heading alone, and a heading in sections brings its section.
 type PlanView = { selection: boolean; headings: ReadonlySet<string> };
 
 function renderPlan(actions: AssistantAction[], before: Map<string, { text: string }>, view: PlanView = { selection: false, headings: new Set() }): string {
@@ -427,7 +428,15 @@ function renderPlan(actions: AssistantAction[], before: Map<string, { text: stri
             return `${short(a.blockId)}: "${clip(window.before, 160)}" → "${clip(window.after, 160)}"`;
           }
           case "insert_paragraph":
-            return `after ${a.afterBlockId ? short(a.afterBlockId) : "the start"}${a.kind ? ` as ${a.kind}` : ""}: "${clip(a.text)}"`;
+            // The card shows each line of a new list (reader-interactions.tsx actionDetail).
+            return a.kind === "list" || a.kind === "numbered"
+              ? `after ${a.afterBlockId ? short(a.afterBlockId) : "the start"} as ${a.kind}:\n${a.text
+                  .split("\n")
+                  .filter((line) => line.trim())
+                  .slice(0, 8)
+                  .map((line) => `    ${clip(line, 120)}`)
+                  .join("\n")}`
+              : `after ${a.afterBlockId ? short(a.afterBlockId) : "the start"}${a.kind ? ` as ${a.kind}` : ""}: "${clip(a.text)}"`;
           case "remove_block":
             return `${short(a.blockId)}: "${clip(before.get(a.blockId)?.text ?? "")}"`;
           case "format_block":
@@ -448,10 +457,16 @@ function renderPlan(actions: AssistantAction[], before: Map<string, { text: stri
             return `"${a.title}"`;
           case "suggest":
           case "revise": {
-            const target = a.blockIds?.length
-              ? a.blockIds.map((id) => `${short(id)}${view.headings.has(id) ? " (a heading: its whole section is in scope)" : ""}`).join(", ")
-              : view.selection && a.type === "suggest"
-                ? "the selected words (the route runs the action on them)"
+            const named = [
+              ...(a.blockIds ?? []).map((id) => `${short(id)}${view.headings.has(id) ? " (a heading: the heading alone)" : ""}`),
+              ...(a.sections ?? []).map((id) => `${short(id)} with its section (the heading and every block under it)`),
+            ];
+            const target = named.length
+              ? named.join(", ")
+              : view.selection
+                ? a.type === "suggest"
+                  ? "the selected words (the route runs the action on them)"
+                  : "the selected block (the route runs the action on it)"
                 : "the whole document";
             const order = a.reorder ? ", reorder (the order pass reads the whole document: blocks move in or out of the scope)" : "";
             // The instruction whole: the judge reads every clause the pass read.
@@ -538,7 +553,9 @@ async function score(): Promise<void> {
         instruction: revise.instruction,
         material: text.slice(0, 20_000) || null,
         history: history.map((turn) => ({ role: turn.role, content: turn.content })),
-        blockIds: revise.blockIds,
+        // The act route: a revise that names no blocks and no sections covers the selected block.
+        blockIds: revise.blockIds ?? (c.chat === "selection" && c.selection && !revise.sections ? [rowSelection(ctx.blocks, c.selection).blockId] : undefined),
+        sections: revise.sections,
         reorder: revise.reorder,
         caretBlockId: c.caret ? f.blocks[c.caret - 1].id : null,
         thinking: "deep",
@@ -549,7 +566,7 @@ async function score(): Promise<void> {
       const at = actions.indexOf(revise);
       actions = [...actions.slice(0, at), ...revised.actions, ...actions.slice(at + 1)];
       warnings.push(...revised.warnings);
-      revisedInfo = { instruction: revise.instruction, blockIds: revise.blockIds ?? [], reorder: Boolean(revise.reorder), rows: revised.actions.length };
+      revisedInfo = { instruction: revise.instruction, blockIds: revise.blockIds ?? [], sections: revise.sections ?? [], reorder: Boolean(revise.reorder), rows: revised.actions.length };
     }
     // A suggest action on a document with rich text runs its passes now, as
     // the act route does, and its resolved ops land on the simulated blocks.
@@ -678,7 +695,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     "",
     ...(r.revised
       ? [
-          `The answer proposed one revise action (${r.revised.blockIds.length ? `blocks ${r.revised.blockIds.map(short).join(", ")}` : "the whole document"}${r.revised.reorder ? ", reorder" : ""}; instruction: ${r.revised.instruction}). The revise pass turned it into the ${r.revised.rows} rows below, which is what the plan card lists; the rows are that one action's work, not actions the answer wrote.`,
+          `The answer proposed one revise action (${r.revised.blockIds.length || r.revised.sections.length ? [r.revised.blockIds.length ? `blocks ${r.revised.blockIds.map(short).join(", ")}` : "", r.revised.sections.length ? `the sections under ${r.revised.sections.map(short).join(", ")}` : ""].filter(Boolean).join(" and ") : "the whole document"}${r.revised.reorder ? ", reorder" : ""}; instruction: ${r.revised.instruction}). The revise pass turned it into the ${r.revised.rows} rows below, which is what the plan card lists; the rows are that one action's work, not actions the answer wrote.`,
           "",
         ]
       : []),
