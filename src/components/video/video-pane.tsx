@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import {
-  CommentIcon,
   LocateIcon,
   QuestionIcon,
   RegenerateIcon,
@@ -592,38 +591,6 @@ export function VideoPane({
     }
   }
 
-  // A transcript line is an anchor like a circled spot: same tools, same time
-  // range, no drawn region (SPEC.md §11).
-  function commentOnLine(line: TranscriptLine) {
-    if (!canEdit) return;
-    playerRef.current?.seek(line.startTime);
-    setActiveLineId(line.id);
-    setDrawing(false);
-    setExplaining(null);
-    setOpenNote(null);
-    setComposer({
-      region: null,
-      startTime: formatTime(line.startTime),
-      endTime: formatTime(Math.ceil(line.endTime)),
-      text: "",
-      busy: false,
-      error: null,
-    });
-  }
-
-  function explainLine(line: TranscriptLine) {
-    if (!canEdit) return;
-    playerRef.current?.seek(line.startTime);
-    setActiveLineId(line.id);
-    setDrawing(false);
-    setComposer(null);
-    void runExplain({
-      startTime: line.startTime,
-      endTime: Math.ceil(line.endTime),
-      region: null,
-    });
-  }
-
   async function onVisualDelete(noteId: string) {
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
@@ -654,46 +621,22 @@ export function VideoPane({
 
   const lineAction =
     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
-  // The moment's tools on a transcript line: a line is an anchor like a
-  // circled spot — same tools, same time range, no drawn region.
+  // The one tool on a hovered transcript line: an annotated line opens its
+  // annotation. Comments and explanations on a line start from the selection
+  // toolbar or the tool bar above the lines, never from a pill over the text.
   const lineTools = (line: TranscriptLine) => {
     const annotated = annotationByLine.get(line.id);
+    if (!annotated) return null;
     return (
-      <>
-        {canEdit && (
-          <button
-            onClick={() => commentOnLine(line)}
-            data-track="video-line-comment"
-            className={lineAction}
-            data-tip={t("video.commentOnLineTitle")}
-          >
-            <CommentIcon size={11} />
-            {t("video.comment")}
-          </button>
-        )}
-        {canEdit && (
-          <button
-            onClick={() => explainLine(line)}
-            data-track="video-line-explain"
-            className={lineAction}
-            data-tip={t("video.explainThisMoment")}
-          >
-            <QuestionIcon size={11} />
-            {t("video.explain")}
-          </button>
-        )}
-        {annotated && (
-          <button
-            onClick={() => openAnnotation(annotated)}
-            data-track="video-line-open-note"
-            className={lineAction}
-            data-tip={t("video.openNoteTitle")}
-          >
-            <LocateIcon size={11} />
-            {t("video.openNote")}
-          </button>
-        )}
-      </>
+      <button
+        onClick={() => openAnnotation(annotated)}
+        data-track="video-line-open-note"
+        className={lineAction}
+        data-tip={t("video.openNoteTitle")}
+      >
+        <LocateIcon size={11} />
+        {t("video.openNote")}
+      </button>
     );
   };
   function openAnnotation(a: VideoAnnotationItem) {

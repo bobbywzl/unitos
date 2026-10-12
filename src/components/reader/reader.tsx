@@ -81,8 +81,8 @@ export type TranscriptVariant = {
   // Lines covered by a time-anchored annotation: underlined, like a
   // highlighted span in an article.
   annotatedLineIds: Set<string>;
-  // The moment's tools, floating over a line on hover: comment, explain,
-  // open the note.
+  // The line's tool, floating over a hovered line: an annotated line opens
+  // its annotation. Null when the line has none.
   lineTools: (line: TranscriptLine) => React.ReactNode;
   // Above the lines: the player, the tool bar, and the view bar. Below:
   // whatever the view bar's other views show.
@@ -277,6 +277,7 @@ function TranscriptBody({
                 html: null,
               };
               const annotated = annotatedLineIds.has(line.id);
+              const tools = lineTools(line);
               return (
                 <span key={line.id} className="group/line relative">
                   {documentId && (
@@ -304,15 +305,17 @@ function TranscriptBody({
                       }}
                     />
                   </span>{" "}
-                  {/* The line's tools, floating over the text on hover. */}
-                  <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
-                    <span
-                      data-anchor-skip
-                      className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
-                    >
-                      {lineTools(line)}
+                  {/* The line's tool, floating over the text on hover. */}
+                  {tools && (
+                    <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
+                      <span
+                        data-anchor-skip
+                        className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
+                      >
+                        {tools}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </span>
               );
             })}

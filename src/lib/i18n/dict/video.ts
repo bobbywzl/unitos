@@ -104,7 +104,6 @@ const en = {
   transcribeAgainTitle: "Transcribe the video again; the lines are replaced",
   transcribeAgainTitleAudio: "Transcribe the audio again; the lines are replaced",
   jumpHere: "Jump here",
-  commentOnLineTitle: "Comment on this line",
   openNote: "Open note",
   openNoteTitle: "Open the note on this moment",
   transcribingLong:
@@ -287,7 +286,6 @@ const zh: Record<keyof typeof en, string> = {
   transcribeAgainTitle: "重新转写视频；逐字稿行会被替换",
   transcribeAgainTitleAudio: "重新转写音频；逐字稿行会被替换",
   jumpHere: "跳转到这里",
-  commentOnLineTitle: "评论这一行",
   openNote: "打开笔记",
   openNoteTitle: "打开这个时刻的笔记",
   transcribingLong: "转写中…需要一两分钟。完成后可以跟读、点击行跳转、查找视频内容。",
