@@ -75,7 +75,10 @@
 //   page start(导入的 PDF 某页开始处，页边显示页码) 页首 · import line(标题后说明导入来源的一行) 导入行 ·
 //   Pages(添加 PDF 时选择要导入的页，如 45–60) 页码 ·
 //   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议 ·
-//   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
+//   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记 ·
+//   structure(文档的块归入画布上的类别) 结构 · bucket(结构里的一个框) 类别 ·
+//   piece(归入类别的一个块) 片块 · connection(类别或片块之间的关联) 关联 ·
+//   unsorted(尚未归类的块) 未归类 · structure assistant 结构助手
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

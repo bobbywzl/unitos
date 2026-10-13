@@ -42,6 +42,14 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20260925bBody",
     features: [],
   },
+  {
+    // Structure (SPEC.md §32): the button beside Collapse glows.
+    id: "2026-10-13",
+    date: "2026-10-13",
+    titleKey: "works.release20261013Title",
+    bodyKey: "works.release20261013Body",
+    features: ["structure"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

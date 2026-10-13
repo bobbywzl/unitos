@@ -298,6 +298,11 @@ const en = {
   // Collapse (SPEC.md §28)
   collapseNeedsKey: "No model is configured for Collapse.",
   collapseFailed: "The article could not be collapsed",
+  // Structure (SPEC.md §32)
+  structureNeedsKey: "No model is configured for the structure assistant.",
+  structureFailed: "The structure assistant failed. {reason}",
+  structureTimedOut: "The structure assistant ran out of time before the answer ended. Ask for less at once, or try again.",
+  structureStale: "The structure changed elsewhere. It was reloaded; make the change again.",
   videoNoReparse: "Video documents do not re-parse",
   reparseRunning: "A re-parse of this document is already running",
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
@@ -664,6 +669,10 @@ const zh: Record<keyof typeof en, string> = {
   contentsFailed: "目录无法生成",
   collapseNeedsKey: "未配置折叠所用的模型。",
   collapseFailed: "文章无法折叠",
+  structureNeedsKey: "未配置结构助手所用的模型。",
+  structureFailed: "结构助手失败。{reason}",
+  structureTimedOut: "结构助手在回答结束前超时。请一次少要一些，或重试。",
+  structureStale: "结构已在别处更改。已重新加载；请再做一次更改。",
   videoNoReparse: "视频文档不能重新解析",
   reparseRunning: "此文档正在重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",

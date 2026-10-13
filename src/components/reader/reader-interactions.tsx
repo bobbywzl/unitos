@@ -86,6 +86,7 @@ import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CollapseIcon,
+  StructureIcon,
   CommentIcon,
   DefineIcon,
   ExpandIcon,
@@ -145,6 +146,14 @@ import {
 } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
+import dynamic from "next/dynamic";
+import type { PieceAnnotation } from "@/components/structure/structure-context";
+
+// Structure (SPEC.md §32) loads with its canvas only when it opens.
+const StructureOverlay = dynamic(
+  () => import("@/components/structure/structure-overlay").then((m) => m.StructureOverlay),
+  { ssr: false, loading: () => null },
+);
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { pageCellSelection, pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
@@ -3789,6 +3798,31 @@ export function ReaderInteractions({
   );
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
+  // Structure (SPEC.md §32): the overlay over the reader, and its glow.
+  const [structureOpen, setStructureOpen] = useState(false);
+  const structureNew = useNewFeature("structure");
+  // What each block carries, for the pieces of the structure: every
+  // annotation and note anchored in it, its kind and its words.
+  const structureAnnotations = useMemo<Record<string, PieceAnnotation[]>>(() => {
+    const byBlock: Record<string, PieceAnnotation[]> = {};
+    const seen = new Set<string>();
+    for (const [blockId, list] of Object.entries(wholeAnchorHighlights)) {
+      for (const h of list) {
+        const key = `${blockId}|${h.sourceId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bubble = annotationBubbles[h.sourceId];
+        const stored = annotationsBySource[h.sourceId];
+        const item: PieceAnnotation = bubble
+          ? { kind: bubble.kind, color: null, text: bubble.content, sourceId: h.sourceId, noteId: bubble.noteId }
+          : stored
+            ? { kind: stored.kind, color: stored.color, text: stored.content, sourceId: h.sourceId, noteId: stored.noteId }
+            : { kind: "note", color: null, text: "", sourceId: h.sourceId, noteId: h.noteId };
+        (byBlock[blockId] ??= []).push(item);
+      }
+    }
+    return byBlock;
+  }, [wholeAnchorHighlights, annotationBubbles, annotationsBySource]);
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
@@ -7656,6 +7690,25 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {collapseNew.isNew && <NewPill />}
     </button>
   );
+  // Structure (SPEC.md §32): the button at the top right, beside Collapse.
+  // Pressed, the structure opens over the reader.
+  const structureButton = (
+    <button
+      onClick={() => {
+        structureNew.seen();
+        setStructureOpen(true);
+      }}
+      data-track="structure"
+      data-tip={t("structure.structureButtonTitle")}
+      className={`flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
+        structureNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+      }`}
+    >
+      <StructureIcon size={13} />
+      {t("structure.structure")}
+      {structureNew.isNew && <NewPill />}
+    </button>
+  );
   // The annotation each card over the article holds, as a reference
   // (lib/annotation-reference.ts): what its grip and a hold on it drag.
   const annotationCardReference = annotationCard
@@ -7727,6 +7780,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {!transcript && !richText && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
+              {structureButton}
               {collapseButton}
               {distillButton}
               {/* The article's errors: under the buttons, over the text. */}
@@ -7828,6 +7882,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {t("common.done")}
           </button>
         )}
+        {!split && !transcript && !embedded && !richText && structureButton}
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
@@ -7902,6 +7957,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 aiControls:
                   !split && !embedded ? (
                     <div className="flex items-center gap-2">
+                      {structureButton}
                       {collapseButton}
                       {distillButton}
                     </div>
@@ -9471,6 +9527,30 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           after={<QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />}
           foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
           onClose={closeConversationView}
+        />
+      )}
+      </Presence>
+
+      <Presence show={structureOpen} exit="fade">
+      {structureOpen && (
+        <StructureOverlay
+          notebookId={notebookId}
+          documentId={documentId}
+          title={title}
+          blocks={blocks}
+          annotationsByBlock={structureAnnotations}
+          onClose={() => setStructureOpen(false)}
+          onOpenBlock={(blockId, sourceId) => {
+            setStructureOpen(false);
+            // The overlay leaves first; the jump needs the reader's own scroller.
+            setTimeout(() => {
+              if (sourceId) {
+                window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+              } else {
+                window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }));
+              }
+            }, 50);
+          }}
         />
       )}
       </Presence>

@@ -104,6 +104,18 @@ export function CollapseIcon(props: IconProps) {
   );
 }
 
+// Structure (SPEC.md §32): three boxes, one over two, joined.
+export function StructureIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="8" y="3" width="8" height="6" rx="1.5" />
+      <rect x="2" y="15" width="8" height="6" rx="1.5" />
+      <rect x="14" y="15" width="8" height="6" rx="1.5" />
+      <path d="M12 9v3M6 15v-3h12v3" />
+    </Icon>
+  );
+}
+
 export function SparkleIcon(props: IconProps) {
   return (
     <Icon {...props}>

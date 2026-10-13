@@ -276,6 +276,18 @@ export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
 export const COLLAPSE_WINDOW_CHARS = 30_000;
 
+// Structure (SPEC.md §32): the structure assistant reads the whole document
+// under the cached prefix and the structure as it stands, and answers with
+// a reply and, when the reader asked for one, a whole new structure: the
+// buckets, every block's bucket, the connections. A judgement over the
+// whole document of what goes with what: GLM 5.3 at high, the assistant's
+// own model, one call per turn.
+export const STRUCTURE_MODEL = GLM_5_3;
+export const STRUCTURE_EFFORT: KimiEffort = "high";
+export const STRUCTURE_MAX_OUTPUT_TOKENS = 32768; // a bucket per block of a long document, with the reasoning before them
+export const STRUCTURE_HISTORY_MAX = 20;
+export const STRUCTURE_DEADLINE_MS = 270_000;
+
 // The assistant's suggestions (SPEC.md §29): the assistant edits a rich text
 // as suggestions an editor accepts or rejects. Claude Sonnet 5, as the voice
 // command: it copies `find` exactly (a misquote is a skipped change) and
