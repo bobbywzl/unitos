@@ -45,6 +45,7 @@ import {
   visualizationMarkdown,
   visualizeCheckSchema,
   visualizeOutputSchema,
+  visualSchema,
 } from "@/lib/derive/visualize";
 import { visualizeCheckPrompt } from "@/lib/prompts/visualize-check";
 import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
@@ -122,6 +123,9 @@ const deriveSchema = z
   // The reader's Web toggle (SPEC.md §7): EXPLAIN, ANALYZE, and ASK may
   // search the web. Absent reads as on, the toggle's default.
   web: z.boolean().optional(),
+  // VISUALIZE only (SPEC.md §20): the reader was told the picture may not be
+  // accurate and confirmed. The run draws the best picture anyway.
+  confirm: z.boolean().optional(),
   notebookId: z.string().min(1),
   anchor: z
     .object({
@@ -763,6 +767,7 @@ async function handle(req: Request, t: TFunc) {
     query: data.query,
     question: data.question?.trim(),
     format: data.format,
+    confirmed: data.type === "VISUALIZE" && data.confirm === true,
   };
 
   // FIND searches the transcript; without one there is nothing to search.
@@ -1019,9 +1024,12 @@ async function handle(req: Request, t: TFunc) {
   // pass that drew it never sees it. What stands is stored as an SVG
   // ImageAsset, and one annotation lands on the selection whose markdown
   // points at it. When the model is not certain, or the check withdraws the
-  // picture, the run declines with the reason and persists nothing: the card
-  // says so and points at the assistant, Explain, and Simplify. Runs behind
-  // the heartbeat stream.
+  // picture, the run answers unsure with the reason and persists nothing:
+  // the card says the picture may not be accurate and asks the reader to
+  // confirm. A confirmed run (data.confirm) draws the best picture anyway,
+  // the check never withdraws it, and the caption carries "May not be
+  // accurate." when the model is still not certain. Runs behind the
+  // heartbeat stream.
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
       req,
@@ -1034,16 +1042,19 @@ async function handle(req: Request, t: TFunc) {
           messages,
           maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
           providerOptions: visualCall.providerOptions,
-          schema: visualizeOutputSchema,
+          // Confirmed: a null visual fails validation, so the model is asked
+          // again for the picture it owes.
+          schema: ctx.confirmed ? visualizeOutputSchema.extend({ visual: visualSchema }) : visualizeOutputSchema,
           label: "VISUALIZE",
           usage: visualUsage,
           abortSignal: req.signal,
         });
         if (!result.ok) throw new DeriveFailure(result.error);
         const { judgment, visual: drawn } = result.data;
-        if (!judgment.certain || !drawn) {
-          return { ok: true, declined: true, reason: judgment.reason.trim() };
+        if (!drawn || (!judgment.certain && !ctx.confirmed)) {
+          return { ok: true, unsure: true, reason: judgment.reason.trim() };
         }
+        const unsure = !judgment.certain;
         const first = await renderVisual(drawn);
         if ("error" in first) {
           throw new DeriveFailure(t("api.visualizeNotRendered", { reason: first.error }));
@@ -1075,6 +1086,7 @@ async function handle(req: Request, t: TFunc) {
                       ? JSON.stringify(drawn.simulation)
                       : null,
                   svg: simulation ? null : rendered.svg,
+                  confirmed: ctx.confirmed === true,
                 }),
               },
             ],
@@ -1087,8 +1099,10 @@ async function handle(req: Request, t: TFunc) {
           });
           if (checked.ok && !checked.data.keep) {
             if (!checked.data.visual) {
-              return { ok: true, declined: true, reason: checked.data.reason.trim() };
-            }
+              if (!ctx.confirmed) return { ok: true, unsure: true, reason: checked.data.reason.trim() };
+              // Confirmed: the reader asked for the picture; it stands as drawn.
+              console.warn("[derive] VISUALIZE:check withdrew a confirmed picture; it stands:", checked.data.reason);
+            } else {
             const again = await renderVisual(checked.data.visual);
             // A replacement that does not render is no replacement: the
             // picture that already rendered stands.
@@ -1097,6 +1111,7 @@ async function handle(req: Request, t: TFunc) {
               rendered = again;
             } else {
               console.warn("[derive] VISUALIZE:check replacement not rendered:", again.error);
+            }
             }
           } else if (!checked.ok) {
             console.warn("[derive] VISUALIZE:check failed; the picture stands:", checked.error);
@@ -1107,7 +1122,7 @@ async function handle(req: Request, t: TFunc) {
           data: { mimeType: "image/svg+xml", size: bytes.length, data: bytes, userId: user.id },
           select: { id: true },
         });
-        const content = visualizationMarkdown(image.id, visual.caption.trim());
+        const content = visualizationMarkdown(image.id, visual.caption.trim(), unsure ? t("api.visualizeMayBeInaccurate") : null);
         const section = await annotationsSection(data.notebookId);
         const count = await db.note.count({ where: { sectionId: section.id } });
         const note = await db.note.create({
@@ -1122,7 +1137,7 @@ async function handle(req: Request, t: TFunc) {
           },
         });
         await bumpNotebook(data.notebookId);
-        return { ok: true, noteId: note.id, kind: visual.kind, caption: visual.caption.trim(), content };
+        return { ok: true, noteId: note.id, kind: visual.kind, caption: visual.caption.trim(), content, unsure };
       },
       (reason) => t("api.visualizeFailed", { reason }),
     );

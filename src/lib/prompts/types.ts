@@ -28,6 +28,9 @@ export type PromptCtx = {
   question?: string;
   // Summary depth, for SUMMARIZE.
   depth?: SummaryDepth;
+  // VISUALIZE (SPEC.md §20): the reader was told the picture may not be
+  // accurate and confirmed. The model draws its best picture anyway.
+  confirmed?: boolean;
   // Set when EXPLAIN targets a figure block: the model deciphers the visual.
   // kind image: the image is attached to the message. kind svg: the chart's SVG
   // source is in svgSource. kind video: the model only has caption and context.
