@@ -10,7 +10,7 @@ import { parseBody } from "@/lib/validate";
 
 export const maxDuration = 300;
 
-// The structure assistant (SPEC.md §32): one turn over the document's
+// The Breakwork assistant (SPEC.md §32): one turn over the document's
 // structure. Answers over the heartbeat stream (the Stitch pattern): spaces
 // while the model works, then the result JSON — the reply and the proposal,
 // if any — or the in-band error token. Stop aborts the request; nothing is

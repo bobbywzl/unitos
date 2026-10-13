@@ -1,4 +1,4 @@
-// Structure (SPEC.md §32): the structure library and the assistant's
+// Breakwork (SPEC.md §32): the structure library and the assistant's
 // proposal resolution. tidy drops every dangling reference and keeps a
 // block's first place; placeNewBuckets lays new top buckets in columns
 // under the ones placed; resolveProposal turns the model's numbered answer

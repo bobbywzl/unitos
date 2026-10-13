@@ -7,7 +7,7 @@ import { serverT } from "@/lib/i18n/server";
 import { readStructure, structureBodySchema, STRUCTURE_VERSION, tidy, type Structure } from "@/lib/structure";
 import { parseBody } from "@/lib/validate";
 
-// Structure (SPEC.md §32): the document's structure in this project. GET
+// Breakwork (SPEC.md §32): the document's structure in this project. GET
 // (viewer) answers the stored structure, or an empty one. PUT (editor)
 // replaces it whole: the reader's canvas is the source of truth, saved a
 // moment after every change. A save names the rev it was built on; a save

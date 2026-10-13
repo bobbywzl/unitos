@@ -104,7 +104,7 @@ export function CollapseIcon(props: IconProps) {
   );
 }
 
-// Structure (SPEC.md §32): three boxes, one over two, joined.
+// Breakwork (SPEC.md §32): three boxes, one over two, joined.
 export function StructureIcon(props: IconProps) {
   return (
     <Icon {...props}>

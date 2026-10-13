@@ -15,7 +15,7 @@ import type { StructureBody } from "@/lib/structure";
 import type { StructureProposal, StructureTurnResult } from "@/lib/structure-assist";
 import { useStructure } from "@/components/structure/structure-context";
 
-// The structure assistant (SPEC.md §32): the column at the left of the
+// The Breakwork assistant (SPEC.md §32): the column at the left of the
 // canvas. The reader talks with it about how to sort the document — by its
 // parts, by keywords, by what the paragraphs share — and asks for a
 // structure; every answer that carries one shows as a proposal card: what

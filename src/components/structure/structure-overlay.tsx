@@ -40,7 +40,7 @@ const StructureCanvas = dynamic(() => import("@/components/structure/structure-c
   loading: () => null,
 });
 
-// Structure (SPEC.md §32): the full-screen overlay over the reader. The
+// Breakwork (SPEC.md §32): the full-screen overlay over the reader. The
 // document's blocks sorted into buckets on a canvas; the structure
 // assistant on the left; the unsorted blocks on the right. This component
 // owns the structure: it loads it, applies every change the parts ask for,

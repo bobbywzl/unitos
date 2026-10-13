@@ -276,7 +276,7 @@ export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
 export const COLLAPSE_WINDOW_CHARS = 30_000;
 
-// Structure (SPEC.md §32): the structure assistant reads the whole document
+// Breakwork (SPEC.md §32): the Breakwork assistant reads the whole document
 // under the cached prefix and the structure as it stands, and answers with
 // a reply and, when the reader asked for one, a whole new structure: the
 // buckets, every block's bucket, the connections. A judgement over the

@@ -298,10 +298,10 @@ const en = {
   // Collapse (SPEC.md §28)
   collapseNeedsKey: "No model is configured for Collapse.",
   collapseFailed: "The article could not be collapsed",
-  // Structure (SPEC.md §32)
-  structureNeedsKey: "No model is configured for the structure assistant.",
-  structureFailed: "The structure assistant failed. {reason}",
-  structureTimedOut: "The structure assistant ran out of time before the answer ended. Ask for less at once, or try again.",
+  // Breakwork (SPEC.md §32)
+  structureNeedsKey: "No model is configured for the Breakwork assistant.",
+  structureFailed: "The Breakwork assistant failed. {reason}",
+  structureTimedOut: "The Breakwork assistant ran out of time before the answer ended. Ask for less at once, or try again.",
   structureStale: "The structure changed elsewhere. It was reloaded; make the change again.",
   videoNoReparse: "Video documents do not re-parse",
   reparseRunning: "A re-parse of this document is already running",

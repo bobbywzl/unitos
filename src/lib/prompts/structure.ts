@@ -1,7 +1,7 @@
 import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, type ReaderProfileCtx } from "@/lib/prompts/types";
 
-// Structure (SPEC.md §32): the structure assistant. The reader talks with it
+// Breakwork (SPEC.md §32): the Breakwork assistant. The reader talks with it
 // about how to sort the document — by its headings, by keywords, by what the
 // paragraphs have in common, by a question — and it answers with a reply
 // and, once the reader asks for a structure, the whole structure: every
@@ -41,7 +41,7 @@ export type StructureCtx = {
     from turn to turn, so it caches. */
 export function structureSystem(title: string, blocks: StructureBlockCtx[]): string {
   return [
-    "You are the structure assistant of a reader's document. The whole document follows. Each block starts with its number in the form [block <n>], in reading order. Refer to blocks by their numbers, exactly as given.",
+    "You are the Breakwork assistant of a reader's document. The whole document follows. Each block starts with its number in the form [block <n>], in reading order. Refer to blocks by their numbers, exactly as given.",
     "",
     `Document title: ${title}`,
     "",

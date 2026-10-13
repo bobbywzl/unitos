@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-// Structure (SPEC.md §32): the document's blocks sorted into buckets on a
+// Breakwork (SPEC.md §32): the document's blocks sorted into buckets on a
 // canvas — one new page made from an existing document. A bucket is one box:
 // a title, a description, the pieces in it in order, and the buckets inside
 // it. A piece is one block of the document placed in a bucket, with a label
 // the reader or the assistant gives it. A connection joins two buckets or two
 // pieces with a label and a comment. Stored on NotebookDocument.structure,
 // one structure per document per project; the reader edits it by hand, and
-// the structure assistant proposes a whole structure the reader applies.
+// the Breakwork assistant proposes a whole structure the reader applies.
 // The blocks are the document's: a piece names its block by id, keeps the
 // hash of the text it was placed with and its first words, so a block whose
 // text changed still shows where the reader put it, and a block that is gone

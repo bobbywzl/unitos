@@ -43,7 +43,7 @@ export const RELEASES: Release[] = [
     features: [],
   },
   {
-    // Structure (SPEC.md §32): the button beside Collapse glows.
+    // Breakwork (SPEC.md §32): the button beside Collapse glows.
     id: "2026-10-13",
     date: "2026-10-13",
     titleKey: "works.release20261013Title",

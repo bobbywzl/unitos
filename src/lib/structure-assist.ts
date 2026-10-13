@@ -26,7 +26,7 @@ import {
 } from "@/lib/structure";
 import type { UsageMeta } from "@/lib/usage";
 
-// The structure assistant (SPEC.md §32): one turn of the conversation over
+// The Breakwork assistant (SPEC.md §32): one turn of the conversation over
 // a document's structure. The model reads the document whole (every block
 // numbered), the structure as it stands, the turns so far, and the reader's
 // message, and answers with a reply and, when asked for one, the whole

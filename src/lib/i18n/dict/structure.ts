@@ -1,13 +1,13 @@
-// UI strings of Structure (SPEC.md §32): the button, the overlay, the
+// UI strings of Breakwork (SPEC.md §32): the button, the overlay, the
 // buckets, the pieces, the connections, the unsorted tray, and the structure
 // assistant. zh glossary: dict/common.ts — structure 结构 · bucket 类别 ·
-// piece 片块 · connection 关联 · unsorted 未归类.
+// piece 片块 · connection 关联 · unsorted 未归类 · Breakwork 不翻译.
 
 const en = {
   // The button beside Collapse (reader-interactions.tsx)
-  structure: "Structure",
+  structure: "Breakwork",
   structureButtonTitle:
-    "Structure: sort the document's blocks into buckets on a canvas, by hand or with the assistant, and draw connections between them",
+    "Breakwork: sort the document's blocks into buckets on a canvas, by hand or with the assistant, and draw connections between them",
   // The overlay header
   counts: "{buckets} buckets · {placed} of {total} blocks placed",
   saveFailed: "Not saved",
@@ -79,11 +79,11 @@ const en = {
   unsortedEmpty: "Every block is in a bucket.",
   unsortedNoMatch: "No block matches.",
   unsortedPlaceTitle: "Put this block in {bucket}",
-  // The structure assistant
-  assistant: "Structure assistant",
-  assistantTitle: "The structure assistant: talk about how to sort the document, then ask for a structure",
-  assistantExpand: "Show the structure assistant",
-  assistantCollapse: "Hide the structure assistant",
+  // The Breakwork assistant
+  assistant: "Breakwork assistant",
+  assistantTitle: "The Breakwork assistant: talk about how to sort the document, then ask for a structure",
+  assistantExpand: "Show the Breakwork assistant",
+  assistantCollapse: "Hide the Breakwork assistant",
   assistantHint:
     "Say how to sort the document: by its parts, by keywords, by what the paragraphs have in common, by the questions they answer. Ask for a structure and it proposes one; you apply it or discard it. It can change the structure as much as you ask.",
   assistantWelcome:
@@ -114,8 +114,8 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  structure: "结构",
-  structureButtonTitle: "结构：把文档的块归入画布上的类别，手动或由助手完成，并在它们之间画关联",
+  structure: "Breakwork",
+  structureButtonTitle: "Breakwork：把文档的块归入画布上的类别，手动或由助手完成，并在它们之间画关联",
   counts: "{buckets} 个类别 · 已归类 {placed} / {total} 个块",
   saveFailed: "未保存",
   undo: "撤销",
@@ -179,10 +179,10 @@ const zh: Record<keyof typeof en, string> = {
   unsortedEmpty: "每个块都已归类。",
   unsortedNoMatch: "没有匹配的块。",
   unsortedPlaceTitle: "把这个块放入 {bucket}",
-  assistant: "结构助手",
-  assistantTitle: "结构助手：先聊聊如何归类文档，再让它提出结构",
-  assistantExpand: "显示结构助手",
-  assistantCollapse: "隐藏结构助手",
+  assistant: "Breakwork 助手",
+  assistantTitle: "Breakwork 助手：先聊聊如何归类文档，再让它提出结构",
+  assistantExpand: "显示 Breakwork 助手",
+  assistantCollapse: "隐藏 Breakwork 助手",
   assistantHint: "说明如何归类文档：按部分、按关键词、按段落的共同点、按它们回答的问题。让它提出结构，你再应用或丢弃。它可以按你的要求对结构做任何更改。",
   assistantWelcome: "告诉我你想怎样归类这篇文档，或问问怎样归类合适。准备好后，让我提出结构：我会提出类别，把每个块放进去，并画出关联。你再应用或丢弃。",
   assistantWelcomeAgain: "结构已在画布上。随时要求更改：拆分类别、合并两个类别、按另一规则重新归类、给块加标签、把相关的块关联起来。",

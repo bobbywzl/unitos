@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { pieceHash, type BucketHue, type Structure, type StructureEnd } from "@/lib/structure";
 
-// Structure (SPEC.md §32): what every part of the overlay reads — the
+// Breakwork (SPEC.md §32): what every part of the overlay reads — the
 // structure as it stands, the document's blocks, the annotations on each
 // block, and the operations that change the structure. The overlay owns the
 // state (structure-overlay.tsx); the canvas, the buckets, the pieces, the

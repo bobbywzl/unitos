@@ -149,7 +149,7 @@ import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature
 import dynamic from "next/dynamic";
 import type { PieceAnnotation } from "@/components/structure/structure-context";
 
-// Structure (SPEC.md §32) loads with its canvas only when it opens.
+// Breakwork (SPEC.md §32) loads with its canvas only when it opens.
 const StructureOverlay = dynamic(
   () => import("@/components/structure/structure-overlay").then((m) => m.StructureOverlay),
   { ssr: false, loading: () => null },
@@ -3798,7 +3798,7 @@ export function ReaderInteractions({
   );
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
-  // Structure (SPEC.md §32): the overlay over the reader, and its glow.
+  // Breakwork (SPEC.md §32): the overlay over the reader, and its glow.
   const [structureOpen, setStructureOpen] = useState(false);
   const structureNew = useNewFeature("structure");
   // What each block carries, for the pieces of the structure: every
@@ -7690,7 +7690,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {collapseNew.isNew && <NewPill />}
     </button>
   );
-  // Structure (SPEC.md §32): the button at the top right, beside Collapse.
+  // Breakwork (SPEC.md §32): the button at the top right, beside Collapse.
   // Pressed, the structure opens over the reader.
   const structureButton = (
     <button

@@ -1906,7 +1906,7 @@ ellipse.anchor-flash {
   opacity: 0;
 }
 
-/* Structure (SPEC.md §32): the canvas's nodes are the buckets themselves,
+/* Breakwork (SPEC.md §32): the canvas's nodes are the buckets themselves,
    with none of reactflow's node chrome; a handle is a dot at the side of a
    bucket's header or a piece row, shown on hover, that a connection drags
    from. */
