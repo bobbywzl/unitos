@@ -120,7 +120,7 @@ const en = {
     "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
   guidePanelAnnotations: "Annotations",
   guidePanelAnnotationsBody:
-    "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
+    "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain violet, simplify green, analyze teal, visualize magenta, assistant Unitos orange; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
   guidePanelEdits: "Edits",
   guidePanelEditsBody: "The edit history.",
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
@@ -136,7 +136,7 @@ const en = {
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
   release20260924Title: "New: Collapse, the annotations full page, By document, Conversations",
   release20260924Body:
-    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain violet, simplify green, analyze teal, visualize magenta, assistant Unitos orange.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
   release20260925Title: "New: Define",
   release20260925Body:
     "- **Define** — select one word in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Not on Chinese text. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
@@ -288,7 +288,7 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",
   guidePanelAnnotationsBody:
-    "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
+    "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释紫、简化绿、分析青、可视化品红、助手橙；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
   guidePanelEdits: "编辑记录",
   guidePanelEditsBody: "编辑历史。",
   guideCollapseHeader: "折叠——每个块折叠为核心",
@@ -301,7 +301,7 @@ const zh: Record<keyof typeof en, string> = {
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
   release20260924Body:
-    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释紫、简化绿、分析青、可视化品红、助手橙。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
   release20260925Title: "新功能：定义",
   release20260925Body:
     "- **定义**——在任何文档里选中一个词：文章、PDF、逐字稿、幻灯片、工作表、空白文档。中文文本上不出现。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",

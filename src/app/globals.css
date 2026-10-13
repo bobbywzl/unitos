@@ -67,11 +67,11 @@
      the article, the Annotations tab, the annotations full page, the
      annotation beside a note. A highlight carries its own hue instead. */
   --kind-comment: #3f6fbf;
-  --kind-explain: #c8433b;
+  --kind-explain: #7a4fc9;
   --kind-simplify: #2f8f5b;
   --kind-analyze: #1f8a8a;
   --kind-visualize: #c2408f;
-  --kind-assistant: #7a4fc9;
+  --kind-assistant: #c67139;
   --kind-link: #5b6b7a;
 
   --background: var(--paper);
@@ -127,11 +127,11 @@
   --weblink: #8ab4f8;
 
   --kind-comment: #8fb3ee;
-  --kind-explain: #ef8079;
+  --kind-explain: #b99cf5;
   --kind-simplify: #6fcf97;
   --kind-analyze: #5ec8c8;
   --kind-visualize: #f08ac8;
-  --kind-assistant: #b99cf5;
+  --kind-assistant: #d98a52;
   --kind-link: #9fb0c0;
 
   color-scheme: dark;
