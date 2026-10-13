@@ -1906,6 +1906,66 @@ ellipse.anchor-flash {
   opacity: 0;
 }
 
+/* Breakwork (SPEC.md §32): the canvas's nodes are the buckets themselves,
+   with none of reactflow's node chrome; a handle is a dot at the side of a
+   bucket's header or a piece row, shown on hover, that a connection drags
+   from. */
+.structure-canvas .react-flow__node {
+  width: auto;
+}
+.structure-canvas .react-flow__node-bucket {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.structure-canvas .react-flow__node.selected .structure-bucket {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--clay) 45%, transparent), var(--elev-md);
+}
+.structure-canvas .structure-handle.react-flow__handle {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--card);
+  background: var(--sand-400);
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+.structure-canvas .react-flow__handle-left.structure-handle {
+  left: -6px;
+}
+.structure-canvas .react-flow__handle-right.structure-handle {
+  right: -6px;
+}
+.structure-canvas .structure-bucket:hover > .bucket-drag > .structure-handle,
+.structure-canvas [data-piece-row]:hover > .structure-handle,
+.structure-canvas .react-flow__handle.connecting,
+.structure-canvas .react-flow__handle.valid,
+.structure-canvas .structure-handle:hover {
+  opacity: 1;
+}
+.structure-canvas .structure-handle:hover,
+.structure-canvas .react-flow__handle.valid {
+  background: var(--clay);
+}
+.structure-canvas .react-flow__connection-path {
+  stroke: var(--clay);
+  stroke-width: 2;
+}
+.structure-canvas .react-flow__edge-interaction {
+  cursor: pointer;
+}
+/* A bucket the pointer is on, or one with a box in focus, rises over its
+   neighbors: an opened piece grows the bucket, and the words stay readable.
+   reactflow sets each node's z-index inline, so the rule has to win. */
+.structure-canvas .react-flow__node:hover,
+.structure-canvas .react-flow__node:focus-within {
+  z-index: 900 !important;
+}
+/* A connection's label and its open card stand over the buckets. */
+.structure-canvas .react-flow__edgelabel-renderer {
+  z-index: 5;
+}
+
 /* Documents whose recommended links await acceptance breathe on their own
    rhythm — the living tips of the graph still calling for review. */
 @keyframes graph-node-breathe {

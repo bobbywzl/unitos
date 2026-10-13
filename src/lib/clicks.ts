@@ -85,6 +85,14 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "collapse-stop",
     "collapse-expand",
     "collapse-fold",
+    // structure (SPEC.md §32): the button, the assistant's turns and proposals, the tools on a piece
+    "structure",
+    "structure-send",
+    "structure-apply",
+    "structure-discard",
+    "structure-explain",
+    "structure-simplify",
+    "structure-suggest:",
     // Stop on the other long runs: a stopped run is a reader who gave up on it
     "contents-stop",
     "chapters-stop",

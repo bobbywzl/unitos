@@ -134,7 +134,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch
+  feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch | structure
   model: string;
 };
 
