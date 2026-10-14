@@ -40,6 +40,10 @@ Both samples together: 9 wins, 8 losses, 3 ties against r1. The kept prompt wins
 
 Production keeps the r1 rules until a round shows the fix: a block that the list or the second dimension moves takes the lines that comment on it, and rule 4 comes before both. nz-rework misses the My take lines in both samples although r5 names them; that is open too.
 
+| round | change | targeted cases (2 samples each) | against control | kept |
+|---|---|---|---|---|
+| r13 | rule 4 comes before the document's own list and the second dimension: a quote, the lecture point on it, the reader's comment, an objection and its reply stay in one bucket and move together; "my critiques" takes My take lines too | nz-themes-archetypes 4, 4; nz-retry-complaint 4, 4; zh-themes 4, 4; nz-rework 3, 3 | 5 / 3 / 0, margins 6 to 3 (the reader's request and the Chinese notes won both; the rework took every My take line; the complaint lost both on week headings filed two ways in one answer) | yes |
+
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
 Faults still open after r1, each seen in one or two cases:
