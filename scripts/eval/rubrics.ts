@@ -119,6 +119,20 @@ export const RUBRICS: Record<string, Rubric> = {
       { key: "order", ask: "Is the best match first, and are duplicates merged?" },
     ],
   },
+  // A case with a plan (cases.ts): the assistant's or the selection chat's
+  // actions, which the reader approves in the plan card before they run.
+  plan: {
+    tool: "Plan (assistant actions)",
+    what: "The plan the reader approves in the plan card: exactly the change the command asks for, on the blocks it means, with every word and number the change does not touch left as it was, and an answer that says what changes.",
+    criteria: [
+      { key: "intent", ask: "Does the plan do what the command asks: a change when it asks for a change, no action when it asks only for an answer or the document takes no change, and the full change when it confirms one proposed earlier?" },
+      { key: "scope", ask: "Does every action act on the blocks the command names or means, and does no action change a block, a word, or a format the command did not ask to change?" },
+      { key: "faithful", ask: "Does every new or edited text keep the document's facts — every number, name, condition, and claim — unless the command asks to change them, and add no fact the document does not state?" },
+      { key: "shape", ask: "Is the plan the smallest that does the change, with the right action type: one revise or suggest for a change to more than five blocks, edit_block for a few, highlight, comment, or style on the exact words, add_note into the named section, move_block in an order that lands where asked?" },
+      { key: "descriptions", ask: "Does each description say in one plain sentence what its action does, so the reader can approve it without opening the document?" },
+      { key: "answer", ask: "Does the answer say in a sentence or two what changes and why, without writing out the changed text the plan already carries?" },
+    ],
+  },
 };
 
 // The criteria every assistant-voice tool shares, appended to its rubric.

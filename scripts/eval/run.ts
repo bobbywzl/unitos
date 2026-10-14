@@ -43,6 +43,17 @@ import {
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
+import {
+  enrichActions,
+  fitActions,
+  parseActionsFence,
+  readActions,
+  splitActionsFence,
+  type DocumentEdits,
+  type ReadActions,
+} from "@/lib/assistant/plan";
+import { translatorFor } from "@/lib/i18n/dictionaries";
+import type { AssistantAction } from "@/lib/types";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { askPrompt } from "@/lib/prompts/ask";
 import { definable } from "@/lib/define";
@@ -52,7 +63,7 @@ import { findPrompt } from "@/lib/prompts/find";
 import { saliencePrompt } from "@/lib/prompts/salience";
 import { simplifyPrompt } from "@/lib/prompts/simplify";
 import { summarizePrompt } from "@/lib/prompts/summarize";
-import { synthesisAskPrompt } from "@/lib/prompts/synthesis";
+import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesis";
 import { splitSentences } from "@/lib/sentences";
 import { formatTimeRange } from "@/lib/video/types";
 import { CASES, type EvalCase, type EvalTool } from "./cases";
@@ -132,6 +143,159 @@ function loadCases(): EvalCase[] {
 // ── Adapters: one per tool, the route's own messages and post-processing ──
 type Adapter = (c: EvalCase, f: Fixture) => Promise<{ input: string; prompt: string; raw: string; output: string; checks: Check[]; ms: number; tokens: { input: number; output: number }; model?: string }>;
 
+// ── Plans: the actions the reader approves in the plan card (SPEC.md §7) ──
+
+// The block an action acts on; revise and suggest act on their blockIds, or
+// on every block when they name none.
+function actedBlocks(a: AssistantAction, f: Fixture): string[] {
+  switch (a.type) {
+    case "edit_block":
+    case "remove_block":
+    case "format_block":
+    case "move_block":
+      return [a.blockId];
+    case "highlight":
+    case "comment":
+    case "style":
+    case "link":
+      return [a.anchor.blockId];
+    case "revise":
+    case "suggest":
+      return a.blockIds ?? f.blocks.map((b) => b.id);
+    default:
+      return [];
+  }
+}
+
+// The blocks' order after the plan's removals, moves, and inserts, run in
+// the plan's order; a new block counts in the order and is left out of the
+// result.
+function orderAfter(actions: AssistantAction[], f: Fixture): string[] {
+  let order = f.blocks.map((b) => b.id);
+  let added = 0;
+  for (const a of actions) {
+    if (a.type === "remove_block") order = order.filter((id) => id !== a.blockId);
+    else if (a.type === "move_block" || a.type === "insert_paragraph") {
+      const id = a.type === "move_block" ? a.blockId : `new-${++added}`;
+      order = order.filter((other) => other !== id);
+      const at = a.afterBlockId === null ? 0 : order.indexOf(a.afterBlockId) + 1;
+      if (at === 0 && a.afterBlockId !== null) continue;
+      order.splice(at, 0, id);
+    }
+  }
+  return order.filter((id) => !id.startsWith("new-"));
+}
+
+function planLines(actions: AssistantAction[], f: Fixture, warnings: string[]): string {
+  const textOf = new Map(f.blocks.map((b) => [b.id, b.text]));
+  const lines = actions.map((a, i) => {
+    const head = `${i + 1}. ${a.type} — ${a.description}`;
+    switch (a.type) {
+      case "edit_block":
+        return `${head}\n   [block ${a.blockId}] before: ${textOf.get(a.blockId) ?? "(no such block)"}\n   after: ${a.newText}`;
+      case "insert_paragraph":
+        return `${head}\n   after ${a.afterBlockId === null ? "the document's start" : `[block ${a.afterBlockId}]`}${a.kind ? ` as ${a.kind}` : ""}: ${a.text}`;
+      case "remove_block":
+      case "format_block":
+        return `${head}\n   [block ${a.blockId}]${a.type === "format_block" ? ` to ${a.kind}` : ""}`;
+      case "move_block":
+        return `${head}\n   [block ${a.blockId}] after ${a.afterBlockId === null ? "the document's start" : `[block ${a.afterBlockId}]`}`;
+      case "highlight":
+      case "comment":
+      case "style":
+      case "link": {
+        const extra = a.type === "highlight" ? ` (${a.color})${a.comment ? `: ${a.comment}` : ""}` : a.type === "comment" ? `: ${a.comment}` : a.type === "style" ? ` (${a.style})` : ` to ${a.href ?? a.toDocumentId}`;
+        return `${head}\n   [block ${a.anchor.blockId}] “${a.anchor.quotedText}”${extra}`;
+      }
+      case "add_note":
+        return `${head}\n   into ${a.sectionId ?? `a new section "${a.sectionTitle}"`}${a.source ? `, source [block ${a.source.blockId}] “${a.source.quotedText}”` : ", no source"}: ${a.content}`;
+      case "revise":
+      case "suggest":
+        return `${head}\n   ${a.blockIds ? a.blockIds.map((id) => `[block ${id}]`).join(" ") : "the whole document"}: ${a.instruction}`;
+      default:
+        return head;
+    }
+  });
+  return [...(lines.length > 0 ? lines : ["(no action)"]), ...warnings.map((w) => `Warning: ${w}`)].join("\n");
+}
+
+/** A case's plan, read as the route reads it (enrichActions against the
+    fixture), then checked against what the case expects. */
+function planOf(c: EvalCase, f: Fixture, read: ReadActions | null): { checks: Check[]; lines: string } {
+  const plan = c.plan!;
+  const expect = plan.expect;
+  const enriched = read
+    ? enrichActions(read, {
+        documentId: "eval-document",
+        edits: plan.edits ?? "blocks",
+        format: null,
+        blocks: f.blocks.map((b) => ({ id: b.id, type: b.type, text: b.text, html: b.html ?? null })),
+        transcript: null,
+        attachedIds: new Set(["eval-document"]),
+        sectionIds: new Set((plan.sections ?? []).map((s) => s.id)),
+        t: translatorFor("en"),
+      })
+    : { actions: [], warnings: [] };
+  const actions = enriched.actions;
+  const lines = planLines(actions, f, enriched.warnings);
+  if (expect.none) {
+    return { checks: [{ name: "no action", ok: !read || (read.actions.length === 0 && read.unreadable.length === 0), detail: `${read ? read.actions.length + read.unreadable.length : 0} actions` }], lines };
+  }
+  const idOf = (n: number) => f.blocks[n - 1]?.id ?? `?${n}`;
+  const types = new Set(actions.map((a) => a.type));
+  const acted = new Set(actions.flatMap((a) => actedBlocks(a, f)));
+  const textOf = new Map(f.blocks.map((b) => [b.id, b.text]));
+  const documentNumbers = numbersIn(f.blocks.map((b) => b.text).join("\n"), true);
+  const checks: Check[] = [
+    { name: "actions read", ok: read !== null && read.actions.length > 0 && read.unreadable.length === 0, detail: read ? `${read.actions.length} read, ${read.unreadable.length} not` : "no actions block" },
+  ];
+  if (read) checks.push({ name: "actions resolve", ok: enriched.warnings.length === 0, detail: enriched.warnings.join(" | ") || undefined });
+  if (expect.types) {
+    const missing = expect.types.filter((t) => !types.has(t));
+    checks.push({ name: "action types", ok: missing.length === 0, detail: missing.length > 0 ? `missing ${missing.join(", ")}` : undefined });
+  }
+  if (expect.onlyTypes && expect.types) {
+    const extra = [...types].filter((t) => !expect.types!.includes(t));
+    checks.push({ name: "no other action type", ok: extra.length === 0, detail: extra.join(", ") || undefined });
+  }
+  if (expect.blocks) {
+    const missing = expect.blocks.filter((n) => !acted.has(idOf(n)));
+    checks.push({ name: "acts on the asked blocks", ok: missing.length === 0, detail: missing.length > 0 ? `missing block ${missing.join(", ")}` : undefined });
+    if (expect.onlyBlocks) {
+      const asked = new Set(expect.blocks.map(idOf));
+      const extra = [...acted].filter((id) => !asked.has(id));
+      checks.push({ name: "acts on no other block", ok: extra.length === 0, detail: extra.join(", ") || undefined });
+    }
+  }
+  if (expect.order) {
+    const after = orderAfter(actions, f);
+    const want = expect.order.map(idOf);
+    checks.push({ name: "order after the plan", ok: after.join(",") === want.join(","), detail: after.map((id) => f.blocks.findIndex((b) => b.id === id) + 1).join(",") });
+  }
+  // A quote anchors at its first place in the block (buildAnchor): one that
+  // occurs twice may mark the wrong words.
+  const twice = actions.flatMap((a) => {
+    if (a.type !== "highlight" && a.type !== "comment" && a.type !== "style" && a.type !== "link") return [];
+    const text = textOf.get(a.anchor.blockId) ?? "";
+    return text.indexOf(a.anchor.quotedText, a.anchor.startOffset + 1) === -1 ? [] : [`“${a.anchor.quotedText}” in ${a.anchor.blockId}`];
+  });
+  checks.push({ name: "quotes occur once in their block", ok: twice.length === 0, detail: twice.join(", ") || undefined });
+  const edits = actions.filter((a) => a.type === "edit_block");
+  checks.push({ name: "at most 5 edit_block", ok: edits.length <= 5, detail: `${edits.length}` });
+  checks.push({ name: "every edit changes its block", ok: edits.every((a) => a.newText.trim() !== (textOf.get(a.blockId) ?? "").trim()) });
+  if (!expect.changesNumbers) {
+    const lost = edits.flatMap((a) => {
+      const now = numbersIn(a.newText, true);
+      return [...numbersIn(textOf.get(a.blockId) ?? "")].filter((n) => !now.has(n)).map((n) => `${n} in ${a.blockId}`);
+    });
+    checks.push({ name: "edits keep the block's numbers", ok: lost.length === 0, detail: lost.join(", ") || undefined });
+  }
+  const written = actions.flatMap((a) => (a.type === "edit_block" ? [a.newText] : a.type === "insert_paragraph" ? [a.text] : a.type === "add_note" ? [a.content] : []));
+  const invented = [...new Set(written.flatMap((w) => [...numbersIn(w)].filter((n) => !documentNumbers.has(n))))];
+  checks.push({ name: "new text adds no number", ok: invented.length === 0, detail: invented.join(", ") || undefined });
+  return { checks, lines };
+}
+
 function system(f: Fixture): ModelMessage {
   return { role: "system", content: fixturePrefix(f) };
 }
@@ -149,7 +313,9 @@ function capCheck(output: string, cap: number): Check {
 }
 
 function languageCheck(output: string, lang: string): Check {
-  const share = cjkShare(output);
+  // Block tags are ids, not words: a short Chinese answer with two tags
+  // is still Chinese.
+  const share = cjkShare(output.replace(/\[block [a-zA-Z0-9-]+\]/g, ""));
   const ok = lang === "zh" ? share >= 0.3 : share < 0.3;
   return { name: `answers in ${lang}`, ok, detail: `CJK share ${(share * 100).toFixed(0)}%` };
 }
@@ -373,21 +539,39 @@ const adapters: Record<EvalTool, Adapter> = {
   },
 
   async assistant(c, f) {
+    const plan = c.plan;
+    const edits: DocumentEdits = plan?.edits ?? "blocks";
+    const history = plan?.history ?? [];
     const prompt = synthesisAskPrompt({
       profile: c.profile,
       lang: c.lang,
       scopeLabel: "this page: the open document in full",
       question: c.question ?? "",
+      continued: history.length > 0,
+      // A plan case runs in This page scope with the actions on (SPEC.md §7).
+      ...(plan ? { act: { sections: (plan.sections ?? []).map((s) => ({ ...s, parentTitle: null })), otherDocuments: [], edits } } : {}),
     });
-    const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
-    const checks: Check[] = [
-      tagCheck(r.text, f),
-      { name: "cites at least one block", ok: blockTags(r.text).length > 0 },
-      capCheck(r.text, 250),
-      languageCheck(r.text, c.lang),
-      openerCheck(r.text),
-    ];
-    return { input: c.question ?? "", prompt, raw: r.text, output: r.text, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
+    const turns: ModelMessage[] = history.map((m) => ({ role: m.role, content: m.role === "user" ? synthesisHistoryTurn({ content: m.content }) : m.content }));
+    const r = await callTool({ messages: [system(f), ...turns, { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
+    const input = [...history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`), `${history.length > 0 ? "Reader: " : ""}${c.question ?? ""}`].join("\n");
+    if (!plan) {
+      const checks: Check[] = [
+        tagCheck(r.text, f),
+        { name: "cites at least one block", ok: blockTags(r.text).length > 0 },
+        capCheck(r.text, 250),
+        languageCheck(r.text, c.lang),
+        openerCheck(r.text),
+      ];
+      return { input, prompt, raw: r.text, output: r.text, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
+    }
+    // The route holds the actions block back from the stream and reads it
+    // as the plan (app/api/assistant/route.ts).
+    const { text, content } = splitActionsFence(r.text);
+    const read = content === null ? null : parseActionsFence(content, text, edits);
+    const planned = planOf(c, f, read);
+    const checks: Check[] = [...planned.checks, tagCheck(text, f), capCheck(text, 250), languageCheck(text, c.lang), openerCheck(text)];
+    const output = [text, "", "Plan", planned.lines].join("\n");
+    return { input, prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
   },
 
   async act(c, f) {
@@ -399,16 +583,17 @@ const adapters: Record<EvalTool, Adapter> = {
       selectionBlock: textSelectionBlock(anchor.blockId, anchor.quotedText),
       toolBlock: "",
       hasSelection: true,
-      sections: [],
+      sections: (c.plan?.sections ?? []).map((s) => ({ ...s, parentTitle: null })),
       otherDocuments: [],
       notes: [],
-      history: [],
+      history: c.plan?.history ?? [],
       command: c.question ?? "Explain this.",
+      ...(c.plan ? { edits: c.plan.edits ?? "blocks" } : {}),
     });
     const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
     const planSchema = z.object({
       reply: z.string().nullable(),
-      actions: z.array(z.unknown()).optional(),
+      actions: z.unknown().optional(),
       matches: z.array(z.object({ blockId: z.string(), quote: z.string(), why: z.string() })).optional(),
     });
     const parsed = planSchema.safeParse(extractJson(r.text));
@@ -422,6 +607,16 @@ const adapters: Record<EvalTool, Adapter> = {
       })
       .filter((m) => m !== null);
     const reply = parsed.success ? (parsed.data.reply ?? "") : "";
+    const input = [...(c.plan?.history ?? []).map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`), `selection: ${anchor.quotedText}`, `command: ${c.question ?? "Explain this."}`].join("\n");
+    if (c.plan) {
+      // The route reads the actions field as readActions reads a fence, in
+      // the kind the document takes (app/api/assistant/act/route.ts).
+      const read = parsed.success ? fitActions(readActions(parsed.data.actions ?? []), c.plan.edits ?? "blocks") : null;
+      const planned = planOf(c, f, read);
+      const checks: Check[] = [{ name: "valid JSON", ok: parsed.success }, ...planned.checks, tagCheck(reply, f), capCheck(reply, 150), languageCheck(reply, c.lang), openerCheck(reply)];
+      const output = [reply, "", "Plan", planned.lines].join("\n");
+      return { input, prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
+    }
     const checks: Check[] = [
       { name: "valid JSON", ok: parsed.success },
       { name: "3 to 8 matches", ok: matches.length >= 3 && matches.length <= 8, detail: `${matches.length}` },
@@ -434,7 +629,7 @@ const adapters: Record<EvalTool, Adapter> = {
       openerCheck(reply),
     ];
     const output = [reply, "", "Passages", quoteLines(resolved.map((m) => ({ blockId: m.blockId, quotedText: m.quotedText, label: m.why })))].join("\n");
-    return { input: `selection: ${anchor.quotedText}\ncommand: ${c.question ?? "Explain this."}`, prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
+    return { input, prompt, raw: r.text, output, checks, ms: r.ms, tokens: { input: r.inputTokens, output: r.outputTokens }, model: r.model };
   },
 
   async ask(c, f) {
@@ -492,7 +687,8 @@ const judgeSchema = z.object({
 });
 
 function judgePrompt(c: EvalCase, f: Fixture, input: string, output: string): string {
-  const rubric = RUBRICS[c.tool];
+  // A plan case is judged on its plan: the change the reader approves.
+  const rubric = c.plan ? RUBRICS.plan : RUBRICS[c.tool];
   const criteria = [...rubric.criteria, ...SHARED_CRITERIA];
   const profile = c.profile
     ? `Background: ${c.profile.background}\nPurpose: ${c.profile.purpose}\nApplication: ${c.profile.application || "(none)"}`
