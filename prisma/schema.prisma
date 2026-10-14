@@ -618,6 +618,19 @@ model DocumentVersion {
 // newer. The reader opens the document there and draws the left-off mark
 // above the block. userId is a soft reference like Notebook.userId ("user-1"
 // = the local reader).
+// The last-open document (SPEC.md §6): the document the account last had
+// open in a project. A project opened without a document in its link opens
+// there. One row per account per project; written by the reader as a
+// document opens, never by a prefetch.
+model LastDocument {
+  userId     String
+  notebookId String
+  documentId String
+  at         DateTime @default(now())
+
+  @@id([userId, notebookId])
+}
+
 model ReadingPosition {
   userId     String
   documentId String
@@ -697,6 +710,10 @@ model NotebookDocument {
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
   formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
+  // Pinned (SPEC.md §6): when the document was pinned to the top of the
+  // document list in this project; null = not pinned, which every row
+  // written before pins existed is, so it lists as before.
+  pinnedAt      DateTime?
   // Structure (SPEC.md §32): the document's blocks sorted into buckets on a
   // canvas, per project — {v, rev, buckets, pieces, connections}
   // (lib/structure.ts). Null = no structure yet: every block unsorted.

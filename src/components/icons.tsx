@@ -104,6 +104,16 @@ export function CollapseIcon(props: IconProps) {
   );
 }
 
+// A pin (SPEC.md §6): a document pinned to the top of the document list.
+export function PinIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 17v5" />
+      <path d="M9 3h6l-1 6 4 4v2H6v-2l4-4z" />
+    </Icon>
+  );
+}
+
 // Breakwork (SPEC.md §32): three boxes, one over two, joined.
 export function StructureIcon(props: IconProps) {
   return (

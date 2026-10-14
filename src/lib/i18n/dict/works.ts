@@ -152,6 +152,9 @@ const en = {
   release20261013Title: "New: Breakwork",
   release20261013Body:
     "- **Breakwork** — the button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag blocks between buckets, nest buckets, label blocks, and draw labeled connections between buckets or blocks. Every block opens whole with its annotations and the Explain and Simplify tools.\n- **The Breakwork assistant** — talk about how to sort the document, then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and it changes the structure as much as you ask.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+  release20261014Title: "New: name a document before you add it, pin documents, reopen where you left off",
+  release20261014Body:
+    "- **Title** — every link and file in the add dialog has a Title field. Write a title, and the document is added under it. Empty keeps the document's own title.\n- **Pin to top** — in a document's ⋯ in the document list. Pinned documents list first, under Pinned, for everyone in the project.\n- **Where you left off** — a project opens on the document you last had open in it, at the place you left off.\n- **Breakwork** — the assistant answers long documents in well under a minute, sorts every block, and keeps a failed turn in the conversation with Try again.",
   // Feedback button
   feedback: "Feedback",
   sendFeedback: "Send feedback",
@@ -325,6 +328,9 @@ const zh: Record<keyof typeof en, string> = {
   release20261013Title: "新功能：Breakwork",
   release20261013Body:
     "- **Breakwork**——文章右上角、折叠旁边的按钮。文档的块归入画布上的类别：块可在类别之间拖动，类别可以嵌套，块可以加标签，类别或块之间可以画带标签的关联。每个块都可以连同批注完整打开，并使用解释和简化工具。\n- **Breakwork 助手**——先聊聊如何归类文档，再让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，它可以按你的要求对结构做任何更改。\n\n新功能的控件会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+  release20261014Title: "新功能：添加前命名文档、置顶文档、回到上次的位置",
+  release20261014Body:
+    "- **标题**——添加对话框里的每个链接和文件都有标题栏。写下标题，文档就以这个标题添加。留空则保留文档自己的标题。\n- **置顶**——在文档列表里文档的 ⋯ 中。置顶的文档排在最前，在“已置顶”下，项目里的每个人都能看到。\n- **回到上次的位置**——项目打开时显示你上次打开的文档，停在你上次读到的位置。\n- **Breakwork**——助手在一分钟内处理长文档，归类每个块，失败的回合会留在对话里并附有重试。",
   // Feedback button
   feedback: "反馈",
   sendFeedback: "发送反馈",

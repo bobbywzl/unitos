@@ -10,7 +10,7 @@ import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
-import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
+import { ChevronDownIcon, PinIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
@@ -79,6 +79,9 @@ export type AttachedDocument = {
   // Its place in its list under Sort by Custom order (SPEC.md §6); null =
   // never placed by a drag.
   position: number | null;
+  // When it was pinned to the top of the document list (SPEC.md §6); null =
+  // not pinned.
+  pinnedAt: string | null;
   // An import edited since it was imported (SPEC.md §29): Re-parse asks
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
@@ -406,6 +409,10 @@ export function DocumentBar({
   // request of theirs.
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
+  // Pinned (SPEC.md §6): first pinned first.
+  const pinnedDocuments = documents
+    .filter((d) => d.pinnedAt !== null)
+    .sort((a, b) => (a.pinnedAt ?? "").localeCompare(b.pinnedAt ?? ""));
   const isStale = (d: AttachedDocument) =>
     !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && d.parserVersion < PARSER_VERSION;
   // The open document's figures a browser render can bring over: captions
@@ -981,6 +988,18 @@ export function DocumentBar({
 
   // Move to folder (SPEC.md §6): the document's row moves under the folder;
   // null = the project itself. The row's picker shows a failure.
+  // Pin a document to the top of the document list, or unpin it (SPEC.md §6).
+  async function pinDocument(documentId: string, pinned: boolean) {
+    setMoveError(null);
+    try {
+      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", { pinned });
+      setPillMenu(null);
+      router.refresh();
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+
   async function moveDocument(documentId: string, folderId: string | null) {
     setMoveError(null);
     try {
@@ -1026,6 +1045,7 @@ export function DocumentBar({
           }`}
           data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
         >
+          {d.pinnedAt !== null && <PinIcon size={11} className="mr-1.5 inline-block align-[-1px] text-clay" />}
           {clipWords(d.title, 44)}
           {isStale(d) && (
             <span className="ml-1.5 text-[11px] font-normal text-sand-500">
@@ -1166,6 +1186,16 @@ export function DocumentBar({
               </div>
             </div>
           )}
+          {canEdit && (
+            <button
+              onClick={() => void pinDocument(d.id, d.pinnedAt === null)}
+              data-track={d.pinnedAt === null ? "document-pin" : "document-unpin"}
+              className={rowAction}
+              data-tip={t(d.pinnedAt === null ? "panes.pinDocumentTitle" : "panes.unpinDocumentTitle")}
+            >
+              {t(d.pinnedAt === null ? "panes.pinDocument" : "panes.unpinDocument")}
+            </button>
+          )}
           {canEdit && folders.length > 0 && (
             <button
               onClick={() => {
@@ -1259,6 +1289,45 @@ export function DocumentBar({
               className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
               <DocumentsSort sort={documentSort} onSort={setDocumentSort} />
+              {/* Pinned (SPEC.md §6): the pinned documents at the top, first
+                  pinned first, whatever the sort; each also stays in its
+                  place below. */}
+              {pinnedDocuments.length > 0 && (
+                <div className="mb-1 border-b border-line pb-1">
+                  <p className="px-4 pt-1 pb-0.5 text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
+                    {t("panes.pinned")}
+                  </p>
+                  {pinnedDocuments.map((d) => (
+                    <div key={d.id} className="group flex items-center">
+                      <button
+                        onClick={() => {
+                          closeList();
+                          open(d.id);
+                        }}
+                        data-track="document-open-pinned"
+                        data-tip={d.title}
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden px-4 py-1.5 text-left text-[13px] whitespace-nowrap ${
+                          d.id === activeId ? "font-semibold text-ink" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                        }`}
+                      >
+                        <PinIcon size={11} className="shrink-0 text-clay" />
+                        <span className="min-w-0 truncate">{clipWords(d.title, 44)}</span>
+                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => void pinDocument(d.id, false)}
+                          data-track="document-unpin"
+                          aria-label={t("panes.unpinDocument")}
+                          data-tip={t("panes.unpinDocumentTitle")}
+                          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 group-hover:opacity-100 hover:bg-clay-100 hover:text-clay-800 focus:opacity-100"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <DocumentTree
                 notebookId={notebookId}
                 folders={folders}

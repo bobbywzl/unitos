@@ -216,6 +216,8 @@ export default async function NotebookPage(props: {
     folderId: nd.folderId,
     // Its place in its list under Custom order (SPEC.md §6); null = never placed.
     position: nd.position,
+    // Pinned to the top of the document list (SPEC.md §6); null = not pinned.
+    pinnedAt: nd.pinnedAt?.toISOString() ?? null,
     // Re-parse of an edited import asks first (document-bar.tsx).
     importEdited: editedSinceImport(nd.document),
     kind: kindOf(nd),
@@ -225,7 +227,26 @@ export default async function NotebookPage(props: {
       noteEdits.get(nd.document.id)?.toISOString(),
     ]),
   }));
-  const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
+  // A link without a document opens the one the account last had open in
+  // this project (SPEC.md §6): the last-open document, else the article it
+  // last read (its newest reading position), else the first attached.
+  const lastOpenId = async (): Promise<string | null> => {
+    if (attached.length === 0) return null;
+    const ids = new Set(attached.map((d) => d.id));
+    const last = await db.lastDocument.findUnique({
+      where: { userId_notebookId: { userId: user.id, notebookId } },
+      select: { documentId: true },
+    });
+    if (last && ids.has(last.documentId)) return last.documentId;
+    const read = await db.readingPosition.findFirst({
+      where: { userId: user.id, documentId: { in: [...ids] } },
+      orderBy: { at: "desc" },
+      select: { documentId: true },
+    });
+    return read?.documentId ?? null;
+  };
+  const activeId =
+    doc && attached.some((d) => d.id === doc) ? doc : ((await lastOpenId()) ?? attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
   const readerView: ReaderViewKind =
     viewParam === "side" || viewParam === "stack" ? viewParam : "normal";

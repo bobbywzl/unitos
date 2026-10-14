@@ -252,6 +252,20 @@ export function Workspace({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(readerView !== "normal"));
   }, [trayStoreKey, canEdit, activeDocumentId, readerView]);
+  // The last-open document (SPEC.md §6): the document open now is the one
+  // this project reopens at. Fire and forget, like the reading position: a
+  // lost save costs a place, not work.
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    fetch(`/api/notebooks/${notebook.id}/last-document`, {
+      method: "PUT",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId: activeDocumentId }),
+    }).catch(() => {
+      // offline, or the network dropped: the project opens as before
+    });
+  }, [notebook.id, activeDocumentId]);
   // The script's style rules leave once React owns the tray and the entrance
   // fades are past: the tray can then slide, and the fade cannot start late.
   useEffect(() => {

@@ -50,6 +50,15 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20261013Body",
     features: ["structure"],
   },
+  {
+    // The Title field, pinned documents, and the last-open document
+    // (SPEC.md §6, §15): Pin to top lives in a menu, so nothing glows.
+    id: "2026-10-14",
+    date: "2026-10-14",
+    titleKey: "works.release20261014Title",
+    bodyKey: "works.release20261014Body",
+    features: [],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

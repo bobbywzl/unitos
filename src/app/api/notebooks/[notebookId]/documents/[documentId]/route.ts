@@ -8,23 +8,26 @@ import { parseBody } from "@/lib/validate";
 
 // Delete one stored distillation (DISTILL, the reader's Extract) — or several
 // selected at once — or one extraction (EXTRACT, the reader's Match-it) from
-// the attachment, or move the document to a folder (SPEC.md §6; null = the
-// project itself). Exactly one of the four.
+// the attachment, move the document to a folder (SPEC.md §6; null = the
+// project itself), or pin it to the top of the document list or unpin it
+// (SPEC.md §6). Exactly one of the five.
 const patchSchema = z
   .object({
     removeDistillationId: z.string().min(1).optional(),
     removeDistillationIds: z.array(z.string().min(1)).min(1).max(50).optional(),
     removeExtractionId: z.string().min(1).optional(),
     folderId: z.string().min(1).nullable().optional(),
+    pinned: z.boolean().optional(),
   })
   .refine(
     (d) =>
       [d.removeDistillationId, d.removeDistillationIds, d.removeExtractionId].filter(Boolean).length +
-        (d.folderId !== undefined ? 1 : 0) ===
+        (d.folderId !== undefined ? 1 : 0) +
+        (d.pinned !== undefined ? 1 : 0) ===
       1,
     {
       message:
-        "Provide exactly one of removeDistillationId, removeDistillationIds, removeExtractionId, folderId",
+        "Provide exactly one of removeDistillationId, removeDistillationIds, removeExtractionId, folderId, pinned",
     },
   );
 
@@ -43,6 +46,18 @@ export async function PATCH(
   });
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
+  }
+  if (data.pinned !== undefined) {
+    // A pin is the project's: every collaborator sees the document at the
+    // top. Pinning again keeps the first pin's time, so the order holds.
+    if (data.pinned !== (attachment.pinnedAt !== null)) {
+      await db.notebookDocument.update({
+        where: { notebookId_documentId: { notebookId, documentId } },
+        data: { pinnedAt: data.pinned ? new Date() : null },
+      });
+      await bumpNotebook(notebookId);
+    }
+    return NextResponse.json({ ok: true });
   }
   if (data.folderId !== undefined) {
     if (data.folderId) {
