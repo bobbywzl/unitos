@@ -34,6 +34,11 @@ r12, the regression round: every case, the kept prompt (r1 + r4 + r5 + r8 + r11)
 | sample | mean overall | lowest case | against r1 (wins / losses / ties) |
 |---|---|---|---|
 | r12 | 3.90 | 3 (nz-rework: My take lines left out of the critique buckets; sp-claims-evidence: evidence in top buckets apart from the claims) | 3 / 5 / 2 (nz-themes-archetypes and nz-retry-complaint are one structure, counted twice) |
+| r12b | 4.10 | 3 (nz-rework: My take lines left out of the critique buckets again) | 6 / 3 / 1 against a fresh r1 sample (r1b) |
+
+Both samples together: 9 wins, 8 losses, 3 ties against r1. The kept prompt wins every time on the talking turn (nz-how), named sides (nz-quotes-vs-critiques), and the keyword request (nz-keyword), and never loses on the split (nz-split-label). It loses every time on the reader's own request (nz-themes-archetypes), the complaint (nz-retry-complaint), and the Chinese notes (zh-themes), each by margin 1 or 2, and the judges name one cause in all three: a quote run is split, its comment or the objection and reply left in another bucket ([53]-[56], [105]-[107], [130]-[134], [40]-[44]). The rules that move one block by an outside test, the document's own list (r8) and the second dimension (r11), pull single blocks out of runs; rule 4 (keep a block with what it belongs to) does not say it comes first.
+
+Production keeps the r1 rules until a round shows the fix: a block that the list or the second dimension moves takes the lines that comment on it, and rule 4 comes before both. nz-rework misses the My take lines in both samples although r5 names them; that is open too.
 
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
