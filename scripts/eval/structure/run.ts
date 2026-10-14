@@ -111,6 +111,7 @@ function check(): void {
   const rows: string[] = [];
   for (const c of cases()) {
     const dir = dirOf(round, c.id);
+    if (!existsSync(dir)) continue;
     const raw = readText(join(dir, "answer.json"));
     const checks: Check[] = [];
     const add = (name: string, ok: boolean, detail = "") => checks.push({ name, ok, detail });
@@ -149,7 +150,7 @@ function check(): void {
       const count = (id: string): number =>
         structure.pieces.filter((p) => p.bucketId === id).length + childBuckets(structure, id).reduce((s, b) => s + count(b.id), 0);
       const tiny = structure.buckets.filter((b) => count(b.id) < 2);
-      add("tiny", tiny.length <= 1, `${tiny.length} buckets under 2 blocks${tiny.length ? `: ${tiny.map((b) => b.title).join("; ")}` : ""}`);
+      add("tiny", c.expect.tinyOk === true || tiny.length <= 1, `${tiny.length} buckets under 2 blocks${tiny.length ? `: ${tiny.map((b) => b.title).join("; ")}` : ""}`);
       if (c.expect.themes) {
         const big = structure.buckets.filter((b) => structure.pieces.filter((p) => p.bucketId === b.id).length > readable.length / 3);
         add("lumping", big.length === 0, big.length ? `over a third: ${big.map((b) => b.title).join("; ")}` : "");
@@ -199,6 +200,8 @@ function check(): void {
     }
     const failed = checks.filter((x) => !x.ok);
     writeJson(join(dir, "result.json"), { checks, tokens, failed: failed.map((x) => x.name) });
+    // The structure as text, for the side-by-side judge (pair).
+    writeFileSync(join(dir, "packet.md"), [`## The assistant's reply\n${answer.reply}`, "", packet || "## The structure\n(none: the assistant answered in words only)"].join("\n"));
     const doc = readable.map((b, i) => `[${i + 1}] (${b.type}) ${b.text.replace(/\s+/g, " ")}`).join("\n");
     writeFileSync(
       join(dir, "judge.md"),
@@ -212,7 +215,7 @@ function check(): void {
         "",
         "## The conversation before this turn",
         ...(c.history.length ? c.history.map((h) => `${h.role}: ${h.content}`) : ["(none)"]),
-        ...(c.canvas ? ["", "## The canvas before this turn", ...c.canvas.map((b) => `- ${b.id} "${b.title}": blocks ${b.blocks}`)] : []),
+        ...(c.canvas ? ["", "## The canvas before this turn", ...c.canvas.map((b) => `- ${b.id} "${b.title}"${b.parent ? ` (inside ${b.parent})` : ""}: blocks ${b.blocks}`)] : []),
         "",
         `## The reader's request\n${c.message}`,
         "",
@@ -239,6 +242,43 @@ function check(): void {
     rows.push(`${c.id}: ${failed.length ? `FAIL ${failed.map((x) => x.name).join(", ")}` : "checks pass"} (${tokens} tokens)`);
   }
   console.log(rows.join("\n"));
+}
+
+// ── pair: the candidate beside the base, blind ───────────────────────────
+// For each case, the base answer is the first of the --base rounds that has
+// one. The two packets are shown as X and Y in an order fixed by the case id,
+// so no letter names the candidate; pair-key.json keeps which is which.
+function pair(): void {
+  const bases = (flag("base") ?? "").split(",").filter(Boolean);
+  let n = 0;
+  for (const c of cases()) {
+    const dir = dirOf(round, c.id);
+    const cand = readText(join(dir, "packet.md"));
+    const baseDir = bases.map((b) => dirOf(b, c.id)).find((d) => existsSync(join(d, "packet.md")));
+    const base = baseDir ? readText(join(baseDir, "packet.md")) : null;
+    if (!cand || !base) continue;
+    const flip = [...`${round}${c.id}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 2 === 1;
+    const [x, y] = flip ? [base, cand] : [cand, base];
+    writeJson(join(dir, "pair-key.json"), { X: flip ? "base" : "candidate", Y: flip ? "candidate" : "base", base: baseDir });
+    const judge = readText(join(dir, "judge.md")) ?? "";
+    const head = judge.slice(0, judge.indexOf("## The assistant's reply"));
+    writeFileSync(
+      join(dir, "pair.md"),
+      [
+        head.replace("# Judge one turn of the Breakwork assistant", "# Compare two answers to one turn of the Breakwork assistant"),
+        "# Answer X",
+        x.replace(/^## /gm, "### "),
+        "",
+        "# Answer Y",
+        y.replace(/^## /gm, "### "),
+        "",
+        "## Choose",
+        "Read the document, then both answers whole. Check at least 10 placements in each against the document. Then write `pair.json` beside this file: {\"winner\": \"X\" | \"Y\" | \"tie\", \"margin\": 1-3 (1 slight, 3 clear), \"why\": \"the decisive differences, concrete, naming blocks or buckets\"}. Prefer the answer this reader would rather press Apply on. Length is no merit; a tie is fine when neither is better.",
+      ].join("\n"),
+    );
+    n++;
+  }
+  console.log(`wrote ${n} pair packets`);
 }
 
 // ── score: the table ─────────────────────────────────────────────────────
@@ -285,7 +325,24 @@ function score(): void {
     };
     lines.push(`| ${c.id} | ${KEYS.map(cell).join(" | ")} | ${r.failed.join(", ") || "none"} | ${r.tokens} |`);
   }
+  // The side-by-side verdicts: candidate wins, base wins, ties.
+  let wins = 0, losses = 0, ties = 0;
+  const verdicts: string[] = [];
+  for (const c of cases()) {
+    const dir = dirOf(round, c.id);
+    const p = readText(join(dir, "pair.json"));
+    const k = readText(join(dir, "pair-key.json"));
+    if (!p || !k) continue;
+    const verdict = JSON.parse(p) as { winner: string; margin?: number; why?: string };
+    const key = JSON.parse(k) as Record<string, string>;
+    const who = verdict.winner === "tie" ? "tie" : key[verdict.winner];
+    if (who === "candidate") wins++;
+    else if (who === "base") losses++;
+    else ties++;
+    verdicts.push(`- **${c.id}**: ${who}${verdict.margin ? ` (${verdict.margin})` : ""} — ${verdict.why ?? ""}`);
+  }
   lines.push(`| **mean** | ${KEYS.map((k) => (means[k].length ? (means[k].reduce((a, b) => a + b, 0) / means[k].length).toFixed(2) : "–")).join(" | ")} | | |`);
+  if (verdicts.length) lines.push("", `## Side by side: candidate ${wins} wins, ${losses} losses, ${ties} ties`, ...verdicts);
   lines.push("", "## Worst faults");
   for (const c of cases()) {
     const r = now.get(c.id);
@@ -300,4 +357,5 @@ if (command === "prepare") prepare();
 else if (command === "batches") batches();
 else if (command === "check") check();
 else if (command === "score") score();
-else console.log("commands: prepare, batches, check, score");
+else if (command === "pair") pair();
+else console.log("commands: prepare, batches, check, pair, score");

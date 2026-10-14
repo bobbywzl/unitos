@@ -23,6 +23,8 @@ export type StructureCase = {
     themes?: boolean;
     // Buckets that must still exist (ids of the canvas).
     keep?: string[];
+    // The request itself makes buckets of one block (a sub-bucket per theme).
+    tinyOk?: boolean;
   };
   good: string;
 };
@@ -76,6 +78,40 @@ export const STRUCTURE_CASES: StructureCase[] = [
     message: "split Archetypes into one bucket per archetype and label every block in them",
     expect: { kind: "structure", nested: true, labels: true, keep: ["b2"] },
     good: "Archetypes becomes three buckets (Rousseau's, Goethe's, Schopenhauer's man), inside Archetypes or in its place; each archetype's lines are in its bucket, each labeled in three to eight words; Gay Science stays as it was.",
+  },
+  {
+    id: "nz-keyword",
+    fixture: "nietzsche-notes",
+    lang: "en",
+    history: [],
+    message: "pull together everything about suffering and pessimism, and everything about art and style, and leave the rest in a third bucket",
+    expect: { kind: "structure", whole: true },
+    good: "Exactly three top buckets: suffering and pessimism (Schopenhauer's pessimism, tragedy, amor fati as the answer to suffering, the camel and bearing weight, recurrence as the test of suffering, the critiques on these), art and style (gay science as joyful wisdom, we artists, giving style to one's character, appearance), and the rest. A block that is about both goes where its main point is. The rest bucket may hold topic buckets inside it, but nothing about the two named topics is left in it.",
+  },
+  {
+    id: "nz-rework",
+    fixture: "nietzsche-notes",
+    lang: "en",
+    history: [],
+    canvas: [
+      { id: "b1", title: "Archetypes", description: "The three types of man FN respects.", blocks: "5, 23-24, 154, 200" },
+      { id: "b2", title: "Rousseau's man", parent: "b1", blocks: "6-9, 78, 125" },
+      { id: "b3", title: "Goethe's man", parent: "b1", blocks: "10-13, 34, 153" },
+      { id: "b4", title: "Schopenhauer's man", parent: "b1", blocks: "14-18, 25, 104, 133, 203" },
+      { id: "b5", title: "Education and the genius", blocks: "20-21, 27-33" },
+      { id: "b6", title: "Self-overcoming", blocks: "19, 22, 95-97, 165-167, 196, 204" },
+      { id: "b7", title: "Gay science and truthfulness", blocks: "37-48, 60-61, 69" },
+      { id: "b8", title: "Art and style", blocks: "50-59, 88-94, 197" },
+      { id: "b9", title: "Death of God", blocks: "64-68, 71-77, 79-85, 143-144, 195" },
+      { id: "b10", title: "Eternal recurrence and amor fati", blocks: "99-103, 105-110, 168-170, 186-192, 199, 202" },
+      { id: "b11", title: "Morality and the Genealogy", blocks: "113-124, 127-132, 134-139, 198" },
+      { id: "b12", title: "Übermensch, last man, metamorphoses", blocks: "142, 145-152, 156-164, 201" },
+      { id: "b13", title: "Perspectivism and will to power", blocks: "173-179, 181-185" },
+      { id: "b14", title: "Course and exam lines", blocks: "3, 35, 62, 86, 111, 140, 171, 193-194, 205-206" },
+    ],
+    message: "merge Gay science and Art and style into one bucket, split Morality and the Genealogy into master/slave morality and guilt/ascetic priest, and inside every theme bucket put my critiques in their own sub-bucket",
+    expect: { kind: "structure", nested: true, keep: ["b1", "b9", "b14"], tinyOk: true },
+    good: "Gay science and Art and style become one bucket (one id kept or a new one), with all their blocks; Morality and the Genealogy becomes two buckets, master/slave morality (good and bad, good and evil, ressentiment) and guilt / bad conscience / the ascetic priest; every theme bucket gets a sub-bucket holding exactly its My critique / My take lines, the rest staying in the theme bucket; buckets the reader did not mention keep their ids, titles, and blocks; nothing else moves.",
   },
   {
     id: "rm-parts",

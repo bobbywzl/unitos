@@ -2,11 +2,21 @@
 
 Model agents: Sonnet, standing in for `STRUCTURE_MODEL` (Claude Sonnet 5). Judges: one agent per two cases. Overall is 1 to 5; the mean is over 8 cases.
 
-| round | change | mean overall | lowest case | kept |
+From r3 on, every judge also compares the candidate with the current best answer side by side, blind (`run.ts pair`), and a change is kept when it wins more cases than it loses and no case falls under 3. Two cases joined at r3: a keyword request (nz-keyword) and a rework of a structure on the canvas (nz-rework); their baseline is r3base, the r1 prompt.
+
+| round | change | mean overall | lowest case | side by side (wins / losses / ties) | kept |
+|---|---|---|---|---|---|
+| r0 | ranges answer format, Sonnet 5 at medium, failed turns kept | 3.63 | 2 (named sides) | – | base |
+| r1 | place every content block when the request names kinds of blocks; named sides get one top bucket each with topics inside; a comment goes with its quote; a block on two buckets goes where it serves most, a connection records the other tie; the talking turn names three or four ways; code: the assistant's new connection from a block to its own bucket drops | 4.13 | 4 | – | yes |
+| r2 | pair comments before sorting; follow the document's own index; labels say what a block adds; connection labels name the relation; talking turn recommends one way; sizes only for whole-document sorts; the same topics on both sides | 4.00 | 4 | – | no: reverted to r1 |
+| r3 | a comment goes right after the quote it is about; a block goes in a person's or a type's bucket only when it names or describes that person or type | 4.10 | 3 (rework) | 4 / 5 / 1 | no: the archetype buckets went thin, the comparing critiques left them |
+| r4 | the talking turn: at most four sentences, three or four ways that group differently, a recommendation that names the line of the document that shows why, then ask | 4.00 | 3 (rework, untouched by the rule) | the targeted case won (2); the other nine, which the rule does not reach, 2 / 6 / 1 | yes: nz-how now recommends sorting by theme from the exam line [194] in three sentences |
+
+From r5 on, a round re-runs only the cases its change targets, against the current best answer of each case (`.eval/structure/best/`): in r4 the nine cases a talking-turn rule cannot reach still went 2 / 6 / 1, which is the sampling noise of a re-run, not the rule. The last round re-runs every case against r1 to catch a regression.
+
+| round | change | targeted cases (2 samples each) | side by side | kept |
 |---|---|---|---|---|
-| r0 | ranges answer format, Sonnet 5 at medium, failed turns kept | 3.63 | 2 (named sides) | base |
-| r1 | place every content block when the request names kinds of blocks; named sides get one top bucket each with topics inside; a comment goes with its quote; a block on two buckets goes where it serves most, a connection records the other tie; the talking turn names three or four ways; code: the assistant's new connection from a block to its own bucket drops | 4.13 | 4 | yes |
-| r2 | pair comments before sorting; follow the document's own index; labels say what a block adds; connection labels name the relation; talking turn recommends one way; sizes only for whole-document sorts; the same topics on both sides | 4.00 | 4 | no: reverted to r1 |
+| r5 | a change touches only what it names; "inside every bucket" reaches nested buckets; the reader's own lines (My critique, My take, my thoughts) are one kind; buckets of one kind under different parents name their parent | nz-rework 4, 5; nz-quotes-vs-critiques 4, 4; nz-split-label 4, 4 | 4 / 2 / 0 (rework 2 wins, sides 2 wins, split 2 losses) | yes; the split regression is r6's target |
 
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
