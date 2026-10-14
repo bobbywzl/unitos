@@ -68,3 +68,4 @@ Faults still open after r1, each seen in one or two cases:
 | r1 | 190 of 206 (92%; the 16 left are the two title lines and the 14 week headings, since a theme runs across weeks) | 14 | 1357 | 4 |
 
 The answer under the old format (one object per block with a label) would be about 10,000 tokens for the same document.
+| r16 | a connection label names the relation in the document's terms, never a bare "connects to" or «连到»; lines that compare the second dimension's values get a bucket of their own | zh-themes 4, 4; nz-themes-archetypes 4, 4; nz-retry-complaint 4, 4 | 2 / 3 / 1, margins 3 to 3: zh-themes won both on the labels («孝为仁之本», «礼以仁为本» in place of «解释», «合起来看»); the Nietzsche cases lost on where the Übermensch and the last man go, which neither rule touches | the label rule yes, the comparing bucket no |
