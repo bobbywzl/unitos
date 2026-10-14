@@ -70,3 +70,8 @@ Faults still open after r1, each seen in one or two cases:
 The answer under the old format (one object per block with a label) would be about 10,000 tokens for the same document.
 | r16 | a connection label names the relation in the document's terms, never a bare "connects to" or «连到»; lines that compare the second dimension's values get a bucket of their own | zh-themes 4, 4; nz-themes-archetypes 4, 4; nz-retry-complaint 4, 4 | 2 / 3 / 1, margins 3 to 3: zh-themes won both on the labels («孝为仁之本», «礼以仁为本» in place of «解释», «合起来看»); the Nietzsche cases lost on where the Übermensch and the last man go, which neither rule touches | the label rule yes, the comparing bucket no |
 | r17 | two ideas the document sets against each other (an ideal and its opposite, two rival theories, a claim and its objection) go in one bucket | nz-themes-archetypes 4, 4; nz-retry-complaint 3, 4; nz-keyword 4, 3 | 4 / 2 / 0, margins 6 to 3 | yes |
+
+r18, the regression round after r17: every case, two samples, against the two r1 samples: 11 / 8 / 1, margins 17 to 10 (r15 was 10 / 10, 15 to 13). nz-rework wins both at margin 3, nz-split-label and nz-retry-complaint win both. nz-themes-archetypes loses both at margin 2: the answer follows the document's own exam list, which files the Übermensch under self-overcoming and the last man under the death of God, and the case's bar asks for an Übermensch bucket of its own. zh-themes loses both at margin 1, on a reply that claims what the structure does not do and on titles with a 论 prefix.
+
+| round | change | targeted cases (2 samples each) | against control | kept |
+|---|---|---|---|---|
