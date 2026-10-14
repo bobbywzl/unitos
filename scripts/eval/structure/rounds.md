@@ -26,6 +26,7 @@ From r8 on, a candidate is paired with a fresh control sample of the kept prompt
 | round | change | targeted cases (2 samples each) | against control | kept |
 |---|---|---|---|---|
 | r9 | a label says what the block says, never the bucket's title or the block's type; a description says what the blocks say, never which kinds of lines | nz-split-label 4, 4; zh-themes 4, 4 | 1 / 1 / 2, margins 1 to 1 (the labels lost the document's own parallel form, Core drive / Character / Role, which the judge preferred) | no: reverted |
+| r10 | a how-to-sort reply never offers the document's own order; before writing the rest bucket, check each of its blocks against the named topics | nz-keyword 4, 3; nz-how 4, 4 | 1 / 3 / 0 (the judge wanted the week option back; one keyword sample left the rest as one flat bucket of 136 blocks) | no: reverted |
 
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
