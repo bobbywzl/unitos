@@ -23,6 +23,10 @@ From r5 on, a round re-runs only the cases its change targets, against the curre
 
 From r8 on, a candidate is paired with a fresh control sample of the kept prompt on the same case (rNc, rNcb), never with the best answers: each best answer won out of several samples, so an equal prompt loses to it. r6 and r7 were judged against the best answers and may have been reverted unfairly. A tie on wins is broken by the sum of margins.
 
+| round | change | targeted cases (2 samples each) | against control | kept |
+|---|---|---|---|---|
+| r9 | a label says what the block says, never the bucket's title or the block's type; a description says what the blocks say, never which kinds of lines | nz-split-label 4, 4; zh-themes 4, 4 | 1 / 1 / 2, margins 1 to 1 (the labels lost the document's own parallel form, Core drive / Character / Role, which the judge preferred) | no: reverted |
+
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
 Faults still open after r1, each seen in one or two cases:
