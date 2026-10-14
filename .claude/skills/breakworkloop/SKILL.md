@@ -15,6 +15,7 @@ What the loop improves: the Breakwork assistant — the prompt (`src/lib/prompts
 4. Spawn one **judge agent** per 2 cases (prompt below). Each writes `scores.json`.
 5. `run.ts score --round rN --baseline rM` writes `.eval/structure/rN/report.md`: the table against the baseline, then each case's worst fault and the judge's fix.
 6. Read the worst cases' `judge.md` yourself before trusting the judge. Change the prompt (a rule that names the fault class, never the fixture) or the code (when the fault is mechanical: a dangling end, a connection that draws nothing). Keep the change when the mean overall rises and no case falls under 3; revert it otherwise.
+6a. Compare blind, against a control. A round re-runs only the cases its change targets, two samples each (rN, rNb). Before the change lands, prepare two control rounds with the kept prompt (rNc, rNcb) on the same cases and have them answered the same way. `run.ts pair --round rN --base rNc` (and rNb against rNcb) writes `pair.md`; the judge writes `pair.json`. Keep the change when the candidate wins more pairs than it loses and no case scores under 3. Never pair against `.eval/structure/best/`: each answer there won out of several samples, so a fresh sample of an equal prompt loses to it (r6 to r8 lost 2 / 3, 1 / 3, 1 / 5 that way).
 7. Stop when no case is under 4, or a round no longer moves the mean. Then `npx tsc --noEmit`, `npx eslint`, `npx tsx scripts/qa/structure-check.ts`.
 
 ## Model agent prompt
@@ -23,7 +24,7 @@ What the loop improves: the Breakwork assistant — the prompt (`src/lib/prompts
 
 ## Judge agent prompt
 
-> You judge one feature of a reading app. For each case directory below, read `judge.md` whole and do exactly what it says: write `scores.json` beside it with the Write tool. Be strict and concrete: 5 is rare; check placements against the document lines the packet lists; name blocks by their numbers in "worst". Read only the judge.md files named. Reply with one line per case: its name and the overall.
+> You judge one feature of a reading app. For each case directory below, do two things in order. First read `judge.md` whole and do exactly what it says: write `scores.json` beside it. Then read `pair.md` whole and do exactly what it says: write `pair.json` beside it. Use the Write tool. Be strict and concrete: 5 is rare; check placements against the document lines the packet lists; name blocks by their numbers. Read only the judge.md and pair.md files named. Reply with one line per case: its name, the overall, and the pair winner.
 
 ## Rules
 
