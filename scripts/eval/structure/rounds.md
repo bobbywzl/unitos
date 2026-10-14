@@ -45,6 +45,11 @@ Production keeps the r1 rules until a round shows the fix: a block that the list
 | r13 | rule 4 comes before the document's own list and the second dimension: a quote, the lecture point on it, the reader's comment, an objection and its reply stay in one bucket and move together; "my critiques" takes My take lines too | nz-themes-archetypes 4, 4; nz-retry-complaint 4, 4; zh-themes 4, 4; nz-rework 3, 3 | 5 / 3 / 0, margins 6 to 3 (the reader's request and the Chinese notes won both; the rework took every My take line; the complaint lost both on week headings filed two ways in one answer) | yes |
 | r14 | every part heading unsorted alike when the sort runs across parts; "every bucket" of a kind takes the second dimension's buckets too | nz-themes-archetypes 4, 4; nz-retry-complaint 4, 4; nz-rework 4, 4 | 1 / 4 / 1, margins 2 to 5 (the rework scored 4 twice, up from 3, but the losses were on theme choices the rules do not touch) | no: reverted |
 
+r15, the regression round after r13: every case, two samples, against the two r1 samples: 10 / 10 / 0, margins 15 to 13. Every sample wins on nz-how and nz-rework (margin 2 each, every My take line now sorted); every sample over r12 and r15 loses on nz-retry-complaint and zh-themes. The judges name two causes: Chinese connection labels that name no relation («连到仁», «结合») where r1 writes «礼以仁为本»; and the lines that compare the archetypes, which r1 gives a bucket of their own inside Archetypes.
+
+| round | change | targeted cases (2 samples each) | against control | kept |
+|---|---|---|---|---|
+
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
 Faults still open after r1, each seen in one or two cases:
