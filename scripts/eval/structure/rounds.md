@@ -75,3 +75,6 @@ r18, the regression round after r17: every case, two samples, against the two r1
 
 | round | change | targeted cases (2 samples each) | against control | kept |
 |---|---|---|---|---|
+| r19 | the reply says only what the structure does (counts its buckets, claims no rule it breaks); titles carry no prefix such as "On" or «论» | zh-themes 4, 4; nz-themes-archetypes 4, 4; nz-retry-complaint 4, 3 | 1 / 4 / 1, margins 1 to 7 (the losses are placements the rules do not touch) | no: reverted |
+
+Where the loop stands: the kept prompt is r1 + r4 + r5 + r8 + r11 + r13 + the r16 label rule + r17, and it beats r1 11 / 8 / 1 over two samples of every case (r18). Rounds r14, r16's second rule, and r19 lost on placements their rules do not reach: a single targeted round now sits near the judges' noise, so a further rule needs more samples than two to show.
