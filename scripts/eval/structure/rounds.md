@@ -29,6 +29,12 @@ From r8 on, a candidate is paired with a fresh control sample of the kept prompt
 | r10 | a how-to-sort reply never offers the document's own order; before writing the rest bucket, check each of its blocks against the named topics | nz-keyword 4, 3; nz-how 4, 4 | 1 / 3 / 0 (the judge wanted the week option back; one keyword sample left the rest as one flat bucket of 136 blocks) | no: reverted |
 | r11 | a block whose main point is one value of the second dimension (an archetype it names and judges) goes in that value's bucket; the reply never cites block numbers | nz-themes-archetypes 4, 4; nz-retry-complaint 4, 3 | 2 / 2 / 0, margins 3 to 2 (both wins on the reader's own request: the archetype buckets take in the later critiques [34], [153], [104], [133]; both losses on how closely the themes follow the exam list) | yes, on margins |
 
+r12, the regression round: every case, the kept prompt (r1 + r4 + r5 + r8 + r11) against r1, blind.
+
+| sample | mean overall | lowest case | against r1 (wins / losses / ties) |
+|---|---|---|---|
+| r12 | 3.90 | 3 (nz-rework: My take lines left out of the critique buckets; sp-claims-evidence: evidence in top buckets apart from the claims) | 3 / 5 / 2 (nz-themes-archetypes and nz-retry-complaint are one structure, counted twice) |
+
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
 Faults still open after r1, each seen in one or two cases:
