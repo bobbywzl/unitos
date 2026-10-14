@@ -277,16 +277,23 @@ export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the wind
 export const COLLAPSE_WINDOW_CHARS = 30_000;
 
 // Breakwork (SPEC.md §32): the Breakwork assistant reads the whole document
-// under the cached prefix and the structure as it stands, and answers with
-// a reply and, when the reader asked for one, a whole new structure: the
-// buckets, every block's bucket, the connections. A judgement over the
-// whole document of what goes with what: GLM 5.3 at high, the assistant's
-// own model, one call per turn.
-export const STRUCTURE_MODEL = GLM_5_3;
-export const STRUCTURE_EFFORT: KimiEffort = "high";
-export const STRUCTURE_MAX_OUTPUT_TOKENS = 32768; // a bucket per block of a long document, with the reasoning before them
+// under the cached prefix and the structure as it stands, and answers with a
+// reply and, when the reader asked for one, a whole structure: the buckets,
+// each with its blocks as ranges of block numbers, the labels asked for, the
+// connections. The answer stays a few hundred tokens whatever the length of
+// the document. A judgement of what goes with what across the whole
+// document, read while the reader waits: Claude Sonnet 5 at medium — it
+// follows many rules at once, answers in well under a minute on a long
+// document, and the document is cached from turn to turn. GLM 5.3 at high
+// reasoned past the route's deadline on a 267-block document.
+export const STRUCTURE_MODEL = CLAUDE_SONNET_5;
+export const STRUCTURE_EFFORT: ClaudeEffort = "medium";
+export const STRUCTURE_MAX_OUTPUT_TOKENS = 24576; // the thinking, then a structure of ranges
 export const STRUCTURE_HISTORY_MAX = 20;
 export const STRUCTURE_DEADLINE_MS = 270_000;
+// The text the assistant reads of the document: past it, every block past
+// its fair share is cut to its opening words.
+export const STRUCTURE_READ_CHARS = 400_000;
 
 // The assistant's suggestions (SPEC.md §29): the assistant edits a rich text
 // as suggestions an editor accepts or rejects. Claude Sonnet 5, as the voice

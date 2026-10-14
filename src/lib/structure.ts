@@ -156,6 +156,51 @@ export function pieceHash(text: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
+/** Block numbers as ranges, in the order given: 1,2,3,7,9,10 → "1-3, 7, 9-10".
+    A run breaks where the next number is not one more, so an order other
+    than the document's survives. */
+export function rangesOf(numbers: number[]): string {
+  const parts: string[] = [];
+  let start: number | null = null;
+  let prev = 0;
+  for (const n of numbers) {
+    if (start !== null && n === prev + 1) {
+      prev = n;
+      continue;
+    }
+    if (start !== null) parts.push(start === prev ? String(start) : `${start}-${prev}`);
+    start = n;
+    prev = n;
+  }
+  if (start !== null) parts.push(start === prev ? String(start) : `${start}-${prev}`);
+  return parts.join(", ");
+}
+
+/** Block numbers from ranges ("5-18, 22", "30–31"), in the order written,
+    each once, between 1 and max. A range written high to low reads low to
+    high. Anything that is no number or range is skipped. */
+export function parseRanges(text: string, max: number): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  const push = (n: number) => {
+    if (n >= 1 && n <= max && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  };
+  const normal = text.replace(/\s*(?:[-–—]|\bto\b|\.\.)\s*/g, "-");
+  for (const part of normal.split(/[,;\s]+/)) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) continue;
+    const a = Number(m[1]);
+    const b = m[2] !== undefined ? Number(m[2]) : a;
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    if (hi - lo > 100_000) continue;
+    for (let n = lo; n <= hi; n++) push(n);
+  }
+  return out;
+}
+
 /** The first words of a block, for a piece's preview. */
 export function piecePreview(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -212,6 +257,22 @@ export function tidy(body: StructureBody): StructureBody {
     connections.push(c);
   }
   return { buckets, pieces, connections };
+}
+
+/** True when the connection joins a piece to the bucket that holds it, or to
+    a bucket around that one: it says nothing the canvas does not draw. The
+    assistant's proposals drop such a connection; one the reader drew stays. */
+export function joinsOwnBucket(structure: StructureBody, c: { from: StructureEnd; to: StructureEnd }): boolean {
+  const piece = c.from.kind === "piece" ? c.from : c.to.kind === "piece" ? c.to : null;
+  const bucket = c.from.kind === "bucket" ? c.from : c.to.kind === "bucket" ? c.to : null;
+  if (!piece || !bucket) return false;
+  const byId = new Map(structure.buckets.map((b) => [b.id, b]));
+  let at: string | null = structure.pieces.find((p) => p.blockId === piece.id)?.bucketId ?? null;
+  for (let i = 0; at && i <= structure.buckets.length; i++) {
+    if (at === bucket.id) return true;
+    at = byId.get(at)?.parentId ?? null;
+  }
+  return false;
 }
 
 /** The buckets inside one bucket (null: the canvas), in order. */

@@ -5,8 +5,8 @@
 // into a real structure — new ids, block ids, labels kept, reader-drawn
 // connections kept, positions kept for the buckets that stay.
 // Run: npx tsx scripts/qa/structure-check.ts
-import { resolveProposal } from "@/lib/structure-assist";
-import { emptyStructure, pieceHash, placeNewBuckets, readStructure, tidy, type Structure } from "@/lib/structure";
+import { resolveProposal, structureAnswerSchema } from "@/lib/structure-assist";
+import { emptyStructure, joinsOwnBucket, pieceHash, placeNewBuckets, readStructure, tidy, type Structure } from "@/lib/structure";
 
 let failed = 0;
 const check = (name: string, got: unknown, want: unknown) => {
@@ -43,6 +43,22 @@ const piece = (blockId: string, bucketId: string, label = "") => ({ blockId, has
   check("tidy: a bucket listed twice is one", out.buckets.filter((b) => b.id === "a").length, 1);
   check("tidy: a block placed twice keeps its first place", out.pieces.map((p) => `${p.blockId}@${p.bucketId}`), ["x@a"]);
   check("tidy: a connection to a gone end drops, a loop drops", out.connections.map((c) => c.id), ["c1"]);
+}
+{
+  const out = tidy({
+    buckets: [bucket("p"), bucket("q", "p"), bucket("r")],
+    pieces: [piece("x", "q"), piece("y", "r")],
+    connections: [
+      { id: "own", from: { kind: "piece", id: "x" }, to: { kind: "bucket", id: "q" }, label: "", comment: "", byAssistant: true },
+      { id: "outer", from: { kind: "bucket", id: "p" }, to: { kind: "piece", id: "x" }, label: "", comment: "", byAssistant: true },
+      { id: "other", from: { kind: "piece", id: "x" }, to: { kind: "bucket", id: "r" }, label: "", comment: "", byAssistant: true },
+    ],
+  });
+  check(
+    "joinsOwnBucket: a block to its bucket or a bucket around it, not to another",
+    out.connections.map((c) => joinsOwnBucket(out, c)),
+    [true, true, false],
+  );
 }
 {
   const out = tidy({ buckets: [bucket("a", "b"), bucket("b", "a")], pieces: [], connections: [] });
@@ -90,31 +106,23 @@ const current: Structure = {
     { id: "old", from: { kind: "bucket", id: "keep" }, to: { kind: "piece", id: "b2" }, label: "old", comment: "", byAssistant: true },
   ],
 };
+const answer = (structure: unknown) => structureAnswerSchema.parse({ reply: "done", structure });
 {
   const { structure, summary } = resolveProposal(
-    {
-      reply: "done",
-      structure: {
-        buckets: [
-          { id: "keep", title: "Kept bucket", description: "", parentId: null },
-          { id: "new1", title: "Findings", description: "What was found.", parentId: null },
-          { id: "new2", title: "Evidence", description: "", parentId: "new1" },
-        ],
-        pieces: [
-          { n: 2, bucketId: "keep" },
-          { n: 3, bucketId: "new1", label: "Second" },
-          { n: 4, bucketId: "new2", label: "Third" },
-          { n: 9, bucketId: "new1", label: "No such block" },
-          { n: 3, bucketId: "new2", label: "Twice" },
-        ],
-        connections: [
-          { from: { kind: "bucket", id: "new1" }, to: { kind: "piece", id: "4" }, label: "holds", comment: "c" },
-          { id: "old", from: { kind: "bucket", id: "keep" }, to: { kind: "piece", id: "3" }, label: "moved", comment: "" },
-          { from: { kind: "bucket", id: "nope" }, to: { kind: "piece", id: "2" }, label: "dangling", comment: "" },
-        ],
-        removeConnectionIds: [],
-      },
-    },
+    answer({
+      buckets: [
+        { id: "keep", title: "Kept bucket", description: "", parent: null, blocks: "2" },
+        { id: "new1", title: "Findings", description: "What was found.", parent: null, blocks: "3, 9" },
+        { id: "new2", title: "Evidence", description: "", parent: "new1", blocks: [4, "3"] },
+      ],
+      labels: { "3": "Second" },
+      connections: [
+        { from: "bucket new1", to: "block 4", label: "inside", comment: "c" },
+        { from: "block 4", to: "bucket keep", label: "holds", comment: "c" },
+        { id: "old", from: "bucket keep", to: "block 3", label: "moved", comment: "" },
+        { from: "bucket nope", to: "block 2", label: "dangling", comment: "" },
+      ],
+    }),
     current,
     blocks,
   );
@@ -124,27 +132,31 @@ const current: Structure = {
   check("resolveProposal: a bucket inside a new bucket follows it", byTitle("Evidence").parentId, byTitle("Findings").id);
   check("resolveProposal: the new top bucket is placed", byTitle("Findings").y > 0 || byTitle("Findings").x > 0, true);
   check(
-    "resolveProposal: block numbers become ids, a number with no block drops, a block twice keeps its first place",
-    structure.pieces.map((p) => p.blockId).sort(),
-    ["b2", "b3", "b4"],
+    "resolveProposal: ranges become ids, a number with no block drops, a block twice keeps its first place",
+    structure.pieces.map((p) => `${p.blockId}@${structure.buckets.find((b) => b.id === p.bucketId)!.title}`).sort(),
+    ["b2@Kept bucket", "b3@Findings", "b4@Evidence"],
   );
   check("resolveProposal: a label the model left out is kept from the piece", structure.pieces.find((p) => p.blockId === "b2")?.label, "The reader's label");
+  check("resolveProposal: a label asked for lands", structure.pieces.find((p) => p.blockId === "b3")?.label, "Second");
   check("resolveProposal: a new piece carries the hash of its block", structure.pieces.find((p) => p.blockId === "b3")?.hash, pieceHash("Second paragraph."));
   check("resolveProposal: the reader's connection stays", structure.connections.some((c) => c.id === "mine"), true);
   check("resolveProposal: a connection changed by id moves", structure.connections.find((c) => c.id === "old")?.to, { kind: "piece", id: "b3" });
   check("resolveProposal: a new connection is the assistant's", structure.connections.find((c) => c.label === "holds")?.byAssistant, true);
   check("resolveProposal: a dangling connection drops", structure.connections.some((c) => c.label === "dangling"), false);
+  check("resolveProposal: a new connection from a block to a bucket around it drops", structure.connections.some((c) => c.label === "inside"), false);
   check("resolveProposal: the summary counts", summary, { bucketsAdded: 2, bucketsRemoved: 0, piecesMoved: 2, connectionsAdded: 1, connectionsRemoved: 0 });
 }
 {
-  const { structure, summary } = resolveProposal(
-    { reply: "", structure: { buckets: [], pieces: [], connections: [], removeConnectionIds: ["mine"] } },
-    current,
-    blocks,
-  );
+  const { structure, summary } = resolveProposal(answer({ buckets: [], removeConnections: ["mine"] }), current, blocks);
   check("resolveProposal: a bucket left out is removed and its block unsorted", [structure.buckets.length, structure.pieces.length], [0, 0]);
-  check("resolveProposal: removeConnectionIds drops the reader's connection only when named", structure.connections.length, 0);
+  check("resolveProposal: removeConnections drops the reader's connection only when named", structure.connections.length, 0);
   check("resolveProposal: the summary says so", summary, { bucketsAdded: 0, bucketsRemoved: 1, piecesMoved: 1, connectionsAdded: 0, connectionsRemoved: 2 });
+}
+{
+  const parsed = structureAnswerSchema.safeParse({ reply: 5, structure: { buckets: [{ id: 1, title: null, blocks: null }] } });
+  check("structureAnswerSchema: a near miss still reads", parsed.success, true);
+  const talk = structureAnswerSchema.parse({ reply: "Sort by parts or by themes." });
+  check("structureAnswerSchema: a talking turn has no structure", talk.structure, null);
 }
 
 if (failed > 0) {
