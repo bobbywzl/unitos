@@ -25,7 +25,9 @@ import { useStructure } from "@/components/structure/structure-context";
 // closing the structure, leaving the page, or a reload keeps it; Clear
 // conversation removes it.
 
-type TurnData = { proposal?: StructureProposal; outcome?: "applied" | "discarded" };
+// error: the turn failed; the reason stays in the conversation, so a reader
+// who closed Breakwork while it ran still sees what happened.
+type TurnData = { proposal?: StructureProposal; outcome?: "applied" | "discarded"; error?: string };
 type Turn = KeptTurn & { data?: TurnData };
 
 const SUGGESTIONS = [
@@ -59,6 +61,13 @@ export function StructureBox({
     writeChatDraft(draftKey, text);
   }
   const [error, setError] = useState<string | null>(null);
+  // The seconds the running turn has taken, beside Reading the document….
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
   const [open, setOpen] = useState(true);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -67,16 +76,21 @@ export function StructureBox({
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns.length, running, open]);
 
-  async function send(text = message.trim()) {
+  async function send(text = message.trim(), retry = false) {
     if (!text || running) return;
     setError(null);
-    setMessage("");
-    const history = turns
+    if (!retry) setMessage("");
+    // A failed turn and the message it failed on are not history: the
+    // model would read a question with no answer.
+    const answered = turns.filter((turn, i) => !turn.data?.error && !turns[i + 1]?.data?.error);
+    const history = answered
       .filter((turn) => turn.content.trim())
       .slice(-20)
       .map((turn) => ({ role: turn.role, content: turn.content }));
-    setTurns((prev) => [...prev, { role: "user", content: text }]);
+    if (!retry) setTurns((prev) => [...prev, { role: "user", content: text }]);
+    else setTurns((prev) => (prev[prev.length - 1]?.data?.error ? prev.slice(0, -1) : prev));
     const controller = kept.begin();
+    setElapsed(0);
     try {
       const result = await runHeartbeat<StructureTurnResult>(
         `/api/notebooks/${notebookId}/documents/${documentId}/structure/assist`,
@@ -93,7 +107,8 @@ export function StructureBox({
       ]);
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : t("common.requestFailed"));
+        const reason = err instanceof Error ? err.message : t("common.requestFailed");
+        setTurns((prev) => [...prev, { role: "assistant", content: "", data: { error: reason } }]);
       }
     } finally {
       kept.end(controller);
@@ -158,6 +173,20 @@ export function StructureBox({
           ) : (
             <div key={i} className="flex max-w-[95%] flex-col gap-1.5 text-[13px] text-sand-800">
               {turn.content && <Markdown>{turn.content}</Markdown>}
+              {turn.data?.error && (
+                <div className="rounded-2xl border border-red-200 bg-red-50/70 px-3 py-2 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                  <p>{turn.data.error}</p>
+                  {canEdit && i === turns.length - 1 && !running && turns[i - 1]?.role === "user" && (
+                    <button
+                      onClick={() => void send(turns[i - 1].content, true)}
+                      data-track="structure-retry"
+                      className="mt-1.5 rounded-full border border-red-300 px-3 py-0.5 text-[11.5px] font-semibold hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
+                    >
+                      {t("structure.retry")}
+                    </button>
+                  )}
+                </div>
+              )}
               {turn.data?.proposal && (
                 <ProposalCard
                   proposal={turn.data.proposal}
@@ -173,7 +202,13 @@ export function StructureBox({
             </div>
           ),
         )}
-        {running && <ThinkingIndicator label={t("structure.assistantRunning")} onStop={kept.stop} stopLabel={t("common.stop")} />}
+        {running && (
+          <ThinkingIndicator
+            label={elapsed > 0 ? t("structure.assistantRunningFor", { s: elapsed }) : t("structure.assistantRunning")}
+            onStop={kept.stop}
+            stopLabel={t("common.stop")}
+          />
+        )}
         {turns.length === 0 && canEdit && (
           <div className="flex flex-wrap gap-1.5">
             {SUGGESTIONS.map((key) => (
