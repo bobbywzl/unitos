@@ -17,6 +17,7 @@ From r5 on, a round re-runs only the cases its change targets, against the curre
 | round | change | targeted cases (2 samples each) | side by side | kept |
 |---|---|---|---|---|
 | r5 | a change touches only what it names; "inside every bucket" reaches nested buckets; the reader's own lines (My critique, My take, my thoughts) are one kind; buckets of one kind under different parents name their parent | nz-rework 4, 5; nz-quotes-vs-critiques 4, 4; nz-split-label 4, 4 | 4 / 2 / 0 (rework 2 wins, sides 2 wins, split 2 losses) | yes; the split regression is r6's target |
+| r6 | sizes only when the whole document is sorted; a split bucket stays as the parent and keeps the blocks that span the group | nz-split-label 5, 4; nz-rework 3, 4; nz-themes-archetypes 4, 4 | 2 / 3 / 1 (split 1 tie, 1 loss on label wording; rework 1 win, 1 loss: one sample skipped the critiques sub-bucket in Archetypes) | no: reverted; the r6b themes answer is the new best |
 
 After r2 the prompt is r1's plus one line: a quotation mark inside a JSON string is escaped or written as the document's own (「」). A model agent's Chinese answer broke the parse with a bare quotation mark.
 
