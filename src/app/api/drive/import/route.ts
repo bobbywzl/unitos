@@ -20,7 +20,7 @@ import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE, WORD_MIME_TYPE } from "@/lib/office-file";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
-import { progressResponse } from "@/lib/ingest-response";
+import { chosenTitleSchema, progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -54,6 +54,7 @@ const bodySchema = z.object({
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
   pdfPages: pageRangesSchema.optional(),
+  title: chosenTitleSchema,
 });
 
 export async function POST(req: Request) {
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
       // recommended-links scan follows it, so it reads the transcript.
       if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
-    });
+    }, { title: data.title });
   }
 
   // The parse chain (jsdom, unpdf) loads per request; see /api/documents
@@ -185,7 +186,7 @@ export async function POST(req: Request) {
         console.error("Drive slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
       }
-    });
+    }, { title: data.title });
   }
 
   // kind is "docx", "docx-file", "pdf", or "export".
@@ -263,7 +264,7 @@ export async function POST(req: Request) {
       after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
     }
     return { id: document.id, title: document.title, deduped };
-  });
+  }, { title: data.title });
 }
 
 /** A Word file's bytes from Drive: a .docx sitting in Drive as it is, or a

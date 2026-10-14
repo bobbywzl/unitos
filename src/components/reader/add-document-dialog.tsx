@@ -38,10 +38,11 @@ function parseLinks(raw: string): string[] {
 
 // One request for the queue (SPEC.md §22): a lone link, files alone, or
 // Drive picks alone go to the box as before; everything else is a batch,
-// and so is a queue with a PDF's chosen pages, which ride on its item.
+// and so is a queue with a PDF's chosen pages or a chosen title, which ride
+// on its item.
 function requestFor(items: UploadItem[]): UploadRequest {
   if (items.length === 1 && (items[0].kind === "url" || items[0].kind === "video-url")) return items[0];
-  const chosen = items.some((item) => (item.kind === "file" || item.kind === "drive-file") && item.pdfPages);
+  const chosen = items.some((item) => ((item.kind === "file" || item.kind === "drive-file") && item.pdfPages) || item.title);
   if (!chosen && items.every((item) => item.kind === "file")) {
     return { kind: "files", files: items.flatMap((item) => (item.kind === "file" ? [item.file] : [])) };
   }
@@ -147,6 +148,9 @@ export function AddDocumentDialog({
   // Each queued PDF's Pages field, and each queued PDF file's page count
   // once its bytes are read (null: they do not say).
   const [pageText, setPageText] = useState<Map<UploadItem, string>>(new Map());
+  // Each queued item's Title field (SPEC.md §15): empty keeps the
+  // document's own title.
+  const [titleText, setTitleText] = useState<Map<UploadItem, string>>(new Map());
   const [pageCounts, setPageCounts] = useState<Map<File, number | null>>(new Map());
   const countOf = (item: UploadItem) => (item.kind === "file" ? (pageCounts.get(item.file) ?? null) : null);
   const pagesOf = (item: UploadItem) => readPageRanges(pageText.get(item) ?? "", countOf(item));
@@ -248,13 +252,16 @@ export function AddDocumentDialog({
   async function submit() {
     if (items.length === 0 || pagesInvalid) return;
     await saveTitle();
-    // A PDF goes with its chosen pages; every page needs none.
+    // A PDF goes with its chosen pages; every page needs none. An item goes
+    // with its chosen title; the document's own needs none.
     onSubmit(
       requestFor(
         items.map((item) => {
-          if (!isPdfItem(item)) return item;
+          const title = titleText.get(item)?.trim();
+          const titled: UploadItem = title ? { ...item, title } : item;
+          if (!isPdfItem(titled)) return titled;
           const read = pagesOf(item);
-          return "ranges" in read && read.ranges ? { ...item, pdfPages: read.ranges } : item;
+          return "ranges" in read && read.ranges ? { ...titled, pdfPages: read.ranges } : titled;
         }),
       ),
     );
@@ -415,6 +422,21 @@ export function AddDocumentDialog({
                     return (
                       <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 text-[13px] text-sand-800">
                         <span className="min-w-0 grow basis-40 truncate">{uploadItemTitle(item)}</span>
+                        {/* The Title field (SPEC.md §15): empty keeps the document's own title. */}
+                        <label className="flex shrink-0 items-center gap-1.5 text-xs text-sand-600">
+                          {t("panes.queueTitle")}
+                          <input
+                            value={titleText.get(item) ?? ""}
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              setTitleText((current) => new Map(current).set(item, text));
+                            }}
+                            placeholder={t("panes.queueTitleOwn")}
+                            data-track="add-queue-title"
+                            maxLength={300}
+                            className="h-7 w-40 rounded-full border border-line bg-card px-3 text-xs text-sand-800 outline-none placeholder:text-sand-500 focus:border-clay"
+                          />
+                        </label>
                         {/* A PDF's Pages field (SPEC.md §15): empty is every page. */}
                         {pdf && (
                           <label className="flex shrink-0 items-center gap-1.5 text-xs text-sand-600">
@@ -455,6 +477,7 @@ export function AddDocumentDialog({
                   })}
                 </ul>
                 <span className="text-[11px] text-sand-500">{t("panes.queueHint")}</span>
+                <span className="-mt-1 text-[11px] text-sand-500">{t("panes.queueTitleHint")}</span>
                 {items.some(isPdfItem) && <span className="-mt-1 text-[11px] text-sand-500">{t("panes.pdfPagesHint")}</span>}
               </div>
             )}

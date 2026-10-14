@@ -11,7 +11,7 @@ import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { progressResponse } from "@/lib/ingest-response";
+import { chosenTitleSchema, progressResponse } from "@/lib/ingest-response";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { attachDocument } from "@/lib/parse/attach";
 import { sniffMedia } from "@/lib/video/storage";
@@ -46,6 +46,7 @@ const bodySchema = z.object({
   // reader picked in the upload box. Absent = the whole recording. Video only.
   clipStart: z.number().min(0).optional(),
   clipEnd: z.number().min(0).optional(),
+  title: chosenTitleSchema,
 }).refine((d) => d.clipStart === undefined || d.clipEnd === undefined || d.clipEnd > d.clipStart, {
   message: "clipEnd must be after clipStart",
 });
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
         console.error("Word ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
       }
-    });
+    }, { title: data.title });
   } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
     // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
     // parses with its own parser, no judgment, no model pass.
@@ -158,7 +159,7 @@ export async function POST(req: Request) {
         console.error("Slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
       }
-    });
+    }, { title: data.title });
   } else if (isMarkdownFile({ type: "", name: filename })) {
     // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment.
     return progressResponse(async (onProgress) => {
@@ -171,7 +172,7 @@ export async function POST(req: Request) {
         console.error("Markdown ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
       }
-    });
+    }, { title: data.title });
   } else if (!parse.isPdfBytes(bytes)) {
     return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
   }
@@ -210,7 +211,7 @@ export async function POST(req: Request) {
       console.error("PDF ingest failed:", err);
       throw new Error(describeIngestError(err, t, "pdf"));
     }
-  });
+  }, { title: data.title });
 }
 
 // Video completion. The staged chunks are validated in place (uniform slice
@@ -268,7 +269,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
       id: existing.id,
       title: existing.title,
       deduped: true,
-    }));
+    }), { title: data.title });
   }
 
   const title = data.filename.replace(/\.[a-z0-9]+$/i, "");
@@ -324,5 +325,5 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
       throw new Error(err instanceof Error ? err.message : t("api.videoSaveFailed"));
     }
     return { id: document.id, title, deduped: false };
-  });
+  }, { title: data.title });
 }

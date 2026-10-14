@@ -10,7 +10,7 @@ import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
 import { imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
 import { serverT } from "@/lib/i18n/server";
-import { progressResponse } from "@/lib/ingest-response";
+import { chosenTitleSchema, progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
@@ -76,6 +76,7 @@ const urlSchema = z.object({
   url: z.url(),
   notebookId: z.string().min(1),
   split: z.boolean().default(false),
+  title: chosenTitleSchema,
 });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
@@ -89,6 +90,7 @@ const fileFieldsSchema = z.object({
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
   pdfPages: z.preprocess(jsonField, pageRangesSchema.optional()),
+  title: chosenTitleSchema,
 });
 
 // A form field that holds JSON, read; not JSON, it stays text and fails
@@ -152,6 +154,7 @@ export async function POST(req: Request) {
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
       pdfPages: form.get("pdfPages"),
+      title: form.get("title") ?? undefined,
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -192,7 +195,7 @@ export async function POST(req: Request) {
           console.error("Word ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
         }
-      });
+      }, { title: fields.data.title });
     } else if (officeFormat(parse, bytes, { type: file.type, name: filename })) {
       // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
       // parses with its own parser, no judgment, no model pass.
@@ -217,7 +220,7 @@ export async function POST(req: Request) {
           console.error("Slides/sheets ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
         }
-      });
+      }, { title: fields.data.title });
     } else if (isMarkdownFile({ type: file.type, name: filename })) {
       // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment, no
       return progressResponse(async (onProgress) => {
@@ -232,7 +235,7 @@ export async function POST(req: Request) {
           console.error("Markdown ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
         }
-      });
+      }, { title: fields.data.title });
     } else if (!parse.isPdfBytes(bytes)) {
       return NextResponse.json({ error: t("api.notPdf") }, { status: 400 });
     }
@@ -273,7 +276,7 @@ export async function POST(req: Request) {
         console.error("PDF ingest failed:", err);
         throw new Error(describeIngestError(err, t, "pdf"));
       }
-    });
+    }, { title: fields.data.title });
   }
 
   const { data, error } = await parseBody(req, urlSchema);
@@ -311,7 +314,7 @@ export async function POST(req: Request) {
       // (SPEC.md §13), from the graph.
       if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
-    });
+    }, { title: data.title });
   }
 
   // A direct video or audio file link is a media document too (SPEC.md §11):
@@ -334,7 +337,7 @@ export async function POST(req: Request) {
       // (SPEC.md §13), from the graph.
       if (!deduped) after(() => runTranscription(document.id).catch(() => {}));
       return { id: document.id, title: document.title, deduped };
-    });
+    }, { title: data.title });
   }
 
   return progressResponse(async (onProgress) => {
@@ -372,5 +375,5 @@ export async function POST(req: Request) {
       console.error("URL ingest failed:", err);
       throw new Error(describeIngestError(err, t, "url"));
     }
-  });
+  }, { title: data.title });
 }
