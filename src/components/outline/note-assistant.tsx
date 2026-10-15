@@ -266,8 +266,9 @@ export function NoteAssistant({
     <section
       ref={sectionRef}
       data-no-drag
+      data-note-assistant=""
       aria-label={t("assistant.noteAssistant")}
-      className={`flex max-h-[min(55vh,460px)] min-h-0 shrink-0 flex-col rounded-2xl border border-[color-mix(in_srgb,var(--kind-assistant)_28%,transparent)] bg-card shadow-soft ${className}`}
+      className={`flex max-h-[min(55vh,460px)] min-h-0 pointer-coarse:max-h-[min(55vh,460px,calc(var(--note-edit-limit,100vh)*0.55))] shrink-0 flex-col rounded-2xl border border-[color-mix(in_srgb,var(--kind-assistant)_28%,transparent)] bg-card shadow-soft ${className}`}
     >
       <div className="flex items-center gap-2 px-3 pt-2">
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />
