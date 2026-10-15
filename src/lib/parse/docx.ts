@@ -71,6 +71,7 @@ const IMAGE_MIME: Record<string, string> = {
   svg: "image/svg+xml",
 };
 const EMU_PER_PX = 9525;
+const EMU_PER_INCH = 914400;
 const EMU_PER_TWIP = 635;
 /** A picture no larger than this beside words is an icon in the line, not a
     figure (the URL walk's rule for icons, lib/parse/figures.ts). */
@@ -618,6 +619,8 @@ type Level = {
   left: number | null;
   first: number | null;
   suffix: string;
+  /** The level draws a picture bullet (w:lvlPicBulletId). */
+  picture: boolean;
 };
 
 function readLevel(lvl: Element): Level {
@@ -632,6 +635,7 @@ function readLevel(lvl: Element): Level {
     first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
     suffix: attr(child(lvl, "suff"), "val") ?? "tab",
+    picture: child(lvl, "lvlPicBulletId") !== null,
   };
 }
 
@@ -698,10 +702,13 @@ function formatNumber(fmt: string, n: number): string {
     "o" — Word's hollow second-level bullet — as the hollow bullet ◦, any
     other character as it is. A bullet with no character we can name is the
     default dot, so the line stays a list line (the converter draws the
-    LIST text's bullets, lib/docs/import.ts). */
+    LIST text's bullets, lib/docs/import.ts). A picture bullet
+    (w:lvlPicBulletId) draws its picture, not its character: the default
+    dot too. Word benchmark finding: a Chinese manual's picture bullets
+    (Symbol's U+F06C) read as "λ", a letter where Word draws a dot. */
 function bulletChar(level: Level): string {
   const text = level.text.trim();
-  if (!text) return "•";
+  if (!text || level.picture) return "•";
   if (text === "o") return "◦";
   const drawn = [...text].map((ch) => symbolChar(level.font, ch) ?? (/[\uf000-\uf0ff]/.test(ch) ? (symbolChar("Symbol", ch) ?? "") : ch)).join("");
   return drawn || "•";
@@ -1301,6 +1308,9 @@ class DocxReader {
   private pendingBookmarks: string[] = [];
   /** Text boxes met in a paragraph, read after it. */
   private boxes: Element[] = [];
+  /** Text boxes met in a paragraph that the page sets at its top: read
+      before it. */
+  private topBoxes: Element[] = [];
   private footnoteCount = 0;
   private endnoteCount = 0;
   /** A custom-mark note waiting for its mark's words (claimCustomMark). */
@@ -1446,6 +1456,10 @@ class DocxReader {
 
   body(el: Element, table: StyleDef[] = []) {
     for (const node of el.children) {
+      // Where the node's blocks start, and whether a list or code block ran
+      // on into it.
+      const start = this.blocks.length;
+      const settled = !this.list && !this.code;
       switch (node.localName) {
         case "p":
           this.paragraph(node, table);
@@ -1490,9 +1504,20 @@ class DocxReader {
           break;
         }
       }
-      // The text boxes a paragraph anchors read after it.
+      // The text boxes a paragraph anchors read after it; the ones the page
+      // sets at its top read before it, where the paragraph's blocks are all
+      // out and no list or code block runs on (Word benchmark finding:
+      // poi-60316's name and contact column read after "Objective").
       const boxes = this.boxes;
+      const top = this.topBoxes;
       this.boxes = [];
+      this.topBoxes = [];
+      if (top.length > 0 && node.localName === "p" && settled && !this.list && !this.code) {
+        const from = this.blocks.length;
+        for (const box of top) this.body(box, table);
+        this.close();
+        this.blocks.splice(start, 0, ...this.blocks.splice(from));
+      } else boxes.unshift(...top);
       for (const box of boxes) this.body(box, table);
     }
   }
@@ -1796,6 +1821,28 @@ class DocxReader {
       before: breaks.some((b) => !wordsIn(pieces.slice(0, b.piece)) && !textOf(b.piece).slice(0, b.at).trim()),
       after: breaks.some((b) => !wordsIn(pieces.slice(b.piece + 1)) && !textOf(b.piece).slice(b.at).trim()),
     };
+    // A picture inline in a sentence, words on both sides of it in the one
+    // line, follows the sentence: the page editor draws no picture inside a
+    // line, and a cut would make the sentence two paragraphs (Word benchmark
+    // finding: pandoc-inline_images' "This picture", a picture, "is an
+    // identicon."). A picture on a line of its own stays where it stands.
+    const joined: Piece[] = [];
+    let held: Piece[] = [];
+    const tail = () => {
+      const last = joined.at(-1);
+      return last?.kind === "words" && !last.line.empty && !/\n\s*$/.test(last.line.text) ? last.line : null;
+    };
+    for (const piece of pieces) {
+      const line = tail();
+      if (piece.kind === "figure" && !piece.icon && line) held.push(piece);
+      else if (piece.kind === "words" && held.length > 0 && line && !/^\s*\n/.test(piece.line.text)) line.append(piece.line);
+      else {
+        joined.push(...held, piece);
+        held = [];
+      }
+    }
+    joined.push(...held);
+    pieces.splice(0, pieces.length, ...joined);
     if (sink.floating.length > 0) pieces.push({ kind: "figure", pictures: sink.floating, icon: false });
     const words = pieces.some((piece) => piece.kind === "words" && !piece.line.empty);
     return pieces.filter((piece) => (piece.kind === "words" ? !piece.line.empty || piece.line.bookmarks.length > 0 || pieces.length === 1 : !(piece.kind === "figure" && piece.icon && words)));
@@ -2093,8 +2140,8 @@ class DocxReader {
     // A diagram's words are labels, not the document's text. A text box on
     // its own, or in a group that only places a few boxes, holds text.
     const boxes = descendants(el, "txbxContent").filter((box) => !inside(box, BOX_HOSTS));
-    if (!isDiagram(el, boxes.length)) this.boxes.push(...boxes);
     const frame = child(el, "inline") ?? child(el, "anchor");
+    if (!isDiagram(el, boxes.length)) (atPageTop(el, frame) ? this.topBoxes : this.boxes).push(...boxes);
     const extent = child(frame, "extent");
     const widthEmu = intAttr(extent, "cx") ?? 0;
     const heightEmu = intAttr(extent, "cy") ?? 0;
@@ -2113,7 +2160,10 @@ class DocxReader {
     const pictures = [...urls].map((url) => ({ url, alt, widthEmu }));
     const icon = widthEmu > 0 && heightEmu > 0 && widthEmu <= ICON_EMU && heightEmu <= ICON_EMU;
     if (frame?.localName === "anchor" && !icon) sink.floating.push(...pictures);
-    else sink.cut({ kind: "figure", pictures, icon });
+    // An icon after words stays out without a cut: the line's words go on
+    // as one paragraph (Word benchmark finding: lo-tdf163575's "با علامت",
+    // an icon, "نمایش داده" read as two paragraphs).
+    else if (!(icon && !sink.line().empty)) sink.cut({ kind: "figure", pictures, icon });
   }
 
   private pictureUrl(rid: string | null): string | null {
@@ -2303,7 +2353,11 @@ class DocxReader {
             const images = piece.pictures.map((pic) => `<img src="${escapeHtml(pic.url)}" alt="${escapeHtml(pic.alt)}" width="${Math.max(1, Math.min(4000, Math.round(pic.widthEmu / EMU_PER_PX)))}">`);
             add({ text: "", html: images.join("") });
           } else if (piece.kind === "math") {
-            add({ text: piece.text, html: escapeHtml(piece.text) });
+            // A display equation in a cell: the cell's formula, its TeX a
+            // math span over its readable characters, as an inline formula
+            // in a cell has it (Word benchmark finding: dl-table_with_equations'
+            // "A=πr²" read as plain words).
+            add({ text: piece.text, html: `<span data-type="inline-math" data-latex="${escapeHtml(piece.latex)}">${escapeHtml(piece.text)}</span>` });
           } else if (piece.kind === "words" && !piece.line.empty) {
             if (marker) piece.line.prepend(`${marker} `);
             marker = null;
@@ -2516,6 +2570,22 @@ function isDiagram(el: Element, boxes: number): boolean {
   return descendants(el, "*").some((n) => attr(n, "connectortype") !== null || ["startarrow", "endarrow"].some((a) => (attr(n, a) ?? "none") !== "none"));
 }
 
+/** A floating drawing the page sets at its top: a DrawingML anchor aligned
+    to the top of the page or its margin, or set within an inch of it; a VML
+    shape positioned so. */
+function atPageTop(el: Element, frame: Element | null): boolean {
+  if (frame?.localName === "anchor") {
+    const v = child(frame, "positionV");
+    if (!["page", "margin", "topMargin"].includes(attr(v, "relativeFrom") ?? "")) return false;
+    const align = child(v, "align")?.textContent?.trim();
+    const offset = Number(child(v, "posOffset")?.textContent ?? NaN);
+    return align === "top" || (align === undefined && offset >= 0 && offset <= EMU_PER_INCH);
+  }
+  if (frame) return false;
+  const style = descendants(el, "*").map((n) => attr(n, "style") ?? "").find((st) => /position:\s*absolute/.test(st)) ?? "";
+  return /mso-position-vertical:\s*top/.test(style) && /mso-position-vertical-relative:\s*(page|margin|top-margin-area)/.test(style);
+}
+
 /** What an equation in Word's linear format holds beside its runs. */
 const LINEAR_EXTRAS = new Set(["ctrlPr", "argPr", "oMathParaPr", "bookmarkStart", "bookmarkEnd", "proofErr"]);
 
@@ -2657,6 +2727,11 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
   const bodySize = bodyFont ? `<table style="font-size:${bodyFont.size}pt">` : null;
   for (const b of blocks) if (bodySize && b.type === "TABLE" && b.html?.startsWith(bodySize)) b.html = `<table>${b.html.slice(bodySize.length)}`;
   if (titleBlock?.font) parsed.titleFont = titleBlock.font;
+  // The title's own styles (an underlined title), where the title's words
+  // are the paragraph's as it stands: bold and italic over the whole title
+  // are its look already.
+  const titleStyles = titleBlock && titleBlock.text === own ? (titleBlock.styles ?? []).filter((s) => !((s.style === "bold" || s.style === "italic") && titleBlock.font?.[s.style] && s.start === 0 && s.end === own.length)) : [];
+  if (titleStyles.length > 0) parsed.titleStyles = titleStyles;
   const tokens = /^<[a-z0-9]+ class="([^"]*)"/.exec(titleBlock?.html ?? "")?.[1].split(" ") ?? [];
   const titleAlign = tokens.find((t): t is "center" | "right" => t === "center" || t === "right");
   if (titleAlign) parsed.titleAlign = titleAlign;

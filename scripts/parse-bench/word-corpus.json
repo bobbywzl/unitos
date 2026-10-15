@@ -40,6 +40,108 @@
    "commit": "d881165a038cfaa48894662c630524e06957a93e",
    "license": "MPL-2.0",
    "what": "LibreOffice's Word export tests (sw/qa/extras/ooxmlexport/data)"
+  },
+  "ucsd-thesis": {
+   "repo": "srcole/ucsd_thesis_template",
+   "commit": "8c31bc5daa443aced7a080f5400744205067243c",
+   "license": "MIT",
+   "what": "a UC San Diego doctoral thesis in Word, its front matter and chapters (Scott Cole, 2018)"
+  },
+  "cqu-thesis": {
+   "repo": "ilcpm/cqu-thesis-markdown",
+   "commit": "50c9834d9889d068e0b1a9eecb2b781fc2d1068c",
+   "license": "MIT",
+   "what": "a Chongqing University thesis's Word reference document (Chinese)"
+  },
+  "cdc": {
+   "repo": "CDCgov/prime-reportstream",
+   "commit": "5f58b4c574fa64a70b362f7881f035ec6110a933",
+   "license": "CC0-1.0",
+   "what": "the CDC ReportStream programmer's guide"
+  },
+  "unstructured": {
+   "repo": "unstructured-io/unstructured",
+   "commit": "e72485b7441ad2fae14cca8dffff03b2b78b12e8",
+   "license": "Apache-2.0",
+   "what": "unstructured's example documents (example-docs): a Google Docs handbook of 872 pages among them"
+  },
+  "docx4j": {
+   "repo": "plutext/docx4j",
+   "commit": "0e8e7633ef46012e0d3603339728b83ed21d5045",
+   "license": "Apache-2.0",
+   "what": "docx4j's documentation, contributor agreement, and sample documents"
+  },
+  "tika": {
+   "repo": "apache/tika",
+   "commit": "a4384e9d49a17fd3011c83820125d6bae00cee6e",
+   "license": "Apache-2.0",
+   "what": "Apache Tika's test documents: web documents of its regression corpus (tika-grpc test-files) and Word test files"
+  },
+  "bonterms": {
+   "repo": "open-agreements/open-agreements",
+   "commit": "0f8f39261d33230c0d9dea2d7cab96a76b1179ba",
+   "license": "CC0-1.0",
+   "what": "Bonterms agreements (open-agreements templates/bonterms-cc0-1.0)"
+  },
+  "common-paper": {
+   "repo": "open-agreements/open-agreements",
+   "commit": "0f8f39261d33230c0d9dea2d7cab96a76b1179ba",
+   "license": "CC-BY-4.0",
+   "what": "Common Paper agreements (open-agreements templates/common-paper-cc-by-4.0)"
+  },
+  "yc-safe": {
+   "repo": "open-agreements/open-agreements",
+   "commit": "0f8f39261d33230c0d9dea2d7cab96a76b1179ba",
+   "license": "CC-BY-ND-4.0",
+   "what": "Y Combinator's SAFE (open-agreements templates/yc-cc-by-nd-4.0), read and never changed"
+  },
+  "openagreements": {
+   "repo": "open-agreements/open-agreements",
+   "commit": "0f8f39261d33230c0d9dea2d7cab96a76b1179ba",
+   "license": "CC-BY-4.0",
+   "what": "OpenAgreements templates (open-agreements templates/openagreements-cc-by-4.0)"
+  },
+  "docling": {
+   "repo": "docling-project/docling",
+   "commit": "b2a59b9fa1a31ae6584d4dd18cd0c2bb3ca285b6",
+   "license": "MIT",
+   "what": "docling's Word test files (tests/data/docx/sources)"
+  },
+  "markitdown": {
+   "repo": "microsoft/markitdown",
+   "commit": "4cc9fa17653d695d64fb9eee5b33d4de55ff84e8",
+   "license": "MIT",
+   "what": "MarkItDown's Word test files"
+  },
+  "officer": {
+   "repo": "davidgohel/officer",
+   "commit": "5bb35f54ad9de7e033aeadb29396b0a0b2273c7c",
+   "license": "MIT",
+   "what": "officer's example Word report (inst/doc_examples)"
+  },
+  "redoc": {
+   "repo": "noamross/redoc",
+   "commit": "1206310e05b3e5ab8a9843689765a773fb0d8743",
+   "license": "MIT",
+   "what": "redoc's example of a report edited in Word with tracked changes and comments"
+  },
+  "docx-reply": {
+   "repo": "hc-ui/docx-reply",
+   "commit": "d43006678d7c67ab21491b0437540ded028a9f69",
+   "license": "MIT",
+   "what": "docx-reply's sample of a Chinese paper with comments and tracked changes"
+  },
+  "libreoffice-qa": {
+   "repo": "LibreOffice/core",
+   "commit": "12728e3e42bed829bed1e2aed20baf9309489bee",
+   "license": "MPL-2.0",
+   "what": "LibreOffice Writer's test documents (sw/qa), from bug reports: CJK, Arabic, and Hebrew files"
+  },
+  "onlyoffice": {
+   "repo": "ONLYOFFICE/document-templates",
+   "commit": "0a52fb76fa53fddf7d70da28878537cde3d29421",
+   "license": "Apache-2.0",
+   "what": "ONLYOFFICE's sample document"
   }
  },
  "files": [
@@ -3190,6 +3292,803 @@
    "covers": [
     "bookmark"
    ]
+  },
+  {
+   "name": "thesis-ucsd-1-title.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_1_Title and copyright.docx",
+   "covers": [
+    "thesis",
+    "google-docs"
+   ],
+   "sha256": "13bb20281a6a51c42062589981f0c2d6880a1e9c34b1d383575d95974e2ad6fd"
+  },
+  {
+   "name": "thesis-ucsd-5-toc.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_5_TOC.docx",
+   "covers": [
+    "thesis",
+    "toc"
+   ],
+   "sha256": "d8befde767794221a8bfdc4aa9babd0e73fd9591d834d3f62c22626b7df81350"
+  },
+  {
+   "name": "thesis-ucsd-6-figure-list.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_6_FigureList.docx",
+   "covers": [
+    "thesis",
+    "toc"
+   ],
+   "sha256": "e2088fb12ad608a6c71bc75d7a609e27ecfd78715956c1264fc3d998b1141d2a"
+  },
+  {
+   "name": "thesis-ucsd-8-vita.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_8_Vita.docx",
+   "covers": [
+    "thesis",
+    "cv",
+    "google-docs"
+   ],
+   "sha256": "3b1125655715e56e96d6826e2f4c65ceaad1c8425cb21458a86cd87e1470852d"
+  },
+  {
+   "name": "thesis-ucsd-9-abstract.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_9_Abstract.docx",
+   "covers": [
+    "thesis",
+    "google-docs"
+   ],
+   "sha256": "bfa6e0f539bca8421fd6f0b1e86391c7f719ea8e0b56c59bd333019c6d6c9d3b"
+  },
+  {
+   "name": "thesis-ucsd-10-introduction.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_10_Introduction.docx",
+   "covers": [
+    "thesis",
+    "picture"
+   ],
+   "sha256": "7727ed32ae4293dda34756d9b6126cf4f1c9b5bc887b90c20cb223362adcc59a"
+  },
+  {
+   "name": "thesis-ucsd-11-chapter1.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_11_Chapter1.docx",
+   "covers": [
+    "thesis",
+    "picture",
+    "table",
+    "equation"
+   ],
+   "sha256": "f2d04a02000540434c9f314019c6e79c64a2e1975d9b66e0b290b614ceb45795"
+  },
+  {
+   "name": "thesis-ucsd-12-chapter2.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_12_Chapter2.docx",
+   "covers": [
+    "thesis",
+    "picture"
+   ],
+   "sha256": "4405fd6671c22d7735b1c68e5ab2a5250025d80d9b86bce26d2ba4efab60f09e"
+  },
+  {
+   "name": "thesis-ucsd-13-chapter3.docx",
+   "source": "ucsd-thesis",
+   "path": "Thesis_13_Chapter3.docx",
+   "covers": [
+    "thesis",
+    "picture"
+   ],
+   "sha256": "91e34dd923b0c7873590e3b0d92f9ead6349d27faa6b794caf259444a32ad3e2"
+  },
+  {
+   "name": "thesis-ucsd-dean-letter.docx",
+   "source": "ucsd-thesis",
+   "path": "X_Dean permission letter.docx",
+   "covers": [
+    "letter"
+   ],
+   "sha256": "8202f4ed00ba800cbf1cdadd695005b5d4d6c01693a7d3f860afb5d2e8dd58c5"
+  },
+  {
+   "name": "cqu-thesis-reference.docx",
+   "source": "cqu-thesis",
+   "path": "template/reference.docx",
+   "covers": [
+    "thesis",
+    "cjk",
+    "footnote",
+    "equation",
+    "table"
+   ],
+   "sha256": "fb86c47ca11e64eaa854fc4d3401747098c2194baafc62c14000e283a367126c"
+  },
+  {
+   "name": "cdc-reportstream-programmers-guide.docx",
+   "source": "cdc",
+   "path": "prime-router/docs/docs-deprecated/ReportStream-Programmers-Guide-v2.4.docx",
+   "covers": [
+    "government",
+    "report",
+    "toc",
+    "table",
+    "list"
+   ],
+   "sha256": "c77553c6c466ce6addb5d8096ca115629bbd81e1fa9d0e0d9c09c29b4b7c6ed0"
+  },
+  {
+   "name": "uns-handbook-872p.docx",
+   "source": "unstructured",
+   "path": "example-docs/handbook-872p.docx",
+   "covers": [
+    "government",
+    "handbook",
+    "google-docs",
+    "footnote",
+    "large"
+   ],
+   "sha256": "bd2f039298407b1a2aa06a44ef1b4bfc3461bd909c965f20286d1640763ae7cb"
+  },
+  {
+   "name": "uns-eng_spa_mult.docx",
+   "source": "unstructured",
+   "path": "example-docs/language-docs/eng_spa_mult.docx",
+   "covers": [
+    "google-docs",
+    "multilingual"
+   ],
+   "sha256": "0458e96a206cc2c2e6c7d334caaad6cad5971762240647391b44a1f7e95b1315"
+  },
+  {
+   "name": "uns-category-level.docx",
+   "source": "unstructured",
+   "path": "example-docs/category-level.docx",
+   "covers": [
+    "libreoffice",
+    "list"
+   ],
+   "sha256": "e86f8e34faee194158a961d44622b96bd1eead71bcdee309824442b51f948e97"
+  },
+  {
+   "name": "uns-docx-shapes.docx",
+   "source": "unstructured",
+   "path": "example-docs/docx-shapes.docx",
+   "covers": [
+    "libreoffice",
+    "text-box"
+   ],
+   "sha256": "536efe9ff61931073d90adf5e234162bbf5374adea4ad1c03e07985ae01956a7"
+  },
+  {
+   "name": "uns-example-list-items-multiple.docx",
+   "source": "unstructured",
+   "path": "example-docs/example-list-items-multiple.docx",
+   "covers": [
+    "list"
+   ],
+   "sha256": "250ff8aa147c1b8effd40bea8e6157d848c7ec5f309cc417ddb1e1e23b4b906d"
+  },
+  {
+   "name": "d4j-Docx4j_GettingStarted.docx",
+   "source": "docx4j",
+   "path": "docs/Docx4j_GettingStarted.docx",
+   "covers": [
+    "manual",
+    "toc",
+    "footnote",
+    "table",
+    "list",
+    "content-control"
+   ],
+   "sha256": "e8faa6b6d556edb36e687b7ac7d4e8963ffb2f80f294d170af30d3f65f9bc706"
+  },
+  {
+   "name": "d4j-OpenDoPE_Specification.docx",
+   "source": "docx4j",
+   "path": "docs/OpenDoPE Specification v3 WD 2026 09 18.docx",
+   "covers": [
+    "specification",
+    "toc",
+    "table"
+   ],
+   "sha256": "9a772bc914fea3ec2e2837a63797a1bf56e014949dc8dc05e0fb2d852300ec68"
+  },
+  {
+   "name": "d4j-headers_footers.docx",
+   "source": "docx4j",
+   "path": "docs/headers_footers.docx",
+   "covers": [
+    "manual",
+    "table",
+    "picture"
+   ],
+   "sha256": "621014619dbaebb287543f123d448059e6a1675a288c20a9ce82af12cbe9a607"
+  },
+  {
+   "name": "d4j-Convert_Out.docx",
+   "source": "docx4j",
+   "path": "docs/developer/Convert_Out.docx",
+   "covers": [
+    "manual",
+    "list",
+    "table"
+   ],
+   "sha256": "a527adfd5e5f495a07e69e9194cc86aa39c1a0fee15f60b831235c12b9cbd051"
+  },
+  {
+   "name": "d4j-rFonts.docx",
+   "source": "docx4j",
+   "path": "docs/developer/rFonts.docx",
+   "covers": [
+    "manual",
+    "multilingual",
+    "table"
+   ],
+   "sha256": "d3a9fd32e4766ef88bb0276baffa6a4c4bab97a115a06e9c631550bc9a114203"
+  },
+  {
+   "name": "d4j-Eastern_Arabic_numbering.docx",
+   "source": "docx4j",
+   "path": "docs/developer/Eastern Arabic numbering.docx",
+   "covers": [
+    "arabic",
+    "list",
+    "table"
+   ],
+   "sha256": "eef8571d73be3f628429dfd1e8c6e971c4a63631d2a2d5b7e9a7e6d099870d82"
+  },
+  {
+   "name": "d4j-IndividualContributor.docx",
+   "source": "docx4j",
+   "path": "legals/docx4j_IndividualContributor.docx",
+   "covers": [
+    "legal",
+    "libreoffice",
+    "list",
+    "form"
+   ],
+   "sha256": "5b1ddeb9ca7a500c72f499df77219b0dd6d0f1daf739221b10ddfb7613c13163"
+  },
+  {
+   "name": "d4j-invoice2013.docx",
+   "source": "docx4j",
+   "path": "docx4j-samples-docx4j/sample-docs/databinding/invoice2013.docx",
+   "covers": [
+    "form",
+    "content-control",
+    "table"
+   ],
+   "sha256": "7db84f21ed07484ce9fa95d795f78fdb6d1d60537832d1c5bd9e53d98fff6f32"
+  },
+  {
+   "name": "d4j-decracdiscrim1.docx",
+   "source": "docx4j",
+   "path": "docx4j-samples-docx4j/sample-docs/decracdiscrim1.docx",
+   "covers": [
+    "form",
+    "content-control",
+    "legal"
+   ],
+   "sha256": "9ac66331cc12691a52c8a585455370c2e949f338f4cdec452354c35aebecc88f"
+  },
+  {
+   "name": "d4j-arabic_align.docx",
+   "source": "docx4j",
+   "path": "docx4j-core-tests/src/test/resources/multilingual/arabic/arabic_align.docx",
+   "covers": [
+    "arabic",
+    "rtl",
+    "list",
+    "table"
+   ],
+   "sha256": "198f98953c82f1be499c98dd39e1ad0b27cb8c9ec64bafdcda65d4198201e516"
+  },
+  {
+   "name": "tika-014760.docx",
+   "source": "tika",
+   "path": "tika-grpc/src/test/resources/test-files/014760.docx",
+   "covers": [
+    "report",
+    "list",
+    "table"
+   ],
+   "sha256": "f538e934e60c77ff561cbf91876dc2a252da283d2fe83b5fe620268fe27dcce6"
+  },
+  {
+   "name": "tika-017091.docx",
+   "source": "tika",
+   "path": "tika-grpc/src/test/resources/test-files/017091.docx",
+   "covers": [
+    "report",
+    "table"
+   ],
+   "sha256": "6a41ce073ac8fa7f7a03e2d80224b7e34a5b53064733b937f14f43ba1314e368"
+  },
+  {
+   "name": "tika-017097.docx",
+   "source": "tika",
+   "path": "tika-grpc/src/test/resources/test-files/017097.docx",
+   "covers": [
+    "report",
+    "table",
+    "list"
+   ],
+   "sha256": "9d261a88188744a3006314966f6e5c45ce38c8235341854fb6ffca64fa2c565c"
+  },
+  {
+   "name": "tika-018367.docx",
+   "source": "tika",
+   "path": "tika-grpc/src/test/resources/test-files/018367.docx",
+   "covers": [
+    "report",
+    "list",
+    "text-box"
+   ],
+   "sha256": "fc72225c1f6185a1f62772e208c8e06827371c8ba1460013011017873a6f46ba"
+  },
+  {
+   "name": "tika-testWORD_2006ml.docx",
+   "source": "tika",
+   "path": "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_2006ml.docx",
+   "covers": [
+    "tracked-changes",
+    "comment",
+    "content-control",
+    "footnote",
+    "equation",
+    "toc"
+   ],
+   "sha256": "a27f2b9244f5147cce25a05d4cddb1eec9c72259a41d52a7bf5eb3806b28207c"
+  },
+  {
+   "name": "tika-testWORD_embedded_pics.docx",
+   "source": "tika",
+   "path": "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_embedded_pics.docx",
+   "covers": [
+    "tracked-changes",
+    "comment",
+    "footnote",
+    "picture"
+   ],
+   "sha256": "416b7f04fc83bf3d393924f1e1aa49e6bf7cda06fa1559a0e23b889e0cb6205d"
+  },
+  {
+   "name": "tika-testWORD_template.docx",
+   "source": "tika",
+   "path": "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_template.docx",
+   "covers": [
+    "form",
+    "content-control",
+    "text-box"
+   ],
+   "sha256": "b05df2e299e825b5b25b34ff5af63f3c309bf6afcd94b3dd8fab224ac507f163"
+  },
+  {
+   "name": "bonterms-mutual-nda.docx",
+   "source": "bonterms",
+   "path": "templates/bonterms-cc0-1.0/bonterms-mutual-nda/template.docx",
+   "covers": [
+    "legal",
+    "table"
+   ],
+   "sha256": "c481077adf9fe34ed254b017a82510f11158f1ebe723fccd1132baeab83785ae"
+  },
+  {
+   "name": "bonterms-professional-services-agreement.docx",
+   "source": "bonterms",
+   "path": "templates/bonterms-cc0-1.0/bonterms-professional-services-agreement/template.docx",
+   "covers": [
+    "legal",
+    "table",
+    "content-control"
+   ],
+   "sha256": "3b9665a986893b4b01c84f573c9a2e162683ce4503f1af5c0b0b79ed026e5789"
+  },
+  {
+   "name": "cp-cloud-service-agreement.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-cloud-service-agreement/template.docx",
+   "covers": [
+    "legal",
+    "table"
+   ],
+   "sha256": "8fa913dc0a4b6b83a84145741dd4553e8e5d8b1d012f052026a978c6b48c2395"
+  },
+  {
+   "name": "cp-data-processing-agreement.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-data-processing-agreement/template.docx",
+   "covers": [
+    "legal",
+    "list",
+    "definitions"
+   ],
+   "sha256": "c2aa5151fdaa5349403e690569791627e063d27a0c9fce13df9005dfbb1443fa"
+  },
+  {
+   "name": "cp-mutual-nda.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-mutual-nda/template.docx",
+   "covers": [
+    "legal",
+    "table"
+   ],
+   "sha256": "27af73b9be12e550ded4b188861aa3e973a3daec74982a70d22c72732f2b9a74"
+  },
+  {
+   "name": "cp-independent-contractor-agreement.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-independent-contractor-agreement/template.docx",
+   "covers": [
+    "legal",
+    "list"
+   ],
+   "sha256": "b11ebb7c35f32fec64b6f5ba5283623114eda7041a2da26324f4386157a79fc7"
+  },
+  {
+   "name": "cp-statement-of-work.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-statement-of-work/template.docx",
+   "covers": [
+    "legal",
+    "table"
+   ],
+   "sha256": "bb56e77cd04adf6e5b3aece93f4279ce6eb503f775dcfd3c4b06d2205ad5cdbb"
+  },
+  {
+   "name": "cp-term-sheet.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-term-sheet/template.docx",
+   "covers": [
+    "legal",
+    "table"
+   ],
+   "sha256": "663314649d2e1598ceddf3332f77b85603a8631c223e3daae23a3c1f0a3db9ef"
+  },
+  {
+   "name": "cp-software-license-agreement.docx",
+   "source": "common-paper",
+   "path": "templates/common-paper-cc-by-4.0/common-paper-software-license-agreement/template.docx",
+   "covers": [
+    "legal"
+   ],
+   "sha256": "0a073e0e2087811749bb06215bc9490b9a6a067c5449ed3516bb9d94c0497834"
+  },
+  {
+   "name": "yc-safe-valuation-cap.docx",
+   "source": "yc-safe",
+   "path": "templates/yc-cc-by-nd-4.0/yc-safe-valuation-cap/template.docx",
+   "covers": [
+    "legal",
+    "list",
+    "definitions"
+   ],
+   "sha256": "185d24f5bcf13acdf1419bf1d420771088da5dea3b3f3e0cdc7fa5df643649c4"
+  },
+  {
+   "name": "oa-hedge-fund-lpa.docx",
+   "source": "openagreements",
+   "path": "templates/openagreements-cc-by-4.0/openagreements-hedge-fund-limited-partnership-agreement/template.docx",
+   "covers": [
+    "legal",
+    "list",
+    "definitions"
+   ],
+   "sha256": "723c91b18d11e84053631d714e433588228459f3ea6ae7b11430e32cbf9ddc13"
+  },
+  {
+   "name": "oa-privacy-policy.docx",
+   "source": "openagreements",
+   "path": "templates/openagreements-cc-by-4.0/openagreements-privacy-policy/template.docx",
+   "covers": [
+    "legal",
+    "list"
+   ],
+   "sha256": "b354022978a7af84fa78b90623bc401895abd05e892a35c824f4b84c7c7b3e00"
+  },
+  {
+   "name": "oa-employment-offer-letter.docx",
+   "source": "openagreements",
+   "path": "templates/openagreements-cc-by-4.0/openagreements-employment-offer-letter/template.docx",
+   "covers": [
+    "legal",
+    "letter",
+    "list",
+    "table"
+   ],
+   "sha256": "78866110fe1bd4fd73e91302aa29430651975fc101a41c28569f429e07586dc4"
+  },
+  {
+   "name": "dl-docx_list_east_asian_num_fmt.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/docx_list_east_asian_num_fmt.docx",
+   "covers": [
+    "cjk",
+    "list"
+   ],
+   "sha256": "b0b6555348043d90c65fc3a013c75f944aedb517aa4bd8b97dad7436b21bb610"
+  },
+  {
+   "name": "dl-word_sample.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/word_sample.docx",
+   "covers": [
+    "list",
+    "table",
+    "picture"
+   ],
+   "sha256": "ae4f3f6edd7ccd636b893ec8355d5eade6b0413fa779606452c561e334f390f7"
+  },
+  {
+   "name": "dl-equations.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/equations.docx",
+   "covers": [
+    "equation"
+   ],
+   "sha256": "32933facc78a062cd504f91286521f7615c86895ebbad410c9a3bf586cbe36d8"
+  },
+  {
+   "name": "dl-docx_comments.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/docx_comments.docx",
+   "covers": [
+    "comment"
+   ],
+   "sha256": "fba1ceb88fdb0b1353f5d97d94f0dbb45c8379adfb7c53d8199612ab13c05a3e"
+  },
+  {
+   "name": "dl-textbox.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/textbox.docx",
+   "covers": [
+    "text-box",
+    "list"
+   ],
+   "sha256": "0d1675cd051a6e29a34f447cf0031a3b5f619fa95938622347c91a972a4d8973"
+  },
+  {
+   "name": "dl-content_control_with_picture.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/content_control_with_picture.docx",
+   "covers": [
+    "content-control",
+    "picture"
+   ],
+   "sha256": "9f0020f2fa76c360293dff10a2f37484638ad6a86d1129ef94fe8a45b34dff99"
+  },
+  {
+   "name": "dl-docx_sdt_table_cells.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/docx_sdt_table_cells.docx",
+   "covers": [
+    "content-control",
+    "table"
+   ],
+   "sha256": "388a46e167e39b9418fb3bd25e6c562ced36c5e97dcbee04356b1fd1440cfcd7"
+  },
+  {
+   "name": "dl-docx_checkboxes.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/docx_checkboxes.docx",
+   "covers": [
+    "form",
+    "content-control",
+    "table"
+   ],
+   "sha256": "eefaf5e8b4671cc7250d0b2d3c3f4b4c4f280439ef07910c55dac2e9d53e0969"
+  },
+  {
+   "name": "dl-table_with_equations.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/table_with_equations.docx",
+   "covers": [
+    "equation",
+    "table"
+   ],
+   "sha256": "fe924e9bef7ab34a7785fcd4fd74c975142e2530ba6e5db75a9ad16421c942a8"
+  },
+  {
+   "name": "dl-omml_multi_equation_paragraph.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/omml_multi_equation_paragraph.docx",
+   "covers": [
+    "equation"
+   ],
+   "sha256": "39d5f6c4aff8191dc3c371b612f6decd9399a41869c86fcaf32522d5e0ed803e"
+  },
+  {
+   "name": "dl-unit_test_headers_numbered.docx",
+   "source": "docling",
+   "path": "tests/data/docx/sources/unit_test_headers_numbered.docx",
+   "covers": [
+    "heading",
+    "list"
+   ],
+   "sha256": "81a617b51e111fdbb74a1844c5a0d6145af8f758620939ba22c19b976fa0e6bc"
+  },
+  {
+   "name": "mid-test.docx",
+   "source": "markitdown",
+   "path": "packages/markitdown/tests/test_files/test.docx",
+   "covers": [
+    "table",
+    "picture"
+   ],
+   "sha256": "ee1974633f3b1e8bb54201abce779a755cb1cd5259641a08cf7b1b9b36dec42b"
+  },
+  {
+   "name": "mid-test_with_comment.docx",
+   "source": "markitdown",
+   "path": "packages/markitdown/tests/test_files/test_with_comment.docx",
+   "covers": [
+    "comment",
+    "libreoffice"
+   ],
+   "sha256": "296fdb38ac2869f153db77e5f85ddbd74a1f931d8a3524cd5e12e3c5936d56a0"
+  },
+  {
+   "name": "mid-equations.docx",
+   "source": "markitdown",
+   "path": "packages/markitdown/tests/test_files/equations.docx",
+   "covers": [
+    "equation"
+   ],
+   "sha256": "339b064492530598859de0bde8504de7a4aefead88210baf3e9f3db0ed925b40"
+  },
+  {
+   "name": "officer-example.docx",
+   "source": "officer",
+   "path": "inst/doc_examples/example.docx",
+   "covers": [
+    "report",
+    "list",
+    "table"
+   ],
+   "sha256": "80472ea252ccd563209cc9689b9f60bc7ccf57e513732a1a3d025f711ea28a5c"
+  },
+  {
+   "name": "redoc-example-edited.docx",
+   "source": "redoc",
+   "path": "inst/examples/example-edited.docx",
+   "covers": [
+    "tracked-changes",
+    "comment",
+    "picture"
+   ],
+   "sha256": "e1d293531d0ed5ae5518e67afb261850f9e1140035b235dc13ad253ae42c2e10"
+  },
+  {
+   "name": "docxreply-sample.docx",
+   "source": "docx-reply",
+   "path": "examples/sample.docx",
+   "covers": [
+    "cjk",
+    "tracked-changes",
+    "comment",
+    "footnote"
+   ],
+   "sha256": "7fa371932bdbe0119c9cacca3c6204806238d4432cd56feae5bc873d970f6c7c"
+  },
+  {
+   "name": "lo-tdf149089.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf149089.docx",
+   "covers": [
+    "cjk",
+    "table"
+   ],
+   "sha256": "ca9b51bc71acc6082890ec49cff5f7a2d27c7492a2281a226df2e650fda8a115"
+  },
+  {
+   "name": "lo-tdf142407.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf142407.docx",
+   "covers": [
+    "cjk"
+   ],
+   "sha256": "1d48b105c68438b2a2223ef15a5b557e5393ae7ea4320bc4f40f6c69dc58f302"
+  },
+  {
+   "name": "lo-tdf130314.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/odfexport/data/tdf130314.docx",
+   "covers": [
+    "cjk",
+    "picture"
+   ],
+   "sha256": "ae4f3e8e649530cf1efdfff54dbb846d4a5bf1bf27ee2a0452a8e5bf8f2ed270"
+  },
+  {
+   "name": "lo-tdf49073.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf49073.docx",
+   "covers": [
+    "cjk",
+    "ruby"
+   ],
+   "sha256": "6c5940209c085fd384a555aeb80e16c4a3a495415839d7366a7c76ddcda4501f"
+  },
+  {
+   "name": "lo-tdf138779.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/rtfexport/data/tdf138779.docx",
+   "covers": [
+    "cjk"
+   ],
+   "sha256": "181b561b0a6aa868ac6df461c36452b02a21a63ff59b68d5fec247cb53dc9662"
+  },
+  {
+   "name": "lo-tdf104649.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/uiwriter/data/tdf104649.docx",
+   "covers": [
+    "arabic",
+    "rtl",
+    "footnote",
+    "libreoffice",
+    "large"
+   ],
+   "sha256": "f3228a625a4f4bef6d26c6ced321ad53c7cb554effd0d38915c5f38ffda4a090"
+  },
+  {
+   "name": "lo-tdf163575.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/odfexport/data/tdf163575.docx",
+   "covers": [
+    "arabic",
+    "rtl",
+    "picture"
+   ],
+   "sha256": "7ec36a70d03c79fbbfd199679330e4bf0b74cfebbff6af1b83de996475448c8d"
+  },
+  {
+   "name": "lo-tdf155707.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlexport/data/tdf155707.docx",
+   "covers": [
+    "arabic",
+    "rtl"
+   ],
+   "sha256": "af36644e14e94c0e1a42509d31687727720f3cf2bf22eca039e00694808b45af"
+  },
+  {
+   "name": "lo-tdf129659.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlimport/data/tdf129659.docx",
+   "covers": [
+    "hebrew",
+    "rtl",
+    "endnote"
+   ],
+   "sha256": "ccca8bf3eae9ede4c48bfadaf530e04db0b4738dae58b178c0e4cabb9912d313"
+  },
+  {
+   "name": "lo-tdf87533_bidi.docx",
+   "source": "libreoffice-qa",
+   "path": "sw/qa/extras/ooxmlimport/data/tdf87533_bidi.docx",
+   "covers": [
+    "arabic",
+    "rtl",
+    "list"
+   ],
+   "sha256": "9594bbbc4d50dbc22b2c514fcbd6616b58c5193ffc7ed08ab519fa172b969f1a"
+  },
+  {
+   "name": "oo-sample.docx",
+   "source": "onlyoffice",
+   "path": "sample/sample.docx",
+   "covers": [
+    "report",
+    "table",
+    "list"
+   ],
+   "sha256": "d678383aee1f2deb84808353fcf77e1ffd865495aa5079ff9bca90a24a9ca0f5"
   }
  ]
 }

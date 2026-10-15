@@ -5,6 +5,7 @@
 // Run: npx tsx --tsconfig tsconfig.json scripts/qa/word-parse.mts
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { richTextFromImport } from "@/lib/docs/import";
+import { tableFromHtml } from "@/lib/docs/import-table";
 import type { RichNode } from "@/lib/docs/schema";
 import { parseDocx } from "@/lib/parse/docx";
 import type { ParsedBlock } from "@/lib/parse/types";
@@ -197,6 +198,185 @@ function importLists(blocks: ParsedBlock[]): string[] {
   const blocks = await parse(zipSync(parts));
   const kinds = blocks.map((b) => b.type).join(",");
   check("a w:pict out of any paragraph is a figure between its neighbors", kinds === "PARAGRAPH,FIGURE,PARAGRAPH", kinds);
+}
+
+// ── A picture bullet draws its picture, not its character ───────────────────
+
+{
+  const symbol = '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr>';
+  const lvl = (picture: boolean) =>
+    `<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${String.fromCharCode(0xf06c)}"/>${picture ? '<w:lvlPicBulletId w:val="0"/>' : ""}<w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr>${symbol}</w:lvl>`;
+  const numbering = `<w:abstractNum w:abstractNumId="0">${lvl(true)}</w:abstractNum><w:abstractNum w:abstractNumId="1">${lvl(false)}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>`;
+  const texts = (await parse(docx(item("Pictured", 1, 0) + para("Between") + item("Lettered", 2, 0), numbering))).filter((b) => b.type === "LIST").map((b) => b.text);
+  check("a picture bullet is the default dot; Symbol's U+F06C without a picture is λ", texts.join("|") === "• Pictured|λ Lettered", JSON.stringify(texts));
+}
+
+// ── A CJK counter stays the page's words in a list that draws no marker ─────
+
+{
+  // The page editor counts in Latin digits, letters, and roman numerals
+  // alone: "第%0条" would print "第9条" where Word prints "第九条".
+  const numbering = `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="9"/><w:numFmt w:val="chineseCounting"/><w:lvlText w:val="第%1条"/><w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
+  const blocks = await parse(docx(item("合同双方履行义务。", 1, 0) + item("不得擅自变更合同。", 1, 0), numbering));
+  check("a chineseCounting list counts 九, 十", listText(blocks) === "第九条 合同双方履行义务。\n第十条 不得擅自变更合同。", JSON.stringify(listText(blocks)));
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks });
+  const found = (richText.content ?? []).find((n) => n.type === "bulletList" || n.type === "orderedList");
+  const levels = found ? (JSON.parse(String(found.attrs?.listLevels ?? "[]")) as { bullet?: string }[]) : [];
+  const first = found?.content?.[0]?.content?.[0]?.content?.[0]?.text ?? "";
+  check("the import keeps 第九条 as words in a list that draws no marker", levels.length === 9 && levels.every((l) => l.bullet === "") && first === "第九条 合同双方履行义务。", JSON.stringify({ levels: found?.attrs?.listLevels, first }));
+}
+
+// ── A cross-reference in a list item makes no contents list ─────────────────
+
+{
+  const text = "• Refer to Step 1 for the data.\n• Keep the device codes.\n• Send one time zone.";
+  const at = text.indexOf("Step 1");
+  const notes: ParsedBlock[] = [
+    { type: "HEADING", text: "Step 1", html: "<h2>Step 1</h2>" },
+    { type: "LIST", text, links: [{ start: at, end: at + 6, quotedText: "Step 1", targetOrder: 0 }] },
+  ];
+  const kinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: notes }).richText.content ?? []).map((n) => n.type).join(",");
+  check("a bulleted list whose one item cites a heading stays a list", kinds === "heading,bulletList", kinds);
+  const toc = "1 Introduction\n2 Methods";
+  const contents: ParsedBlock[] = [
+    { type: "LIST", text: toc, links: [{ start: 2, end: 14, quotedText: "Introduction", targetOrder: 1 }, { start: 17, end: 24, quotedText: "Methods", targetOrder: 2 }] },
+    { type: "HEADING", text: "Introduction", html: "<h1>Introduction</h1>" },
+    { type: "HEADING", text: "Methods", html: "<h1>Methods</h1>" },
+  ];
+  const tocKinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: contents }).richText.content ?? []).map((n) => n.type).join(",");
+  check("lines that each link to a heading are a contents list: a paragraph each", tocKinds === "paragraph,paragraph,heading,heading", tocKinds);
+  const note = "NOTE A template for XPath 2.0 needs a processor (Section 7.2).";
+  const ref = note.indexOf("7.2");
+  const one: ParsedBlock[] = [
+    { type: "HEADING", text: "7.2 Booleans", html: "<h2>7.2 Booleans</h2>" },
+    { type: "LIST", text: note, links: [{ start: ref, end: ref + 3, quotedText: "7.2", targetOrder: 0 }] },
+  ];
+  const oneKinds = (richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: one }).richText.content ?? []).map((n) => n.type).join(",");
+  check("a one-line note that cites a section stays a list", oneKinds === "heading,bulletList", oneKinds);
+}
+
+// ── A Word figure's caption keeps its bold label in the import ──────────────
+
+{
+  const figure: ParsedBlock = { type: "FIGURE", text: "Figure 2.4. Simulated data.", html: '<figure><img src="/a.png" alt=""><figcaption><strong>Figure 2.4. </strong>Simulated data.</figcaption></figure>' };
+  const out = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: [figure] });
+  const html = out.figures[0]?.html ?? "";
+  check("a Word figure draws its figcaption, its bold label in <strong>", /<figcaption[^>]*><strong>Figure 2\.4\. <\/strong>/.test(html), html);
+}
+
+// ── A Word title keeps its own styles ───────────────────────────────────────
+
+{
+  const title = `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">Interpreting help text</w:t></w:r></w:p>`;
+  const parsed = await parseDocx(docx(title + para("Brackets mark a field to fill.")), "check.docx", { storeImage: async () => "/api/images/check" });
+  check("an underlined Word title keeps its underline as a title style", JSON.stringify(parsed.titleStyles) === JSON.stringify([{ start: 0, end: 22, style: "underline", quotedText: "Interpreting help text" }]), JSON.stringify(parsed.titleStyles));
+  const { richText } = richTextFromImport({ kind: "docx", title: parsed.title ?? "", titleFromOriginal: !parsed.titleFromFile, blocks: parsed.blocks, titleStyles: parsed.titleStyles });
+  const marks = (richText.content?.[0]?.content?.[0]?.marks ?? []).map((m) => m.type).join(",");
+  check("the import's Title draws the title underlined", richText.content?.[0]?.attrs?.docStyle === "title" && marks === "underline", JSON.stringify(richText.content?.[0]));
+}
+
+// ── A page reference in a sentence keeps the page number Word printed ──────
+
+{
+  const run = (inner: string) => `<w:r>${inner}</w:r>`;
+  const field = run('<w:fldChar w:fldCharType="begin"/>') + run('<w:instrText xml:space="preserve"> PAGEREF _Toc1 \\h </w:instrText>') + run('<w:fldChar w:fldCharType="separate"/>') + run("<w:t>1</w:t>") + run('<w:fldChar w:fldCharType="end"/>');
+  const body = `<w:p>${run('<w:t xml:space="preserve">See page </w:t>')}${field}${run('<w:t xml:space="preserve">, Select by Polygon.</w:t>')}</w:p>`;
+  const block = (await parse(docx(body)))[0];
+  check("a PAGEREF outside a contents list keeps its number in the sentence", block?.text === "See page 1, Select by Polygon.", JSON.stringify(block?.text));
+}
+
+// ── An icon between words keeps the sentence one paragraph ──────────────────
+
+/** A .docx of a body whose drawings show media/image1.png (r:embed rId9). */
+function withPicture(body: string): Uint8Array {
+  const parts = unzipSync(docx(body));
+  parts["word/_rels/document.xml.rels"] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="${REL}/image" Target="media/image1.png"/></Relationships>`,
+  );
+  parts["word/media/image1.png"] = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return zipSync(parts);
+}
+const picture = (emu: number) =>
+  `<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${emu}" cy="${emu}"/><wp:docPr id="1" name="Picture 1"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="rId9"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+
+{
+  const blocks = await parse(withPicture(`<w:p>${words("Select by Polygon: the sign ")}${picture(114286)}${words(" draws a closed shape.")}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("an icon between words leaves the sentence one paragraph", lines === "PARAGRAPH:Select by Polygon: the sign draws a closed shape.", JSON.stringify(lines));
+  const alone = (await parse(withPicture(`<w:p>${picture(114286)}</w:p>`))).map((b) => b.type).join(",");
+  check("an icon on a line of its own is a figure", alone === "FIGURE", alone);
+}
+
+// ── A picture inline in a sentence follows the sentence ────────────────────
+
+{
+  const big = 952500; // 1 inch: no icon
+  const blocks = await parse(withPicture(`<w:p>${words("This picture ")}${picture(big)}${words(" is an identicon.")}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a picture inline in a sentence follows the sentence, which stays one paragraph", lines === "PARAGRAPH:This picture is an identicon.|FIGURE:", JSON.stringify(lines));
+  const own = await parse(withPicture(`<w:p>${words("Before")}<w:r><w:br/></w:r>${picture(big)}<w:r><w:br/></w:r>${words("After")}</w:p>`));
+  const ownLines = own.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a picture on a line of its own between words stays where it stands", /^PARAGRAPH:Before\s*\|FIGURE:\|PARAGRAPH:\s*After$/.test(ownLines), JSON.stringify(ownLines));
+}
+
+// ── A spacer picture after words draws nothing ──────────────────────────────
+
+{
+  const blocks = await parse(withPicture(`<w:p>${words("Determining font script in DrawingML ")}${picture(8255)}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a 1x1 spacer picture after words draws no figure", lines === "PARAGRAPH:Determining font script in DrawingML", JSON.stringify(lines));
+}
+
+// ── A display equation in a table cell stays math ───────────────────────────
+
+{
+  const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+  const math = `<m:oMathPara ${M}><m:oMath><m:r><m:t>A=π</m:t></m:r><m:sSup><m:e><m:r><m:t>r</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath></m:oMathPara>`;
+  const cell = (inner: string) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${inner}</w:tc>`;
+  const table = `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell(para("The next cell has an equation"))}${cell(`<w:p>${math}</w:p>`)}</w:tr><w:tr>${cell(para("Area"))}${cell(para("Circle"))}</w:tr></w:tbl>`;
+  const block = (await parse(docx(table))).find((b) => b.type === "TABLE");
+  check("a display equation in a cell is the cell's formula, a math span", /<span data-type="inline-math" data-latex="[^"]+">/.test(block?.html ?? ""), block?.html ?? "no table");
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks: block ? [block] : [] });
+  check("the import draws the cell's formula as math", JSON.stringify(richText).includes('"type":"inlineMath"'), JSON.stringify(richText).slice(0, 300));
+}
+
+// ── A backslash typed in an equation ends its command with a space ──────────
+
+{
+  const M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"';
+  const math = `<w:p><m:oMathPara ${M}><m:oMath><m:r><m:t>\\in</m:t></m:r><m:sSub><m:e><m:r><m:t>t</m:t></m:r></m:e><m:sub><m:r><m:t>0</m:t></m:r></m:sub></m:sSub><m:r><m:t>&lt;5</m:t></m:r></m:oMath></m:oMathPara></w:p>`;
+  const blocks = await parse(docx(para("Linear Format with lt") + math));
+  const equation = blocks.find((b) => b.type === "EQUATION");
+  check("a half-built \\int stays an equation, \\backslash then its letters", equation?.text === "\\backslash int_{0}<5", JSON.stringify(blocks.map((b) => `${b.type}:${b.text}`)));
+}
+
+// ── A text box the page sets at its top reads before its paragraph ──────────
+
+{
+  const box = (relativeFrom: string, position: string, text: string) =>
+    `<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:positionH relativeFrom="page"><wp:posOffset>458470</wp:posOffset></wp:positionH><wp:positionV relativeFrom="${relativeFrom}">${position}</wp:positionV><wp:extent cx="1901952" cy="4248150"/><wp:docPr id="1" name="Text Box 1"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${para(text)}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+  const top = await parse(docx(`<w:p>${words("Objective")}${box("margin", "<wp:align>top</wp:align>", "Allison, Timothy B.")}</w:p>${para("Getting the perfect job.")}`));
+  const topLines = top.map((b) => b.text).join("|");
+  check("a text box aligned to the top of the margin reads before its paragraph", topLines === "Allison, Timothy B.|Objective|Getting the perfect job.", JSON.stringify(topLines));
+  const beside = await parse(docx(`<w:p>${words("Objective")}${box("paragraph", "<wp:posOffset>0</wp:posOffset>", "A note beside it.")}</w:p>${para("Getting the perfect job.")}`));
+  const besideLines = beside.map((b) => b.text).join("|");
+  check("a text box set against its paragraph reads after it", besideLines === "Objective|A note beside it.|Getting the perfect job.", JSON.stringify(besideLines));
+}
+
+// ── The import reads a Word table's html without jsdom ──────────────────────
+
+{
+  const html = '<table><colgroup><col style="width:100pt"><col style="width:200pt"></colgroup><tbody><tr><td style="background-color:#eeeeee">Rate<sup>1</sup><span class="cell-gap">\t</span></td><td><strong>5%</strong></td></tr><tr><td colspan="2"><p style="text-align:center">Fee</p><p>none</p></td></tr></tbody></table>';
+  const text = "Rate1\t5%Feenone";
+  const built = tableFromHtml(html, 624, { text, refs: [{ start: 4, end: 5, footnoteId: "n1" }] });
+  const json = JSON.stringify(built?.table ?? null);
+  const rows = built?.table.content ?? [];
+  check(
+    "a Word table reads its fill, its marks, its merged row, and the note it cites",
+    rows.length === 2 && json.includes('"backgroundColor":"#eeeeee"') && json.includes('{"type":"footnoteReference","attrs":{"footnoteId":"n1"}}') && json.includes('"marks":[{"type":"bold"}]') && json.includes('"colspan":2') && json.includes('"textAlign":"center"'),
+    json.slice(0, 400),
+  );
 }
 
 if (failed > 0) {

@@ -750,6 +750,32 @@ function levelsOfLines(lines: ListLine[], printed: Bullets): void {
   }
 }
 
+/** How many of a LIST block's lines are a link to a heading: links with
+    targetOrder over half the line's letters or more, as a contents entry's
+    title is. A cross-reference in a sentence ("(Section 8.4)") is not. */
+function linkedLines(block: ParsedBlock): number {
+  const letter = /\p{L}/u;
+  const linked = new Array<boolean>(block.text.length).fill(false);
+  for (const l of block.links ?? []) {
+    if (l.targetOrder === undefined) continue;
+    for (let i = Math.max(0, l.start); i < Math.min(block.text.length, l.end); i++) linked[i] = true;
+  }
+  let count = 0;
+  let at = 0;
+  for (const line of block.text.split("\n")) {
+    let letters = 0;
+    let inLink = 0;
+    for (let i = 0; i < line.length; i++) {
+      if (!letter.test(line[i])) continue;
+      letters++;
+      if (linked[at + i]) inLink++;
+    }
+    if (letters > 0 && inLink * 2 >= letters) count++;
+    at += line.length + 1;
+  }
+  return count;
+}
+
 /** Each line's depth: how many lines still open above it are set less
     deep. A line goes at most one level deeper than the line before it, and
     lines set alike stay siblings wherever the first line stands. A list
@@ -1427,9 +1453,13 @@ class Converter {
       if (initial && above?.indent === l.indent && above.unmarked) lines[k] = { ...l, type: null, unmarked: true, count: undefined, letter: undefined, words: l.whole };
     });
     // A contents list: its class, or lines that link to headings, whatever
-    // their markers ("1 Introduction", "2.1 Background").
-    const contents =
-      tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
+    // their markers ("1 Introduction", "2.1 Background"): half its lines or
+    // more. A cross-reference in an item's sentence ("see Step 1: Sample
+    // Data", "(Section 8.4)") makes no contents list. Word benchmark
+    // finding: a CDC guide's bulleted notes, one citing a step by its
+    // heading, drew as paragraphs with their bullets as words, and so did a
+    // specification's one-line notes citing a section.
+    const contents = tokensOf(block.html).includes("contents") || linkedLines(block) * 2 >= block.text.split("\n").length;
     if (!contents && this.resume(lines, block, index)) return;
     nestLines(lines);
     levelsOfLines(lines, this.printed);

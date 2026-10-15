@@ -116,8 +116,11 @@ function charLatex(ch: string, inArray: boolean): string {
   if (ch === "&" && inArray) return "&";
   const command = COMMANDS[ch];
   if (command) return /[A-Za-z]$/.test(command) ? `${command} ` : command;
+  // A command name ends at a space: "\backslash int", not the unknown
+  // "\backslashint" (Word benchmark finding: d2p-equations' "\int" typed
+  // half-built).
   const escaped = ESCAPES[ch];
-  if (escaped !== undefined) return escaped;
+  if (escaped !== undefined) return /^\\[A-Za-z]+$/.test(escaped) ? `${escaped} ` : escaped;
   const styled = mathAlphanumeric(ch);
   if (styled) {
     const base = COMMANDS[styled.base] ?? styled.base;

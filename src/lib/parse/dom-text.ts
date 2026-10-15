@@ -26,10 +26,25 @@ export function spacedText(el: Element): string {
   return normalizeText(clone.textContent ?? "");
 }
 
+/** What separateBlocks reads and changes of a tree: a DOM's, or the
+    import's light html tree (lib/docs/import-table.ts). */
+type SpacedNode = { readonly nodeType: number; readonly textContent: string | null; readonly previousSibling: SpacedNode | null };
+interface SpacedElement extends SpacedNode {
+  readonly localName: string;
+  readonly ownerDocument: { createTextNode(data: string): SpacedNode };
+  before(node: SpacedNode): void;
+  after(node: SpacedNode): void;
+  querySelectorAll(selectors: "*"): Iterable<SpacedElement>;
+}
+
 /** In place: a space at every block boundary, and between two adjacent inline
     elements where one text ends and the next begins ("2026." then "Photo by",
     "Jim Edwards" then "Executive Editor" — a flex column's spans). */
-export function separateBlocks(el: Element) {
+export function separateBlocks(el: Element): void;
+export function separateBlocks(el: SpacedElement): void;
+export function separateBlocks(root: Element | SpacedElement): void {
+  // Each member read below is a DOM element's under the same name.
+  const el = root as SpacedElement;
   const document = el.ownerDocument;
   // One query for both passes: the spaces are text nodes and leave the
   // elements as they were. The engine's query for the 36 tags took 2.5 s

@@ -1,15 +1,19 @@
 {
  "total": {
-  "math.missing": 1,
-  "import.math.missing": 1,
   "words": 186,
   "lost:label": 59,
   "import.words": 188,
   "import.lost:label": 59,
-  "import.list.kind": 23,
-  "import.mark.bold": 10,
-  "mark.bold": 8,
-  "import.list.depth": 2
+  "import.mark.bold": 210,
+  "mark.bold": 98,
+  "import.list.depth": 2,
+  "mark.italic": 26,
+  "import.mark.italic": 26,
+  "link.missing": 1,
+  "mark.underline": 49,
+  "import.mark.underline": 49,
+  "image.missing": 2,
+  "import.image.missing": 2
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -25,10 +29,7 @@
   "d2p-comments.docx": {},
   "d2p-created-in-pages-bulleted-lists.docx": {},
   "d2p-created-in-pages-paragraphs-only.docx": {},
-  "d2p-equations.docx": {
-   "math.missing": 1,
-   "import.math.missing": 1
-  },
+  "d2p-equations.docx": {},
   "d2p-example.docx": {},
   "d2p-example_numbering.docx": {},
   "d2p-has_pict.docx": {},
@@ -40,9 +41,7 @@
    "import.lost:label": 28
   },
   "d2p-invalid_tag_name.docx": {},
-  "d2p-libreoffice_conversion.docx": {
-   "import.list.kind": 2
-  },
+  "d2p-libreoffice_conversion.docx": {},
   "d2p-list_index_a.docx": {},
   "d2p-long_hyperlink.docx": {},
   "d2p-merged_cells.docx": {},
@@ -68,9 +67,7 @@
   "lo-TOC_field_b.docx": {},
   "lo-TableWithAboveCaptions.docx": {},
   "lo-caption.docx": {},
-  "lo-cjklist30.docx": {
-   "import.list.kind": 20
-  },
+  "lo-cjklist30.docx": {},
   "lo-cjklist31.docx": {},
   "lo-cjklist34.docx": {},
   "lo-cjklist44.docx": {},
@@ -235,9 +232,7 @@
   "poi-HeaderFooterUnicode.docx": {},
   "poi-IllustrativeCases.docx": {},
   "poi-MultipleBodyBug.docx": {},
-  "poi-Numbering.docx": {
-   "import.list.kind": 1
-  },
+  "poi-Numbering.docx": {},
   "poi-NumberingWOverrides.docx": {},
   "poi-SampleDoc.docx": {},
   "poi-Styles.docx": {},
@@ -290,9 +285,7 @@
   },
   "poi-stress011.docx": {},
   "poi-stress012.docx": {},
-  "poi-stress014.docx": {
-   "import.mark.bold": 1
-  },
+  "poi-stress014.docx": {},
   "poi-stress015.docx": {},
   "poi-stress016.docx": {},
   "poi-stress017.docx": {},
@@ -346,6 +339,110 @@
   "pydocx-tbl-props.docx": {},
   "pydocx-test.docx": {},
   "pydocx-txt-font-highlight-color.docx": {},
-  "pydocx-txt-font-props.docx": {}
+  "pydocx-txt-font-props.docx": {},
+  "bonterms-mutual-nda.docx": {},
+  "bonterms-professional-services-agreement.docx": {},
+  "cdc-reportstream-programmers-guide.docx": {
+   "mark.bold": 14,
+   "import.mark.bold": 14
+  },
+  "cp-cloud-service-agreement.docx": {},
+  "cp-data-processing-agreement.docx": {},
+  "cp-independent-contractor-agreement.docx": {},
+  "cp-mutual-nda.docx": {},
+  "cp-software-license-agreement.docx": {},
+  "cp-statement-of-work.docx": {},
+  "cp-term-sheet.docx": {},
+  "cqu-thesis-reference.docx": {},
+  "d4j-Convert_Out.docx": {
+   "mark.bold": 4,
+   "mark.italic": 8,
+   "import.mark.bold": 9,
+   "import.mark.italic": 8
+  },
+  "d4j-Docx4j_GettingStarted.docx": {
+   "link.missing": 1,
+   "mark.bold": 69,
+   "mark.italic": 18,
+   "mark.underline": 48,
+   "import.mark.bold": 91,
+   "import.mark.italic": 18,
+   "import.mark.underline": 48
+  },
+  "d4j-Eastern_Arabic_numbering.docx": {},
+  "d4j-IndividualContributor.docx": {},
+  "d4j-OpenDoPE_Specification.docx": {
+   "import.mark.bold": 84
+  },
+  "d4j-arabic_align.docx": {},
+  "d4j-decracdiscrim1.docx": {},
+  "d4j-headers_footers.docx": {
+   "mark.bold": 2,
+   "mark.underline": 1,
+   "import.mark.bold": 2,
+   "import.mark.underline": 1
+  },
+  "d4j-invoice2013.docx": {},
+  "d4j-rFonts.docx": {},
+  "dl-content_control_with_picture.docx": {},
+  "dl-docx_checkboxes.docx": {},
+  "dl-docx_comments.docx": {},
+  "dl-docx_list_east_asian_num_fmt.docx": {},
+  "dl-docx_sdt_table_cells.docx": {},
+  "dl-equations.docx": {},
+  "dl-omml_multi_equation_paragraph.docx": {},
+  "dl-table_with_equations.docx": {},
+  "dl-textbox.docx": {},
+  "dl-unit_test_headers_numbered.docx": {},
+  "dl-word_sample.docx": {},
+  "docxreply-sample.docx": {},
+  "lo-tdf104649.docx": {},
+  "lo-tdf129659.docx": {},
+  "lo-tdf130314.docx": {},
+  "lo-tdf138779.docx": {},
+  "lo-tdf142407.docx": {},
+  "lo-tdf149089.docx": {},
+  "lo-tdf155707.docx": {},
+  "lo-tdf163575.docx": {
+   "image.missing": 2,
+   "import.image.missing": 2
+  },
+  "lo-tdf49073.docx": {},
+  "lo-tdf87533_bidi.docx": {},
+  "mid-equations.docx": {},
+  "mid-test.docx": {},
+  "mid-test_with_comment.docx": {},
+  "oa-employment-offer-letter.docx": {},
+  "oa-hedge-fund-lpa.docx": {},
+  "oa-privacy-policy.docx": {},
+  "officer-example.docx": {},
+  "oo-sample.docx": {},
+  "redoc-example-edited.docx": {
+   "mark.bold": 1,
+   "import.mark.bold": 1
+  },
+  "thesis-ucsd-1-title.docx": {},
+  "thesis-ucsd-10-introduction.docx": {},
+  "thesis-ucsd-11-chapter1.docx": {},
+  "thesis-ucsd-12-chapter2.docx": {},
+  "thesis-ucsd-13-chapter3.docx": {},
+  "thesis-ucsd-5-toc.docx": {},
+  "thesis-ucsd-6-figure-list.docx": {},
+  "thesis-ucsd-8-vita.docx": {},
+  "thesis-ucsd-9-abstract.docx": {},
+  "thesis-ucsd-dean-letter.docx": {},
+  "tika-014760.docx": {},
+  "tika-017091.docx": {},
+  "tika-017097.docx": {},
+  "tika-018367.docx": {},
+  "tika-testWORD_2006ml.docx": {},
+  "tika-testWORD_embedded_pics.docx": {},
+  "tika-testWORD_template.docx": {},
+  "uns-category-level.docx": {},
+  "uns-docx-shapes.docx": {},
+  "uns-eng_spa_mult.docx": {},
+  "uns-example-list-items-multiple.docx": {},
+  "uns-handbook-872p.docx": {},
+  "yc-safe-valuation-cap.docx": {}
  }
 }

@@ -7,7 +7,10 @@
 //     [--baseline] [--save-baseline] [--json out.json]
 //
 // The set is the test files of open-source Word readers and writers (pandoc,
-// mammoth, docx2python, python-docx, Apache POI, LibreOffice), saved under
+// mammoth, docx2python, python-docx, Apache POI, LibreOffice, docling,
+// MarkItDown, Apache Tika, docx4j) and documents people write in Word: a
+// thesis, legal agreements, a government guide, manuals, a Google Docs
+// handbook, forms, edited reports, Chinese, Arabic, and Hebrew files. Saved under
 // .bench/word/files by scripts/parse-bench/word-fetch.ts. word-corpus.json
 // names each file's source (the repository at a pinned commit, or the npm
 // package at a pinned version), its path there, its license, its sha256, and
@@ -31,6 +34,8 @@
 //   lost:<kind>      a paragraph whose words are not in the output (kind:
 //                    body, heading, list, cell, note, box, label, caption)
 //   words            words of the reference missing from the output
+//   split            a body paragraph whose words are kept, but in no one
+//                    block (a sentence cut in two around a picture)
 //   heading.missing  a heading's words kept but not as a heading
 //   heading.level    a heading at another level
 //   title.missing    a Title paragraph neither the title nor a heading
@@ -56,7 +61,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { unzipSync } from "fflate";
 import { join } from "node:path";
 import type { RichNode } from "@/lib/docs/schema";
-import type { ParsedBlock, TextFont } from "@/lib/parse/types";
+import type { ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const SET = join(ROOT, ".bench", "word", "files");
@@ -126,6 +131,9 @@ type Unit = {
   numId?: string;
   /** A caption beside a picture or a table. */
   nearFloat?: boolean;
+  /** Where in the words a page number the reference leaves out stood (a
+      PAGEREF's "1"): the output may keep it there. */
+  gaps?: number[];
   /** …beside a table and no picture: the page editor has no table caption,
       so an import keeps it a paragraph over the table. */
   nearTable?: boolean;
@@ -227,7 +235,11 @@ function readReference(zip: OfficeZip): Reference {
 
   const ref: Reference = { units: [], tables: [], notes: 0, math: 0, links: [], images: 0, marks: { bold: [], italic: [], underline: [], strike: [], sup: [], sub: [] } };
   const fields: { code: string; result: boolean }[] = [];
-  const skipResult = () => fields.some((f) => f.result && /^\s*(PAGEREF|PAGE|NUMPAGES|SECTIONPAGES)\b/i.test(f.code)) || fields.some((f) => !f.result);
+  const PAGE_FIELD = /^\s*(PAGEREF|PAGE|NUMPAGES|SECTIONPAGES)\b/i;
+  const skipResult = () => fields.some((f) => f.result && PAGE_FIELD.test(f.code)) || fields.some((f) => !f.result);
+  const gap = (ctx: Ctx, code: string) => {
+    if (ctx.unit && PAGE_FIELD.test(code)) (ctx.unit.gaps ??= []).push(ctx.unit.text.length);
+  };
   let listRun = 0;
   let lastWasList = false;
 
@@ -444,6 +456,7 @@ function readReference(zip: OfficeZip): Reference {
           }
         } else if (type === "end") {
           const f = fields.pop();
+          if (f?.result) gap(ctx, f.code);
           const url = f && /^\s*HYPERLINK\s+"?(https?:[^"\s]+|mailto:[^"\s]+)/i.exec(f.code);
           const u = ctx.unit as (Unit & { linkStart?: number }) | null;
           if (url && u && u.linkStart !== undefined) {
@@ -460,6 +473,7 @@ function readReference(zip: OfficeZip): Reference {
         const before = ctx.unit?.text.length ?? 0;
         for (const c of node.children) walk(c, ctx);
         fields.pop();
+        gap(ctx, code);
         if (/^\s*HYPERLINK\s+"?(https?:|mailto:)/i.test(code) && ctx.unit) {
           const words = ctx.unit.text.slice(before);
           if (compact(words)) ref.links.push(words);
@@ -498,7 +512,7 @@ function readReference(zip: OfficeZip): Reference {
       }
       case "blip": {
         const rel = rels.get(attr(node, "embed") ?? "");
-        if (rel && !rel.external && RASTER.test(rel.target) && !ctx.hidden && !ctx.note) {
+        if (rel && !rel.external && RASTER.test(rel.target) && !ctx.hidden && !ctx.note && !spacer(node)) {
           ref.images++;
           if (ctx.unit) ctx.unit.picture = true;
         }
@@ -515,6 +529,16 @@ function readReference(zip: OfficeZip): Reference {
       default:
         for (const c of node.children) walk(c, ctx);
     }
+  };
+  // A picture under 2pt each way is a spacer no reader sees (a web page's
+  // 1×1 trans.gif pasted into Word: d4j-rFonts), not a picture.
+  const spacer = (el: Element) => {
+    let frame = el.parentElement;
+    while (frame && frame.localName !== "inline" && frame.localName !== "anchor") frame = frame.parentElement;
+    const extent = frame ? [...frame.children].find((c) => c.localName === "extent") : undefined;
+    const cx = Number(attr(extent ?? null, "cx") ?? 0);
+    const cy = Number(attr(extent ?? null, "cy") ?? 0);
+    return cx > 0 && cy > 0 && cx < 25400 && cy < 25400;
   };
   const inside = (el: Element, names: string[]) => {
     for (let at = el.parentElement; at; at = at.parentElement) if (names.includes(at.localName)) return true;
@@ -558,6 +582,8 @@ type Reading = {
   images: number;
   /** Words that stand as a paragraph of their own, not a figure's or a table's caption. */
   paragraphs: Set<string>;
+  /** Each block's words (a parse block, an import paragraph index row), compacted. */
+  rows: string[];
   marks: Record<MarkKind, string>;
 };
 
@@ -579,15 +605,48 @@ function htmlTable(html: string): { rows: number; cols: number; header: number }
   return { rows: rows.length, cols, header };
 }
 
-const MARK_TAGS: Record<MarkKind, string> = { bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
+/** A line that opens with a counter: a first token of letters or digits,
+    up to 12 characters ("第九条", "（一）", "①", "NOTE"), or a legal number
+    of any depth ("3.2.2.5.1.4.1."). */
+function opensWithCounter(line: string): boolean {
+  const token = /^\s*(\S+)/.exec(line)?.[1] ?? "";
+  return /[\p{L}\p{N}]/u.test(token) && (token.length <= 12 || /^(?:\d{1,3}\.){2,}\d{0,3}$/.test(token));
+}
 
-function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont): Reading {
-  const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
+const MARK_TAGS: Record<MarkKind, string> ={ bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
+
+/** A paragraph whose words are all in the output, in order, around the
+    page numbers the reference leaves out (the output keeps a PAGEREF's
+    "1" where Word printed it), with nothing else between them. */
+function keptAround(u: Unit, all: string): boolean {
+  if (!u.gaps?.length) return false;
+  let at = 0;
+  let from = 0;
+  for (const end of [...u.gaps, u.text.length]) {
+    const part = compact(u.text.slice(from, end));
+    from = end;
+    if (!part) continue;
+    // The next words follow at once, or after a page number at most.
+    const found = at === 0 ? all.indexOf(part) : all.indexOf(part, at);
+    if (found < 0 || (at > 0 && found - at > 6)) return false;
+    at = found + part.length;
+  }
+  return true;
+}
+
+function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont, titleStyles?: StyleSpan[]): Reading {
+  const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), rows: [], marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // The title's look (ParsedDocument.titleFont) is its words' marks: the
   // import's Title style takes it.
   if (title && titleFont?.bold) r.marks.bold += ` ${title}`;
   if (title && titleFont?.italic) r.marks.italic += ` ${title}`;
+  // and its own styles (ParsedDocument.titleStyles) are its words' marks too.
+  for (const st of titleStyles ?? []) {
+    const k = ({ bold: "bold", italic: "italic", underline: "underline", strike: "strike", sup: "sup", sub: "sub" } as Partial<Record<string, MarkKind>>)[st.style];
+    if (title && k) r.marks[k] += ` ${title.slice(st.start, st.end)}`;
+  }
   const texts: string[] = [title ?? ""];
+  r.rows.push(compact(title ?? ""));
   const links: string[] = [];
   for (const b of blocks) {
     // A note's label the parse raises in the words is no word of the file.
@@ -597,6 +656,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
     const cuts = [...(b.footnoteRefs ?? []).map((f) => ({ ...f, by: "" })), ...(b.math ?? []).map((m) => ({ start: m.start, end: m.end, by: " " }))];
     for (const f of cuts.sort((x, y) => y.start - x.start)) words = `${words.slice(0, f.start)}${f.by}${words.slice(f.end)}`;
     texts.push(b.type === "EQUATION" ? "" : words);
+    r.rows.push(compact(b.type === "EQUATION" ? "" : words));
     if (b.footnote) r.notes++;
     if (b.type === "EQUATION") r.math++;
     r.math += b.math?.length ?? 0;
@@ -611,10 +671,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
       for (const line of words.split("\n")) {
         const m = /^( *)(\S+)\s?(.*)$/.exec(line);
         if (!m) continue;
-        // A counter: up to 12 characters, or a legal number of any depth
-        // ("3.2.2.5.1.4.1.").
-        const counter = /[\p{L}\p{N}]/u.test(m[2]) && (m[2].length <= 12 || /^(?:\d{1,3}\.){2,}\d{0,3}$/.test(m[2]));
-        r.lists.push({ depth: m[1].length / 2, numbered: counter, text: compact(line) });
+        r.lists.push({ depth: m[1].length / 2, numbered: opensWithCounter(line), text: compact(line) });
       }
     }
     if (b.type === "TABLE") {
@@ -648,9 +705,9 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
 
 const RICH_MARKS: Record<string, MarkKind> = { bold: "bold", italic: "italic", underline: "underline", strike: "strike", superscript: "sup", subscript: "sub" };
 
-function readImport(doc: RichNode): Reading {
+function readImport(doc: RichNode, figures: { html: string | null }[] = []): Reading {
   const rows = deriveBlocks(doc);
-  const r: Reading = { text: "", headings: [], title: "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
+  const r: Reading = { text: "", headings: [], title: "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), rows: [], marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
   // An inline formula reads as its TeX between dollar signs (mathWords): no
   // words of the file, which keep a formula out of the words too.
   const formulas = new Set<string>();
@@ -659,10 +716,9 @@ function readImport(doc: RichNode): Reading {
     for (const c of node.content ?? []) findMath(c);
   };
   findMath(doc);
-  r.text = rows
-    .filter((row) => row.type !== "EQUATION")
-    .map((row) => [...formulas].reduce((text, f) => (f ? text.split(f).join(" ") : text), row.text))
-    .join("\n");
+  const texts = rows.filter((row) => row.type !== "EQUATION").map((row) => [...formulas].reduce((text, f) => (f ? text.split(f).join(" ") : text), row.text));
+  r.text = texts.join("\n");
+  r.rows = texts.map(compact);
   for (const row of rows) {
     if (row.type === "HEADING") r.headings.push({ level: Number(/^<h([1-6])/.exec(row.html ?? "")?.[1] ?? 1), text: compact(row.text) });
     if (row.type === "PARAGRAPH" && !row.cell) r.paragraphs.add(compact(row.text));
@@ -683,7 +739,20 @@ function readImport(doc: RichNode): Reading {
   for (const style of ["Normal", "Title", "Subtitle", "H1", "H2", "H3", "H4", "H5", "H6"]) looks[style] = styled(style);
   const styleOf = (node: RichNode) =>
     node.type === "heading" ? `H${Number(node.attrs?.level) || 1}` : node.attrs?.docStyle === "title" ? "Title" : node.attrs?.docStyle === "subtitle" ? "Subtitle" : "Normal";
-  const walk = (node: RichNode, depth: number, ordered: boolean, inCell: boolean, inNote: boolean) => {
+  // A list level that draws no marker (a bullet of ""): its line keeps
+  // its counter as words where the page editor has no counter that draws it
+  // ("第九条", "（一）", "NEW-1-FORMAT"), so the line reads as the page
+  // prints it, numbered when its words open with a counter, as the parse
+  // reading reads a LIST line.
+  const levelsOf = (node: RichNode): { bullet?: string }[] | null => {
+    try {
+      const levels = JSON.parse(String(node.attrs?.listLevels ?? "null")) as unknown;
+      return Array.isArray(levels) ? (levels as { bullet?: string }[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  const walk = (node: RichNode, depth: number, ordered: boolean, inCell: boolean, inNote: boolean, levels: { bullet?: string }[] | null = null) => {
     if (node.type === "paragraph" || node.type === "heading") {
       const look = looks[styleOf(node)];
       const words: string[] = [];
@@ -734,11 +803,20 @@ function readImport(doc: RichNode): Reading {
         for (const c of n.content ?? []) collect(c);
       };
       collect(node);
-      r.lists.push({ depth: depth - 1, numbered: ordered, text: compact(words.join("")) });
+      const markerless = !ordered && levels?.[Math.min(depth - 1, 8)]?.bullet === "";
+      r.lists.push({ depth: depth - 1, numbered: markerless ? opensWithCounter(words.join("")) : ordered, text: compact(words.join("")) });
     }
-    for (const c of node.content ?? []) walk(c, list ? depth + 1 : depth, list ? node.type === "orderedList" : ordered, inCell || node.type === "tableCell" || node.type === "tableHeader", inNote || node.type === "footnote");
+    const own = list ? levelsOf(node) : null;
+    for (const c of node.content ?? []) walk(c, list ? depth + 1 : depth, list ? node.type === "orderedList" : ordered, inCell || node.type === "tableCell" || node.type === "tableHeader", inNote || node.type === "footnote", own ?? levels);
   };
   walk(doc, 0, false, false, false);
+  // A Word figure draws its media's html (components/docs/insert/figure.ts,
+  // MediaHtml), its caption the figcaption the parse writes, in its runs'
+  // marks: those marks are the import's, as the parse reading reads them.
+  for (const f of figures) {
+    const caption = /<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/.exec(f.html ?? "")?.[1] ?? "";
+    for (const k of MARK_KINDS) for (const m of caption.matchAll(new RegExp(`<${MARK_TAGS[k]}>([\\s\\S]*?)</${MARK_TAGS[k]}>`, "g"))) r.marks[k] += ` ${stripTags(m[1])}`;
+  }
   r.links = compact(links.join(" | "));
   for (const k of MARK_KINDS) r.marks[k] = compact(r.marks[k]);
   return r;
@@ -771,7 +849,9 @@ function compare(ref: Reference, got: Reading, side: "parse" | "import"): Findin
     // A marker typed before the words ("1.1", "(a)", "•") an import's list
     // draws as its own counter: the words after it are the line's.
     const words = compact(u.text.replace(TYPED, ""));
-    if (c.length >= 3 && !all.includes(c) && !(words.length >= 3 && all.includes(words))) bump(`lost:${u.kind}`, u.text);
+    if (c.length >= 3 && !all.includes(c) && !(words.length >= 3 && all.includes(words)) && !keptAround(u, all)) bump(`lost:${u.kind}`, u.text);
+    // A body paragraph whose words are kept but in no one block: split.
+    else if (u.kind === "body" && words.length >= 12 && all.includes(words) && !got.rows.some((row) => row.includes(words))) bump("split", u.text);
   }
   // Headings, the title.
   for (const u of ref.units) {
@@ -905,7 +985,7 @@ for (const name of files) {
   try {
     const parsed = await parseDocx(bytes, name, { storeImage: async () => "/api/images/bench" });
     const title = parsed.titleFromFile ? null : (parsed.title ?? null);
-    const p = compare(ref, readParse(title, parsed.blocks, parsed.titleFont), "parse");
+    const p = compare(ref, readParse(title, parsed.blocks, parsed.titleFont, parsed.titleStyles), "parse");
     Object.assign(counts, p.counts);
     notes.push(...p.notes);
     try {
@@ -920,7 +1000,7 @@ for (const name of files) {
         titleStyles: parsed.titleStyles,
         titleLines: parsed.titleLines,
       });
-      const reading = readImport(out.richText);
+      const reading = readImport(out.richText, out.figures);
       if (!parsed.titleFromFile) reading.title = parsed.title ?? "";
       const i = compare(ref, reading, "import");
       for (const [k, v] of Object.entries(i.counts)) counts[`import.${k}`] = v;
