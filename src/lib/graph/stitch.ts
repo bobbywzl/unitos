@@ -53,7 +53,7 @@ import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
 import { fuseRanks, rank, tokenize, YEAR_TERM } from "@/lib/graph/rank";
 import { searchBlocks } from "@/lib/graph/search";
-import { commandIntent } from "@/lib/graph/intent";
+import { commandIntent, holisticWords } from "@/lib/graph/intent";
 import {
   asksAboutNotes,
   asksMore,
@@ -67,6 +67,7 @@ import {
   stitchRules,
   stitchSelectPrompt,
   stitchSelectRules,
+  whyAboutAnswer,
   type StitchDocumentCtx,
   type StitchNotPickedCtx,
 } from "@/lib/prompts/stitch";
@@ -146,12 +147,18 @@ const NOT_SHOWN_NAMED = 8; // documents the "No block shown" line names past SHO
 const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
 const CITED_TEXT = 600; // chars of a cited block's text in the result
 const BACK_BUDGET = 6_000; // tokens of cited blocks a follow-up reads with no select pass (backSelection)
+const BACK_BUDGET_WHY = 10_000; // the same for a why-question about the last answer (whyAboutAnswer; ANS10-06): under the smallest select pass (19k on seven documents)
 // A back reference's ordinal phrase ("the first one", "the second link",
 // 第二点) names a point of the last answer, not a document: it drops before
 // the back selection's title check, where "first" would match the title
 // "Thus Spake Zarathustra — First Part" and run the select pass (ANS9-06).
 const ORDINAL_REF =
   /\b(?:the |that |this )?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d+(?:st|nd|rd|th))\s+(?:one|ones|link|links|point|points|passage|passages|quote|quotes|sentence|sentences|thread|threads|difference|differences|contradiction|contradictions|paragraph|paragraphs|item|items|claim|claims|pair|pairs)\b|第[一二三四五六七八九十\d]+[个条点处段句对]?/gi;
+// A number word in a follow-up counts the answer's points or editions
+// ("rather than two editions"), not a document: it drops before the title
+// check too, where "two" would match the title "BOOK TWO" (ANS10-06). An
+// ordinal stays: "First Part" names a document.
+const NUMBER_WORD = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\b/gi;
 
 // The answer's limits cut what runs over instead of failing it: one field
 // over its limit would otherwise fail validation and re-run the whole
@@ -917,26 +924,47 @@ export async function notPickedOf(notebookId: string, picked: string[], command:
   return { count: rows.length, titles: named.map((d) => d.doc.title) };
 }
 
-const NOTE_CHARS = 600; // chars of a note's or a reply's text in the answer prompt
-const NOTES_ROWS = 200; // notes, and replies, read before the ranker
+const NOTE_CHARS = 600; // chars of a note's, a reply's or a comment's text in the answer prompt
+const NOTES_ROWS = 1_000; // notes, replies, and comments read before the ranker (REV10-10: at 200, a project past 200 notes never read an older one)
+const FORMER_COLLABORATOR = "a former collaborator";
 
-/** The reader's notes and the replies on links, as the answer pass reads
-    them when the command is about them (ANS9-04; lib/prompts/stitch.ts
-    asksAboutNotes): the accepted notes of the sections the reader sees (no
-    hidden section, no side chat) and the replies on the project's links
-    whose two documents are in the project, open or resolved, one line each
-    — a note with its section and the document it was written in, a reply
-    with its link's two documents and quotes — ranked against the query
-    (lib/graph/rank.ts; ties newest first) and cut to STITCH_NOTES_BUDGET
-    tokens. The scope is the Notes list's and the link's panel's. Read-only:
-    nothing is written. */
-export async function notesSection(notebookId: string, query: string): Promise<string[]> {
-  const [notes, replies] = await Promise.all([
+/** The names the notes section marks other people's lines with (ANS10-02):
+    the one the person badge shows — User.name, else the email's local part
+    (lib/auth.ts) — and "a former collaborator" for an account that is gone.
+    One query over the ids. */
+async function authorNames(ids: Set<string>): Promise<Map<string, string>> {
+  if (ids.size === 0) return new Map();
+  const rows = await db.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true, email: true } });
+  return new Map(rows.map((u) => [u.id, u.name.trim() || u.email.split("@")[0]]));
+}
+
+/** The project's notes, the replies on links and the comments, as the
+    answer pass reads them when the command is about them (ANS9-04;
+    lib/prompts/stitch.ts asksAboutNotes): the accepted notes of the
+    sections the reader sees (no hidden section, no side chat), the replies
+    on the project's links whose two documents are in the project, open or
+    resolved, and the comments — the annotations of the hidden Annotations
+    section with no tool and no highlight color, lib/graph/coverage.ts's
+    rule (REV10-02) — with their replies, one line each: a note with its
+    section and the document it was written in, a reply with its link's two
+    documents and quotes, a comment with its document and the words it
+    marks and its replies under it. A line by another account than the
+    reader's starts "note by <name>", "reply by <name>", "comment by <name>"
+    (ANS10-02: a collaborator's words never read as the reader's); the
+    reader's own lines carry no name, nor does a row with no author (written
+    before authors were kept). readerId: the signed-in account; null (a
+    check, sign-in off) reads as the project's owner. Ranked against the
+    query (lib/graph/rank.ts; ties newest first) and cut to
+    STITCH_NOTES_BUDGET tokens. The scope is the Notes list's, the link's
+    panel's and the Annotations tab's. Read-only: nothing is written. */
+export async function notesSection(notebookId: string, query: string, readerId: string | null = null): Promise<string[]> {
+  const reader = readerId ?? (await db.notebook.findUnique({ where: { id: notebookId }, select: { userId: true } }))?.userId ?? null;
+  const [notes, replies, comments] = await Promise.all([
     db.note.findMany({
       where: { section: { notebookId, hidden: false }, status: "ACCEPTED", sideChatOfId: null },
       orderBy: { createdAt: "desc" },
       take: NOTES_ROWS,
-      select: { content: true, section: { select: { title: true } }, document: { select: { title: true } } },
+      select: { content: true, createdById: true, section: { select: { title: true } }, document: { select: { title: true } } },
     }),
     db.reply.findMany({
       where: {
@@ -951,24 +979,53 @@ export async function notesSection(notebookId: string, query: string): Promise<s
       take: NOTES_ROWS,
       select: {
         content: true,
+        userId: true,
         resolvedById: true,
         docLink: { select: { quotedText: true, toQuotedText: true, fromDocument: { select: { title: true } }, toDocument: { select: { title: true } } } },
       },
     }),
+    db.note.findMany({
+      where: { section: { notebookId, hidden: true }, status: "ACCEPTED", sideChatOfId: null, derivationType: null, color: null },
+      orderBy: { createdAt: "desc" },
+      take: NOTES_ROWS,
+      select: {
+        content: true,
+        createdById: true,
+        resolvedById: true,
+        document: { select: { title: true } },
+        sources: { take: 1, orderBy: { startOffset: "asc" }, select: { quotedText: true, document: { select: { title: true } } } },
+        replies: { orderBy: { createdAt: "asc" }, select: { content: true, userId: true, resolvedById: true } },
+      },
+    }),
   ]);
+  const authors = new Set<string>();
+  for (const id of [...notes.map((n) => n.createdById), ...replies.map((r) => r.userId), ...comments.flatMap((c) => [c.createdById, ...c.replies.map((r) => r.userId)])]) {
+    if (id && id !== reader) authors.add(id);
+  }
+  const names = await authorNames(authors);
+  const by = (id: string | null) => (id && id !== reader ? ` by ${names.get(id) ?? FORMER_COLLABORATOR}` : "");
   const fold = (s: string, max: number) => {
     const t = s.replace(/\s+/g, " ").trim();
     return t.length > max ? `${t.slice(0, max - 1)}…` : t;
   };
   const lines = [
-    ...notes.map((n) => `- note in "${fold(n.section.title, 60)}"${n.document ? ` on "${fold(n.document.title, 80)}"` : ""}: ${fold(n.content, NOTE_CHARS)}`),
+    ...notes.map((n) => `- note${by(n.createdById)} in "${fold(n.section.title, 60)}"${n.document ? ` on "${fold(n.document.title, 80)}"` : ""}: ${fold(n.content, NOTE_CHARS)}`),
     ...replies.flatMap((r) =>
       r.docLink
         ? [
-            `- reply${r.resolvedById ? " (resolved)" : ""} on the link "${fold(r.docLink.fromDocument.title, 80)}" ("${fold(r.docLink.quotedText, 80)}") – "${fold(r.docLink.toDocument.title, 80)}"${r.docLink.toQuotedText ? ` ("${fold(r.docLink.toQuotedText, 80)}")` : ""}: ${fold(r.content, NOTE_CHARS)}`,
+            `- reply${by(r.userId)}${r.resolvedById ? " (resolved)" : ""} on the link "${fold(r.docLink.fromDocument.title, 80)}" ("${fold(r.docLink.quotedText, 80)}") – "${fold(r.docLink.toDocument.title, 80)}"${r.docLink.toQuotedText ? ` ("${fold(r.docLink.toQuotedText, 80)}")` : ""}: ${fold(r.content, NOTE_CHARS)}`,
           ]
         : [],
     ),
+    // A comment and its replies are one item: the ranker keeps them together.
+    ...comments.map((c) => {
+      const title = c.document?.title ?? c.sources[0]?.document?.title;
+      const quoted = c.sources[0]?.quotedText;
+      return [
+        `- comment${by(c.createdById)}${c.resolvedById ? " (resolved)" : ""}${title ? ` on "${fold(title, 80)}"` : ""}${quoted ? ` ("${fold(quoted, 80)}")` : ""}: ${fold(c.content, NOTE_CHARS)}`,
+        ...c.replies.map((r) => `  - reply${by(r.userId)}${r.resolvedById ? " (resolved)" : ""}: ${fold(r.content, NOTE_CHARS)}`),
+      ].join("\n");
+    }),
   ];
   const out: string[] = [];
   let used = 0;
@@ -1527,10 +1584,15 @@ export function firstsFirst(
 /** True when the command is over every document as a whole: each or
     every document, all the documents, an overview (ANS8-05); across these
     documents, the main threads, all seven texts, the whole project, 主要线索,
-    主线, 贯穿, 整个项目 (ANS9-03, REV9-08). "The main point of this
-    document" is not. */
+    主线, 贯穿, 整个项目 (ANS9-03, REV9-08), and every holistic wording
+    (lib/graph/intent.ts holisticWords: the big picture, what the texts
+    share, what is left open; ANS10-01). "The main point of this document"
+    and "the main themes of pessimism" are not. */
 export function overEvery(command: string): boolean {
-  return /\b(?:each|every) (?:document|text|source)s?\b|\ball (?:of )?(?:the |these |my |\w+ )?(?:documents|texts|sources)\b|\boverview\b|\bacross (?:the |these |all |my )?(?:documents|texts|sources)\b|\bmain (?:threads?|themes?|ideas?)\b|\bwhole project\b|每个文档|每篇|每份|各文档|各个文档|所有文档|全部文档|概述|总览|主要线索|主线|贯穿|整个项目|这些文档之间/i.test(command);
+  return (
+    /\b(?:each|every) (?:document|text|source)s?\b|\ball (?:of )?(?:the |these |my |\w+ )?(?:documents|texts|sources)\b|\boverview\b|\bacross (?:the |these |all |my )?(?:documents|texts|sources)\b|\bwhole project\b|每个文档|每篇|每份|各文档|各个文档|所有文档|全部文档|概述|总览|主要线索|主线|贯穿|整个项目|这些文档之间/i.test(command) ||
+    holisticWords(command)
+  );
 }
 
 /** The picks shared by document (ANS8-05), each document's in the given
@@ -2395,6 +2457,10 @@ export function backSelection(
   words: string[] = [],
 ): Set<string> | null {
   if (history.length === 0 || !refersBack(command) || asksMore(command)) return null;
+  // A follow-up about the reader's notes reads anew (ANS10-03): "Do my
+  // notes make the second point?" needs the notes document whole, not the
+  // one block of it the last answer cited.
+  if (asksAboutNotes(command) || ownNotesQuestion(command)) return null;
   const cited = citedAliases(history, blockByRef);
   if (cited.length === 0) return null;
   if (names.some((n) => !n.aliases.some((a) => cited.includes(a)))) return null;
@@ -2412,14 +2478,20 @@ export function backSelection(
   const cjk = /[㐀-鿿]/.test(command);
   // The ordinal phrase of the back reference drops before the title check
   // (ORDINAL_REF): it names a point of the last answer, not a document.
-  for (const word of new Set(tokenize([command.replace(ORDINAL_REF, " "), ...(cjk ? words : [])].join("\n")))) {
+  // The expansion's words stand in for a CJK command's own, but not for a
+  // page of the answer (ANS10-04): they come from the history, and "BOOK
+  // TWO" among them is the last answer's context, not a document the page
+  // asks for (把刚才的回答做成一页 after an answer that cited one document).
+  for (const word of new Set(tokenize([command.replace(ORDINAL_REF, " ").replace(NUMBER_WORD, " "), ...(cjk && kind !== "page" ? words : [])].join("\n")))) {
     const titled = titleMatches(docs, word);
     if (titled.length > 0 && !titled.some((d) => citedDocs.has(d.doc.id))) return null;
   }
   // The answer pass reads on the answer model, uncached: past BACK_BUDGET
-  // the select pass's few blocks cost less than every block cited.
+  // the select pass's few blocks cost less than every block cited. A
+  // why-question about the answer reads up to BACK_BUDGET_WHY (ANS10-06):
+  // the cited passages are its reason, and the select pass costs more.
   const cost = cited.reduce((sum, a) => sum + blockCost(blockByRef.get(a)?.text ?? ""), 0);
-  if (cost > BACK_BUDGET) return null;
+  if (cost > (whyAboutAnswer(command) ? BACK_BUDGET_WHY : BACK_BUDGET)) return null;
   return cutSelection(cited, blockByRef, kind);
 }
 
@@ -2565,9 +2637,14 @@ export async function stitch(input: {
   // The documents a pick left out: the answer pass is told of them, and the
   // box says how many (ANS6-02).
   const notPicked = input.documentIds ? await notPickedOf(input.notebookId, docs.map((d) => d.id), input.command, reading.words) : undefined;
-  // The reader's notes and the replies on links, when the command is about
-  // them (ANS9-04): ranked against the command and its expansion's words.
-  const notes = asksAboutNotes(input.command) ? await notesSection(input.notebookId, [input.command, ...(reading.words ?? [])].join("\n")) : undefined;
+  // The project's notes, the replies on links and the comments, when the
+  // command is about them (ANS9-04; a question about the reader's own
+  // disagreement too, REV10-03): ranked against the command and its
+  // expansion's words; another person's lines marked (ANS10-02).
+  const notes =
+    asksAboutNotes(input.command) || ownNotesQuestion(input.command)
+      ? await notesSection(input.notebookId, [input.command, ...(reading.words ?? [])].join("\n"), input.userId)
+      : undefined;
 
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
