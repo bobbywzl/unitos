@@ -152,6 +152,9 @@ export function LinkPanel({
 
   // [lists8] WALK8-05: where the link sits among its curve's links; the step wraps.
   const at = curveLinks && onStep && curveLinks.length > 1 ? curveLinks.findIndex((l) => l.id === link.id) : -1;
+  // [style10] VIEW10-10: under 768 px, with the step in the head row, the title
+  // takes the next row whole, so it reads in one or two lines, not four.
+  const crowded = at >= 0;
   const step = (by: number) => {
     if (!curveLinks || !onStep || at < 0) return;
     onStep(curveLinks[(at + by + curveLinks.length) % curveLinks.length]);
@@ -168,7 +171,7 @@ export function LinkPanel({
       aria-label={t("panes.graphLinkPanel")}
       className="menu-in absolute top-3 right-3 z-10 flex max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
-      <div className="flex items-start gap-2">
+      <div className={`flex items-start gap-2 ${crowded ? "max-md:flex-wrap" : ""}`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -182,7 +185,7 @@ export function LinkPanel({
         )}
         {/* [style7] VIEW7-04: the panel's title, as the node card's (same place, same size). */}
         {/* [style10] VIEW10-10: TEXT_NAME under 768 px, so two titles fit in one or two lines beside "1 of 2". */}
-        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink max-md:text-[13.5px]`}>
+        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink max-md:text-[13.5px] ${crowded ? "max-md:order-last max-md:basis-full" : ""}`}>
           {loop
             ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
             : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
@@ -215,7 +218,7 @@ export function LinkPanel({
           data-track="graph-link-panel-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className={`-mt-1 -mr-1 ${CLOSE}`}
+          className={`-mt-1 -mr-1 ${CLOSE} ${crowded ? "max-md:ml-auto" : ""}`}
         >
           ✕
         </button>
