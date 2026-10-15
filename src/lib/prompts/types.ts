@@ -28,6 +28,9 @@ export type PromptCtx = {
   question?: string;
   // Summary depth, for SUMMARIZE.
   depth?: SummaryDepth;
+  // VISUALIZE (SPEC.md §20): the reader was told the picture may not be
+  // accurate and confirmed. The model draws its best picture anyway.
+  confirmed?: boolean;
   // Set when EXPLAIN targets a figure block: the model deciphers the visual.
   // kind image: the image is attached to the message. kind svg: the chart's SVG
   // source is in svgSource. kind video: the model only has caption and context.
@@ -93,7 +96,7 @@ export const CORE_RULE =
 // The length line of an answer that explains: the shortest answer that
 // carries the core and its reasoning.
 export const ANSWER_LENGTH =
-  "Length: the shortest answer that carries the core and its reasoning. A lookup (a name, a number, a place in the document) takes one to three sentences. A question of meaning, argument, or interpretation usually takes 80 to 200 words; go longer only when the reader asks for detail or the reasoning needs more steps. Use markdown: short paragraphs, bold for the one or two key terms, no headings.";
+  "Length: the shortest answer that carries the core and its reasoning. A lookup takes one to three sentences: a question of who, which, when, where, how many, or whether that the document answers in its own words, or what the document itself states about one thing (what it recommends, concludes, or reports). A question of meaning, argument, or interpretation that the document does not answer in one place (why, how two parts compare, what follows) usually takes 80 to 200 words; go longer only when the reader asks for detail or the reasoning needs more steps. Use markdown: short paragraphs, bold for the one or two key terms, no headings.";
 
 // The connection line every template that reads the reader's notes and
 // annotations carries: what the reader already wrote is named where it bears

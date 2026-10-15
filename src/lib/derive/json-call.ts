@@ -2,6 +2,7 @@ import { generateText, type ModelMessage, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
 import { claude, CLAUDE_REFUSAL_FALLBACK, isClaudeModel } from "@/lib/claude";
+import { EXTERNAL_PENDING, externalCall, externalDir } from "@/lib/derive/external-call";
 import { extractJson, parseJson } from "@/lib/derive/json";
 import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
@@ -106,6 +107,16 @@ export async function callForJson<S extends z.ZodType>(params: {
       params.usage ? { ...params.usage, model: CLAUDE_REFUSAL_FALLBACK } : undefined,
     );
   };
+
+  // The eval's external model (lib/derive/external-call.ts): the messages go
+  // to a file an agent answers; no provider is called, and no retry runs.
+  const external = externalDir();
+  if (external) {
+    const call = externalCall(external, params.label, params.messages);
+    if (call.text === null) return { ok: false, error: `${EXTERNAL_PENDING} (${call.name})` };
+    const parsed = parseJson(params.schema, call.text);
+    return parsed === null ? { ok: false, error: `Output was not valid JSON (${call.name}).` } : { ok: true, data: parsed };
+  }
 
   let first: Attempt;
   try {

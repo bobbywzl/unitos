@@ -12,19 +12,21 @@ import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 const MODES: { id: Thinking; labelKey: TKey; hintKey: TKey }[] = [
+  { id: "auto", labelKey: "assistant.thinkingAuto", hintKey: "assistant.thinkingAutoHint" },
   { id: "fast", labelKey: "assistant.thinkingFast", hintKey: "assistant.thinkingFastHint" },
   { id: "deep", labelKey: "assistant.thinkingDeep", hintKey: "assistant.thinkingDeepHint" },
 ];
 
 /** The reader's thinking choice, read where an assistant request is sent. The
-    server's render and the first client render agree on Deep. */
+    server's render and the first client render agree on Auto. */
 export function useThinking(): Thinking {
   return useSyncExternalStore(subscribeThinking, readThinking, () => DEFAULT_THINKING);
 }
 
-/** The two thinking options (SPEC.md §7). The same pair on every assistant
-    surface: the panel, the reader's chat, the media pane's chat. One choice for
-    the whole app, so picking one here picks it everywhere. */
+/** The three thinking options (SPEC.md §7): Auto, Fast, Deep. The same
+    three on every assistant surface: the panel, the reader's chat, the media
+    pane's chat. One choice for the whole app, so picking one here picks it
+    everywhere. */
 export function ThinkingChips({ className = "", small = false }: { className?: string; small?: boolean }) {
   const t = useT();
   const thinking = useThinking();

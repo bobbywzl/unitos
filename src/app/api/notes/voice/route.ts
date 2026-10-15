@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
             : []),
           { role: "user", content: userPrompt },
         ];
-        const voiceCall = await featureCall("voice", VOICE_EFFORT[thinking ?? "deep"]);
+        const voiceCall = await featureCall("voice", VOICE_EFFORT[resolvedThinking(thinking)]);
         const result = await callForJson({
           model: voiceCall.model,
           messages,

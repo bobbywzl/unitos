@@ -72,14 +72,28 @@ function land(
   made: string[],
   styleOf: (blockId: string) => SuggestStyle | null | undefined,
 ): SkipReason | null {
-  // One edit on the page as it now stands, suggested under a new id.
-  const commit = (build: (state: EditorState) => Transaction | SkipReason): SkipReason | null => {
+  // One edit on the page as it now stands, suggested under a new id. With
+  // `then`, a second edit on the page after the first, under the same id:
+  // one suggestion in two steps (a move: the copy added, then the original
+  // struck), each tracked on its own so neither is read as the other.
+  const commit = (
+    build: (state: EditorState) => Transaction | SkipReason,
+    then?: (state: EditorState) => Transaction | SkipReason,
+  ): SkipReason | null => {
     const state = EditorState.create({ doc: tr.doc });
     const edit = build(state);
     if (typeof edit === "string") return edit;
     if (!edit.docChanged) return null;
     const id = newId(author);
-    for (const step of suggest(edit, state, author, id).steps) tr.step(step);
+    const first = suggest(edit, state, author, id);
+    const steps = [...first.steps];
+    if (then) {
+      const next = EditorState.create({ doc: first.doc });
+      const more = then(next);
+      if (typeof more === "string") return more;
+      if (more.docChanged) steps.push(...suggest(more, next, author, id).steps);
+    }
+    for (const step of steps) tr.step(step);
     whys.set(id, op.why);
     made.push(id);
     return null;
@@ -557,31 +571,50 @@ function moveColumn(
   return edit;
 }
 
-/** The top-level node that holds this row, as a range of the doc. */
-function topRange(doc: PMNode, blockId: string): { from: number; to: number } | null {
+/** What a row moves as (lib/assistant/reorder-run.ts richTextUnits): the
+    item of a top-level list that holds it, with the lines nested under it,
+    else the top-level node that holds it. */
+type RowNode = { from: number; to: number; item: { list: PMNode; listFrom: number; listTo: number } | null };
+
+function rowNode(doc: PMNode, blockId: string): RowNode | null {
   const found = findIndexed(doc, blockId);
   if (!found) return null;
   const $pos = doc.resolve(found.pos);
-  return $pos.depth === 0 ? { from: found.pos, to: found.pos + found.node.nodeSize } : { from: $pos.before(1), to: $pos.after(1) };
+  if ($pos.depth === 0) return { from: found.pos, to: found.pos + found.node.nodeSize, item: null };
+  if ($pos.depth >= 2 && isList($pos.node(1)) && isListItem($pos.node(2))) {
+    return { from: $pos.before(2), to: $pos.after(2), item: { list: $pos.node(1), listFrom: $pos.before(1), listTo: $pos.after(1) } };
+  }
+  return { from: $pos.before(1), to: $pos.after(1), item: null };
 }
 
-/** The order pass's move (lib/assistant/reorder.ts): its top-level nodes,
-    each while it holds exactly the rows and the words the server read, go
-    right after the node that holds afterBlockId, with the new headings
-    among them, as one suggestion: the nodes struck where they stood and
-    added where they go. Accept moves them, Reject leaves them. A node holds
-    the asker's earlier suggestions (the same command's windows changed its
-    words, in this landing or before it): the copy carries them accepted and the place it leaves takes
-    them back, so the move is the one suggestion on those words. A node with
+/** `node` as an item of `list`: itself when it is one, else the list's
+    kind of item with the same content (a task line into a bulleted list). */
+function itemOf(list: PMNode, node: PMNode): PMNode {
+  const type = list.type.contentMatch.defaultType;
+  return !type || node.type === type ? node : type.create(null, node.content);
+}
+
+/** The order pass's move (lib/assistant/reorder.ts): its nodes, each while
+    it holds exactly the rows and the words the server read, go right after
+    the node that holds afterBlockId, with the new headings among them, as
+    one suggestion: the nodes struck where they stood and added where they
+    go. Accept moves them, Reject leaves them. A line of a list moves as its
+    item: after a line, into that line's list; after a block, into the list
+    of its kind beside the place, else in a list of its kind of its own. A
+    list every item of which moves goes with them. A block cannot go between
+    the lines of a list: that move is skipped. A node holds the asker's earlier suggestions
+    (the same command's windows changed its words, in this landing or before
+    it): the copy carries them accepted and the place it leaves takes them
+    back, so the move is the one suggestion on those words. A node with
     another author's suggestion is skipped: its copy would repeat it. */
 function moveBlocks(
   tr: Transaction,
   op: Extract<ResolvedOp, { op: "move_blocks" }>,
   author: string,
-  commit: (build: (state: EditorState) => Transaction | SkipReason) => SkipReason | null,
+  commit: (build: (state: EditorState) => Transaction | SkipReason, then?: (state: EditorState) => Transaction | SkipReason) => SkipReason | null,
 ): SkipReason | null {
   const units = op.items.flatMap((item) => ("blockIds" in item ? [item] : []));
-  const rangeOf = (doc: PMNode, unit: { blockIds: string[] }) => topRange(doc, unit.blockIds[0]);
+  const rangeOf = (doc: PMNode, unit: { blockIds: string[] }) => rowNode(doc, unit.blockIds[0]);
   const own = new Set<string>();
   for (const unit of units) {
     const r = rangeOf(tr.doc, unit);
@@ -603,10 +636,10 @@ function moveBlocks(
   if (own.size) settle(accepted, true, own);
   const copies = units.map((unit) => {
     for (const id of unit.blockIds) {
-      const r = topRange(accepted.doc, id);
-      if (r) return accepted.doc.slice(r.from, r.to).content;
+      const r = rowNode(accepted.doc, id);
+      if (r) return { content: accepted.doc.slice(r.from, r.to).content, list: r.item?.list.type.name ?? null };
     }
-    return Fragment.empty;
+    return { content: Fragment.empty, list: null };
   });
   if (own.size) settle(tr, false, own);
   // The nodes as the server read them: the rows and their words.
@@ -618,21 +651,114 @@ function moveBlocks(
       return !block || indexText(block.node) !== unit.base[k];
     })) return "changed";
   }
-  return commit((state) => {
-    const ranges = units.map((unit) => rangeOf(state.doc, unit));
-    if (ranges.some((r) => !r)) return "changed";
-    const after = op.afterBlockId === null ? { to: 0 } : topRange(state.doc, op.afterBlockId);
-    if (!after || ranges.some((r) => r!.from < after.to && after.to < r!.to)) return "changed";
-    let u = 0;
-    const content: PMNode[] = [];
-    for (const item of op.items) {
-      const fragment = "blockIds" in item ? movedCopy(copies[u++]) : blocksOf(state, item.markdown);
-      fragment.forEach((node) => content.push(node));
-    }
-    const edit = state.tr.insert(after.to, Fragment.fromArray(content));
-    for (const r of [...ranges].sort((a, b) => b!.from - a!.from)) edit.delete(edit.mapping.map(r!.from), edit.mapping.map(r!.to));
-    return edit;
-  });
+  const firstRows = new Set(units.map((unit) => unit.blockIds[0]));
+  // The items of `list` that are moved originals: a list whose every item moves goes whole.
+  const wholeList = (list: PMNode) => {
+    let every = true;
+    list.forEach((child) => {
+      let holds = false;
+      child.descendants((node) => {
+        if (typeof node.attrs.blockId === "string" && firstRows.has(node.attrs.blockId)) holds = true;
+        return !holds;
+      });
+      if (!holds) every = false;
+    });
+    return every;
+  };
+  return commit(
+    // The copies, where they go.
+    (state) => {
+      const { schema } = state;
+      const ranges = units.map((unit) => rangeOf(state.doc, unit));
+      if (ranges.some((r) => !r)) return "changed";
+      const moved = ranges as RowNode[];
+      const after = op.afterBlockId === null ? null : rowNode(state.doc, op.afterBlockId);
+      if (op.afterBlockId !== null && !after) return "changed";
+      const at = after ? after.to : 0;
+      if (moved.some((r) => r.from < at && at < r.to)) return "changed";
+      // What goes in: each moved node with the list it came from, the new blocks.
+      let u = 0;
+      const parts: { node: PMNode; list: string | null }[] = [];
+      for (const item of op.items) {
+        if ("blockIds" in item) {
+          const copy = copies[u++];
+          movedCopy(copy.content).forEach((node) => parts.push({ node, list: isListItem(node) ? copy.list : null }));
+        } else blocksOf(state, item.markdown).forEach((node) => parts.push({ node, list: null }));
+      }
+      if (parts.length === 0) return "changed";
+      const gone = (listFrom: number) => {
+        const list = state.doc.nodeAt(listFrom);
+        return !!list && isList(list) && wholeList(list);
+      };
+      // Items in a row of one list's kind become one list of that kind.
+      const topLevel = (ps: typeof parts): PMNode[] => {
+        const out: PMNode[] = [];
+        let run: PMNode[] = [];
+        let kind: string | null = null;
+        const flush = () => {
+          if (run.length > 0 && kind) out.push(schema.nodes[kind].create(null, run));
+          run = [];
+          kind = null;
+        };
+        for (const part of ps) {
+          if (!part.list) {
+            flush();
+            out.push(part.node);
+            continue;
+          }
+          if (kind && kind !== part.list) flush();
+          kind = part.list;
+          run.push(part.node);
+        }
+        flush();
+        return out;
+      };
+      const allItems = parts.every((part) => part.list !== null);
+      const edit = state.tr;
+      let pos = at;
+      let nodes: PMNode[];
+      if (after?.item) {
+        const { list, listFrom, listTo } = after.item;
+        if (gone(listFrom)) return "changed";
+        if (allItems) nodes = parts.map((part) => itemOf(list, part.node));
+        else if (at === listTo - 1) {
+          pos = listTo;
+          nodes = topLevel(parts);
+        } else return "notText"; // A block cannot go between the lines of a list.
+      } else {
+        const kinds = new Set(parts.map((part) => part.list));
+        const $at = state.doc.resolve(at);
+        const before = $at.nodeBefore;
+        const next = $at.nodeAfter;
+        const kind = allItems && kinds.size === 1 ? parts[0].list! : null;
+        if (kind && before && before.type.name === kind && !gone(at - before.nodeSize)) {
+          pos = at - 1;
+          nodes = parts.map((part) => itemOf(before, part.node));
+        } else if (kind && next && next.type.name === kind && !gone(at)) {
+          pos = at + 1;
+          nodes = parts.map((part) => itemOf(next, part.node));
+        } else nodes = topLevel(parts);
+      }
+      edit.insert(pos, Fragment.fromArray(nodes));
+      return edit;
+    },
+    // The originals, struck: a node, or a list whose every item moves.
+    (state) => {
+      const ranges = units.map((unit) => rangeOf(state.doc, unit));
+      if (ranges.some((r) => !r)) return "changed";
+      const moved = ranges as RowNode[];
+      const deletions: { from: number; to: number }[] = moved.filter((r) => !r.item);
+      const byList = new Map<number, RowNode[]>();
+      for (const r of moved) if (r.item) byList.set(r.item.listFrom, [...(byList.get(r.item.listFrom) ?? []), r]);
+      for (const [listFrom, items] of byList) {
+        if (wholeList(items[0].item!.list)) deletions.push({ from: listFrom, to: items[0].item!.listTo });
+        else deletions.push(...items);
+      }
+      const edit = state.tr;
+      for (const r of [...deletions].sort((a, b) => b.from - a.from)) edit.delete(edit.mapping.map(r.from), edit.mapping.map(r.to));
+      return edit;
+    },
+  );
 }
 
 /** A moved block's copy: each indexed node takes a new id from the editor

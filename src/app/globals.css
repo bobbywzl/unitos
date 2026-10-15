@@ -67,11 +67,11 @@
      the article, the Annotations tab, the annotations full page, the
      annotation beside a note. A highlight carries its own hue instead. */
   --kind-comment: #3f6fbf;
-  --kind-explain: #c8433b;
+  --kind-explain: #7a4fc9;
   --kind-simplify: #2f8f5b;
   --kind-analyze: #1f8a8a;
   --kind-visualize: #c2408f;
-  --kind-assistant: #7a4fc9;
+  --kind-assistant: #c67139;
   --kind-link: #5b6b7a;
 
   --background: var(--paper);
@@ -127,11 +127,11 @@
   --weblink: #8ab4f8;
 
   --kind-comment: #8fb3ee;
-  --kind-explain: #ef8079;
+  --kind-explain: #b99cf5;
   --kind-simplify: #6fcf97;
   --kind-analyze: #5ec8c8;
   --kind-visualize: #f08ac8;
-  --kind-assistant: #b99cf5;
+  --kind-assistant: #d98a52;
   --kind-link: #9fb0c0;
 
   color-scheme: dark;
@@ -1978,6 +1978,66 @@ ellipse.anchor-flash {
   .graph-overlay[data-gather] [data-stitch-suggestions] {
     display: none;
   }
+}
+
+/* Breakwork (SPEC.md §32): the canvas's nodes are the buckets themselves,
+   with none of reactflow's node chrome; a handle is a dot at the side of a
+   bucket's header or a piece row, shown on hover, that a connection drags
+   from. */
+.structure-canvas .react-flow__node {
+  width: auto;
+}
+.structure-canvas .react-flow__node-bucket {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.structure-canvas .react-flow__node.selected .structure-bucket {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--clay) 45%, transparent), var(--elev-md);
+}
+.structure-canvas .structure-handle.react-flow__handle {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--card);
+  background: var(--sand-400);
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+.structure-canvas .react-flow__handle-left.structure-handle {
+  left: -6px;
+}
+.structure-canvas .react-flow__handle-right.structure-handle {
+  right: -6px;
+}
+.structure-canvas .structure-bucket:hover > .bucket-drag > .structure-handle,
+.structure-canvas [data-piece-row]:hover > .structure-handle,
+.structure-canvas .react-flow__handle.connecting,
+.structure-canvas .react-flow__handle.valid,
+.structure-canvas .structure-handle:hover {
+  opacity: 1;
+}
+.structure-canvas .structure-handle:hover,
+.structure-canvas .react-flow__handle.valid {
+  background: var(--clay);
+}
+.structure-canvas .react-flow__connection-path {
+  stroke: var(--clay);
+  stroke-width: 2;
+}
+.structure-canvas .react-flow__edge-interaction {
+  cursor: pointer;
+}
+/* A bucket the pointer is on, or one with a box in focus, rises over its
+   neighbors: an opened piece grows the bucket, and the words stay readable.
+   reactflow sets each node's z-index inline, so the rule has to win. */
+.structure-canvas .react-flow__node:hover,
+.structure-canvas .react-flow__node:focus-within {
+  z-index: 900 !important;
+}
+/* A connection's label and its open card stand over the buckets. */
+.structure-canvas .react-flow__edgelabel-renderer {
+  z-index: 5;
 }
 
 /* Documents whose recommended links await acceptance breathe on their own

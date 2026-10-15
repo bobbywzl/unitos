@@ -125,7 +125,8 @@ function words(pieces: (string | PMNode)[], t: TFunc): string {
 
 /** What a suggestion does, a line each: Add, Delete, Replace, or Move with
     its words; Format with the names of its format changes. */
-function describe(s: Suggestion, t: TFunc): ReactNode[] {
+/** What a suggestion changes, in lines: the card's and the review box's. */
+export function describe(s: Suggestion, t: TFunc): ReactNode[] {
   const lines: ReactNode[] = [];
   // An equation's TeX and a figure's caption are words: their change reads
   // as a replacement.

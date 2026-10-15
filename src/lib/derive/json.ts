@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { matchInTextLoose } from "@/lib/anchors/match";
+import { repairJsonEscapes, restoreTexEscapesDeep } from "@/lib/tex-escapes";
 
 // Tolerant extraction, strict validation. On failure the caller retries once with the
 // error appended, then surfaces failure (SPEC.md §4). Malformed output never reaches the DB.
@@ -29,22 +30,32 @@ function tryParse(s: string): unknown | null {
 }
 
 // Every reading of the output, best first: the fenced block, the whole text,
-// the text from its first brace to its last, then the truncation cuts.
+// the text from its first brace to its last; the same with the escapes JSON
+// does not know repaired (a TeX `\mathrm` written unescaped); then the
+// truncation cuts. Every reading has its TeX spans' backslashes read back
+// (lib/tex-escapes.ts): `\text` the JSON read as a tab is `\text` again.
 function* jsonCandidates(text: string): Generator<unknown> {
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence?.[1]) {
-    const r = tryParse(fence[1]);
-    if (r !== null) yield r;
+  for (const candidate of readings(text)) yield restoreTexEscapesDeep(candidate);
+}
+
+function* readings(text: string): Generator<unknown> {
+  const repaired = repairJsonEscapes(text);
+  for (const source of repaired === text ? [text] : [text, repaired]) {
+    const fence = source.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence?.[1]) {
+      const r = tryParse(fence[1]);
+      if (r !== null) yield r;
+    }
+    const whole = tryParse(source);
+    if (whole !== null) yield whole;
+    const o1 = source.indexOf("{");
+    const o2 = source.lastIndexOf("}");
+    if (o1 !== -1 && o2 > o1) {
+      const r = tryParse(source.slice(o1, o2 + 1));
+      if (r !== null) yield r;
+    }
   }
-  const whole = tryParse(text);
-  if (whole !== null) yield whole;
-  const o1 = text.indexOf("{");
-  const o2 = text.lastIndexOf("}");
-  if (o1 !== -1 && o2 > o1) {
-    const r = tryParse(text.slice(o1, o2 + 1));
-    if (r !== null) yield r;
-  }
-  yield* truncatedReadings(text);
+  yield* truncatedReadings(repaired);
 }
 
 // The output closed back into valid JSON at each place it could have ended:

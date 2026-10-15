@@ -22,6 +22,7 @@ import { reader } from "@/lib/i18n/dict/reader";
 import { settings } from "@/lib/i18n/dict/settings";
 import { signin } from "@/lib/i18n/dict/signin";
 import { stitch } from "@/lib/i18n/dict/stitch";
+import { structure } from "@/lib/i18n/dict/structure";
 import { video } from "@/lib/i18n/dict/video";
 import { works } from "@/lib/i18n/dict/works";
 import type { Lang } from "@/lib/i18n/config";
@@ -54,6 +55,7 @@ const NAMESPACES = {
   graphNotes,
   graphCover,
   graphView,
+  structure,
   video,
   settings,
   admin,

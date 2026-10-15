@@ -162,7 +162,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
 
 export type UsageMeta = {
   userId: string | null;
-  feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch
+  feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch | structure
   model: string;
   // Which pass of a feature of several passes the call is (COST5-03):
   // Stitch's route, select, expand, and answer passes, and the skeleton.

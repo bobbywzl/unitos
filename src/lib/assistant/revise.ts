@@ -17,6 +17,7 @@ import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
+import { changedSpansAt } from "@/lib/assistant/diff-window";
 
 // The revise action (SPEC.md §7): a change to many blocks of a document
 // without rich text, the spelling or the grammar across it, its register, a
@@ -67,11 +68,11 @@ export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<
 }
 
 /** The blocks the revision reads, in document order: the named ones (a
-    heading grows to its section), else the whole document; only blocks
-    whose words it may change. */
-export function reviseScope(blocks: RevisedBlock[], places: Map<string, BlockPlace>, blockIds: string[] | undefined): string[] {
+    heading of `sections` grows to its section), else the whole document;
+    only blocks whose words it may change. */
+export function reviseScope(blocks: RevisedBlock[], places: Map<string, BlockPlace>, blockIds: string[] | undefined, sections: string[] = []): string[] {
   const takes = (b: RevisedBlock) => places.has(b.id) || b.type === "EQUATION";
-  const named = blockIds?.length ? new Set(scopeOf(blocks, places, blockIds)) : null;
+  const named = blockIds?.length || sections.length ? new Set(scopeOf(blocks, places, blockIds ?? [], sections)) : null;
   return blocks.filter((b) => takes(b) && (!named || named.has(b.id))).map((b) => b.id);
 }
 
@@ -172,11 +173,183 @@ const KIND_OF_STYLE: Record<SuggestStyle, BlockKind> = {
   checklist: "list",
 };
 
-const DESCRIPTION_MAX = 300;
-const describe = (whys: string[]): string => {
-  const text = [...new Set(whys.map((w) => w.trim()).filter(Boolean))].join(" ");
-  return text.length > DESCRIPTION_MAX ? `${text.slice(0, DESCRIPTION_MAX - 1).trimEnd()}…` : text;
-};
+/** The plan card's description of an edit a pass made (SPEC.md §7): the
+    change itself, "Change “old” to “new”", when up to four stretches of
+    the block change; the three largest and the count of the rest when more
+    change; "Rewrite the paragraph that starts …" when most of its words are
+    replaced or as many are added, with its length when that moves far.
+    Never the pass's one why repeated on every edit, which names no block
+    and no words. */
+export function editDescription(t: TFunc, before: string, after: string): string {
+  const description = describeEdit(t, before, after);
+  // A quote that ends its sentence ends the description too: no second period.
+  return description.replace(/([.!?。！？])”[.。]$/, "$1”");
+}
+
+/** `text` cut to `n` characters at a whole word, never inside a bracket it opens. */
+function cutWords(text: string, n: number): string {
+  if (text.length <= n) return text;
+  let head = text.slice(0, n - 1);
+  const space = head.lastIndexOf(" ");
+  if (space > n / 2) head = head.slice(0, space);
+  const open = head.lastIndexOf("(");
+  if (open > head.lastIndexOf(")") && open > n / 3) head = head.slice(0, open);
+  return `${head.replace(/[\s,;:(]+$/, "")}…`;
+}
+
+/** Where word `i` of `list` starts in the words joined by single spaces. */
+const offsetOf = (list: string[], i: number): number => (i === 0 ? 0 : list.slice(0, i).join(" ").length + 1);
+
+function describeEdit(t: TFunc, before: string, after: string): string {
+  const cut = (text: string, n = 60) => cutWords(text, n);
+  const flatBefore = before.replace(/\s+/g, " ").trim();
+  const flatAfter = after.replace(/\s+/g, " ").trim();
+  // Every changed stretch, so an edit that changes three places names all
+  // three, and two edits of one kind read differently on the card.
+  const found = changedSpansAt(before, after);
+  if (found.length === 0) return t("api.editRewrite", { start: cut(flatBefore, 40) });
+  // Most of the words replaced, or as many added (a plain-words rewrite that
+  // grows by half): a rewrite, which no list of changes names. A short block
+  // counts as 25 words, so a clause added to one sentence stays a change.
+  const total = Math.max(25, words(flatBefore));
+  if (found.reduce((sum, s) => sum + words(s.before), 0) > total * 0.6 || found.reduce((sum, s) => sum + words(s.after), 0) > total * 0.6) {
+    return rewriteDescription(t, flatBefore, flatAfter);
+  }
+  // A stretch that only adds or only removes words reads with the word
+  // before it (after it, at the start), so both sides name its place.
+  const a = flatBefore.split(" ");
+  const b = flatAfter.split(" ");
+  const placed = found.map((s) => {
+    const left = (s.before && s.after) || (s.from > 0 && s.fromB > 0);
+    const from = s.before && s.after ? s.from : left ? s.from - 1 : s.from;
+    const to = s.before && s.after ? s.to : left ? s.to : s.to + 1;
+    const fromB = s.before && s.after ? s.fromB : left ? s.fromB - 1 : s.fromB;
+    const toB = s.before && s.after ? s.toB : left ? s.toB : s.toB + 1;
+    return {
+      before: a.slice(from, to).join(" "),
+      after: b.slice(fromB, toB).join(" "),
+      atBefore: offsetOf(a, from),
+      atAfter: offsetOf(b, fromB),
+      size: words(s.before) + words(s.after),
+    };
+  });
+  // A stretch of one or two words reads as its sentence when it is the only
+  // change and the sentence is short ("I" to "this essay" names no block, the
+  // sentence that holds it does); else as the shortest phrase around it that
+  // names one place in the block. Two short stretches of one sentence read
+  // as that sentence once.
+  const short = placed.filter((s) => words(s.before) < 3);
+  const oneSentence = short.length === placed.length && new Set(placed.map((s) => sentenceAround(flatBefore, s.before, s.atBefore))).size === 1;
+  const alone = placed.length === 1 || oneSentence;
+  const wide = placed.map((s) =>
+    words(s.before) < 3
+      ? alone && sentenceAround(flatBefore, s.before, s.atBefore).length <= 60
+        ? { before: sentenceAround(flatBefore, s.before, s.atBefore), after: sentenceAround(flatAfter, s.after, s.atAfter), wide: true, size: s.size }
+        : { ...uniquePhrase(flatBefore, flatAfter, s), wide: true, size: s.size }
+      : { before: s.before, after: s.after, wide: false, size: s.size },
+  );
+  const spans = wide.filter((s, k) => k === 0 || s.before !== wide[k - 1].before || s.after !== wide[k - 1].after);
+  // Each change in full, cut only past 60 characters.
+  const pair = (k: number, plain: number) => ({ from: cut(spans[k].before, spans[k].wide ? Math.max(plain, 60) : plain), to: cut(spans[k].after, spans[k].wide ? Math.max(plain, 60) : plain) });
+  if (spans.length === 1) {
+    const p = pair(0, spans[0].wide ? 100 : 60);
+    return t("api.editChange", { from: p.from, to: p.to });
+  }
+  // Up to four changes, each named; more, or a list past one sentence of
+  // 40 words, names the largest that fit and counts the rest. The larger
+  // changes are the ones the command made (a recast sentence), the small
+  // ones its echoes (a word for a word).
+  const bySize = spans
+    .map((s, k) => ({ k, size: s.size }))
+    .sort((x, y) => y.size - x.size || x.k - y.k)
+    .map((x) => x.k);
+  const named = (shown: number): string => {
+    const ks = bySize.slice(0, shown).sort((x, y) => x - y);
+    const ps = ks.map((k) => pair(k, 60));
+    const more = spans.length - shown;
+    const s = more === 1 ? "" : "s";
+    if (more === 0 && shown === 2) return t("api.editChangeTwo", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to });
+    if (more === 0 && shown === 3) return t("api.editChangeThree", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to });
+    if (more === 0 && shown === 4) return t("api.editChangeFour", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, g: ps[3].from, h: ps[3].to });
+    if (shown === 3) return t("api.editChangeMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, e: ps[2].from, f: ps[2].to, n: more, s });
+    if (shown === 2) return t("api.editChangeTwoMore", { a: ps[0].from, b: ps[0].to, c: ps[1].from, d: ps[1].to, n: more, s });
+    return t("api.editChangeOneMore", { a: ps[0].from, b: ps[0].to, n: more, s });
+  };
+  const fits = (text: string) => (/[\u3400-\u9fff]/.test(text) ? text.length <= 90 : words(text) <= 40);
+  for (let shown = Math.min(spans.length <= 4 ? spans.length : 3, spans.length); shown > 1; shown--) {
+    const text = named(shown);
+    if (fits(text)) return text;
+  }
+  return named(1);
+}
+
+/** A rewrite: the block's opening, and its length when it moves by a quarter
+    and by ten words or more. Words are not counted in CJK text. */
+function rewriteDescription(t: TFunc, flatBefore: string, flatAfter: string): string {
+  const start = cutWords(flatBefore, 40);
+  const from = words(flatBefore);
+  const to = words(flatAfter);
+  const cjk = /[\u3400-\u9fff]/.test(flatBefore);
+  if (!cjk && Math.abs(to - from) >= Math.max(10, from * 0.25)) return t("api.editRewriteLength", { start, from, to });
+  return t("api.editRewrite", { start });
+}
+
+const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+/** The sentence of `text` that holds `part` (its first occurrence from
+    `from`), as printed; `part` itself when it is not in the text. */
+function sentenceAround(text: string, part: string, from = 0): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const at = part ? flat.indexOf(part, from) : -1;
+  if (at < 0) return part;
+  let start = 0;
+  for (const m of flat.matchAll(/[.!?。！？]["”)]?\s+/g)) {
+    const end = m.index + m[0].length;
+    if (end <= at) start = end;
+    else break;
+  }
+  const tail = flat.slice(at + part.length).match(/[.!?。！？]["”)]?(\s|$)/);
+  const end = tail ? at + part.length + (tail.index ?? 0) + tail[0].trimEnd().length : flat.length;
+  return flat.slice(start, end).trim();
+}
+
+/** The shortest phrase around a short change that names one place in the
+    block: the change alone, then a word more on the left, on the right, or
+    both, until the phrase occurs once in the block's text. Punctuation that
+    ends the phrase is left off. */
+function uniquePhrase(flatBefore: string, flatAfter: string, s: { before: string; after: string; atBefore: number; atAfter: number }): { before: string; after: string } {
+  // The words before a change name its place better than the words after it.
+  const steps: [number, number][] = [[0, 0], [1, 0], [2, 0], [1, 1], [0, 1], [2, 1], [1, 2], [2, 2], [3, 3]];
+  const bare = (phrase: string) => phrase.replace(/[.,;:!?。，；：！？]+$/, "");
+  const once = (text: string, phrase: string) => phrase.length > 0 && text.indexOf(phrase) === text.lastIndexOf(phrase);
+  // A phrase never stops inside a bracket.
+  const balanced = (phrase: string) => (phrase.match(/\(/g) ?? []).length === (phrase.match(/\)/g) ?? []).length;
+  for (const [left, right] of steps) {
+    const before = bare(wordsAround(flatBefore, s.before, left, s.atBefore, right));
+    if ((once(flatBefore, before) && balanced(before)) || left === 3) return { before, after: bare(wordsAround(flatAfter, s.after, left, s.atAfter, right)) };
+  }
+  return { before: s.before, after: s.after };
+}
+
+/** `part` with up to `n` words of its sentence before it and `right` (`n`
+    when left out) after it, as printed (the spaces and the punctuation
+    between them kept). */
+function wordsAround(text: string, part: string, n: number, from = 0, right = n): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const sentence = sentenceAround(flat, part, from);
+  const start = flat.indexOf(sentence, Math.max(0, from - sentence.length));
+  const at = flat.indexOf(part, from) - (start < 0 ? 0 : start);
+  if (at < 0 || at >= sentence.length) return part;
+  let before = new RegExp(`(?:\\S+\\s+){0,${n}}$`).exec(sentence.slice(0, at))?.[0] ?? "";
+  let after = new RegExp(`^(?:\\s*\\S+){0,${right}}`).exec(sentence.slice(at + part.length))?.[0] ?? "";
+  // The words around never end inside a bracket they open, nor start inside
+  // one they close.
+  const open = after.lastIndexOf("(");
+  if (open >= 0 && after.indexOf(")", open) < 0) after = after.slice(0, open).replace(/[\s,;:]+$/, "");
+  const close = before.indexOf(")");
+  if (close >= 0 && before.lastIndexOf("(", close) < 0) before = before.slice(close + 1).replace(/^[\s,;:]+/, "");
+  return `${before}${part}${after}`.trim();
+}
 
 const anchorIn = (text: string, blockId: string, start: number, end: number): AssistantAnchor => ({
   blockId,
@@ -293,7 +466,7 @@ export function reviseActions(
           for (let k = 0; k < paired; k++) {
             const was = gapOld[k];
             const now = gapNew[k];
-            if (now.text !== was.text) actions.push({ type: "edit_block", blockId: was.id, newText: now.text, description: op.why });
+            if (now.text !== was.text) actions.push({ type: "edit_block", blockId: was.id, newText: now.text, description: editDescription(t, was.text, now.text) });
             if (now.kind !== kindOf(was)) actions.push({ type: "format_block", blockId: was.id, kind: now.kind, description: op.why });
             lastKept = was.id;
           }
@@ -376,7 +549,7 @@ export function reviseActions(
         if (op.op === "format_words") marks.push({ start: moved(op.start), end: moved(op.end), format: op.format, value: op.value, why: op.why });
       }
     }
-    if (text !== block.text) actions.push({ type: "edit_block", blockId, newText: text, description: describe(whys) });
+    if (text !== block.text) actions.push({ type: "edit_block", blockId, newText: text, description: editDescription(t, block.text, text) });
     for (const mark of marks) {
       const anchor = anchorIn(text, blockId, mark.start, mark.end);
       if (mark.format === "bold" || mark.format === "italic" || mark.format === "underline") {
@@ -447,9 +620,12 @@ export type ReviseRun = {
   instruction: string;
   material: string | null;
   history: ChatTurn[];
+  // The blocks themselves (a heading the heading alone), and the headings
+  // whose whole section the change covers; neither: the whole document.
   blockIds: string[] | undefined;
+  sections?: string[];
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // The change moves blocks too: the order pass runs beside the windows
   // (lib/assistant/reorder.ts), and its moves come first in the plan.
   reorder?: boolean;
@@ -457,6 +633,9 @@ export type ReviseRun = {
   signal: AbortSignal;
   deadline: AbortSignal;
 };
+
+/** The run names its blocks or sections; else it covers the whole document. */
+const scoped = (run: Pick<ReviseRun, "blockIds" | "sections">): boolean => Boolean(run.blockIds?.length || run.sections?.length);
 
 /** The order pass of a revise action: the moves, the new headings, and the
     headings that go, as block actions. The moves run one after another, so
@@ -466,7 +645,7 @@ async function reviseOrder(run: ReviseRun): Promise<{ actions: AssistantAction[]
   const { t, shape } = run;
   const blocks = run.document.blocks;
   const units = blockUnits(blocks, shape);
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, revisePlaces(blocks, shape), run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, revisePlaces(blocks, shape), run.blockIds ?? [], run.sections ?? []) : [];
   try {
     const order = await runOrderPass({
       userId: run.userId,
@@ -517,7 +696,7 @@ async function reviseOnePass(run: ReviseRun): Promise<{ actions: AssistantAction
   const blocks = run.document.blocks;
   const units = blockUnits(blocks, shape);
   const places = revisePlaces(blocks, shape);
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, places, run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, places, run.blockIds ?? [], run.sections ?? []) : [];
   try {
     const pass = await runOnePass({
       userId: run.userId,
@@ -558,7 +737,7 @@ export async function runRevise(run: ReviseRun): Promise<{ actions: AssistantAct
   // recording, or pages): the one pass, the whole document read at once.
   const blocks = run.document.blocks;
   const plain = !run.shape.format && !run.shape.media && run.shape.pages === 0;
-  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, revisePlaces(blocks, run.shape), run.blockIds) : [];
+  const scopeRowIds = scoped(run) ? scopeOf(blocks, revisePlaces(blocks, run.shape), run.blockIds ?? [], run.sections ?? []) : [];
   if (plain && fitsOnePass(blocks, scopeRowIds)) return reviseOnePass(run);
   if (!run.reorder) return runWindows(run);
   const [order, words] = await Promise.all([reviseOrder(run), runWindows(run)]);
@@ -572,10 +751,10 @@ async function runWindows(run: ReviseRun): Promise<{ actions: AssistantAction[];
   const { t } = run;
   const blocks = run.document.blocks;
   const places = revisePlaces(blocks, run.shape);
-  const scope = reviseScope(blocks, places, run.blockIds);
+  const scope = reviseScope(blocks, places, run.blockIds, run.sections ?? []);
   if (scope.length === 0) return { actions: [], warnings: [t("api.reviseNoBlocks")] };
   let all = windowsOf(blocks, places, scope);
-  let whole = !run.blockIds?.length;
+  let whole = !scoped(run);
   // A scope past the windows of one command: the target pass names the
   // blocks the command changes, and the windows run over those alone
   // (lib/assistant/target.ts).

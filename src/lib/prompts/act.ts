@@ -1,4 +1,4 @@
-import { actionLines, insertParagraphLine, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
+import { actionLines, insertParagraphLine, NEAREST_CHANGE_RULE, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import {
@@ -68,7 +68,7 @@ export function textSelectionBlock(blockId: string, text: string, core = false):
   // A core is the block collapsed to what it really says (SPEC.md §28): the
   // reader selected in the core, not in the block's own words.
   const where = core ? `the core of block ${blockId} (the block collapsed to what it really says, in plain words)` : `block ${blockId}`;
-  return `The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
+  return `This is the selection chat. The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
 }
 
 export function actPrompt(ctx: ActCtx): string {
@@ -90,20 +90,21 @@ export function actPrompt(ctx: ActCtx): string {
     "",
     `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
     "",
-    "Action types:",
+    "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(ctx.edits ?? "blocks", Boolean(ctx.transcript)),
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
     "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
-    "2a. A command that confirms a change the conversation proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: return its actions in full, and reply in one sentence. Never answer a confirmation with reply alone. A command that asks for a change never returns an empty actions list unless the change cannot be made; then reply says why.",
+    "2a. A command that confirms a change the conversation proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: return its actions in full, and reply in one sentence. Never answer a confirmation with reply alone. A command that asks for a change never returns an empty actions list unless the change cannot be made; then reply says why. A confirmation of suggestions the conversation already made (its turn says the suggestions are in the document): reply in one sentence that they are in the document, to accept or reject in the review box, and return no action.",
     "2b. When one of the reader's tools does the job better than an action (Simplify, Explain, Visualize, Define, Extract, Stitch), name the tool in reply and say in one sentence what it will do.",
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
-    "4. description: one plain sentence of what the action does, for the reader's approval list.",
+    "4. description: one plain sentence of what the action does, for the reader's approval list. It names the block by its opening words (\"the paragraph that starts 'Fuel is'\"); an action on a quote (a note, a highlight, a comment, a style, a link) whose quote does not open its block names the quote by its own first words instead (\"the sentence that starts 'Routing adds one pass'\"), and by what it is: the sentence, the two sentences, the line; \"the paragraph\" only when the quote is the whole paragraph.",
     "5. FIGURE and VIDEO blocks cannot be edited or removed. A TABLE block's words change with edit_block within its cells: the new text is the whole table, a line per row and a tab between cells, and keeps every line and every tab. In a document of handwritten pages a TABLE is the conversion's: there edit_block writes its text anew, the first line its header row, and may add or remove rows and columns, and remove_block removes it. There a PAGE block is its page's picture and keeps its text; a page's words are the blocks listed under Pages: edit_block changes them, and a new block after one of them joins its page. A SLIDE block changes with edit_block: the new text is the whole slide, a line per line of its text; an edit changes words within lines and adds or removes lines of its text boxes and of its speaker notes. A new line opens with the bullet of the lines beside it; every bullet, a table's rows, and the line Speaker notes: stay, and speaker notes a slide lacks come at its end, under the line Speaker notes:. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. A line break in a cell's words stays in its cell. A formula's cell follows the cells it reads: leave its value as it is, and the sheet computes it. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute, its merged cells, a chart's data) is listed under Sheets. A SLIDE, a SHEET, or any other TABLE block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
-    "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
+    NEAREST_CHANGE_RULE("5a"),
+    "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click. Several blocks named together take each block's tag, side by side: tags side by side render as one chip with their count.",
     `7. Write reply, every description, and every why in ${language}.`,
-    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. ${ANSWER_LENGTH} ${CORE_RULE} ${CONNECTION_RULE} ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,
+    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. ${ANSWER_LENGTH} ${CORE_RULE} ${CONNECTION_RULE} ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted. Stop at the answer: no context the question did not ask for, no point made twice, no account of how the answer was found. In the selection chat the whole reply to a question is one paragraph of at most three sentences, each under 25 words and each claim with its block, unless the message asks for detail. A question about the selected passage is answered from the passage first: what it states, in its own terms, and the conclusion it draws itself, in one sentence with its block. A second sentence only for what the question needs and the passage lacks; other blocks' findings only when the question asks for them. Each block is cited once. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",
@@ -113,21 +114,23 @@ export function actPrompt(ctx: ActCtx): string {
           "   d. Every claim in reply that rests on a passage cites it as [block <id>].",
           ctx.history.length > 0
             ? "   e. This message continues the conversation: return matches only when the message asks where else the document deals with something. Otherwise return an empty list."
-            : "   e. This is the first message of the conversation: always return matches.",
+            : "   e. This is the first message of the conversation: return matches, except where rule 10 asks for an empty list.",
         ]
       : ["9. matches: return an empty list. The reader has no selection."]),
     ...(ctx.edits === "suggestions"
       ? [
-          "10. A command that asks to change the document's words, styles, or order: one suggest action, reply null, and matches an empty list. A change of order (group by theme, organize, put in order) sets reorder: true on it. The suggestions carry the change: never write the changed text in reply.",
+          "10. A command that asks to change the document's words, styles, or order: one suggest action, reply null, and matches an empty list. A change of order (group by theme, organize, put in order) sets reorder: true on it. The suggestions carry the change: never write the changed text or the new words in reply. A page draws TeX only in an equation block: an inline formula ($…$) in a paragraph shows as its raw characters, so a command to fix it, clean it up, or make it readable asks for the same words as plain text (Unicode subscripts, arrows, and Greek letters), with no dollar signs, backslashes, or braces. A command that asks for the math in words (in plain words, in English, spelled out) asks for words: each formula as the fewest plain words that say it, with the sentence's own subject (\"the cost grows with the square of the length\"); a symbol that only names a thing keeps its name, with a Unicode subscript (Bank_2 becomes Bank₂), the same in every block.",
         ]
       : ctx.edits === "none"
         ? [
-            "10. The document's words and styles cannot be changed: a project of another account holds the document too. A command that asks to change them: say so in reply, in one sentence, and return no action for the change.",
+            "10. The document's words and styles cannot be changed: a project of another account holds the document too. A command that asks to change them: say so in reply, in one sentence, and return no action for the change. Then give what the reader can still have: a command that asks for new words for a passage (a rewrite, a shorter version, a fix) gets the new words in the reply, so the reader can use them; a command that asks for a mark or a style on a passage gets the offer, in one sentence, to highlight the passage (\"I can highlight that sentence instead.\"), no other mark, and no action unasked.",
           ]
         : [
             "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions. reply: one sentence on what will change: the plan carries the edits.",
             ...(ctx.transcript ? [`11. ${TRANSCRIPT_RULE}`] : []),
           ]),
+    "12. A command that asks for a new document (make, create, or write a document, a page, or a doc: a summary, a study guide, action items, an outline, a glossary) is one create_document action, never notes or sections in its place, and never words added to the open document. Its markdown is the whole new document, written from the material: ## headings for its parts, the points in plain words with the material's own numbers and names, and under each point the passage that supports it as a > quote line: the one sentence that states the point, of one block, copied word for word. Each point is written from its quote: every fact the point states (a number, a name, a mechanism) is in that quote's words, and a fact from another sentence gets that sentence as its own quote line. A point holds the facts of one or two sentences, so it takes one or two quote lines; a point that would need more is two points, or loses the facts that matter least. A part that summarizes a named part of the document draws on every block under that heading and keeps every number of it. A summary's own words stay under a third of the length of what it sums up, and the whole summary, its quote lines too, under half: a point holds what several lines say, and a line that adds nothing to a point is left out. The steps of a process go in the order the process runs, which the steps' own words give, not the order the material lists them. An answer under a question (an FAQ, a study guide) is in the reader's words and shorter than its quote, never the quote retyped. A document for a named audience (the sales team, a client, a manager) holds only what that audience will say or do: test figures and the debate behind a decision stay out unless the message asks for them. reply: one sentence that names the document and what it holds.",
+    "13. A message that asks for one note, one mark, or one entry per X the document names (each risk, every limit, each decision, every term): before writing the plan, list every block of the whole document that states an X, under any heading, and write one action per X, even when two X share a block. A heading named X holds some of them, not all. The key X (key numbers, key terms) are the few the document's main point rests on, never every X it gives.",
     ...(ctx.figureBlockId && ctx.edits !== "none" ? ["", ...figureWordsRules(ctx.figureBlockId, ctx.edits ?? "blocks")] : []),
     "",
     ...(ctx.history.length > 0
@@ -140,6 +143,7 @@ export function actPrompt(ctx: ActCtx): string {
     `Command: ${ctx.command}`,
     "",
     ...(ctx.web ? ["", ...WEB_LINES, ""] : []),
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"reply": string or null, "actions": [...], "matches": [{"blockId": "<id>", "quote": "<verbatim>", "why": "<sentence>"}]}',
   ].join("\n");
 }
