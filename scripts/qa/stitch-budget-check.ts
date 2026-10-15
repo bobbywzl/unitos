@@ -61,7 +61,7 @@ import {
 import { fuseRanks, rank, YEAR_TERM } from "../../src/lib/graph/rank";
 import { searchQuery } from "../../src/lib/graph/search";
 import { commandIntent } from "../../src/lib/graph/intent";
-import { asksAboutNotes, asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksAboutNotes, asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt, whyAboutAnswer } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -641,7 +641,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
 
   // ANS4-08: Stitch says it reads no notes, replies, or links.
   // ENGINE9 (ANS9-04): the notes and the replies on links are read when the command is about them; the links in the graph never.
-  check("answer rules: Stitch reads the documents' text, and the notes and replies only when listed", rules.includes("You read the documents' text, and the reader's notes and the replies on links only when the reader's message lists them") && rules.includes("notes in the Notes list and replies in the link's panel") && rules.includes("You never read the links in the graph, except the links listed as already in the project"));
+  check("answer rules: Stitch reads the documents' text, and the notes and replies only when listed", rules.includes("You read the documents' text, and the project's notes, the replies on links and the comments only when the reader's message lists them") && rules.includes("notes in the Notes list, replies in the link's panel, and comments in the Annotations tab") && rules.includes("You never read the links in the graph, except the links listed as already in the project"));
 
   // ANS4-09: the reading passes keep the last six commands.
   check("STITCH_READ_HISTORY keeps six commands", STITCH_READ_HISTORY === 6);
@@ -1255,9 +1255,9 @@ void (async () => {
   check("overEvery: across these documents, main threads, all seven texts, whole project, 主线, 贯穿, 整个项目 (ANS9-03)", over9.every(overEvery), over9.filter((c) => !overEvery(c)).join(" | "));
   check("overEvery: the main point of this document, which documents, a topic question are not", !notOver9.some(overEvery), notOver9.filter(overEvery).join(" | "));
   // ANS9-04: the notes and the replies on links are read when the command is about them.
-  const about9 = ["Where do my notes and comments disagree with the documents?", "What did I reply on the link about when The Antichrist was printed?", "Which line did I say in my notes I would open the essay with?", "Are the replies on the links resolved?", "What did we write about pity?", "我的笔记和评论在哪些地方与文档不一致？", "我在链接上的回复说了什么？", "我写的和文档一致吗？"];
+  const about9 = ["Where do my notes and comments disagree with the documents?", "What did I reply on the link about when The Antichrist was printed?", "Which line did I say in my notes I would open the essay with?", "Are my replies on the links resolved?", "What did we write about pity?", "我的笔记和评论在哪些地方与文档不一致？", "我在链接上的回复说了什么？", "我写的和文档一致吗？"];
   const notAbout9 = ["What does Ludovici's Notes add that Zarathustra itself does not say?", "What does the notes document say about pity?", "Find the contradictions between the documents.", "门肯的导言提供了哪些其他文档没有的信息？", "What does Nietzsche say about Wagner?"];
-  check("asksAboutNotes: my notes, what did I reply, the replies, 我的笔记, 回复, 我写的", about9.every(asksAboutNotes), about9.filter((c) => !asksAboutNotes(c)).join(" | "));
+  check("asksAboutNotes: my notes, what did I reply, my replies, 我的笔记, 我在链接上的回复, 我写的 (the replies and bare 回复 count no more: ANS10-05)", about9.every(asksAboutNotes), about9.filter((c) => !asksAboutNotes(c)).join(" | "));
   check("asksAboutNotes: a notes document, Ludovici's Notes, a topic question are not", !notAbout9.some(asksAboutNotes), notAbout9.filter(asksAboutNotes).join(" | "));
   // REV9-08: a contradiction question about the reader's own notes or self is a question; an imperative still draws links.
   const own9 = ["Where do my notes disagree with the documents?", "Where do I disagree with Nietzsche?", "我的笔记和文档有哪些不一致？", "Do my notes contradict any of the other documents?"];
@@ -1269,9 +1269,9 @@ void (async () => {
   const docs9 = [{ tag: "A", title: "The Antichrist", read: true }, { tag: "B", title: "Nietzsche combined notes", read: true }];
   const base9 = { documents: docs9, command: "Where do my notes disagree with the documents?", continued: false, selected: true };
   const withNotes = stitchPrompt({ ...base9, notes: ['- note in "Essay ideas": Count for the essay: 30 days.', '- reply on the link "Nietzsche combined notes" ("printed right away") – "Friedrich Nietzsche" ("not in type until 1895"): Dr. Hale says Mencken is right.'] });
-  check("stitchPrompt: the notes and replies are listed before the command, as not blocks", withNotes.includes("The reader's notes and replies, the ones nearest the command's words first") && withNotes.includes("Dr. Hale says Mencken is right.") && withNotes.indexOf("Dr. Hale") < withNotes.indexOf("The reader's command:"));
-  check("stitchPrompt: a command about the notes with none listed gets the plain sentence; a command not about them gets nothing", stitchPrompt({ ...base9, notes: [] }).includes("the Notes list holds no note, and no link of this project has a reply") && !stitchPrompt(base9).includes("The reader's notes and replies"));
-  check("answer rules: a note or a reply is never cited as a block; a notes command with no list says where they are", stitchRules("en").includes("A note or a reply is not a block: cite no block tag for it") && stitchRules("en").includes("a command that turns on them gets one sentence saying where they are, notes in the Notes list and replies in the link's panel"));
+  check("stitchPrompt: the notes and replies are listed before the command, as not blocks", withNotes.includes("The project's notes, replies and comments, the ones nearest the command's words first") && withNotes.includes("Dr. Hale says Mencken is right.") && withNotes.indexOf("Dr. Hale") < withNotes.indexOf("The reader's command:"));
+  check("stitchPrompt: a command about the notes with none listed gets the plain sentence; a command not about them gets nothing", stitchPrompt({ ...base9, notes: [] }).includes("the Notes list holds no note, no link of this project has a reply, and no document has a comment") && !stitchPrompt(base9).includes("The project's notes, replies and comments"));
+  check("answer rules: a note or a reply is never cited as a block; a notes command with no list says where they are", stitchRules("en").includes("A note, a reply or a comment is not a block: cite no block tag for it") && stitchRules("en").includes("a command that turns on them gets one sentence saying where they are, notes in the Notes list, replies in the link's panel, and comments in the Annotations tab"));
   check("config: STITCH_NOTES_BUDGET holds a few notes, under the question budget", STITCH_NOTES_BUDGET >= 1_000 && STITCH_NOTES_BUDGET <= STITCH_SELECTED_BUDGET.question / 3);
   // ANS9-02: the last answer's points reach the reading passes.
   const reply9 = [
@@ -1341,4 +1341,57 @@ void (async () => {
   // The holistic whole read (COST9-02): the threshold and the class.
   check("config: STITCH_HOLISTIC_WHOLE_THRESHOLD is above the whole threshold, under the skeleton budget", STITCH_HOLISTIC_WHOLE_THRESHOLD > STITCH_WHOLE_THRESHOLD && STITCH_HOLISTIC_WHOLE_THRESHOLD <= 60_000);
   check("commandIntent: the main threads, 主要线索, what is left unanswered are holistic; what one document adds, a date question are not", commandIntent("What are the main threads across these documents?", false, "question") === "holistic" && commandIntent("这些文档之间的主要线索是什么？", false, "question") === "holistic" && commandIntent("What question do the documents raise but leave unanswered?", false, "question") === "holistic" && commandIntent("When was The Antichrist printed?", false, "question") === "fact" && commandIntent("Where do my notes disagree with the documents?", false, "question") === "fact");
+}
+
+// [engine10] Round 10 (ENGINE10): a reply counts as the reader's only with a
+// first-person word, holistic words in other words, the page of the last
+// answer, the why-budget, the follow-up about the notes, who wrote the lines
+// read. Synchronous, like the engine9 block above.
+{
+  // ANS10-05, REV10-04: "the replies of the critics", "the reply to Kant" and bare 回复 are a text's replies; 我在…回复, 我在笔记里 are the reader's.
+  const about10 = ["What did I reply on the link about the will?", "What have I replied under the link on The Antichrist's printing?", "我在关于《敌基督》印刷年份的链接上回复了什么？", "我在笔记里写了什么关于怜悯的内容？", "我的回复说了什么？", "Are my replies on the links resolved?", "我们的笔记里有什么？"];
+  const notAbout10 = ["How does Mencken describe the replies of Nietzsche's critics?", "尼采对叔本华的回复是什么？", "Does the reply to Wagner in The Antichrist name him?", "Summarize the replies of Nietzsche's critics in these documents", "What does Schopenhauer say about the reply to Kant?", "尼采如何回复批评者？", "作者回复了哪些批评？", "What did Nietzsche write about pity?", "List the notes Ludovici added to the translation", "What do the notes say about the eternal recurrence?"];
+  check("asksAboutNotes: what did I reply, what have I replied, 我在…回复, 我在笔记里, 我的回复, my replies (ANS10-05)", about10.every(asksAboutNotes), about10.filter((c) => !asksAboutNotes(c)).join(" | "));
+  check("asksAboutNotes: the replies of the critics, the reply to Kant, 尼采的回复, bare 回复 are a text's, not the reader's (ANS10-05, REV10-04)", !notAbout10.some(asksAboutNotes), notAbout10.filter(asksAboutNotes).join(" | "));
+  check("commandIntent: the reply to Wagner is a fact question, not meta; the replies on the link are meta", commandIntent("Does the reply to Wagner in The Antichrist name him?", false, "question") === "fact" && commandIntent("Are the replies on the link resolved?", false, "question") === "meta");
+  // ANS10-01: holistic in other words reads whole (commandIntent) and shares the cut by document (overEvery).
+  const holistic10 = ["What do all these texts share?", "What is left open after these four documents?", "这四份文档的主线有哪些？", "读完这些文档，还有哪些问题没有解决？", "这四份文档有什么共同点？", "Give me the big picture of this library in a few threads.", "What is still open across these documents?", "What are the recurring themes across this library?", "这个图书馆里有哪些反复出现的主题？", "这些文档整体上有哪些尚未解决的问题？", "What do the four documents have in common?", "What are the main threads running through these four documents?"];
+  const fact10 = ["What is the main point of The Antichrist?", "Which documents mention the main themes of pessimism?", "What does BOOK TWO share with the notes?", "Which themes does Mencken name?", "门肯的导言有哪些其他文档没有的内容？", "What does How Zarathustra came into being add that no other document says?", "What are the main lines of Mencken's argument?"];
+  const intent10 = (c: string) => commandIntent(c, false, commandKind(c));
+  check("commandIntent: what the texts share, left open, 主线, 共同点, 没有解决, big picture, recurring themes are holistic (ANS10-01)", holistic10.every((c) => intent10(c) === "holistic"), holistic10.filter((c) => intent10(c) !== "holistic").join(" | "));
+  check("commandIntent: the main point of a document, the main themes of a topic, what one document shares with another, what X adds stay fact", fact10.every((c) => intent10(c) === "fact"), fact10.filter((c) => intent10(c) !== "fact").join(" | "));
+  check("overEvery: true for every holistic wording, the big picture too; false for the main themes of a topic", holistic10.every(overEvery) && !overEvery("Which documents mention the main themes of pessimism?") && !overEvery("What is the main point of this document?"), holistic10.filter((c) => !overEvery(c)).join(" | "));
+  // ANS10-04: a page or a summary of the last answer refers back.
+  const back10 = ["Make a page of it.", "把这个回答整理成一页。", "把刚才的回答做成一页。", "Turn it into a table.", "上面的回答有哪几点？", "Give me a summary of that."];
+  check("refersBack: a page of it, turn it into a table, 这个回答, 把刚才的回答, 上面的回答 (ANS10-04)", back10.every(refersBack), back10.filter((c) => !refersBack(c)).join(" | "));
+  check("refersBack: a page on a topic does not", !refersBack("Make a page of the passages on pity.") && !refersBack("把关于悲观主义的段落汇集成一页。"));
+  // ANS10-06: the why-question about the last answer.
+  check("whyAboutAnswer: why is the first one a contradiction, 为什么说第二条是矛盾; not with another document asked for, not a what-question", whyAboutAnswer("Why is the first one a contradiction rather than two editions?") && whyAboutAnswer("为什么说第二条是矛盾？") && !whyAboutAnswer("Why is the first one a contradiction, and does any other document disagree?") && !whyAboutAnswer("What does the second one say?"));
+  // backSelection: the follow-up about the notes (ANS10-03), the page of it (ANS10-04), the why-budget (ANS10-06).
+  const blk10 = (alias: string, documentId: string, text: string) => ({ id: alias.toLowerCase(), alias, type: "PARAGRAPH", text, documentId });
+  const docs10 = ["Friedrich Nietzsche", "The Antichrist", "Nietzsche combined notes"].map((title, i) => ({ doc: { id: `d${i}`, title } }));
+  const short10 = "Pity is the practice of nihilism.";
+  const long10 = "The will to power is the one principle of life. ".repeat(190); // about 2,300 tokens a block
+  const mapOf = (text: string) => {
+    const bb = new Map<string, ReturnType<typeof blk10>>();
+    for (const [a, d] of [["A7", "d0"], ["F24", "d1"], ["F25", "d1"], ["G15", "d2"]]) {
+      bb.set(a, blk10(a, d, text));
+      bb.set(a.toLowerCase(), blk10(a, d, text));
+    }
+    return bb;
+  };
+  const hist10 = [{ role: "user" as const, content: "Where do the documents disagree about dates?" }, { role: "assistant" as const, content: "1. The printing year [block A7] [block F24] [block F25]. 2. The notes say otherwise [block G15]." }];
+  const bbShort = mapOf(short10);
+  const bbLong = mapOf(long10); // four long blocks cited: about 9,200 tokens, over 6,000 and under 10,000
+  const back = (c: string, bb: Map<string, ReturnType<typeof blk10>>, kind: "question" | "page" = "question") => backSelection(c, hist10, bb, [], kind, docs10);
+  check("backSelection: a follow-up about the reader's notes reads anew; one about the threads does not (ANS10-03)", back("Which of those threads does my notes document leave out?", bbShort) === null && back("Do my notes make the second point?", bbShort) === null && back("Which of those threads is the longest?", bbShort) !== null);
+  check("backSelection: a why-question about the answer reads the cited blocks up to 10,000 tokens; a quote command keeps 6,000 (ANS10-06)", back("Why is the first one a contradiction rather than two editions?", bbLong) !== null && back("Quote the first one in full.", bbLong) === null && back("Quote the first one in full.", bbShort) !== null);
+  check("backSelection: a page of the last answer reads the cited blocks (ANS10-04)", [...(back("Make a page of it.", bbShort, "page") ?? [])].sort().join(",") === "A7,F24,F25,G15" && [...(back("把这个回答整理成一页。", bbShort, "page") ?? [])].length === 4);
+  // ANS10-02, REV10-02: another person's line is marked and the section says so; a comment lists with its document, the words it marks, and its replies.
+  const base10 = { documents: [{ tag: "A", title: "The Antichrist", read: true }], command: "What did I write about pity?", continued: false, selected: true };
+  const own10 = stitchPrompt({ ...base10, notes: ['- note in "Essay ideas": Open the essay with §7.'] });
+  const shared10 = stitchPrompt({ ...base10, notes: ['- note by Mara in "Essay ideas": Keep 1889 in the essay.', '- comment on "BOOK TWO" ("This latter doubt"): Where does he say this outright?\n  - reply by Mara: Section 186, I think.'] });
+  check("stitchPrompt: a line by another person is marked and the section says what the mark means; a one-account project's section says nothing more (ANS10-02)", shared10.includes("A line marked by <name> is another person's.") && shared10.includes('- note by Mara in "Essay ideas"') && !own10.includes("A line marked by <name>"));
+  check("stitchPrompt: a comment lists with its document and the words it marks, its replies under it (REV10-02)", shared10.includes('- comment on "BOOK TWO" ("This latter doubt"): Where does he say this outright?\n  - reply by Mara: Section 186, I think.'));
+  check("answer rules: a comment is named by its document and the words it marks; comments are in the Annotations tab", stitchRules("en").includes("a comment by its document and the words it marks") && stitchRules("en").includes("comments in the Annotations tab"));
 }
