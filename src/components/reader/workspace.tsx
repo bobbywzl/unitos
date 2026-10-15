@@ -174,8 +174,27 @@ export function Workspace({
   // The tray's notes: every note of the project, or the open document's
   // alone, as the reader picked (note-groups.tsx, SPEC.md §6).
   const [noteScope, setNoteScope] = useNoteScope();
+  // The graph lives in the URL (`graph=1`, SPEC.md §13); its state is here,
+  // above the sync, which waits while it is open (COST10-04).
+  const [graphOpen, setGraphOpen] = useState(false);
+  // Live sync: poll the corpus's rev, refresh when another account changes it,
+  // and learn who else is here (SPEC.md gained this with sharing). [cost10]
+  // While the graph is open the poll reads the notes alone and the refresh
+  // waits for it to close (use-sync.ts, COST10-04).
+  const { people: presence, live } = useNotebookSync({
+    notebookId: notebook.id,
+    documentId: activeDocumentId,
+    rev,
+    enabled: true,
+    accountId: collab.authOn ? collab.myId : null,
+    deferWhile: graphOpen,
+  });
+  // [cost10] The notes the tray and the graph show: the poll's when they are
+  // newer than the page's (a refresh that landed takes over again).
+  const liveNotebook = useMemo(() => (live && live.rev > rev ? { ...notebook, sections: live.sections } : notebook), [notebook, live, rev]);
+  const liveRev = live && live.rev > rev ? live.rev : rev;
   const { tree, pending, pendingElsewhere, actions, lastRejected, undoReject } = useOutline(
-    notebook,
+    liveNotebook,
     canEdit,
     activeDocumentId,
     noteScope === "document",
@@ -184,22 +203,13 @@ export function Workspace({
   // the tray's own section choices and Accept / Reject.
   const graphNotes = useMemo(
     () => ({
-      sections: notebook.sections,
+      sections: liveNotebook.sections,
       sectionChoices: actions.sectionChoices,
       acceptNote: actions.acceptNote,
       rejectNote: actions.rejectNote,
     }),
-    [notebook.sections, actions.sectionChoices, actions.acceptNote, actions.rejectNote],
+    [liveNotebook.sections, actions.sectionChoices, actions.acceptNote, actions.rejectNote],
   );
-  // Live sync: poll the corpus's rev, refresh when another account changes it,
-  // and learn who else is here (SPEC.md gained this with sharing).
-  const presence = useNotebookSync({
-    notebookId: notebook.id,
-    documentId: activeDocumentId,
-    rev,
-    enabled: true,
-    accountId: collab.authOn ? collab.myId : null,
-  });
   const [collapsed, setCollapsed] = useState(false);
   // Set while the tray is folded for a floating note (below), so that fold is
   // undone when the note docks or closes.
@@ -338,8 +348,7 @@ export function Workspace({
   // The graph lives in the URL (`graph=1`, SPEC.md §13): Back from a document
   // opened from the graph reopens the graph, and Back while it is open
   // closes it. Opening pushes the entry; ✕ or Escape goes back off it (or
-  // drops the parameter when the page loaded with it).
-  const [graphOpen, setGraphOpen] = useState(false);
+  // drops the parameter when the page loaded with it). graphOpen is above.
   const graphPushed = useRef(false);
   const graphInUrl = () => new URLSearchParams(window.location.search).get("graph") === "1";
   // What the graph opens on (VIEW3-04, VIEW3-09): a note shown from the tray
@@ -1158,7 +1167,7 @@ export function Workspace({
         <GraphOverlayLoader
           notebookId={notebook.id}
           activeDocumentId={activeDocumentId}
-          rev={rev}
+          rev={liveRev} // [cost10] the poll's rev while the page's refresh waits (COST10-04)
           documents={documents}
           notes={graphNotes}
           focus={graphFocus}

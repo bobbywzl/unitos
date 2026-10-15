@@ -694,7 +694,7 @@ Every write is labeled with its author: `Note.createdById` (manual notes, highli
 
 ### Live sync
 
-Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 8 seconds (every 2 while another person has the same document open): the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. Presence renders as badges in the workspace header.
+Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 8 seconds (every 2 while another person has the same document open): the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. While the graph is open, a rev move fetches the project's sections and notes alone (`GET /api/notebooks/[id]/notes-view`, `lib/notes-view.ts`: the page's shape, 7 to 23 KB in place of the page's 57 to 70 KB) for the graph and the tray, and the refresh waits until the graph closes, then runs once; the reader's panes under the graph show the page as it was until then (COST10-04, `components/collab/use-sync.ts`). Presence renders as badges in the workspace header.
 
 ### Replies
 

@@ -21,6 +21,7 @@ import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
 import { isProvenanceLink } from "@/lib/graph/provenance";
 import { withReaderLinkNotes } from "@/lib/graph/reader-link-notes";
+import { sectionView, sectionsInclude } from "@/lib/notes-view";
 import {
   corpusDistillationList,
   distillationList,
@@ -135,19 +136,9 @@ export default async function NotebookPage(props: {
           },
         },
       },
-      sections: {
-        orderBy: { order: "asc" },
-        include: {
-          notes: {
-            where: { status: { not: "REJECTED" } },
-            orderBy: { order: "asc" },
-            include: {
-              sources: { include: { document: { select: { id: true, title: true } } } },
-              replies: { orderBy: { createdAt: "asc" } },
-            },
-          },
-        },
-      },
+      // The sections and their notes: the shape GET …/notes-view answers too
+      // (lib/notes-view.ts, COST10-04).
+      sections: sectionsInclude,
     },
   });
   if (!notebook) notFound();
@@ -1076,34 +1067,10 @@ export default async function NotebookPage(props: {
   const articleOne = await articleData(paneOne);
   const articleTwo = paneTwo === paneOne ? articleOne : await articleData(paneTwo);
 
-  const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
-    id: s.id,
-    title: s.title,
-    order: s.order,
-    parentId: s.parentId,
-    notes: s.notes.map((n) => ({
-      id: n.id,
-      content: n.content,
-      gist: n.gist,
-      status: n.status,
-      derivationType: n.derivationType,
-      pinned: n.pinned,
-      order: n.order,
-      createdById: n.createdById,
-      updatedAt: n.updatedAt.toISOString(),
-      createdAt: n.createdAt.toISOString(),
-      documentId: n.documentId,
-      sources: n.sources.map((src) => ({
-        id: src.id,
-        documentId: src.documentId ?? "",
-        documentTitle: src.document?.title ?? "",
-        quotedText: src.quotedText,
-        orphaned: resolutionById.get(src.id)?.orphaned ?? src.orphaned,
-      })),
-      replies: toReplyViews(n.replies),
-    })),
-    children: [],
-  });
+  // One mapping with GET …/notes-view (lib/notes-view.ts); here a source's
+  // orphan state comes from the open panes' anchor resolution.
+  const toView = (s: (typeof notebook.sections)[number]): SectionView =>
+    sectionView(s, (src) => resolutionById.get(src.id)?.orphaned ?? src.orphaned);
   const byParent = new Map<string | null, SectionView[]>();
   for (const s of notebook.sections) {
     if (s.hidden) continue; // Annotations section: rail only, not the outline
