@@ -109,6 +109,7 @@ type LevelProps = {
   color?: Element; // the color element, resolved against the palette at render
   font?: string;
   algn?: string;
+  rtl?: boolean; // a right-to-left paragraph: its margin and bullet on the right
   marL?: number;
   indent?: number;
   bullet?: Bullet;
@@ -373,6 +374,8 @@ function parseParagraphProps(pPr: Element | null): LevelProps {
   if (!pPr) return props;
   const algn = attr(pPr, "algn");
   if (algn) props.algn = algn;
+  const rtl = attr(pPr, "rtl");
+  if (rtl !== null) props.rtl = rtl === "1" || rtl === "true";
   const marL = intAttr(pPr, "marL");
   if (marL !== null) props.marL = marL;
   const indent = intAttr(pPr, "indent");
@@ -744,7 +747,12 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
     let bulletHtml = "";
     let bulletText = "";
     if (hasWords && bullet?.kind !== "auto") counters.delete(level);
-    if (bullet && bullet.kind !== "none" && hasWords) {
+    // A bullet whose character is a space draws nothing: no label in the
+    // words. Its place in the hanging indent stays, so the words start at
+    // the margin as PowerPoint sets them. Slides benchmark finding: a
+    // template's buChar " " wrote two spaces before every line of a deck.
+    const blank = bullet?.kind === "char" && bullet.char.trim() === "" && hasWords;
+    if (bullet && bullet.kind !== "none" && hasWords && !blank) {
       const glyph = bullet.kind === "char" ? bulletGlyph(bullet.char, bullet.font) : null;
       let label = glyph?.char ?? "";
       if (bullet.kind === "auto") {
@@ -762,15 +770,21 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
       bulletHtml = `<span class="sb" style="font-size:${cqw(size, s.slideW)}${color ? `;color:${color}` : ""}${font ? `;font-family:${font}` : ""}">${escapeHtml(bulletText)}</span>`;
     }
     const algn = levelProp(s.chain, level, "algn", own);
-    const marL = levelProp(s.chain, level, "marL", own) ?? (bulletText ? 342900 * (level + 1) : 0);
-    const indent = levelProp(s.chain, level, "indent", own) ?? (bulletText ? -342900 : 0);
+    const bulleted = Boolean(bulletText) || blank;
+    const marL = levelProp(s.chain, level, "marL", own) ?? (bulleted ? 342900 * (level + 1) : 0);
+    const indent = levelProp(s.chain, level, "indent", own) ?? (bulleted ? -342900 : 0);
+    if (blank && indent < 0) bulletHtml = `<span class="sb" style="width:${cqw(-indent, s.slideW)}"></span>`;
     const lnPct = levelProp(s.chain, level, "lnSpcPct", own);
     const lnPts = levelProp(s.chain, level, "lnSpcPts", own);
     const spcBef = levelProp(s.chain, level, "spcBef", own);
     const spcAft = levelProp(s.chain, level, "spcAft", own);
     const styles: string[] = [];
+    // A right-to-left paragraph (Hebrew, Arabic) sets its words from the
+    // right: its margin and its bullet on the right side.
+    const rtl = levelProp(s.chain, level, "rtl", own) === true;
+    if (rtl) styles.push("direction:rtl");
     if (algn) styles.push(`text-align:${ALIGN[algn] ?? "left"}`);
-    if (marL) styles.push(`padding-left:${cqw(marL, s.slideW)}`);
+    if (marL) styles.push(`padding-${rtl ? "right" : "left"}:${cqw(marL, s.slideW)}`);
     if (indent) styles.push(`text-indent:${cqw(indent, s.slideW)}`);
     if (lnPts !== undefined) styles.push(`line-height:${cqw(lnPts * EMU_PER_PT, s.slideW)}`);
     else {
@@ -1197,14 +1211,17 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   const prstGeom = child(spPr, "prstGeom");
   const custGeom = child(spPr, "custGeom");
   const geometry = attr(prstGeom, "prst") ?? "rect";
-  if (LINE_GEOMETRIES.has(geometry)) {
-    out.push({ html: lineHtml(box, line, ctx), text: null, box, z: out.length + scope.zBase, title: false });
-    return;
-  }
+  // A line draws on its own; words set on it still show, in a text layer
+  // over the line's box. Slides benchmark finding: a bent or curved
+  // connector shape with words lost them.
+  const isLine = LINE_GEOMETRIES.has(geometry);
+  if (isLine) out.push({ html: lineHtml(box, line, ctx), text: null, box, z: out.length + scope.zBase, title: false });
   // A custom geometry draws as an SVG path in the shape's box; a preset
   // one as a styled div.
   let fillLayer: string;
-  if (custGeom) {
+  if (isLine) {
+    fillLayer = "";
+  } else if (custGeom) {
     fillLayer = customGeometrySvg(custGeom, box, fill, line);
   } else {
     const fillStyles = [fill && fill !== "none" ? fill : "", line && line !== "none" ? `border:${line}` : "", geometryStyle(prstGeom, box, ctx)]
@@ -1659,7 +1676,10 @@ async function renderTable(scope: SlideScope, tbl: Element, box: Box): Promise<R
   }
   const text = rowText.join("\n");
   if (text.trim().length === 0) return { html: "", text: "" };
-  return { html: `<table class="stbl">${colgroup}<tbody>${rowHtml.join("")}</tbody></table>`, text };
+  // A right-to-left table (Hebrew, Arabic) draws its first column on the
+  // right; its words keep the file's order.
+  const dir = boolAttr(tblPr, "rtl") ? ' style="direction:rtl"' : "";
+  return { html: `<table class="stbl"${dir}>${colgroup}<tbody>${rowHtml.join("")}</tbody></table>`, text };
 }
 
 /** A list style that makes every level bold: a styled table's header row. */
@@ -1954,14 +1974,30 @@ function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
   return readingOrderOf(shapes, ctx);
 }
 
+/** True when a slide's words are in a right-to-left script: Hebrew or
+    Arabic letters outnumber the others. */
+function readsRightToLeft(shapes: Placed[]): boolean {
+  let rtl = 0;
+  let all = 0;
+  for (const p of shapes) {
+    rtl += p.text?.match(/[\p{sc=Hebrew}\p{sc=Arabic}]/gu)?.length ?? 0;
+    all += p.text?.match(/\p{L}/gu)?.length ?? 0;
+  }
+  return rtl > all - rtl;
+}
+
+/** Shapes in reading order, as readingOrder says. A slide in Hebrew or
+    Arabic reads a row right to left. Slides benchmark finding: a Hebrew
+    slide read its left column before the right one it starts with. */
 function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
   const band = ctx.slideH * 0.04;
+  const rtl = readsRightToLeft(shapes);
   const key = (a: Placed, b: Placed) => {
     if (a.title !== b.title) return a.title ? -1 : 1;
     const ay = Math.round(a.box.y / band);
     const by = Math.round(b.box.y / band);
     if (ay !== by) return ay - by;
-    return a.box.x - b.box.x;
+    return rtl ? b.box.x + b.box.w - (a.box.x + a.box.w) : a.box.x - b.box.x;
   };
   const sorted = [...shapes].sort(key);
   const n = sorted.length;
@@ -1976,12 +2012,16 @@ function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
       const b = boxes[j];
       const overlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
       const above = a.y + a.h <= b.y;
-      const leftInRow = overlap > 0.5 * Math.min(a.h, b.h) && a.x + a.w <= b.x;
-      if (above || leftInRow) before[j].add(i);
+      const firstInRow = overlap > 0.5 * Math.min(a.h, b.h) && (rtl ? b.x + b.w <= a.x : a.x + a.w <= b.x);
+      if (above || firstInRow) before[j].add(i);
     }
   }
   // The first shape by the band order whose every predecessor is placed;
-  // when none is free (a staircase of rows), the first by the band order.
+  // when none is free (a loop: a staircase of rows, a diagram's labels),
+  // the one with the fewest predecessors still to place, the first by the
+  // band order among equals. Slides benchmark finding: the first by the
+  // band order alone jumped to the far column of a diagram (MSIX before
+  // WinForms) when one small label closed a loop.
   const out: Placed[] = [];
   const done = new Set<number>();
   while (out.length < n) {
@@ -1989,7 +2029,18 @@ function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
     for (let i = 0; i < n && pick < 0; i++) {
       if (!done.has(i) && [...before[i]].every((k) => done.has(k))) pick = i;
     }
-    if (pick < 0) for (let i = 0; i < n && pick < 0; i++) if (!done.has(i)) pick = i;
+    if (pick < 0) {
+      let fewest = Infinity;
+      for (let i = 0; i < n; i++) {
+        if (done.has(i)) continue;
+        let ahead = 0;
+        for (const k of before[i]) if (!done.has(k)) ahead++;
+        if (ahead < fewest) {
+          fewest = ahead;
+          pick = i;
+        }
+      }
+    }
     done.add(pick);
     out.push(sorted[pick]);
   }

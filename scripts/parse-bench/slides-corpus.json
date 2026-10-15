@@ -2918,6 +2918,1289 @@
     "merge"
    ],
    "note": "1 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "dnc-Nosenko-Async-Coroutines",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/MainEvent/Technical/Nosenko_Asynchronous_Coroutines_with_C%23.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "chart",
+    "br",
+    "hyperlink",
+    "rotation",
+    "long",
+    "google"
+   ],
+   "note": "25 slides; saved by an unnamed application"
+  },
+  {
+   "id": "dnc-Harris-Not-Thinking-Small",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2021/MainEvent/Technical/Harris_Not_Thinking_Small_-_My_Journey_to_Learning_.NET%E2%80%8B.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "autonum",
+    "chart",
+    "rotation",
+    "long",
+    "google"
+   ],
+   "note": "24 slides; saved by an unnamed application"
+  },
+  {
+   "id": "dnc-Tour-XAML-tools-VS2019",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2019/Technical/Tour%20around%20XAML%20tools%20in%20VS%202019%20for%20WPF%20and%20UWP.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "merge",
+    "hidden",
+    "sections",
+    "long"
+   ],
+   "note": "30 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Indexing-searching-NuGet",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2019/Technical/Indexing%20and%20searching%20NuGet.org%20with%20Azure%20Functions%20and%20Search.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "hidden",
+    "long"
+   ],
+   "note": "29 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Blazor-Modern-Web-WebAssembly",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2018/Technical/Decks/Blazor_Modern%20Web%20development%20with%20.NET%20and%20WebAssembly.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "levels",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "sections",
+    "long"
+   ],
+   "note": "25 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Beyond-REST-and-RPC",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/FocusOnMicroservices/Technical/Beyond-REST-and-RPC-Asynchronous-Eventing-and-Messaging-Patterns.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "smartart",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "long"
+   ],
+   "note": "32 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-App-modernization-cloud-migration",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2023/Technical/.NET%20App%20modernization%20and%20cloud%20migration%20-%20Cross%20Platform%20Enterprise%20focus/.NET%20App%20modernization%20and%20cloud%20migration%20-%20Cross%20Platform%20Enterprise%20focus.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "group",
+    "field",
+    "altcontent",
+    "comments"
+   ],
+   "note": "12 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Abdalla-Sanderson-blazor-net5",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/MainEvent/Technical/Abdalla_Sanderson_blazor-in-net5.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "br",
+    "group",
+    "rotation",
+    "comments"
+   ],
+   "note": "17 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Wengier-Source-generators",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/MainEvent/Technical/Wengier_Source_generators.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "rotation"
+   ],
+   "note": "13 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Paez-test-readability",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/MainEvent/Technical/Paez_test_readability_nicopaez.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "br",
+    "rotation"
+   ],
+   "note": "19 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "dnc-Tye-NetConf",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/FocusOnMicroservices/Technical/TyeNetConfPresentation.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "levels",
+    "group",
+    "hyperlink",
+    "sections"
+   ],
+   "note": "15 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-VS-for-Mac-Tips",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2018/Technical/Decks/Visual%20Studio%20for%20Mac%20Tips%20%26%20Tricks.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "levels",
+    "altcontent",
+    "sections",
+    "long"
+   ],
+   "note": "23 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "dnc-ASPNET-Core-Health-Checks",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2019/Technical/ASP.NET%20Core%20Health%20Checks.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "levels",
+    "br",
+    "hyperlink",
+    "altcontent",
+    "hidden",
+    "sections",
+    "long"
+   ],
+   "note": "26 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Build-Great-Libraries",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2018/Technical/Decks/Build%20Great%20Libraries%20using%20.NET%20Standard.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "hidden",
+    "sections",
+    "long"
+   ],
+   "note": "36 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Publish-or-perish",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2019/Technical/Publish%20or%20perish%20-%20tricks%20to%20successfully%20ship%20your%20.NET%20Core%203%20app.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "chart",
+    "altcontent",
+    "sections"
+   ],
+   "note": "16 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Make-Games-Unity-PlayFab",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2018/Technical/Decks/Make%20Games%20with%20.NET%20using%20Visual%20Studio%2C%20Unity%2C%20and%20PlayFab.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "chart",
+    "levels",
+    "br",
+    "hyperlink",
+    "altcontent",
+    "sections",
+    "long"
+   ],
+   "note": "23 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Hartono-WindowsAppSDK-Outro",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2021/MainEvent/Technical/Hartono_WindowsAppSDKSessionOutro.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "group"
+   ],
+   "note": "3 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Clean-Architecture-ASPNET8",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2023/Technical/Clean%20Architecture%20with%20ASP.NET%20Core%208/Clean%20Architecture%20with%20ASP.NET%20Core%208.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "rotation",
+    "sections",
+    "long"
+   ],
+   "note": "20 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Experimental-CSharp-Interceptors",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2023/Technical/Experimental%20C%23%20Interceptors%20AOT%20%26%20Performance%20for%20free/Experimental_CSharp_Interceptors_AOT_and_Performance_for_free.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "hyperlink"
+   ],
+   "note": "15 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Ajaj-react-apps-fsharp",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/MainEvent/Technical/Ajaj_dotnetconf2020-building-react-apps-in-fsharp.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "levels",
+    "br",
+    "rotation"
+   ],
+   "note": "7 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-WhyMicroservices",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2020/FocusOnMicroservices/Technical/WhyMicroservices.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "ink",
+    "long"
+   ],
+   "note": "67 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Zero-to-Mobile-Database-Hero",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2022/FocusOnMAUI/Technical/Zero%20to%20Mobile%20Database%20Hero%20-%20Learn%20to%20create%20online%20offline%20data%20storage%20capable%20cross-platform%20apps%20in%2030%20minutes%20-%20Without%20Slide%20Notes.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "br",
+    "group",
+    "hyperlink",
+    "rotation",
+    "media",
+    "long"
+   ],
+   "note": "22 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-A-lap-around-docs",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2018/Technical/Decks/A%20lap%20around%20docs.microsoft.com.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "chart",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "sections",
+    "long"
+   ],
+   "note": "48 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Charbeneau-Responsive-Blazor",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2021/MainEvent/Technical/Charbeneau_Responsive_%26_Adaptive%E2%80%8B_Tactics_for_Blazor_Apps%E2%80%8B.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "br",
+    "group",
+    "rotation",
+    "vertical"
+   ],
+   "note": "19 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnc-Galloway-Wenzel-web-UI",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/dotNETConf/bef9afab8a6620866b9374787623d671c118c110/2021/MainEvent/Technical/Galloway-Wenzel_Create_a_web_UI_with_ASP.NET_Core_-_v2.pptx",
+   "source": ".NET Conf talk decks",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "br",
+    "group",
+    "altcontent",
+    "rotation",
+    "comments",
+    "long"
+   ],
+   "note": "22 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "dnh-WhatIsdotNET-FR",
+   "url": "https://raw.githubusercontent.com/dotnet-presentations/home/112080bcffa9a9b4e6ed45c501c5b791e9df82fc/.NET%20Intro/WhatIsdotNET_FR.pptx",
+   "source": ".NET presentations",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "buchar",
+    "chart",
+    "smartart",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "comments",
+    "long"
+   ],
+   "note": "25 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "aii-01AICluster-01Roadmap-06Challenge",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/01AICluster/01Roadmap/06Challenge.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "levels",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "cjk",
+    "math",
+    "vertical",
+    "long"
+   ],
+   "note": "31 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-01AICluster-01Roadmap-07Architecture",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/01AICluster/01Roadmap/07Architecture.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "levels",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "cjk",
+    "vertical",
+    "long"
+   ],
+   "note": "29 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-02StorComm-02NetworkComm-02RDMA",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/02StorComm/02NetworkComm/02RDMA.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "table",
+    "buchar",
+    "autonum",
+    "levels",
+    "altcontent",
+    "cjk",
+    "wps"
+   ],
+   "note": "16 slides; saved by WPS 演示"
+  },
+  {
+   "id": "aii-04Train-04PostTrainRL-03PPOvsDPO",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/04Train/04PostTrainRL/03PPOvsDPO.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "levels",
+    "altcontent",
+    "cjk",
+    "long",
+    "wps"
+   ],
+   "note": "24 slides; saved by WPS 演示"
+  },
+  {
+   "id": "aii-05Infer-01Foundation-08Performance",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/05Infer/01Foundation/08Performance.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "autonum",
+    "levels",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "merge",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "25 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-06AlgoData-01Basic-05GQAMLA",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/06AlgoData/01Basic/PPT/05GQAMLA.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "levels",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "30 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-06AlgoData-03NewArch-01Review",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/06AlgoData/03NewArch/01Review.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "autonum",
+    "levels",
+    "br",
+    "altcontent",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "22 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "aii-06AlgoData-03NewArch-06Mamba",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/06AlgoData/03NewArch/06Mamba.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "levels",
+    "hyperlink",
+    "altcontent",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "40 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-06AlgoData-08Special-01ChatGPT02",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/06AlgoData/08Special/01ChatGPT02.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "levels",
+    "br",
+    "hyperlink",
+    "altcontent",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "20 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-06AlgoData-08Special-FlashMLA",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/06AlgoData/08Special/OpenDay1_FlashMLA.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "buchar",
+    "autonum",
+    "levels",
+    "hyperlink",
+    "altcontent",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "26 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "aii-07Application-07Safe-02TechDetails",
+   "url": "https://raw.githubusercontent.com/chenzomi12/AIFoundation/b97c0385ba07a62a717d82a0e7aed2927f12fc35/07Application/07Safe/02TechDetails.pptx",
+   "source": "AIInfra course decks (ZOMI)",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "autonum",
+    "levels",
+    "altcontent",
+    "merge",
+    "cjk",
+    "math",
+    "long"
+   ],
+   "note": "39 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "poi-stress013",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/integration/stress013.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "br",
+    "group",
+    "hyperlink",
+    "altcontent",
+    "rotation",
+    "math",
+    "ink",
+    "long"
+   ],
+   "note": "23 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "poi-stress021",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/integration/stress021.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "chart",
+    "smartart",
+    "group",
+    "hyperlink",
+    "field",
+    "rotation",
+    "rtl",
+    "rtlscript",
+    "long"
+   ],
+   "note": "41 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "poi-stress022",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/integration/stress022.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "smartart",
+    "levels",
+    "br",
+    "group",
+    "hyperlink",
+    "field",
+    "altcontent",
+    "rotation",
+    "merge",
+    "vertical",
+    "rtl",
+    "rtlscript",
+    "long"
+   ],
+   "note": "45 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "poi-Scheinecker",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/openxml4j/at.pzp.www_uploads_media_PP_Scheinecker-jdk6error.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "autonum",
+    "levels",
+    "br",
+    "group",
+    "rotation",
+    "long"
+   ],
+   "note": "23 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "poi-PPT2016withComment",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/xmldsign/PPT2016withComment.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "poi-bug60993",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bug60993.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "table",
+    "merge",
+    "libreoffice"
+   ],
+   "note": "1 slides; saved by LibreOffice/5.3.2.2$Linux_X86_64 LibreOffice_project/30m0$Build-2"
+  },
+  {
+   "id": "poi-crop-to-0",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/crop-to-0.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "libreoffice"
+   ],
+   "note": "3 slides; saved by LibreOffice/25.8.7.3$Linux_X86_64 LibreOffice_project/580$Build-3"
+  },
+  {
+   "id": "poi-picture-transparency",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/picture-transparency.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "libreoffice"
+   ],
+   "note": "4 slides; saved by LibreOffice/25.8.4.2$Linux_X86_64 LibreOffice_project/580$Build-2"
+  },
+  {
+   "id": "mir-quarterly-report",
+   "url": "https://raw.githubusercontent.com/aenawi/mirsam/9e5cab8eec0c2dc14c74173e084c7f06950ef037/tests/fixtures/quarterly-report.pptx",
+   "source": "mirsam test fixtures",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "levels",
+    "group",
+    "rtl",
+    "rtlscript"
+   ],
+   "note": "6 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "mir-quarterly-report-correct",
+   "url": "https://raw.githubusercontent.com/aenawi/mirsam/9e5cab8eec0c2dc14c74173e084c7f06950ef037/tests/fixtures/quarterly-report-correct.pptx",
+   "source": "mirsam test fixtures",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "levels",
+    "group",
+    "rtl",
+    "rtlscript"
+   ],
+   "note": "6 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "mir-clean",
+   "url": "https://raw.githubusercontent.com/aenawi/mirsam/9e5cab8eec0c2dc14c74173e084c7f06950ef037/tests/fixtures/clean.pptx",
+   "source": "mirsam test fixtures",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "rtl",
+    "rtlscript"
+   ],
+   "note": "1 slides; saved by an unnamed application"
+  },
+  {
+   "id": "mir-broken-arabic",
+   "url": "https://raw.githubusercontent.com/aenawi/mirsam/9e5cab8eec0c2dc14c74173e084c7f06950ef037/tests/fixtures/broken-arabic.pptx",
+   "source": "mirsam test fixtures",
+   "license": "MIT",
+   "covers": [
+    "rtl",
+    "rtlscript"
+   ],
+   "note": "1 slides; saved by an unnamed application"
+  },
+  {
+   "id": "mir-torture",
+   "url": "https://raw.githubusercontent.com/aenawi/mirsam/9e5cab8eec0c2dc14c74173e084c7f06950ef037/tests/fixtures/torture.pptx",
+   "source": "mirsam test fixtures",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "chart",
+    "altcontent",
+    "rtlscript"
+   ],
+   "note": "1 slides; saved by an unnamed application"
+  },
+  {
+   "id": "lo-date-categories",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/chart2dump/data/date-categories.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-bnc889755",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/data/pptx/bnc889755.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart",
+    "field",
+    "vertical"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf121205",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/data/pptx/tdf121205.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf127393",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/data/pptx/tdf127393.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ],
+   "note": "2 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf127811",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/data/pptx/tdf127811.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf137691-dataTable",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/chart2/qa/extras/data/pptx/tdf137691_dataTable.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart",
+    "altcontent"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf125085-WordArtFontTheme",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/oox/qa/unit/data/tdf125085_WordArtFontTheme.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "rtl"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf149551-vert270AndTextRot",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/oox/qa/unit/data/tdf149551_vert270AndTextRot.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "vertical"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-animation-sound-embedded",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/animation-sound-embedded.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [],
+   "note": "1 slides; saved by an unnamed application"
+  },
+  {
+   "id": "lo-connectors",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/connectors.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "notes",
+    "rotation"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-content-placeholder-cases",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/content-placeholder-cases.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [],
+   "note": "4 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-empty-title-placeholder",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/empty-title-placeholder.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "field"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-hidden-group-shape",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/hidden_group_shape.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "group",
+    "hidden"
+   ],
+   "note": "1 slides; saved by an unnamed application"
+  },
+  {
+   "id": "lo-master-and-eleven-layouts",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/master-and-eleven-layouts.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-pic-placeholder-with-text",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/pic-placeholder-with-text.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-pres-with-notes",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/pres-with-notes.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "comments",
+    "libreoffice"
+   ],
+   "note": "2 slides; saved by LibreOffice/24.2.3.2$Linux_X86_64 LibreOffice_project/420$Build-2"
+  },
+  {
+   "id": "lo-slide-section-test",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/slide-section-test.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "group",
+    "altcontent",
+    "rotation",
+    "sections",
+    "libreoffice"
+   ],
+   "note": "13 slides; saved by Collabora_Office/26.04.0.1$Linux_X86_64 LibreOffice_project/2770d85ded8b1a9ec115c1ba239213f54fd31120"
+  },
+  {
+   "id": "lo-slide-sections",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/slide-sections.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "notes",
+    "group",
+    "hyperlink",
+    "sections"
+   ],
+   "note": "7 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf135843-insideH",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/tdf135843_insideH.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "table",
+    "altcontent",
+    "merge",
+    "sections"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf169496-hidden-graphic",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/tdf169496_hidden_graphic.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "rotation",
+    "hidden"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "lo-tdf169694",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/tdf169694.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "ole",
+    "altcontent",
+    "libreoffice"
+   ],
+   "note": "1 slides; saved by Collabora_OfficeDev/25.04.8.0$Linux_X86_64 LibreOffice_project/75509d8afb7ef865a2efc5d5be622ad0eeb53b02"
+  },
+  {
+   "id": "lo-tdf89064",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/tdf89064.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "notes",
+    "comments",
+    "libreoffice"
+   ],
+   "note": "1 slides; saved by LibreOfficeDev/5.5.0.0.alpha0$Linux_X86_64 LibreOffice_project/59c3fe83ea86c45a92bb04abf3137f875a80ce02"
+  },
+  {
+   "id": "lo-trailing-paragraphs",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/sd/qa/unit/data/pptx/trailing-paragraphs.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "libreoffice"
+   ],
+   "note": "1 slides; saved by LibreOffice/25.8.0.4$Windows_X86_64 LibreOffice_project/48f00303701489684e67c38c28aff00cd5929e67"
+  },
+  {
+   "id": "lo-tdf160401",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/12728e3e42bed829bed1e2aed20baf9309489bee/vcl/qa/cppunit/pdfexport/data/tdf160401.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "rtl",
+    "libreoffice"
+   ],
+   "note": "1 slides; saved by LibreOfficeDev/25.2.0.0.alpha0$Linux_X86_64 LibreOffice_project/5d22f0832004127dd0d91912cc1192eb648bd8e5"
+  },
+  {
+   "id": "oxpt-CU018-Chart-Cached-Data-41",
+   "url": "https://raw.githubusercontent.com/OfficeDev/Open-Xml-PowerTools/5881422a881f6ccefce2b9801b5dc6a753670d6e/TestFiles/CU018-Chart-Cached-Data-41.pptx",
+   "source": "Open XML PowerTools test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "sc-021",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/021.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "chart",
+    "sections"
+   ],
+   "note": "4 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "sc-023",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/023.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "br"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "sc-062-shape-adjustments",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/062_shape-adjustments.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "field",
+    "connectortext"
+   ],
+   "note": "2 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "sc-autoshapes-001",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/autoshapes/001.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table",
+    "buchar",
+    "br",
+    "merge",
+    "vertical"
+   ],
+   "note": "5 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "sc-tables-009-table",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/tables/009_table.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "table",
+    "buchar",
+    "chart",
+    "levels",
+    "group",
+    "ole",
+    "altcontent"
+   ],
+   "note": "5 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "sc-charts-003-chart",
+   "url": "https://raw.githubusercontent.com/ShapeCrawler/ShapeCrawler/ccad97bcec4ea3b260e40bab6d1c9361c524da19/tests/ShapeCrawler.DevTests/Assets/charts/003%20chart.pptx",
+   "source": "ShapeCrawler test assets",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "hidden",
+    "sections"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "tika-testPPT-embeddedMP3",
+   "url": "https://raw.githubusercontent.com/apache/tika/a4384e9d49a17fd3011c83820125d6bae00cee6e/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_embeddedMP3.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "hyperlink",
+    "media"
+   ],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "tika-testWPSAttachment",
+   "url": "https://raw.githubusercontent.com/apache/tika/a4384e9d49a17fd3011c83820125d6bae00cee6e/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWPSAttachment.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "hyperlink",
+    "ole",
+    "altcontent",
+    "wps"
+   ],
+   "note": "1 slides; saved by WPS 演示"
+  },
+  {
+   "id": "docling-powerpoint-comments",
+   "url": "https://raw.githubusercontent.com/docling-project/docling/c6ef3c413b5bdb98bd2ae81a0a3d62ce711f58ec/tests/data/pptx/sources/powerpoint_comments.pptx",
+   "source": "docling documents and test files",
+   "license": "MIT",
+   "covers": [
+    "hyperlink",
+    "comments"
+   ],
+   "note": "3 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "docling-powerpoint-unrecognized-shape",
+   "url": "https://raw.githubusercontent.com/docling-project/docling/c6ef3c413b5bdb98bd2ae81a0a3d62ce711f58ec/tests/data/pptx/sources/powerpoint_unrecognized_shape.pptx",
+   "source": "docling documents and test files",
+   "license": "MIT",
+   "covers": [],
+   "note": "3 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "asp-HiddingSlides",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Presentations/Conversion/HiddingSlides.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [
+    "altcontent",
+    "hidden"
+   ],
+   "note": "3 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "asp-PresOleExample",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Presentations/Conversion/PresOleExample.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [
+    "hyperlink",
+    "ole",
+    "altcontent"
+   ],
+   "note": "2 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "asp-XamlEtalon",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Presentations/Conversion/XamlEtalon.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [
+    "table",
+    "buchar",
+    "br",
+    "group",
+    "altcontent",
+    "rotation",
+    "merge"
+   ],
+   "note": "4 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "asp-MultipleMaster",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Presentations/LowCode/MultipleMaster.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [],
+   "note": "1 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "asp-TestOlePresentation",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Shapes/TestOlePresentation.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [
+    "hyperlink",
+    "ole",
+    "altcontent"
+   ],
+   "note": "4 slides; saved by Microsoft Office PowerPoint"
+  },
+  {
+   "id": "asp-Comments1",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Slides/Comments/Comments1.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [
+    "comments"
+   ],
+   "note": "2 slides; saved by Aspose.Slides for .NET"
+  },
+  {
+   "id": "asp-AnimationAudio",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Slides/Media/AnimationAudio.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [],
+   "note": "2 slides; saved by Microsoft Macintosh PowerPoint"
+  },
+  {
+   "id": "asp-Placeholders-PromptText",
+   "url": "https://raw.githubusercontent.com/aspose-slides/Aspose.Slides-for-.NET/d6a377212d233110f902c280e98367b65b66164a/Examples/Data/Text/Placeholders_PromptText.pptx",
+   "source": "Aspose.Slides examples",
+   "license": "MIT",
+   "covers": [],
+   "note": "1 slides; saved by Aspose.Slides for .NET"
   }
  ]
 }

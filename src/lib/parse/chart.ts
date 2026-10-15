@@ -67,13 +67,25 @@ const LEGEND_POSITIONS = new Set(["r", "l", "t", "b", "tr"]);
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
-function richText(el: Element | null): string {
+/** The words of a rich text: each paragraph's runs joined, the lines (a
+    paragraph, or a line break inside one) joined with `gap`. Slides
+    benchmark finding: a title of three lines read as one word. */
+function richText(el: Element | null, gap = " "): string {
   if (!el) return "";
-  return cleanText(
-    descendants(el, "t")
-      .map((t) => t.textContent ?? "")
-      .join(""),
-  ).trim();
+  const paras = descendants(el, "p");
+  if (paras.length === 0) return cleanText(descendants(el, "t").map((t) => t.textContent ?? "").join("")).trim();
+  const lines: string[] = [];
+  for (const p of paras) {
+    let line = "";
+    for (const c of Array.from(p.children)) {
+      if (c.localName === "br") {
+        lines.push(line);
+        line = "";
+      } else line += descendants(c, "t").map((t) => t.textContent ?? "").join("");
+    }
+    lines.push(line);
+  }
+  return lines.map((l) => cleanText(l).trim()).filter(Boolean).join(gap);
 }
 
 function cacheValues(container: Element | null, palette?: ChartPalette): { text: string[]; numbers: (number | null)[]; formatCode: string | null } {
@@ -122,7 +134,9 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
 
 function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalette): Series {
   const tx = child(ser, "tx");
-  const name = tx ? cacheValues(tx, palette).text[0] ?? richText(tx) : "";
+  // The name: a cached reference, a rich text, or a literal (c:v). Slides
+  // benchmark finding: a chart that names its series in c:v lost the names.
+  const name = tx ? cacheValues(tx, palette).text[0] ?? (richText(tx) || cleanText(child(tx, "v")?.textContent ?? "").trim()) : "";
   const catEl = child(ser, "cat") ?? child(ser, "xVal");
   const cat = cacheValues(catEl, palette);
   const val = cacheValues(child(ser, "val") ?? child(ser, "yVal"), palette);
@@ -301,7 +315,10 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const H = Math.max(200, Math.round((1000 * size.height) / Math.max(1, size.width)));
   const font = Math.max(11, Math.min(20, W * 0.02));
   const out: string[] = [];
-  const explicitTitle = richText(child(chart, "title"));
+  // The title: a rich text, else a cell's cached words (c:strRef). Slides
+  // benchmark finding: a title taken from a cell read as "Chart Title".
+  const explicitTitle =
+    richText(child(chart, "title"), "\n") || cleanText(cacheValues(child(child(chart, "title"), "tx"), palette).text.join(" ")).trim();
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
   // A title element without words is the automatic title: the one series'

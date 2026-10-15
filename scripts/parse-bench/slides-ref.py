@@ -28,6 +28,7 @@ import posixpath
 import re
 import sys
 import zipfile
+from decimal import ROUND_HALF_UP, Decimal
 
 from lxml import etree
 
@@ -369,7 +370,9 @@ def label_of(paras):
             del counters[k]
         if not b or b[0] != "auto":
             counters.pop(lvl, None)
-            q["bullet"] = "" if not b or b[0] == "none" else shown_char(b[1], b[2])
+            shown = "" if not b or b[0] == "none" else shown_char(b[1], b[2])
+            # A bullet whose character is a space draws nothing.
+            q["bullet"] = "" if shown is not None and not shown.strip() else shown
             continue
         scheme, start = b[1], b[2] or 1
         last = counters.get(lvl)
@@ -452,18 +455,19 @@ def auto_label(scheme, n):
 # ── Charts ──────────────────────────────────────────────────────────────────
 
 
-DATE_CODE = re.compile(r"^(?:\[[^\]]*\])*[dmy/.\- ,]+$", re.I)
+DATE_CODE = re.compile(r"^(?:\[[^\]]*\])*(?:[dmy/.\- ,]|\\.)+$", re.I)
 
 
 def fmt_date(x, code):
     """An Excel date serial (1900 system) in a code of d, m, y parts and
-    separators: m/d/yy shows 37261 as 1/5/02."""
+    separators: m/d/yy shows 37261 as 1/5/02. A backslash shows the
+    character after it as it is: d\\-mmm\\-yy shows 44216 as 20-Jan-21."""
     import datetime
 
     day = datetime.date(1899, 12, 30) + datetime.timedelta(days=int(x))
     code = re.sub(r"^(?:\[[^\]]*\])*", "", code)
     out = ""
-    for tok in re.findall(r"y+|m+|d+|[^ymd]+", code, re.I):
+    for tok in re.findall(r"y+|m+|d+|\\.|[^ymd\\]+", code, re.I):
         t = tok.lower()
         if t[0] == "y":
             out += str(day.year) if len(t) > 2 else "%02d" % (day.year % 100)
@@ -472,7 +476,7 @@ def fmt_date(x, code):
         elif t[0] == "d":
             out += [str(day.day), "%02d" % day.day, day.strftime("%a"), day.strftime("%A")][min(len(t), 4) - 1]
         else:
-            out += tok
+            out += tok[1:] if tok.startswith("\\") else tok
     return out
 
 
@@ -513,6 +517,8 @@ def fmt_number(v, code):
         x *= 100
     m = re.search(r"\.([0#?]+)", code)
     decimals = len(m.group(1)) if m else 0
+    # Excel rounds a half away from zero: 541526.5 shows as 541,527.
+    x = float(Decimal(repr(x)).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP))
     s = ("{:,.%df}" if re.search(r"[0#],[0#]", code) else "{:.%df}") % decimals
     s = s.format(x)
     lit = re.findall(r'"([^"]*)"', code)
@@ -645,7 +651,7 @@ def chart_ref(pkg, path):
                     if c not in (None, "") and re.match(r"^-?[\d.eE+-]+$", c):
                         # A date category shows as its date: words, no
                         # number to find.
-                        is_date = bool(info[0] and DATE_CODE.match(info[0]) and re.search(r"[dmy]", info[0], re.I))
+                        is_date = bool(info[0] and DATE_CODE.match(info[0].split(";")[0]) and re.search(r"[dmy]", info[0], re.I))
                         if not is_date:
                             values.append(float(c))
                         shown.append(fmt_number(c, info[0]))

@@ -9,11 +9,13 @@
 // The corpus is slides-corpus.json: each file's source URL (pinned to a
 // commit), its license, and what it exercises. Two kinds of files: decks
 // from public test suites (Apache POI, LibreOffice, Open XML SDK,
-// python-pptx, Tika) and real-world decks committed to permissively licensed
-// repositories (course and workshop decks, talk decks, Chinese, Japanese and
-// Korean decks, decks of 100 and more slides, Google Slides and LibreOffice
-// exports). The files are other people's and are never committed: the first
-// run downloads them into .bench/slides/files/ from the corpus alone. --dir
+// python-pptx, Tika, Aspose, ShapeCrawler) and real-world decks committed to
+// permissively licensed repositories (course and workshop decks, conference
+// talk decks, Chinese, Japanese and Korean decks, Hebrew and Arabic decks,
+// math-heavy lecture decks, decks of 100 and more slides, Google Slides,
+// LibreOffice and WPS exports). The files are other people's and are never
+// committed: the first run downloads them into .bench/slides/files/ from the
+// corpus alone. --dir
 // scores every .pptx under a folder instead (ids are the paths), to look for
 // new fixtures.
 //
@@ -26,8 +28,9 @@
 //   list label at a line's start is not a word on either side).
 // - order: the pairs of pieces whose order the slide fixes — a text shape's
 //   paragraphs in turn, the title before the rest, a shape wholly above
-//   another before it, and in one row the left before the right — the share
-//   in that order in the block's text.
+//   another before it, and in one row the left before the right (the right
+//   before the left on a slide in Hebrew or Arabic) — the share in that
+//   order in the block's text.
 // - bullets: each paragraph's bullet (none, its character as drawn, a number
 //   label of its scheme), the share right among the paragraphs found.
 // - tables: each table row, its cells joined by tabs, found whole.
@@ -174,14 +177,20 @@ if (stale.length > 0) {
 // is no word's edge: a linear equation's subscript mark ("𝑥_𝐾", "ẏ_𝑗") is
 // notation, as "^" is. A private-use character
 // (U+E000-U+F8FF) is a token of its own: a symbol font's code the reader
-// has no font for, a box where the slide shows ☺ or ⇒.
+// has no font for, a box where the slide shows ☺ or ⇒. A run of subscript
+// characters and a run of superscript characters are each a token of their
+// own: "h₀" is h, 0 and "10¹²" is 10, 12, as the reference spaces a
+// script apart from its base.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
 function tokens(text: string): string[] {
-  const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
+  // A table cell starts a line too: a chart's data table writes series
+  // names "1. Column", "2. Column" in one row, the reference one per line.
+  const lines = text.split(/[\n\t]/).map((l) => l.replace(LABEL, ""));
   return (
     lines
       .join("\n")
       .replace(/[\u{1D400}-\u{1D7FF}]\p{M}*/gu, " $& ")
+      .replace(/[\u2070-\u207F\u00B9\u00B2\u00B3]+|[\u2080-\u209C]+/gu, " $& ")
       .normalize("NFKC")
       .toLowerCase()
       .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\u{E000}-\u{F8FF}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
@@ -277,7 +286,10 @@ function bodyAndNotes(text: string, html: string | undefined): { body: string; n
 function piecesOf(slide: RefSlide): Piece[] {
   const out: Piece[] = [];
   slide.shapes.forEach((s, i) => {
-    if (s.kind === "text") for (const p of s.paras) out.push({ kind: p.math ? "math" : "text", text: p.text, shape: i });
+    // A paragraph's words go after its bullet, as a line shows them, so the
+    // list label rule drops the same label on both sides: "• 2. Report"
+    // keeps its "2." as words.
+    if (s.kind === "text") for (const p of s.paras) out.push({ kind: p.math ? "math" : "text", text: p.bullet ? `${p.bullet} ${p.text}` : p.text, shape: i });
     else if (s.kind === "table") out.push({ kind: "table", text: s.rows.map((r) => r.join("\t")).join("\n"), shape: i });
     else if (s.kind === "chart") out.push({ kind: "chart", text: [s.titleText ?? "", ...s.words, ...s.shown].join("\n"), shape: i });
     else for (const t of s.texts) out.push({ kind: "smartart", text: t, shape: i });
@@ -397,6 +409,11 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
         else say.push(`  order inside a shape: a paragraph comes before the one ahead of it`);
       }
     }
+    // A slide in a right-to-left script (Hebrew or Arabic letters outnumber
+    // the others) reads a row right before left.
+    const refText = pieces.map((p) => p.text).join(" ");
+    const rtlLetters = (refText.match(/[\p{sc=Hebrew}\p{sc=Arabic}]/gu) ?? []).length;
+    const rtl = rtlLetters > (refText.match(/\p{L}/gu) ?? []).length - rtlLetters;
     const shapes = [...firstOfShape.keys()];
     for (const a of shapes) {
       for (const b of shapes) {
@@ -407,10 +424,10 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
         if (A.title !== B.title) before = A.title;
         else if (!A.title && A.box && B.box) {
           const [ax, ay, aw, ah] = A.box;
-          const [bx, by, , bh] = B.box;
+          const [bx, by, bw, bh] = B.box;
           const overlap = Math.min(ay + ah, by + bh) - Math.max(ay, by);
           if (ay + ah <= by) before = true;
-          else if (overlap > 0.5 * Math.min(ah, bh) && ax + aw <= bx) before = true;
+          else if (overlap > 0.5 * Math.min(ah, bh) && (rtl ? bx + bw <= ax : ax + aw <= bx)) before = true;
         }
         if (!before) continue;
         orderAll++;
@@ -478,6 +495,9 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
 
     // Chart values: each value as a number in the slide's words.
     const numbers = new Set((body.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => Number(n.replace(/,/g, ""))));
+    // A number in parentheses ("($277,915)", "$(479,325)") is a negative
+    // one, as an accounting format shows it.
+    for (const m of body.matchAll(/(?:\([$€£¥]?|[$€£¥]\()(\d[\d,]*(?:\.\d+)?)\)/g)) numbers.add(-Number(m[1].replace(/,/g, "")));
     for (const s of slide.shapes) {
       if (s.kind !== "chart") continue;
       for (const v of s.values) {
