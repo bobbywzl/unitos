@@ -229,7 +229,14 @@ export const STITCH_WHOLE_THRESHOLD = 30_000; // under it the answer pass reads 
 // every block, the whole read's prefix caches from the second holistic
 // command on at about a fifth of the select and answer passes' price, and
 // judged on Linda's shape it was at least as right on every pair. Every
-// other command keeps STITCH_WHOLE_THRESHOLD.
+// other command keeps STITCH_WHOLE_THRESHOLD. Round 10, on the four-document
+// 54k shape: the whole read costs about $0.08 a command (56.5k input tokens
+// on the answer model) against about $0.03 for select + answer (9k on the
+// select model, 18k on the answer model), and judged on four holistic pairs
+// (the main threads, each document's argument, what is still open, what the
+// texts share) it was more right on every one: the select path lost BOOK
+// TWO's herd morality, the Yea-saying recurrence and Schopenhauer's ascetic
+// turn. The gate stays at 60,000.
 export const STITCH_HOLISTIC_WHOLE_THRESHOLD = 60_000;
 // The reader's notes and the replies on links (ANS9-04): read by the answer
 // pass only when the command is about them (lib/prompts/stitch.ts
