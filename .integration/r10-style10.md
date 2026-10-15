@@ -22,6 +22,7 @@
 - `src/lib/i18n/dict/graphNotes.ts` — `keyFar` reworded, `keyFarTouch`, `noteOnLinkInNoteTitle`; orphan `keyPending` removed.
 - `src/lib/i18n/dict/graphView.ts` — the prototype's gestures keys, `findPlaceholderShort`; orphans `partsMoreOne`, `findPick` removed.
 - `src/lib/i18n/dict/stitch.ts` — `stitchPickClear` reads Read every document, `stitchPickOneMore` names it; orphan `generatedToggleTitle` removed.
+- `scripts/qa/ui-graph-style7.mjs` — the link panel's title check expects 13.5 px under 768 px (VIEW10-10), 16 px above.
 
 **Decisions:**
 - VIEW10-08: a Tab handler and `aria-flowto` from Note on this link to the dock's fold press (and Shift+Tab back), not the dock moved before the lists in the DOM: moving it would put the dock ahead of the panel's own controls for every Tab walk, not only from the press that opened it.
