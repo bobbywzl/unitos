@@ -437,6 +437,8 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, e
       const at = posInBlock(node, pos, h.end, true);
       const passage = h.kind === "anchor" && h.noteId ? ends.get(h.noteId) : undefined;
       if (passage !== undefined && passage !== at) continue;
+      // A match's spans in one block carry its chip once, after the last.
+      if (h.kind === "extract" && painted.some((o) => o.kind === "extract" && o.extractId === h.extractId && o.end > h.end)) continue;
       for (const chip of chipsOf(passage !== undefined ? { ...h, chipless: false } : h)) {
         decorations.push(
           Decoration.widget(at, chipWidget(chip, t), {
