@@ -118,11 +118,9 @@ try {
   const nv = apiSince(changed, "/notes-view");
   check("a rev move while the graph is open reads …/notes-view (200)", sawNotes, nv.map((e) => `${e.status} ${e.bytes} B at +${((e.t - changed) / 1000).toFixed(1)} s`).join(", "));
   await page.locator('[data-track="graph-notes"]').first().click({ force: true }).catch(() => undefined);
-  // A note on one document lists under "n notes on one document": Show opens them.
-  const single = page.locator('[data-track="graph-notes-single"][aria-expanded="false"]');
-  await until(() => single.count().then((n) => n > 0), 10000);
-  await single.first().click().catch(() => undefined);
-  const row = page.locator("[data-graph-notes-single] [data-graph-notes-row]", { hasText: TAG });
+  // Mara's note is new to Linda, so it lists first among the notes across
+  // documents while new (WALK10-01), not under "n notes on one document".
+  const row = page.locator(`[data-graph-notes-row="${maraNote}"]`);
   const shown = await until(() => row.count().then((n) => n > 0), 15000);
   check("the graph's Notes list shows Mara's note within the poll", shown, `+${((Date.now() - changed) / 1000).toFixed(1)} s`);
   check("the tray under the graph lists it too", (await page.locator(`[data-note-id="${maraNote}"]`).count()) > 0);
