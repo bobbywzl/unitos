@@ -44,9 +44,12 @@ for (const w of [1440, 390]) {
   if (w < 640) await page.locator('[data-track="stitch-expand"], [aria-label="Open Stitch"], [aria-label="展开缝合"]').first().click().catch(() => {});
   const input = page.locator('[data-track="stitch-send"]').locator("xpath=ancestor::form[1]").locator("textarea");
   await input.fill(zh ? "叔本华说同情有什么作用？" : "What does Schopenhauer say pity does?");
+  // Kept turns of earlier commands on this project draw their own lines: wait for this command's, the one past them.
+  const lines = page.locator('[data-track="stitch-documents-read"]');
+  const before = await lines.count();
   await page.click('[data-track="stitch-send"]');
-  const line = page.locator('[data-track="stitch-documents-read"]').last();
-  await line.waitFor({ timeout: 120000 }).catch(() => {});
+  await page.waitForFunction((n) => document.querySelectorAll('[data-track="stitch-documents-read"]').length > n, before, { timeout: 120000 }).catch(() => {});
+  const line = lines.last();
   const text = (await line.innerText().catch(() => "")).trim();
   console.log(`  ${w} ${LANG}: "${text}"`);
   if (after) check(zh ? /已读 2 \/ 2 篇选取的文档 · 5 篇未选取/.test(text) : /^Read 2 of 2 picked · 5 not picked$/.test(text), `${w} ${LANG}: the line says the documents not picked`, text);
