@@ -79,7 +79,6 @@ const en = {
   sideChatPlaceholder: "Ask about the quote",
   backToConversation: "Back",
   backToConversationTitle: "Back to the conversation this side chat came from.",
-  sideChatOpened: "Side chat",
   // Thinking control (SPEC.md §7): Fast Thinking, or Deep Thinking
   thinkingFast: "Fast Thinking",
   thinkingFastHint:
@@ -137,7 +136,6 @@ const en = {
   noteAssistantPlaceholder: "Describe any changes you want to make…",
   noteAssistantClose: "Close the assistant",
   noteAssistantSend: "Send",
-  noteAssistantStop: "Stop",
   noteAssistantApply: "Apply to the note",
   noteAssistantDiscard: "Discard",
   noteAssistantApplied: "Applied. Cancel on the note brings back what it said before.",
@@ -164,6 +162,9 @@ const en = {
   assistantFailedStatus: "Assistant failed ({status})",
   taskFailed: "Task failed",
   taskFailedStatus: "Task failed ({status})",
+  // [style10] TOOL16-06: the one failure line under a command the assistant did not answer (the Stitch box; the
+  // interaction loop uses the same key and words). The raw diagnostic stays out of the page.
+  failedServer: "No answer: the assistant had a problem. Try again.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -230,7 +231,6 @@ const zh: Record<keyof typeof en, string> = {
   sideChatPlaceholder: "就引用的内容提问",
   backToConversation: "返回",
   backToConversationTitle: "返回这条支线对话所属的对话。",
-  sideChatOpened: "支线对话",
   thinkingFast: "快速思考",
   thinkingFastHint: "快速思考：助手作答前尽量少推理。更快，适合材料能直接回答的问题。",
   thinkingDeep: "深度思考",
@@ -278,7 +278,6 @@ const zh: Record<keyof typeof en, string> = {
   noteAssistantPlaceholder: "描述你想做的修改…",
   noteAssistantClose: "关闭助手",
   noteAssistantSend: "发送",
-  noteAssistantStop: "停止",
   noteAssistantApply: "应用到笔记",
   noteAssistantDiscard: "放弃",
   noteAssistantApplied: "已应用。笔记上的取消可恢复原来的内容。",
@@ -302,6 +301,7 @@ const zh: Record<keyof typeof en, string> = {
   assistantFailedStatus: "助手请求失败（{status}）",
   taskFailed: "任务失败",
   taskFailedStatus: "任务失败（{status}）",
+  failedServer: "没有回答：助手出了问题。请重试。",
 };
 
 export const assistant = { en, zh } as const;

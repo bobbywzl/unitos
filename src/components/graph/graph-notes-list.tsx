@@ -54,7 +54,7 @@ export function NotesListToggle({
       aria-expanded={open}
       aria-controls={controls}
       data-tip={t("graphNotes.notesToggleTitle")}
-      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 max-md:gap-1 max-md:px-2 hover:text-clay-800 ${
+      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 max-md:gap-1 max-md:px-2 hover:text-clay-800 pointer-coarse:min-h-10 ${
         open ? "border-line bg-clay-100 text-clay-800" : ctx.sectionId ? "border-sage-400 text-sage-800" : "border-line text-sand-600"
       }`}
     >
@@ -300,7 +300,7 @@ export function GraphNotesList({
           value={ctx.sectionId ?? ""}
           onChange={(e) => ctx.setSectionId(e.target.value || null)}
           data-track="graph-notes-section"
-          className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2.5 py-1 ${TEXT_BODY} text-ink`}
+          className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2.5 py-1 ${TEXT_BODY} text-ink pointer-coarse:min-h-10`}
         >
           <option value="">{t("graphNotes.notesSectionAll")}</option>
           {ctx.sectionChoices.map((c) => (
@@ -469,7 +469,7 @@ function NotesListRow({
           }}
           data-track="graph-notes-expand"
           aria-expanded={open}
-          className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
+          className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60 pointer-coarse:min-h-10"
         >
           <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>{noteLine(note)}</span>
         </button>

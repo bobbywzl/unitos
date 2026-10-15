@@ -1,8 +1,8 @@
 // [style7] One look per role across the graph's panels: the node card, the
 // link panel, the side lists, Find, and the key. A control that does the same
 // job looks the same everywhere (VIEW7-01..04). Sizes: 24 px under a mouse;
-// under a finger a row action is 44 px (WALK6-09), ✕ and a lead button 40, a
-// document chip 32.
+// under a finger a row action is 44 px (WALK6-09), ✕, a lead button, a pill,
+// a list row, and a document chip 40 ([style10] VIEW10-09: nothing under 40).
 
 /** [style8] VIEW7-08: the graph's text sizes, four steps. Every panel, list,
     card, and the key take their size from here; a new line picks one of four.
@@ -13,7 +13,8 @@
     - TEXT_NAME 13.5: a name that heads a row or a list: a Documents row, a
       list's name, the hover card's title, a generated document's title.
     - TEXT_TITLE 16: a panel's title, and ✕.
-    The page title (18, display face) and the Stitch box keep theirs. */
+    The page title (18, display face) keeps its own; the Stitch box and the
+    reply thread take the four ([style10] VIEW10-07). */
 export const TEXT_META = "text-[11px]";
 export const TEXT_BODY = "text-[12.5px]";
 export const TEXT_NAME = "text-[13.5px]";
@@ -48,7 +49,7 @@ export const LEAD_PRIMARY = `${LEAD} border-clay bg-clay text-clay-fg hover:bg-c
 
 /** A document's name as a chip that opens or shows it. */
 export const DOC_CHIP =
-  `inline-block min-w-0 truncate rounded-full bg-sand-200 px-2.5 ${TEXT_META} leading-6 font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:leading-8`;
+  `inline-block min-w-0 truncate rounded-full bg-sand-200 px-2.5 ${TEXT_META} leading-6 font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:leading-10`;
 
 /** [lists8] WALK8-09: a side list's head row (its name, filter, switches,
     ✕) stays at the top while the list scrolls. The list's p-4 is the row's own

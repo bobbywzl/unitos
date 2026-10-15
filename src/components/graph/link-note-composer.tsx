@@ -67,6 +67,14 @@ export function useNoteOnLink(link: NoteOnLinkLink): (() => void) | null {
   };
 }
 
+/** [style10] VIEW10-10: every end of the link is in the new note already: the
+    panel's Note on this link then reads In the note and is not a press. */
+export function useLinkInNote(link: NoteOnLinkLink): boolean {
+  const gather = useNoteGather();
+  if (!gather) return false;
+  return linkEnds(link).every((q) => gather.has(q));
+}
+
 /** Note on this link where no action row holds it (the Recommended links list). */
 export function NoteOnLink({ link }: { link: NoteOnLinkLink }) {
   const t = useT();

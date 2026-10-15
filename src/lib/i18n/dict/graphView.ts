@@ -14,7 +14,6 @@ const en = {
   cardNotes: "{n} note{s}",
   cardContents: "Contents",
   // The Documents list's parts line past PARTS_CAP parts (VIEW4-06, P4).
-  partsMoreOne: "1 more part",
   partsMore: "{n} more parts",
   cardLinks: "Links",
   cardNotesHead: "Notes",
@@ -48,6 +47,9 @@ const en = {
   cardHintOpen: "Click to open · right-click or long press for its card · ⇧-click to pick for Stitch",
   gesturesOpen:
     "Click a node to open it · right-click or long press for its card · ⇧-click to pick it for Stitch · drag to move · scroll to pan · pinch or Ctrl+scroll to zoom",
+  // [view10] VIEW10-03: a touch screen has no ⇧-click, right-click, arrow keys, or Ctrl+scroll.
+  gesturesTouchSelect: "Tap a node for its card, tap again to open it · Pick documents in the Stitch box, then tap nodes · pinch to zoom",
+  gesturesTouchOpen: "Tap a node to open it, long press for its card · Pick documents in the Stitch box, then tap nodes · pinch to zoom",
 
   // The last Stitch answer on the graph
   fromLastAnswer: "From the last Stitch answer",
@@ -55,12 +57,13 @@ const en = {
   // Find across the project (graph-find.tsx)
   findLabel: "Find across the project",
   findPlaceholder: "Find a word across the documents…",
+  // [style10] VIEW10-09: the box is 104 px wide under 768 px.
+  findPlaceholderShort: "Find",
   findClear: "Clear the find",
   findSummary: "Found in {n} of {total} document{ts} · {p} passage{ps}",
   findNone: "No passage has these words.",
   findLoading: "Finding…",
   findFailed: "Find did not answer. Try again.",
-  findPick: "Pick these {n} documents",
   findPickOne: "Pick this document",
   findAsk: "Ask Stitch",
   findAskWithPicks: "Ask Stitch about these {n} and your {m} other pick{ms}",
@@ -84,7 +87,6 @@ const zh: Record<keyof typeof en, string> = {
   cardPicked: "已为缝合选取",
   cardNotes: "{n} 条笔记",
   cardContents: "目录",
-  partsMoreOne: "还有 1 个部分",
   partsMore: "还有 {n} 个部分",
   cardLinks: "链接",
   cardNotesHead: "笔记",
@@ -116,15 +118,17 @@ const zh: Record<keyof typeof en, string> = {
   cardHintOpen: "点击打开 · 右键或长按查看卡片 · ⇧-点击为缝合选取",
   gesturesOpen:
     "点击节点打开 · 右键或长按查看卡片 · ⇧-点击为缝合选取 · 拖动可移动 · 滚动可平移 · 双指捏合或 Ctrl+滚动可缩放",
+  gesturesTouchSelect: "轻点节点查看卡片，再点一次打开 · 在缝合框按“选取文档”后轻点节点 · 双指捏合可缩放",
+  gesturesTouchOpen: "轻点节点打开，长按查看卡片 · 在缝合框按“选取文档”后轻点节点 · 双指捏合可缩放",
   fromLastAnswer: "来自上一次缝合回答",
   findLabel: "在项目中查找",
   findPlaceholder: "在所有文档中查找词语…",
+  findPlaceholderShort: "查找",
   findClear: "清除查找",
   findSummary: "在 {total} 个文档中的 {n} 个找到 · {p} 个片段",
   findNone: "没有片段包含这些词。",
   findLoading: "正在查找…",
   findFailed: "查找没有返回结果。请重试。",
-  findPick: "选取这 {n} 个文档",
   findPickOne: "选取这个文档",
   findAsk: "问缝合",
   findAskWithPicks: "就这 {n} 个和你另选的 {m} 个问缝合",

@@ -2022,6 +2022,13 @@ ellipse.anchor-flash {
 .corpus-graph .react-flow__controls-button:hover {
   background: var(--sand-200);
 }
+/* [view10] VIEW10-09: under a finger the zoom stack's buttons are 40 px, not 26×27. */
+@media (pointer: coarse) {
+  .corpus-graph .react-flow__controls-button {
+    width: 40px;
+    height: 40px;
+  }
+}
 .corpus-graph .react-flow__controls-button svg {
   fill: currentColor;
 }
@@ -2055,6 +2062,13 @@ ellipse.anchor-flash {
 .corpus-graph .graph-coverage-ring circle {
   r: calc(var(--ring-dot, 7px) + max(3.5px, calc(3px / var(--graph-zoom, 1))));
   stroke-width: max(2px, calc(1px / var(--graph-zoom, 1)));
+}
+/* [style10] VIEW10-05: how much the ring grew past its near-zoom size, in
+   flow units (the extra off the dot, and half the extra stroke): the node's
+   chips sit right of it by this much (graph-view.tsx), so the comments chip
+   clears the ring at zoom 0.71–0.85 instead of crossing it by 1–2 px. */
+.corpus-graph {
+  --graph-ring-grow: calc(max(3.5px, 3px / var(--graph-zoom, 1)) - 3.5px + (max(2px, 2px / var(--graph-zoom, 1)) - 2px) / 2);
 }
 /* [style9] VIEW9-01: zoomed out, the comments chip hides (below), so a node
    with a comment waiting on this account draws its ring in the comment
@@ -2102,19 +2116,24 @@ ellipse.anchor-flash {
     transform 0.2s ease,
     box-shadow 0.2s ease;
 }
+/* [view10] VIEW10-06: the opacity blends the stroke into the paper. A one-link
+   clay-600 curve at 0.7 read 2.43:1 on light paper (3.86 dark); at 0.85 it
+   reads 3.24:1 light, 5.56 dark. Recommended dashes, sand-500 at 0.45, read
+   1.44:1 light and 1.74 dark; sand-700 at 0.7 reads 2.98 light, 4.96 dark. */
 .corpus-graph .graph-curve {
-  opacity: 0.7;
+  opacity: 0.85;
   transition: opacity 0.25s ease;
 }
 .corpus-graph .graph-curve[data-rec] {
-  opacity: 0.45;
+  opacity: 0.7;
 }
 .corpus-graph .graph-curve-stroke {
   stroke-width: var(--w);
   transition: stroke-width 0.25s ease;
 }
 .corpus-graph .graph-note-curve {
-  opacity: 0.8;
+  /* [view10] VIEW10-06: sage-600 at 0.9 reads 3.02:1 light, 5.34 dark (sage-500 at 0.8 read 1.95 light). */
+  opacity: 0.9;
   transition: opacity 0.25s ease;
 }
 .corpus-graph .graph-note-stroke {
@@ -2187,12 +2206,25 @@ ellipse.anchor-flash {
 /* A quiet canvas at a far zoom (VIEW4-06): no notes chip on a node, and a
    curve's link count and notes pill only while the curve is lit (hovered,
    pinned, or its link open); the replies mark always draws. graph-view.tsx
-   sets data-far below zoom 0.7. */
+   sets data-far below zoom 0.68 and clears it above 0.73 (VIEW10-05: the band
+   keeps the last state between them). */
 .corpus-graph[data-far] [data-graph-node-notes],
 .corpus-graph[data-far] [data-graph-node-comments],
 .corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="count"],
 .corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="notes"] {
   display: none;
+}
+/* [style10] WALK10-03: on a phone the fit of forty documents rests at zoom
+   0.21, where the waiting ring is 6 px and seven presses of + lose the ringed
+   nodes before the chips show, so a node whose ring waits keeps its comments
+   chip drawn: at its screen size (the chip is in flow units; up to 3.5×),
+   right of the ring. */
+@media (pointer: coarse) {
+  .corpus-graph[data-far] [data-graph-node-comments][data-waits] {
+    display: flex;
+    transform: scale(min(3.5, calc(1 / var(--graph-zoom, 1))));
+    transform-origin: left center;
+  }
 }
 /* A curve reached by keyboard (] and [) shows where it runs. */
 .corpus-graph .react-flow__edge:focus {

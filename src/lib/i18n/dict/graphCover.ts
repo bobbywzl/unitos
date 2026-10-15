@@ -44,7 +44,10 @@ const en = {
   commentOpenTitle: "Open this comment in the reader",
   commentResolved: "Resolved",
   commentWaitsTitle: "Waiting on you: the newest words are another person's and not resolved",
-  keyComments: "Open comments on a document; ? when one waits on you",
+  keyComments: "Open comments on a document",
+  // [view10] VIEW10-03: the waiting mark, explained once: the ? and the far-zoom ring.
+  keyWaiting: "? beside a count: a reply or a comment waits on you; zoomed out, the ring turns comment blue.",
+  keyNodeNotes: "Notes written in this document or quoting it; a dot when one is pending",
   // [lists8] WALK8-02: the Documents head's open comments, pressed.
   commentsAllTitle: "List every open comment, under its document. Press again for the documents.",
   // [lists8] WALK8-11: a card whose comments are all resolved.
@@ -83,6 +86,9 @@ const en = {
   composerQueued: "Saved offline. It lands in {section} once you are back online.",
   composerShow: "Show",
   composerOpenQuote: "Open this passage in the reader",
+  // [view10] VIEW10-01: one link's two ends in the note, as one row.
+  composerLinkPair: "Both passages of {a} ⇄ {b}",
+  composerLinkPairTitle: "Open this link. In the note, in its panel, takes a passage out.",
   // Write a page from these (note-gather.tsx, VIEW5-05).
   composerWritePage: "Write a page from these",
   composerWritePageTitle: "Adds the quotes' documents to the pick and puts a command in the Stitch box. Nothing is sent until you press Send.",
@@ -128,7 +134,9 @@ const zh: Record<keyof typeof en, string> = {
   commentOpenTitle: "在阅读器中打开这条评论",
   commentResolved: "已解决",
   commentWaitsTitle: "待你回复：最新一段话是别人写的且未解决",
-  keyComments: "文档上未解决的评论；有评论待你回复时显示 ?",
+  keyComments: "文档上未解决的评论",
+  keyWaiting: "数字旁的 ?：有回复或评论待你回复；缩小视图时，改为把环画成评论颜色。",
+  keyNodeNotes: "在这个文档中写下或引用它的笔记；有待定笔记时带一个点",
   commentsAllTitle: "按文档列出每条未解决的评论。再按一次回到文档。",
   commentsResolvedOne: "1 条已解决的评论",
   commentsResolvedMany: "{n} 条已解决的评论",
@@ -162,6 +170,8 @@ const zh: Record<keyof typeof en, string> = {
   composerQueued: "已离线保存。恢复联网后会存入 {section}。",
   composerShow: "查看",
   composerOpenQuote: "在阅读器中打开这个片段",
+  composerLinkPair: "{a} ⇄ {b} 的两段",
+  composerLinkPairTitle: "打开这个链接。在它的面板中按“已在笔记中”可移除一段。",
   composerWritePage: "用这些写一页",
   composerWritePageTitle: "把引文所在的文档加入选取，并在缝合框中写好命令。按发送之前不会发出任何内容。",
   composerWritePageCommand: "按这个顺序，用下面这些片段写一页，每段都作为引文保留：",

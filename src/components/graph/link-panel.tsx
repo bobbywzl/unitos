@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, ACTION_NOTE_IN, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -12,7 +12,7 @@ import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-l
 import { ArrowLeftIcon, CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { LinkDetail } from "@/components/graph/link-detail";
-import { useNoteOnLink } from "@/components/graph/link-note-composer";
+import { useLinkInNote, useNoteOnLink } from "@/components/graph/link-note-composer";
 import { LinkReplies } from "@/components/graph/link-replies";
 import { LinkNotes } from "@/components/graph/graph-notes";
 
@@ -76,6 +76,7 @@ export function LinkPanel({
   // link puts the link's ends into the new note (WALK9-10).
   const [replyRequest, setReplyRequest] = useState(0);
   const noteOnLink = useNoteOnLink(link);
+  const linkInNote = useLinkInNote(link); // [style10] VIEW10-10
   // As ReplyThread: with sign-in off, Reply shows only on a thread that has replies.
   const canReply = canEdit && !link.crossAccount?.outside && (authOn || (link.replies?.length ?? 0) > 0);
   const accepted = !link.recommended || decided === "accepted";
@@ -151,6 +152,9 @@ export function LinkPanel({
 
   // [lists8] WALK8-05: where the link sits among its curve's links; the step wraps.
   const at = curveLinks && onStep && curveLinks.length > 1 ? curveLinks.findIndex((l) => l.id === link.id) : -1;
+  // [style10] VIEW10-10: under 768 px, with the step in the head row, the title
+  // takes the next row whole, so it reads in one or two lines, not four.
+  const crowded = at >= 0;
   const step = (by: number) => {
     if (!curveLinks || !onStep || at < 0) return;
     onStep(curveLinks[(at + by + curveLinks.length) % curveLinks.length]);
@@ -167,7 +171,7 @@ export function LinkPanel({
       aria-label={t("panes.graphLinkPanel")}
       className="menu-in absolute top-3 right-3 z-10 flex max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
-      <div className="flex items-start gap-2">
+      <div className={`flex items-start gap-2 ${crowded ? "max-md:flex-wrap" : ""}`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -180,7 +184,8 @@ export function LinkPanel({
           </button>
         )}
         {/* [style7] VIEW7-04: the panel's title, as the node card's (same place, same size). */}
-        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink`}>
+        {/* [style10] VIEW10-10: TEXT_NAME under 768 px, so two titles fit in one or two lines beside "1 of 2". */}
+        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink max-md:text-[13.5px] ${crowded ? "max-md:order-last max-md:basis-full" : ""}`}>
           {loop
             ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
             : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
@@ -213,7 +218,7 @@ export function LinkPanel({
           data-track="graph-link-panel-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className={`-mt-1 -mr-1 ${CLOSE}`}
+          className={`-mt-1 -mr-1 ${CLOSE} ${crowded ? "max-md:ml-auto" : ""}`}
         >
           ✕
         </button>
@@ -287,14 +292,31 @@ export function LinkPanel({
                 </button>
               )}
               {noteOnLink && (
+                // [style10] VIEW10-10: while both ends are in the new note it reads
+                // In the note, as the passages do, and is not a press (the
+                // passages' In the note takes an end out; Discard drops the note).
                 <button
-                  onClick={noteOnLink}
+                  onClick={linkInNote ? undefined : noteOnLink}
+                  aria-pressed={linkInNote}
+                  aria-disabled={linkInNote || undefined}
+                  aria-flowto={linkInNote ? "graph-note-gather" : undefined}
+                  onKeyDown={(e) => {
+                    // [style10] VIEW10-08: Tab from the press goes to the note it
+                    // opened (the dock's fold press), not through the panel's
+                    // controls between; aria-flowto says so to a screen reader.
+                    if (!linkInNote || e.key !== "Tab" || e.shiftKey) return;
+                    const fold = document.querySelector<HTMLElement>('#graph-note-gather [data-track="graph-note-gather-fold"]');
+                    if (!fold) return;
+                    e.preventDefault();
+                    fold.focus();
+                  }}
                   data-track="graph-link-note"
-                  data-tip={t("graphNotes.noteOnLinkTitle")}
-                  className={ACTION_NOTE}
+                  data-graph-link-note={linkInNote ? "in" : "out"}
+                  data-tip={t(linkInNote ? "graphNotes.noteOnLinkInNoteTitle" : "graphNotes.noteOnLinkTitle")}
+                  className={linkInNote ? `${ACTION_NOTE_IN} cursor-default` : ACTION_NOTE}
                 >
                   <NotesIcon size={11} />
-                  {t("graphNotes.noteOnLink")}
+                  {t(linkInNote ? "graphCover.addedToNote" : "graphNotes.noteOnLink")}
                 </button>
               )}
               {canRemove && (
