@@ -30,6 +30,7 @@ import { useWantProvenance } from "@/components/graph/provenance-want";
 import { PartDot } from "@/components/graph/coverage"; // [cover4]
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 import { NodeCommentsLine } from "@/components/graph/coverage"; // [layer5]
+import { rememberPartIds } from "@/components/graph/part-ids"; // [cost10]
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
@@ -51,6 +52,7 @@ function useOutline(notebookId: string, documentId: string, version: unknown): D
       .then((r) => (r.ok ? (r.json() as Promise<DocumentOutline>) : null))
       .then((o) => {
         if (!o) return;
+        rememberPartIds(notebookId, documentId, o.parts.map((p) => p.blockId)); // [cost10] COST10-03: the coverage pairs its counts with these ids
         outlines.set(key, o);
         setState({ key, outline: o });
       })
