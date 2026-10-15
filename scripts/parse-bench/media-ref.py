@@ -4,7 +4,10 @@ other code than the code under test:
   section a: ffprobe (FFmpeg) for the container, its streams, and every audio
              packet's byte position and time; mutagen for a second reading of
              the length and the type.
-  section b: pysubs2 for SRT and TTML; YouTube's json3, srv3, and legacy
+  section b: pysubs2 for SRT and TTML, and ttconv (the IMSC reference
+             implementation) for the TTML files whose corpus entry names it:
+             what the document shows at each of its significant times;
+             YouTube's json3, srv3, and legacy
              timedtext XML read here from the format's own structure (events
              and segs, p and s, text). WebVTT is read in media.mts by the W3C
              webvtt-parser (webvtt-parser on npm), which passes the WPT tests.
@@ -184,8 +187,119 @@ def pysubs(path, fmt):
         text = line.plaintext
         if clean(text) == "":
             continue
+        # A cue that ends where it starts, or before, is never drawn: a
+        # player shows a cue while start <= t < end. (The SubRip capability
+        # tester hides "data" this way: "Don't show this text".)
+        if fmt == "srt" and line.end <= line.start:
+            continue
         cues.append(cue(line.start / 1000, line.end / 1000, text))
     return cues
+
+
+# The TTML 1.0 draft namespace older tools write (DFXP); ttconv reads the
+# Recommendation's, and the elements are the same.
+DRAFT_NS = re.compile(r"http://www\.w3\.org/2006/(?:10|04)/ttaf1")
+
+
+def media_seconds(value):
+    """Seconds of a time as Apple's lyrics TTML writes it: "19.764",
+    "1:00.998", "0:01:00.998", with or without a trailing "s"."""
+    parts = value.strip().rstrip("s").split(":")
+    seconds = 0.0
+    for part in parts:
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def nest_media_times(root):
+    """Rewrite times written on the media's clock (Apple's lyrics TTML: every
+    p's begin equals its div's begin) into the standard's nested times, each
+    counting from the element around it, so ttconv reads them as the file
+    means them."""
+    def walk(el, parent_begin):
+        begin = media_seconds(el.get("begin")) if el.get("begin") is not None else parent_begin
+        for name in ("begin", "end"):
+            if el.get(name) is not None:
+                el.set(name, f"{media_seconds(el.get(name)) - parent_begin:.3f}s")
+        if el.get("dur") is not None:
+            el.set("dur", f"{media_seconds(el.get('dur')):.3f}s")
+        for child in el:
+            walk(child, begin)
+
+    for body in root.iter("{http://www.w3.org/ns/ttml}body"):
+        walk(body, 0.0)
+
+
+def ttconv_states(path, media_clock=False):
+    """What a TTML document shows over time, by ttconv (the IMSC reference
+    implementation): every intermediate synchronic document, its time and its
+    visible text, one line per p and br. A display none element is not in
+    the document at that time; a visibility hidden span is there but shows no
+    text. Each state also lists its p's, each with its id and text, so a
+    line is told from another p's line with the same words. media_clock: the
+    file writes every time on the media's clock."""
+    import logging  # noqa: PLC0415
+
+    import ttconv.isd as isd  # noqa: PLC0415
+    import ttconv.imsc.reader as reader  # noqa: PLC0415
+    import ttconv.model as model  # noqa: PLC0415
+    import ttconv.style_properties as sp  # noqa: PLC0415
+
+    logging.disable(logging.CRITICAL)
+    raw = open(path, encoding="utf-8-sig").read()
+    raw = DRAFT_NS.sub("http://www.w3.org/ns/ttml", raw).lstrip()
+    root = ET.fromstring(raw)
+    if media_clock:
+        nest_media_times(root)
+    doc = reader.to_model(ET.ElementTree(root))
+    if doc is None:
+        raise ValueError("ttconv read no document")
+
+    # Every p gets an id (the reader keeps none, and every state copies it),
+    # so a state can say which p each line belongs to.
+    def number(el, count):
+        if isinstance(el, model.P):
+            el.set_id(f"p{count[0]}")
+            count[0] += 1
+        for child in el:
+            number(child, count)
+
+    if doc.get_body() is not None:
+        number(doc.get_body(), [0])
+
+    def texts(el, out, hidden, ps):
+        vis = el.get_style(sp.StyleProperties.Visibility)
+        if vis is not None:
+            hidden = vis == sp.VisibilityType.hidden
+        if isinstance(el, model.Text):
+            if not hidden:
+                out.append(el.get_text())
+            return
+        if isinstance(el, model.Br):
+            out.append("\n")
+            return
+        if isinstance(el, model.P):
+            own = []
+            for child in el:
+                texts(child, own, hidden, ps)
+            lines = [clean(x) for x in "".join(own).split("\n")]
+            ps.append([el.get_id(), "\n".join(x for x in lines if x)])
+            out.extend(own)
+            out.append("\n")
+            return
+        for child in el:
+            texts(child, out, hidden, ps)
+
+    states = []
+    for t, state in isd.ISD.generate_isd_sequence(doc):
+        out = []
+        ps = []
+        for region in state.iter_regions():
+            for body in region:
+                texts(body, out, False, ps)
+        lines = [clean(x) for x in "".join(out).split("\n")]
+        states.append([round(float(t), 3), "\n".join(x for x in lines if x), [x for x in ps if x[1]]])
+    return states
 
 
 def section_b(path, file):
@@ -199,6 +313,8 @@ def section_b(path, file):
         return {"cues": timedtext(raw)}
     if fmt == "srt":
         return {"cues": pysubs(path, "srt")}
+    if fmt == "ttml" and file.get("reader") in ("ttconv", "ttconv-media-clock"):
+        return {"cues": [], "states": ttconv_states(path, file.get("reader") == "ttconv-media-clock")}
     if fmt == "ttml":
         return {"cues": pysubs(path, "ttml")}
     return None

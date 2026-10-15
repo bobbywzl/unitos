@@ -1,5 +1,5 @@
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
-import { srtCueLine, webVttCueText } from "@/lib/video/cue-text";
+import { srtCueLine, webVttCueParts, webVttCueText } from "@/lib/video/cue-text";
 import { isTtml, ttmlCues } from "@/lib/video/ttml";
 import { parseTimeInput } from "@/lib/video/types";
 
@@ -15,6 +15,10 @@ import { parseTimeInput } from "@/lib/video/types";
 // text up to a blank line; NOTE, STYLE, and REGION blocks and cues with broken
 // timings are not captions. A TTML file (its root element is <tt>) is read
 // by lib/video/ttml.ts: one cue per <p>.
+// A WebVTT voice span (<v Name>) names who speaks: the segment's speaker,
+// one id per name, and the name the roster starts from. A cue two voices
+// share becomes one segment per voice, its time divided where their words
+// divide (by characters, as a split line divides it).
 
 const MAX_PASTE_CHARS = 2_000_000;
 const DEFAULT_SEGMENT_SECONDS = 4;
@@ -30,14 +34,14 @@ function seconds(raw: string): number | null {
 }
 
 // cue: opened by a "-->" range line (an SRT or WebVTT cue), so its lines are
-// cue text with markup.
-type Open = { start: number; end: number | null; text: string[]; cue?: boolean };
+// cue text with markup. voice: the name a WebVTT voice span gives.
+type Open = { start: number; end: number | null; text: string[]; cue?: boolean; voice?: string };
 
 /** Timed segments out of pasted text. Throws with a plain reason when the
     text is empty, too long, or carries no times. */
 export function parsePastedTranscript(text: string): TranscriptSegment[] {
   if (text.length > MAX_PASTE_CHARS) throw new Error("the pasted text is too long");
-  const opens = isTtml(text)
+  const opens: Open[] = isTtml(text)
     ? ttmlCues(text).map((c) => ({ start: c.start, end: c.end, text: [c.text] }))
     : WEBVTT_SIGNATURE.test(text)
       ? webVttCues(text)
@@ -48,11 +52,20 @@ export function parsePastedTranscript(text: string): TranscriptSegment[] {
       opens.length > 0 ? "the pasted text has times but no words" : "the pasted text has no times",
     );
   }
-  const segments = timed.map((o, i) => {
+  // One id per voice name, in the order the voices first speak. A name
+  // with no letter in it (<v 0>) is an id, not a name.
+  const ids = new Map<string, string>();
+  const segments = timed.map((o, i): TranscriptSegment => {
     const next = timed[i + 1]?.start;
     const end =
       o.end ?? (next !== undefined && next > o.start ? next : o.start + DEFAULT_SEGMENT_SECONDS);
-    return { start: o.start, end, text: o.text.join(" ") };
+    const segment: TranscriptSegment = { start: o.start, end, text: o.text.join(" ") };
+    if (o.voice !== undefined) {
+      if (!ids.has(o.voice)) ids.set(o.voice, `S${ids.size + 1}`);
+      segment.speaker = ids.get(o.voice);
+      if (/\p{L}/u.test(o.voice)) segment.speakerName = o.voice;
+    }
+    return segment;
   });
   return normalizeSegments(segments);
 }
@@ -162,8 +175,20 @@ function webVttCues(text: string): Open[] {
   let before: string | null = null;
   for (const b of blocks) {
     if (!rolling) {
-      const words = webVttCueText(b.lines.join("\n"));
-      cues.push({ start: b.start, end: b.end, text: words === "" ? [] : [words] });
+      const parts = webVttCueParts(b.lines.join("\n"));
+      if (parts.length <= 1) {
+        cues.push({ start: b.start, end: b.end, text: parts.map((p) => p.text), voice: parts[0]?.voice });
+        continue;
+      }
+      const chars = parts.reduce((n, p) => n + p.text.length, 0);
+      const span = b.end === null ? 0 : b.end - b.start;
+      let before = 0;
+      for (const part of parts) {
+        const start = b.start + (span * before) / chars;
+        before += part.text.length;
+        const end = b.end === null ? null : b.start + (span * before) / chars;
+        cues.push({ start, end, text: [part.text], voice: part.voice });
+      }
       continue;
     }
     const shown = b.lines.map(webVttCueText).filter((l) => l !== "");

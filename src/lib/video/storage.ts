@@ -12,14 +12,15 @@ export function sniffMedia(bytes: Uint8Array): string | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
   if (bytes.length >= 12 && ascii(4, 8) === "ftyp") {
     const brand = ascii(8, 12);
-    if (brand.startsWith("qt")) return "video/quicktime";
     // M4A/M4B brands mark an audio-only MPEG-4 container.
     if (brand.startsWith("M4A") || brand.startsWith("M4B")) return "audio/mp4";
-    // Other brands (isom, mp42, iso5, 3GPP) carry audio alone as often as
-    // video: the tracks decide when the moov box is in the bytes.
+    // Other brands (isom, mp42, iso5, 3GPP, QuickTime's qt) carry audio
+    // alone as often as video: the tracks decide when the moov box is in
+    // the bytes. Media bench finding: a QuickTime file of sound alone
+    // opened in the video player with no picture.
     const handlers = mp4Handlers(bytes);
     if (handlers && !handlers.includes("vide") && handlers.includes("soun")) return "audio/mp4";
-    return "video/mp4";
+    return brand.startsWith("qt") ? "video/quicktime" : "video/mp4";
   }
   if (
     bytes.length >= 4 &&
@@ -46,14 +47,37 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     }
     return "video/ogg";
   }
-  if (bytes.length >= 3 && ascii(0, 3) === "ID3") return "audio/mpeg";
+  if (bytes.length >= 3 && ascii(0, 3) === "ID3") {
+    // An ID3v2 tag heads MP3 files, and also ADTS AAC files (a podcast's
+    // .aac) and some FLAC files: the bytes after the tag decide, when they
+    // are in the chunk. Media bench finding: an ADTS file with a tag was
+    // stored as audio/mpeg.
+    const after = id3End(bytes);
+    if (after !== null && after + 4 <= bytes.length) {
+      if (bytes[after] === 0xff && (bytes[after + 1] & 0xf6) === 0xf0) return "audio/aac";
+      if (ascii(after, after + 4) === "fLaC") return "audio/flac";
+    }
+    return "audio/mpeg";
+  }
   if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
     // MPEG audio frame sync. Layer bits 00 mean ADTS AAC; anything else is MP3.
     return ((bytes[1] >> 1) & 0x03) === 0 ? "audio/aac" : "audio/mpeg";
   }
-  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
+  // RIFF, and RF64 (EBU Tech 3306: the WAV a field recorder writes when the
+  // file may pass 4 GB; FFmpeg reads both as WAV). Media bench finding: an
+  // RF64 file was refused as not media.
+  if (bytes.length >= 12 && (ascii(0, 4) === "RIFF" || ascii(0, 4) === "RF64") && ascii(8, 12) === "WAVE") return "audio/wav";
   if (bytes.length >= 4 && ascii(0, 4) === "fLaC") return "audio/flac";
   return null;
+}
+
+// Where the bytes after an ID3v2 tag start: the 10-byte header, the size
+// (four 7-bit bytes), and a 10-byte footer when the header says so. Null
+// when the header does not read.
+function id3End(bytes: Uint8Array): number | null {
+  if (bytes.length < 10 || bytes.subarray(6, 10).some((b) => b > 0x7f)) return null;
+  const size = (bytes[6] << 21) | (bytes[7] << 14) | (bytes[8] << 7) | bytes[9];
+  return 10 + size + (bytes[5] & 0x10 ? 10 : 0);
 }
 
 // The handler type of every track (moov/trak/mdia/hdlr): "vide", "soun",
