@@ -16,7 +16,7 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
-import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
+import { readChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
 // The note's assistant (SPEC.md §6): a panel docked at the bottom of an open
 // note, the way Gemini sits at the bottom of a Google Doc — a sparkle and a
@@ -41,6 +41,7 @@ import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
 // closing the note, leaving the page, or a reload keeps it; Clear
 // conversation removes it.
 const OPEN_KEY = "unitos-note-assistant";
+// The plain key the box's words were kept under before they named the account.
 const DRAFT_KEY = "unitos-note-assistant-draft:";
 
 // The change an answer proposes, and what became of it.
@@ -63,21 +64,32 @@ function writeOpen(open: boolean) {
   }
 }
 
+// The box's typed words are kept under the account (lib/kept-chat.ts). Words
+// kept before that under the plain key name no account: they move to the
+// account that opens the note and show in its box (CLAUDE.md rule zero 6).
 function readTyped(noteId: string): string {
+  const key = `note:${noteId}`;
+  const typed = readChatDraft(key);
+  let old: string | null = null;
   try {
-    return localStorage.getItem(DRAFT_KEY + noteId) ?? "";
+    old = localStorage.getItem(DRAFT_KEY + noteId);
   } catch {
-    return "";
+    return typed;
   }
+  if (!old) return typed;
+  const moved = !typed.trim() || typed === old ? old : `${typed}\n\n${old}`;
+  writeChatDraft(key, moved);
+  if (readChatDraft(key) !== moved) return moved;
+  try {
+    localStorage.removeItem(DRAFT_KEY + noteId);
+  } catch {
+    // The old copy stays; it moves again on the next open.
+  }
+  return moved;
 }
 
 function writeTyped(noteId: string, text: string) {
-  try {
-    if (text) localStorage.setItem(DRAFT_KEY + noteId, text);
-    else localStorage.removeItem(DRAFT_KEY + noteId);
-  } catch {
-    // The words stay in the box for this session.
-  }
+  writeChatDraft(`note:${noteId}`, text);
 }
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -254,8 +266,9 @@ export function NoteAssistant({
     <section
       ref={sectionRef}
       data-no-drag
+      data-note-assistant=""
       aria-label={t("assistant.noteAssistant")}
-      className={`flex max-h-[min(55vh,460px)] min-h-0 shrink-0 flex-col rounded-2xl border border-[color-mix(in_srgb,var(--kind-assistant)_28%,transparent)] bg-card shadow-soft ${className}`}
+      className={`flex max-h-[min(55vh,460px)] min-h-0 pointer-coarse:max-h-[min(55vh,460px,calc(var(--note-edit-limit,100vh)*0.55))] shrink-0 flex-col rounded-2xl border border-[color-mix(in_srgb,var(--kind-assistant)_28%,transparent)] bg-card shadow-soft ${className}`}
     >
       <div className="flex items-center gap-2 px-3 pt-2">
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />

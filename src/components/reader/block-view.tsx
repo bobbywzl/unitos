@@ -73,6 +73,13 @@ export function layMarginChips(): void {
       }
       const width = chip.offsetWidth + 4;
       if (row.x > start && row.x + width > room) row = { ...row, x: start, y: row.y + 19 };
+      // A chip wider than the margin (a match's label on a phone) moves left
+      // until it ends inside the screen; beside the block's Collapse button
+      // it goes a row down first.
+      if (row.x + chip.offsetWidth > room) {
+        if (start > 0 && row.y === 0) row = { ...row, y: 19 };
+        row = { ...row, x: Math.min(row.x, room - chip.offsetWidth) };
+      }
       const at = `${row.x}px`;
       const down = `${row.y}px`;
       if (chip.style.getPropertyValue("--chip-at") !== at) chip.style.setProperty("--chip-at", at);
@@ -641,11 +648,16 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
         </mark>,
       );
       // An extract span carries its label chip right after the span: the chip
-      // opens the match card, the same as the span itself. The chip's label is
-      // DOM text the stored block text does not have — data-anchor-skip keeps
-      // it out of anchor offsets (SPEC.md §5).
+      // opens the match card, the same as the span itself. A block with
+      // several spans of one match draws the chip once, after its last span.
+      // The chip's label is DOM text the stored block text does not have —
+      // data-anchor-skip keeps it out of anchor offsets (SPEC.md §5).
       const extractEnding = covering.find(
-        (h) => h.kind === "extract" && h.end === to && h.extractLabel,
+        (h) =>
+          h.kind === "extract" &&
+          h.end === to &&
+          h.extractLabel &&
+          !highlights.some((o) => o.kind === "extract" && o.extractId === h.extractId && o.end > h.end),
       );
       if (extractEnding) {
         parts.push(

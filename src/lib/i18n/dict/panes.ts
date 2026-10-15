@@ -491,7 +491,6 @@ const en = {
   translatedBy: "Translated by DeepL",
   hideTranslation: "Hide translation",
   showTranslation: "Show translation",
-  translateFailed: "Translation failed",
 
   // Project extraction (corpus-distill-page.tsx)
   distillCorpus: "Extract from the project",
@@ -980,7 +979,6 @@ const zh: Record<keyof typeof en, string> = {
   translatedBy: "由 DeepL 翻译",
   hideTranslation: "隐藏译文",
   showTranslation: "显示译文",
-  translateFailed: "翻译失败",
 
   distillCorpus: "从项目提取",
   corpusAskPlaceholder: "这个项目应该回答什么？",

@@ -48,11 +48,13 @@ export function noReason(res: Response, t: TFunc): string {
 }
 
 // What the browsers say when a request never reached the server.
-const NETWORK_WORDS = /^(failed to fetch|load failed|networkerror|network error|the network connection was lost)/i;
+const NETWORK_WORDS =
+  /^(failed to fetch|load failed|networkerror|network error|the network connection was lost|the internet connection appears to be offline)/i;
 
 /** The line for a failure caught around api() or modelFetch. */
 export function failureLine(err: unknown, t: TFunc): string {
-  if (err instanceof TypeError || (err instanceof Error && NETWORK_WORDS.test(err.message))) {
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (err instanceof Error && (NETWORK_WORDS.test(err.message) || (err instanceof TypeError && offline))) {
     console.error("assistant request", err);
     return t("assistant.failedConnection");
   }
@@ -66,7 +68,13 @@ export function failureLine(err: unknown, t: TFunc): string {
     console.error("assistant request", err.status, err.message);
     return t("assistant.failedServer");
   }
-  return err instanceof Error && err.message ? err.message : t("assistant.failedServer");
+  // Words the app put in an Error for the reader keep them; a fault in the
+  // page itself (a TypeError, an answer it could not read, a script that did
+  // not load) has none for the reader: the plain line, the fault to the
+  // console.
+  if (err instanceof Error && err.message && err.name === "Error") return err.message;
+  console.error("assistant request", err);
+  return t("assistant.failedServer");
 }
 
 /** A call that is not a model call failed (the conversations list, a
