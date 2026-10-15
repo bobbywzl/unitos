@@ -90,8 +90,10 @@ await graph();
   await shot("VIEW7-01");
   const panel = page.locator('[data-graph-side-list], .graph-overlay aside').first();
   const title = panel.locator("h2").first();
-  if (await title.count()) check("VIEW7-04: the link panel's title is 16 px", (await style(title, "fontSize")) === "16px", await style(title, "fontSize"));
-  else check("VIEW7-04: the link panel's title is 16 px", false, "no h2");
+  // [style10] VIEW10-10: TEXT_NAME (13.5 px) under 768 px, TEXT_TITLE (16 px) above.
+  const titlePx = W < 768 ? "13.5px" : "16px";
+  if (await title.count()) check(`VIEW7-04: the link panel's title is ${titlePx}`, (await style(title, "fontSize")) === titlePx, await style(title, "fontSize"));
+  else check(`VIEW7-04: the link panel's title is ${titlePx}`, false, "no h2");
   const remove = panel.locator('[data-track="graph-link-remove"]');
   if (await remove.count()) {
     const color = await style(remove, "color");
