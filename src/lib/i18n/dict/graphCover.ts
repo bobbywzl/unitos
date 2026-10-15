@@ -59,7 +59,7 @@ const en = {
   newCommentTitle: "A comment or a reply since your last visit",
   newSinceVisitOne: "1 new",
   newSinceVisitMany: "{n} new",
-  newSinceVisitTitle: "Links, comments, and replies another person made since your last visit: {n}",
+  newSinceVisitTitle: "Links, comments, replies, and notes another person made since your last visit: {n}",
 
   // Add to note (note-gather.tsx)
   addToNote: "Add to note",
@@ -139,7 +139,7 @@ const zh: Record<keyof typeof en, string> = {
   newCommentTitle: "你上次来之后别人新写的评论或回复",
   newSinceVisitOne: "1 项新内容",
   newSinceVisitMany: "{n} 项新内容",
-  newSinceVisitTitle: "你上次来之后别人新加的链接、评论和回复：{n} 项",
+  newSinceVisitTitle: "你上次来之后别人新加的链接、评论、回复和笔记：{n} 项",
 
   addToNote: "加入笔记",
   addToNoteTitle: "把这个片段作为引文加入新笔记",
