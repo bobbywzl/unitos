@@ -108,7 +108,9 @@ try {
     await page.waitForTimeout(300);
     const key = await page.locator('[role="dialog"][aria-label]').filter({ has: page.locator("ul") }).last().innerText();
     if (lang === "en") await shot(page, "WALK4-13");
-    const want = lang === "en" ? ["number of links", "Open replies", "quote both documents", "Pending notes", "Zoomed out"] : ["链接数", "未解决回复", "同时引用", "待定笔记", "缩小视图"];
+    // [view10] VIEW10-03: the key says each mark once; the pending dot is explained in the notes chip's row
+    // ("…; a dot when one is pending" / "…有待定笔记时带一个点"), and the ? and the far-zoom ring in one row.
+    const want = lang === "en" ? ["number of links", "Open replies", "quote both documents", "a dot when one is pending", "Zoomed out"] : ["链接数", "未解决回复", "同时引用", "待定笔记", "缩小视图"];
     check(`WALK4-13 ${lang} the key names the curve marks`, want.every((w) => key.includes(w)), want.filter((w) => !key.includes(w)).join(", "));
     check(`WALK4-13 ${lang} no chip reads 0`, (await page.locator("[data-graph-node-notes]").allInnerTexts()).every((s) => !/^\s*0\b/.test(s)));
     await context.close();
