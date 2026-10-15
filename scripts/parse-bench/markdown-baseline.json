@@ -7,16 +7,16 @@
    "lost": 13
   },
   "md": {
-   "score": 0.983,
-   "parse": 0.98,
-   "words": 0.995,
-   "lost": 66
+   "score": 0.981,
+   "parse": 0.981,
+   "words": 0.996,
+   "lost": 81
   },
   "txt": {
-   "score": 0.97,
-   "parse": 0.97,
+   "score": 0.951,
+   "parse": 0.951,
    "words": 0.998,
-   "lost": 1382
+   "lost": 1427
   }
  },
  "files": {
@@ -2881,8 +2881,8 @@
    0.783
   ],
   "theatrical-makeup": [
-   0.78,
-   0.78
+   0.779,
+   0.779
   ],
   "diner-interrompu": [
    0.924,
@@ -3183,6 +3183,98 @@
   "pride-paragraph-lines": [
    0.992,
    0.992
+  ],
+  "powershell-readme": [
+   1,
+   1
+  ],
+  "keepassxc-readme": [
+   0.952,
+   0.952
+  ],
+  "htop-readme": [
+   0.998,
+   0.998
+  ],
+  "chalk-readme": [
+   0.998,
+   0.998
+  ],
+  "neovim-readme": [
+   0.99,
+   0.99
+  ],
+  "rust-book-strings": [
+   1,
+   1
+  ],
+  "rust-book-summary": [
+   1,
+   1
+  ],
+  "mdbook-guide-markdown": [
+   0.995,
+   0.995
+  ],
+  "mdbook-guide-mdbook": [
+   1,
+   1
+  ],
+  "rust-reference-operators": [
+   0.925,
+   0.927
+  ],
+  "rust-rfc-3498": [
+   0.991,
+   0.991
+  ],
+  "tailwind-changelog": [
+   1,
+   1
+  ],
+  "fpb-arabic": [
+   0.938,
+   0.938
+  ],
+  "react-testing-library-readme": [
+   0.863,
+   0.99
+  ],
+  "vim-man": [
+   0.5,
+   0.5
+  ],
+  "xxd-man": [
+   0.5,
+   0.5
+  ],
+  "zlib-changelog": [
+   0.981,
+   0.981
+  ],
+  "git-sample-mbox": [
+   0.746,
+   0.746
+  ],
+  "mpl-2.0": [
+   0.925,
+   0.925
+  ],
+  "cc-by-4.0": [
+   0.958,
+   0.958
+  ],
+  "emacs-tutorial-fa": [
+   0.999,
+   0.999
+  ],
+  "rfc6762": [
+   1,
+   1
+  ],
+  "rfc2131": [
+   0.666,
+   0.666
   ]
  }
 }

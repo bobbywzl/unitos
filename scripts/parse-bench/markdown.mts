@@ -15,16 +15,21 @@
 // - md: Markdown files from public repositories (READMEs, docs, changelogs,
 //   CJK docs, math, front matter, raw HTML, very long files, MDX-like docs
 //   with components, Jupyter notebook exports, Obsidian notes, MkDocs,
-//   Hugo, and MyST dialects), scored against markdown-it's reading of the
-//   same file.
+//   Hugo, and MyST dialects, mdBook chapters, a 300 KB changelog, logo
+//   headings, HTML tables, footnotes, right-to-left lists), scored against
+//   markdown-it's reading of the same file.
 // - txt: plain text files (Project Gutenberg books, plays, and poems, RFCs,
 //   logs, licenses, build files, AsciiDoc, org-mode, and reST saved as
 //   .txt, subtitles, CSV, a one-line file, mixed scripts, the Vim tutor in
 //   eleven legacy encodings, ISO-2022-JP, UTF-16 and Windows-1252 copies, a
-//   paragraph-per-line copy), scored against the file's own words decoded in the
+//   paragraph-per-line copy, man pages, a changelog, an mbox, numbered
+//   legal clauses), scored against the file's own words decoded in the
 //   encoding the corpus names, and, where there is one, the structure of
 //   the same book's HTML edition (Project Gutenberg's), an RFC's section
-//   headings, or a log's lines.
+//   headings, a log's lines, the headings and items the file's format
+//   sets on lines of their own (a man page's section names, a changelog's
+//   version lines and items, a license's clauses), or an mbox's header and
+//   diff lines.
 //
 // The corpus is scripts/parse-bench/markdown-corpus.json: every file's URL
 // (pinned to a commit), license, and what it exercises. The files are other
@@ -438,6 +443,8 @@ type Score = {
   badBreaks: [Unit, Unit][];
 };
 
+const ITEM_MARKER_RX = /^\s*(?:[-*•]|\(?(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxlcdm]+)[.)])\s+/;
+
 function codeKey(text: string) {
   return text.replace(/[ \t]+$/gm, "").replace(/^\n+|\n+$/g, "");
 }
@@ -475,9 +482,15 @@ function score(ref: Ref, ours: Ours, mode: "md" | "txt", refWords: string[], opt
     else candidates.push({ unit: u, at: i });
   });
   const keyOf = (u: Unit) => (u.k === "hr" ? "<hr>" : mode === "md" && u.k === "code" ? `code:${codeKey(u.t)}` : key(u.t));
+  // A layout reference's items leave out their marker ("- ", "1.1. ",
+  // "(a) "): a parse may read the marker as a list's number or keep it as
+  // words, and either shows the item. Ours are keyed without a leading
+  // marker too.
+  const markerFree = mode === "txt" && refUnits.some((u) => u.k === "li");
+  const ourKeyOf = (u: Unit) => (markerFree && u.k !== "h" ? key(u.t.replace(ITEM_MARKER_RX, "")) : keyOf(u));
   const index = new Map<string, number[]>();
   candidates.forEach((c, i) => {
-    const k = keyOf(c.unit);
+    const k = ourKeyOf(c.unit);
     if (!k) return;
     if (!index.has(k)) index.set(k, []);
     index.get(k)!.push(i);
