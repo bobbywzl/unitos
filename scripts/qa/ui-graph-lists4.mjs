@@ -252,8 +252,11 @@ if (want("esc")) {
     await noteBtn.click();
     await page.waitForTimeout(400);
     const words = page.locator("[data-graph-note-gather-words]");
+    // [view10] VIEW10-01: one link's two ends are one row (data-graph-note-gather-link), its quote attribute naming both documents.
+    const linkRow = page.locator("[data-graph-note-gather-quote][data-graph-note-gather-link]");
+    const ends = (await linkRow.count()) === 1 ? (await linkRow.getAttribute("data-graph-note-gather-quote") ?? "").split(" ").filter(Boolean).length : 0;
     check("Note on this link: the new note holds the link's two ends, the focus in its words box, the panel stays",
-      (await page.locator("[data-graph-note-gather-quote]").count()) === 2 && (await words.evaluate((el) => el === document.activeElement)) && (await page.locator("[data-graph-link-panel]").count()) === 1);
+      ends === 2 && (await words.evaluate((el) => el === document.activeElement)) && (await page.locator("[data-graph-link-panel]").count()) === 1);
     await words.fill("a draft to keep");
     await page.waitForTimeout(300);
     const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unitos-note-gather:")).map((k) => localStorage.getItem(k) ?? "").join(" "));
