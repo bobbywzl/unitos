@@ -20,6 +20,8 @@ import {
   STITCH_CUT_NAMED_MAX,
   STITCH_INDEX_NOMATCH_CAP,
   STITCH_INDEX_PREFILTER_BLOCKS,
+  STITCH_INDEX_TEXT_CHARS,
+  STITCH_INDEX_TEXTS,
   STITCH_INDEX_TOP,
   STITCH_LINKS_SKELETON,
   STITCH_MAX_OUTPUT_TOKENS,
@@ -282,14 +284,17 @@ export function asksContradictions(command: string): boolean {
 }
 
 /** True when the command asks about dates (ANS9-01): a date, a year, a
-    timeline, "when did", or a year written out. A cut then keeps the lines
-    that carry a year (YEAR_TERM), as it does for a contradictions command:
-    the notes' date errors are the contradictions a reader plants. */
+    timeline, "when did", "when X was printed" (ANS10-07: when … printed,
+    published, written, born, died, made, founded; 何年, 什么时候…印刷), or a
+    year written out. "When he says this" is not one. A cut then keeps the
+    lines that carry a year (YEAR_TERM), as it does for a contradictions
+    command: the notes' date errors are the contradictions a reader
+    plants. */
 export function asksDates(command: string): boolean {
   const c = command.toLowerCase();
   return (
-    /\b(?:dates?|dated|years?|chronolog\w*|timeline)\b|\bwhen\s+(?:did|was|were|is|are|does|do|had|has|will|would)\b|\b(?:1[0-9]{3}|20[0-9]{2})\b/.test(c) ||
-    /哪一年|哪年|何时|日期|年份|什么时候|时间线|年代/.test(command)
+    /\b(?:dates?|dated|years?|chronolog\w*|timeline)\b|\bwhen\s+(?:did|was|were|is|are|does|do|had|has|will|would)\b|\bwhen\b.*\b(?:printed|published|written|born|died|made|founded)\b|\b(?:1[0-9]{3}|20[0-9]{2})\b/.test(c) ||
+    /哪一年|哪年|何时|何年|日期|年份|什么时候|时间线|年代/.test(command)
   );
 }
 
@@ -389,6 +394,26 @@ export function textMatches(blocks: { id: string; alias: string; text: string }[
     .filter((r) => r.score > 0)
     .slice(0, top)
     .map((r) => r.item.alias);
+}
+
+/** The blocks whose text the select pass reads beside a cut (COST10-01):
+    the first STITCH_INDEX_TEXTS of the text matches, each cut to its first
+    STITCH_INDEX_TEXT_CHARS characters (a cut block ends in …), for a
+    targeted command (a question, a links command, a page: commandIntent)
+    whose lines a cut chose (`shown`; null when every line is read). At
+    200 documents the route pass can miss the document that holds the
+    answer, and a skeleton line can miss the words that match; the matched
+    text holds both (the needed groups held 62% → 88% on the fact commands
+    at 200 documents, no tier losing). Nothing under STITCH_CUT_OVER, where
+    every line is read; nothing for a holistic, follow-up or meta command;
+    nothing with STITCH_INDEX=0, which has no targeted intent. */
+export function matchTexts(shown: Set<string> | null, targeted: boolean, matches: string[], textOf: (alias: string) => string | undefined): { alias: string; text: string }[] {
+  if (!shown || !targeted) return [];
+  return matches.slice(0, STITCH_INDEX_TEXTS).flatMap((alias) => {
+    const text = textOf(alias)?.replace(/\s+/g, " ").trim();
+    if (!text) return [];
+    return [{ alias, text: text.length > STITCH_INDEX_TEXT_CHARS ? `${text.slice(0, STITCH_INDEX_TEXT_CHARS)}…` : text }];
+  });
 }
 
 // A name's match in a block's text: at a word start, any case (Darwin
@@ -1168,8 +1193,10 @@ function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profi
     gist first, the same bytes every command, and the lines after them
     under '[document X]: N of M skeleton lines shown', so the headers cache
     (COST6-02); the title is in the header only, the uncached lines name
-    the letter (COST8-04). */
-export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile, routed: Set<string> | null = null): string {
+    the letter (COST8-04). texts: the text matches' text read beside a cut
+    (matchTexts, COST10-01), one section after the shown lines, in the
+    uncached tail; none when empty. */
+export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile, routed: Set<string> | null = null, texts: { alias: string; text: string }[] = []): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
   const head = (r: Rendered, v: SkeletonView) => `${header(r.letter, r.doc, coverageNote(r.coverage))}${v.gist ? `\ngist: ${v.gist}` : ""}`;
   const sections = rendered.flatMap((r) => {
@@ -1195,12 +1222,16 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
     if (lines.length === 0) out.push("(no lines shown)");
     return [out.join("\n")];
   });
+  const textsSection =
+    texts.length > 0
+      ? `\n\nThe first ${STITCH_INDEX_TEXT_CHARS} characters of the ${texts.length} block${texts.length === 1 ? "" : "s"} whose words match the command best, best first (their skeleton lines above may not show the match):\n${texts.map((t) => `[block ${t.alias}] ${t.text}`).join("\n")}`
+      : "";
   if (!shown) {
     return systemOf(
       stitchSelectRules(),
       profile,
       "Each document's skeleton follows: one line per block, tagged [block <alias>], what the block says at a tenth of its length.",
-      sections.join("\n\n"),
+      `${sections.join("\n\n")}${textsSection}`,
     );
   }
   const heads = rendered.map((r) => {
@@ -1211,7 +1242,7 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
     stitchSelectRules(),
     profile,
     "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter; the titles are in the list above.",
-    `${heads.join("\n\n")}\n\nThe skeleton lines read for this command:\n\n${sections.join("\n\n")}`,
+    `${heads.join("\n\n")}\n\nThe skeleton lines read for this command:\n\n${sections.join("\n\n")}${textsSection}`,
   );
 }
 
@@ -2228,6 +2259,9 @@ export async function pickBlocks(input: {
   // Linda's project, with the expansion in 12 (round 9 RETRIEVAL9).
   if (targeted && matches.length === 0) await findMatches(await rankQuery());
   if (shown) for (const a of matches) shown.add(a);
+  // Beside a cut the select pass reads the text matches' text too
+  // (matchTexts, COST10-01): nothing when every line is read.
+  const texts = matchTexts(shown, targeted, matches, (alias) => blockByRef.get(alias)?.text);
   if (input.signal?.aborted) aborted();
 
   // The picks most relevant first: Jev's by document (one noul per line),
@@ -2248,7 +2282,16 @@ export async function pickBlocks(input: {
       const pick = await callForJson({
         model: readModel,
         messages: [
-          systemMessage(skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown, profile, routedParts)),
+          systemMessage(
+            skeletonSystem(
+              group.views,
+              rendered.filter((r) => letters.has(r.letter)),
+              group.shown,
+              profile,
+              routedParts,
+              texts.filter((t) => letters.has(blockLetter(t.alias))),
+            ),
+          ),
           {
             role: "user",
             content: stitchSelectPrompt({
