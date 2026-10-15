@@ -156,8 +156,10 @@ try {
     await press(opener);
     const dock = page.locator('[data-graph-note-gather="open"]');
     await dock.waitFor({ timeout: 10000 });
-    const quotes = await dock.locator("[data-graph-note-gather-quote]").count();
-    check("Note on this link puts the link's two ends into the new note", quotes === 2, String(quotes));
+    // [view10] VIEW10-01: the link's two ends dock as one row whose
+    // data-graph-note-gather-quote names both documents; count the ends, not the rows.
+    const ends = (await dock.locator("[data-graph-note-gather-quote]").evaluateAll((els) => els.flatMap((el) => (el.getAttribute("data-graph-note-gather-quote") ?? "").split(" ").filter(Boolean)))).length;
+    check("Note on this link puts the link's two ends into the new note", ends === 2, String(ends));
     const words = "SAFE5: a long thought typed with my thumb about the ground and the weakness";
     const box = dock.locator("[data-graph-note-gather-words]");
     await box.fill(words);

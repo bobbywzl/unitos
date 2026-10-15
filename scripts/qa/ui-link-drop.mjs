@@ -113,7 +113,10 @@ try {
   await openPanel();
   await words.waitFor({ timeout: 10000 }).catch(() => {});
   const shown = (await words.count()) > 0 ? await words.inputValue() : "";
-  check("the new note opens on the words when the link opens", shown === WORDS && (await page.locator("[data-graph-note-gather-quote]").count()) === 2, JSON.stringify(shown));
+  // [view10] VIEW10-01: the link's two ends dock as one row whose
+  // data-graph-note-gather-quote names both documents; count the ends, not the rows.
+  const ends = (await page.locator("[data-graph-note-gather-quote]").evaluateAll((els) => els.flatMap((el) => (el.getAttribute("data-graph-note-gather-quote") ?? "").split(" ").filter(Boolean)))).length;
+  check("the new note opens on the words when the link opens", shown === WORDS && ends === 2, `${JSON.stringify(shown)} ends=${ends}`);
   if ((await words.count()) > 0) await words.scrollIntoViewIfNeeded();
   if (OUT) await page.screenshot({ path: `${OUT}/${SHOT}-${LANG}-${WIDTH}.png` });
   await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("unitos-note-gather:")) localStorage.removeItem(k); });
