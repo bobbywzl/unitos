@@ -49,6 +49,8 @@ const en = {
   notesOneDocumentOne: "1 note quotes one document.",
   notesOneDocumentShow: "Show them",
   notesOneDocumentHide: "Hide them",
+  // [lists10] WALK10-01: the dot on a Notes row and on the node's notes chip.
+  newNoteTitle: "A note another person wrote since your last visit",
   notesFullPage: "Notes full page",
   notesShown: "Shown on graph",
   notesShownAll: "All notes",
@@ -113,6 +115,7 @@ const zh: Record<keyof typeof en, string> = {
   notesOneDocumentOne: "1 条笔记只引用一个文档。",
   notesOneDocumentShow: "显示",
   notesOneDocumentHide: "收起",
+  newNoteTitle: "你上次来之后别人新写的笔记",
   notesFullPage: "整页笔记",
   notesShown: "在图谱中显示",
   notesShownAll: "全部笔记",

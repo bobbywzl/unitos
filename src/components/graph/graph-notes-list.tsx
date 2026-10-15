@@ -10,7 +10,7 @@ import { NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { useGraphNotes, useGraphNotesLit } from "@/components/graph/graph-notes";
-import { LinkReplyCount } from "@/components/graph/link-replies";
+import { LinkReplyCount, useMarkNoteSeen, useNewNotes } from "@/components/graph/link-replies"; // [lists10] WALK10-01
 import { ReplyThread } from "@/components/collab/reply-thread"; // [layer5]
 import { ListName } from "@/components/graph/list-name"; // [lists7]
 import { noteLine, type GraphNote } from "@/lib/graph/notes";
@@ -133,9 +133,20 @@ export function GraphNotesList({
   const [rejectedNow, setRejectedNow] = useState<{ g: GraphNote; where: Where }[]>([]);
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // [lists10] WALK10-01: a note another person wrote since this account's
+  // last visit comes first, and one on a single document shows among the
+  // notes across documents while new. `held`: new now, or new when the list
+  // opened — a press marks the note looked at (its dot goes), and the row
+  // keeps its place for this visit.
+  const isNew = useNewNotes();
+  const [newAtOpen] = useState(
+    () => new Set([...(ctx?.every.notes ?? []), ...(ctx?.every.projectNotes ?? [])].filter((g) => isNew(g.note)).map((g) => g.note.id)),
+  );
   if (!ctx) return null;
   const { view } = ctx;
   const graphNotes = ctx;
+  const held = (g: GraphNote) => newAtOpen.has(g.note.id) || isNew(g.note);
+  const heldFirst = (list: GraphNote[]) => [...list].sort((x, y) => Number(held(y)) - Number(held(x)));
 
   const message = (err: unknown) => (err instanceof Error ? err.message : t("common.requestFailed"));
   const without = <T,>(set: Set<T>, value: T) => {
@@ -215,15 +226,16 @@ export function GraphNotesList({
     shown = view.notes.filter((g) => hits(g) > 0).sort((x, y) => Number(hits(y) >= 2) - Number(hits(x) >= 2));
   } else {
     heading = t("graphNotes.notesAcross");
-    shown = view.notes.filter((g) => g.documentIds.length >= 2);
+    // [lists10] WALK10-01: a new note on one document shows here while new.
+    shown = view.notes.filter((g) => g.documentIds.length >= 2 || held(g));
     single = live(
-      view.notes.filter((g) => g.documentIds.length < 2),
+      view.notes.filter((g) => g.documentIds.length < 2 && !held(g)),
       "single",
     );
   }
-  shown = live(shown, "shown");
+  shown = live(heldFirst(shown), "shown");
   // Notes on no document of the graph: listed when nothing narrows the list.
-  const project = shownNote || pinned || pickedIds.size > 0 ? [] : live(view.projectNotes, "project");
+  const project = shownNote || pinned || pickedIds.size > 0 ? [] : live(heldFirst(view.projectNotes), "project");
   // Under the shown note: the links between its documents, or the links of
   // its one document.
   const shownIds = new Set(shownNote?.documentIds ?? []);
@@ -427,6 +439,9 @@ function NotesListRow({
   const t = useT();
   const ctx = useGraphNotes();
   const { canEdit } = useCollab();
+  // [lists10] WALK10-01: new since this account's last visit (the chip's dot); a press marks it looked at.
+  const fresh = useNewNotes()(g.note);
+  const markSeen = useMarkNoteSeen();
   if (!ctx) return null;
   const note = g.note;
   const openReplies = note.replies.filter((r) => r.resolvedById === null).length;
@@ -448,15 +463,23 @@ function NotesListRow({
           reader sees once where a note opens. */}
       <div className="flex items-start gap-1.5">
         <button
-          onClick={onToggle}
+          onClick={() => {
+            markSeen(note); // [lists10] WALK10-01
+            onToggle();
+          }}
           data-track="graph-notes-expand"
           aria-expanded={open}
           className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
         >
           <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>{noteLine(note)}</span>
         </button>
+        {/* [lists10] WALK10-01: the same 6 px dot as the node's chip. */}
+        {fresh && <span data-graph-notes-new aria-label={t("graphNotes.newNoteTitle")} className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--kind-comment)]" />}
         <button
-          onClick={() => ctx.showNote(note.id)}
+          onClick={() => {
+            markSeen(note); // [lists10] WALK10-01
+            ctx.showNote(note.id);
+          }}
           data-track="graph-notes-open"
           className={`${ACTION} focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(pointer:coarse)]:opacity-100 ${open || first ? "" : "opacity-0"}`}
         >

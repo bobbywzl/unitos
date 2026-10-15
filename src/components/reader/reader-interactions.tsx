@@ -1151,6 +1151,14 @@ export function ReaderInteractions({
   const jumpOnOpen = useRef(
     Boolean(searchParams.get("src") || searchParams.get("block") || searchParams.get("link")),
   );
+  // [lists10] WALK10-05: after a jump the address asked for (a comment's
+  // door, an annotation reference, a quote's Jump, a search hit, a link's
+  // other end) the account's copy waits for the reader's own move: the
+  // jump's scrolls save the tab's copy alone, and the first wheel, touch,
+  // pointer, or scroll key in the pane lets the account's copy save as
+  // before. Written less, never deleted: a reader who answers a comment and
+  // leaves keeps her place in the document on every other device.
+  const accountWaitsForReader = useRef(jumpOnOpen.current);
   // A transcript keeps the tab's copy alone (playback moves its pane) and
   // has no left-off mark; an embedded layer keeps no position at all.
   const isTranscript = transcript !== undefined;
@@ -1324,11 +1332,21 @@ export function ReaderInteractions({
       )
         return;
       lastMovedAt.current = Date.now();
-      if (!keepsAccountCopy) return;
+      if (!keepsAccountCopy || accountWaitsForReader.current) return; // [lists10] WALK10-05
       accountDirty = true;
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => saveAccount(false), ACCOUNT_SAVE_SETTLE_MS);
       maxTimer ??= setTimeout(() => saveAccount(false), ACCOUNT_SAVE_MAX_MS);
+    };
+    // [lists10] WALK10-05: the reader's own move ends the wait after a jump
+    // (the signals the hold above reads, and the keys that scroll a pane).
+    const readerMoved = () => {
+      accountWaitsForReader.current = false;
+    };
+    const onScrollKey = (e: KeyboardEvent) => {
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key)) readerMoved();
     };
     const onPageHide = () => {
       save();
@@ -1363,10 +1381,18 @@ export function ReaderInteractions({
     };
     if (keepsAccountCopy && accountAtOpen === null) shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
     container.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("wheel", readerMoved, { passive: true }); // [lists10] WALK10-05
+    container.addEventListener("touchmove", readerMoved, { passive: true });
+    container.addEventListener("pointerdown", readerMoved);
+    window.addEventListener("keydown", onScrollKey);
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("wheel", readerMoved);
+      container.removeEventListener("touchmove", readerMoved);
+      container.removeEventListener("pointerdown", readerMoved);
+      window.removeEventListener("keydown", onScrollKey);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
@@ -3132,6 +3158,13 @@ export function ReaderInteractions({
   const jumpedRef = useRef(new Set<string>());
   const srcRef = useRef(src);
   srcRef.current = src;
+  // [lists10] WALK10-02: the comment's door opens the tab's card alone. The
+  // workspace answers the focus with open-annotation, which this pane would
+  // answer with the on-mark card (Delete, mic, Save) too: the same comment
+  // twice on one screen, and on a phone the on-mark card over Collapse. One
+  // shot: the door's own open only; a later press on the mark opens the
+  // on-mark card as before.
+  const doorRef = useRef<string | null>(null);
   useEffect(() => {
     if (!src || jumpedRef.current.delete(src)) return;
     flashSource(src);
@@ -3142,8 +3175,9 @@ export function ReaderInteractions({
       // A comment: the Annotations tab, its card expanded, where its replies
       // read and Reply is one press away — the path ?link= takes
       // (workspace.tsx onFocusAnnotation). The mark's own card shows the
-      // comment alone.
+      // comment alone, so it stays shut (doorRef).
       if (commentParam) {
+        doorRef.current = src;
         window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail: { sourceId: src } }));
         return;
       }
@@ -3396,6 +3430,11 @@ export function ReaderInteractions({
   useEffect(() => {
     const onOpen = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      // [lists10] WALK10-02: the comment's door opened the tab's card; no on-mark card for the same comment.
+      if (sourceId === doorRef.current) {
+        doorRef.current = null;
+        return;
+      }
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
       if (!container?.querySelector(sourceMarkSelector(sourceId))) return;

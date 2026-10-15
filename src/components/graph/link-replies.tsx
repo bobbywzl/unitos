@@ -3,8 +3,9 @@
 import { TEXT_META } from "./graph-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import type { GraphEdgeLink } from "@/lib/types";
+import type { GraphEdgeLink, NoteView, ReplyView } from "@/lib/types";
 import type { GraphComment, ProjectCoverage } from "@/lib/graph/coverage-view";
+import type { NotesOnGraph } from "@/lib/graph/notes";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon } from "@/components/icons";
@@ -34,8 +35,23 @@ import { useT } from "@/components/lang-provider";
 // shown (LinkReplies), a comment's row pressed (useMarkCommentSeen). The
 // curve draws the dot for a new link, the node's comments chip for a new
 // comment or reply, and useNewCount counts them for the Documents head.
+//
+// [lists10] A note another person wrote after `since` is new too (WALK10-01),
+// from the same store: the node's notes chip and the Notes row draw the same
+// dot, the head counts it, and a press on the row (expand, Open in notes)
+// marks it looked at (useMarkNoteSeen). A thread the reader answered is not
+// news: a link whose newest reply is this account's counts no new reply
+// (WALK10-07), as a comment's rule reads. The prune moves `since` forward to
+// its cutoff, so a thread older than 90 days is never new again (REV10-05);
+// `since` only moves forward.
 
-type Seen = { since: string; links: Record<string, string>; comments?: Record<string, string> };
+type Seen = {
+  since: string;
+  links: Record<string, string>;
+  comments?: Record<string, string>;
+  /** [lists10] A note looked at, by its id: when it was written (WALK10-01). */
+  notes?: Record<string, string>;
+};
 const SEEN_PREFIX = "unitos-link-seen:";
 const SEEN_KEY = (accountId: string, notebookId: string) => `${SEEN_PREFIX}${accountId}:${notebookId}`;
 const seenListeners = new Set<() => void>();
@@ -95,9 +111,19 @@ function markCommentSeen(key: string, commentId: string, at: string) {
   writeSeen(key, { ...seen, comments: { ...comments, [commentId]: at } });
 }
 
+// [lists10] A note looked at, by when it was written (WALK10-01).
+function markNoteSeen(key: string, noteId: string, at: string) {
+  const seen = stored(key) ?? readSeen(key);
+  const notes = seen.notes ?? {};
+  if ((notes[noteId] ?? "") >= at) return;
+  writeSeen(key, { ...seen, notes: { ...notes, [noteId]: at } });
+}
+
 /** Drop the marks of links the graph's answer no longer holds: every one
     when the answer is whole (it holds the provenance links), else those
-    whose last reply is older than 90 days. */
+    whose last reply is older than 90 days. [lists10] REV10-05: `since` moves
+    forward to the cutoff when it is older, so words older than 90 days are
+    never new again once their mark is gone; it never moves back. */
 export function usePruneLinkSeen(notebookId: string, linkIds: string[] | null, whole: boolean) {
   const { myId, authOn } = useCollab();
   useEffect(() => {
@@ -110,12 +136,18 @@ export function usePruneLinkSeen(notebookId: string, linkIds: string[] | null, w
     const links = Object.fromEntries(
       Object.entries(seen.links).filter(([id, at]) => live.has(id) || (!whole && at >= cutoff)),
     );
-    // [lists9] A comment's mark drops once its words are older than 90 days.
+    // [lists9] A comment's mark drops once its words are older than 90 days;
+    // [lists10] a note's mark the same.
     const comments = Object.fromEntries(Object.entries(seen.comments ?? {}).filter(([, at]) => at >= cutoff));
+    const notes = Object.fromEntries(Object.entries(seen.notes ?? {}).filter(([, at]) => at >= cutoff));
+    const since = seen.since < cutoff ? cutoff : seen.since;
     const fewer =
       Object.keys(links).length < Object.keys(seen.links).length ||
-      Object.keys(comments).length < Object.keys(seen.comments ?? {}).length;
-    if (fewer) writeSeen(key, { ...seen, links, ...(seen.comments ? { comments } : {}) });
+      Object.keys(comments).length < Object.keys(seen.comments ?? {}).length ||
+      Object.keys(notes).length < Object.keys(seen.notes ?? {}).length;
+    if (fewer || since !== seen.since) {
+      writeSeen(key, { ...seen, since, links, ...(seen.comments ? { comments } : {}), ...(seen.notes ? { notes } : {}) });
+    }
   }, [authOn, myId, notebookId, linkIds, whole]);
 }
 
@@ -148,10 +180,15 @@ function useSeen(): { seen: Seen | null; myId: string } {
 }
 
 // The open replies on a link another person wrote after this account last
-// opened its thread (or after `since`, a thread never opened).
+// opened its thread (or after `since`, a thread never opened). [lists10]
+// WALK10-07: none when the newest reply is this account's — a thread the
+// reader answered, in any browser, is not news, as a comment's rule reads.
 function newReplies(seen: Seen, myId: string, link: GraphEdgeLink): number {
+  const replies = link.replies ?? [];
+  const newest = replies.reduce<ReplyView | null>((a, r) => (a === null || r.createdAt > a.createdAt ? r : a), null);
+  if (newest !== null && newest.userId === myId) return 0;
   const after = link.id in seen.links ? seen.links[link.id] : seen.since;
-  return (link.replies ?? []).filter((r) => r.resolvedById === null && r.userId !== myId && r.createdAt > after).length;
+  return replies.filter((r) => r.resolvedById === null && r.userId !== myId && r.createdAt > after).length;
 }
 
 // [lists9] A link another person made after `since`, its thread never shown
@@ -170,6 +207,16 @@ function newComment(seen: Seen, myId: string, c: GraphComment): boolean {
   const own = c.authorId !== null && c.authorId !== myId && (c.createdAt ?? "") > after;
   const reply = c.newest != null && !c.newest.resolved && c.newest.userId !== myId && c.newest.createdAt > after;
   return own || reply;
+}
+
+// [lists10] An accepted note another person wrote after this account's last
+// visit, not looked at since (WALK10-01). A pending note is a proposal, not
+// news; an edit moves nothing (createdAt, not updatedAt); a note from before
+// authors or times were kept marks nothing.
+function newNote(seen: Seen, myId: string, note: NoteView): boolean {
+  if (note.status !== "ACCEPTED" || !note.createdById || note.createdById === myId || !note.createdAt) return false;
+  const after = seen.notes?.[note.id] ?? seen.since;
+  return note.createdAt > after;
 }
 
 /** The open replies on a link another person wrote after this account last
@@ -207,10 +254,33 @@ export function useNewComments(): (c: GraphComment) => boolean {
   return useCallback((c: GraphComment) => seen !== null && newComment(seen, myId, c), [seen, myId]);
 }
 
+/** [lists10] useNewLink with the new replies, as a rule over a list
+    (WALK10-01, walk §5.5): a listing that puts the groups with news first. */
+export function useNewLinks(): (link: GraphEdgeLink) => boolean {
+  const { seen, myId } = useSeen();
+  return useCallback(
+    (link: GraphEdgeLink) => seen !== null && (newLink(seen, myId, link) || newReplies(seen, myId, link) > 0),
+    [seen, myId],
+  );
+}
+
+/** [lists10] A note another person wrote since this account's last visit, as
+    a rule over a list (WALK10-01): the node's notes chip, the Notes list. */
+export function useNewNotes(): (note: NoteView) => boolean {
+  const { seen, myId } = useSeen();
+  return useCallback((note: NoteView) => seen !== null && newNote(seen, myId, note), [seen, myId]);
+}
+
 /** [lists9] What is new since this account's last visit, counted once each
     (WALK9-06): the links another person made or replied on, and the
-    comments another person wrote or replied on. For the Documents head. */
-export function useNewCount(links: GraphEdgeLink[], coverage: ProjectCoverage | null | undefined): number {
+    comments another person wrote or replied on; [lists10] and the notes
+    another person wrote (WALK10-01; `notes`: the graph's notes, every
+    section). For the Documents head. */
+export function useNewCount(
+  links: GraphEdgeLink[],
+  coverage: ProjectCoverage | null | undefined,
+  notes?: NotesOnGraph | null,
+): number {
   const { seen, myId } = useSeen();
   if (!seen) return 0;
   const onLinks = links.filter((l) => newLink(seen, myId, l) || newReplies(seen, myId, l) > 0).length;
@@ -218,7 +288,8 @@ export function useNewCount(links: GraphEdgeLink[], coverage: ProjectCoverage | 
     (n, d) => n + (d.comments ?? []).filter((c) => newComment(seen, myId, c)).length,
     0,
   );
-  return onLinks + onComments;
+  const onNotes = notes ? [...notes.notes, ...notes.projectNotes].filter((g) => newNote(seen, myId, g.note)).length : 0;
+  return onLinks + onComments + onNotes;
 }
 
 /** [lists9] A comment's row pressed: the comment, with its newest words, is
@@ -231,6 +302,20 @@ export function useMarkCommentSeen(): (c: GraphComment) => void {
       const at = c.newest?.createdAt ?? c.createdAt;
       if (!authOn || !myId || !notebookId || !at) return;
       markCommentSeen(SEEN_KEY(myId, notebookId), c.id, at);
+    },
+    [authOn, myId, notebookId],
+  );
+}
+
+/** [lists10] A note's row pressed (expand, Open in notes): the note is looked
+    at (WALK10-01). Nothing with sign-in off. */
+export function useMarkNoteSeen(): (note: NoteView) => void {
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  const { myId, authOn } = useCollab();
+  return useCallback(
+    (note: NoteView) => {
+      if (!authOn || !myId || !notebookId || !note.createdAt) return;
+      markNoteSeen(SEEN_KEY(myId, notebookId), note.id, note.createdAt);
     },
     [authOn, myId, notebookId],
   );

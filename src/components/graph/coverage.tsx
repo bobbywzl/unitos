@@ -43,7 +43,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
-import { useMarkCommentSeen, useNewComment, useNewComments, useNewCount } from "@/components/graph/link-replies"; // [lists9] WALK9-06
+import { useMarkCommentSeen, useNewComment, useNewComments, useNewCount, useNewLinks } from "@/components/graph/link-replies"; // [lists9] WALK9-06, [lists10]
 
 type CoverageValue = {
   coverage: ProjectCoverage | null;
@@ -189,7 +189,8 @@ export function CoverageHead({
   const { coverage, gapsOnly, setGapsOnly } = useContext(CoverageContext);
   const waits = useWaitsForReply();
   const commentWaitsOn = useCommentWaits();
-  const fresh = useNewCount(links, coverage); // [lists9] WALK9-06: new since this account's last visit
+  const notesOnGraph = useGraphNotes()?.every; // [lists10] WALK10-01: the notes count in "N new" too
+  const fresh = useNewCount(links, coverage, notesOnGraph); // [lists9] WALK9-06: new since this account's last visit
   const docs = documentIds.flatMap((id) => (coverage?.documents[id] ? [coverage.documents[id]] : []));
   const accepted = links.filter((l) => !l.recommended && !l.provenance);
   const linksWaiting = accepted.filter(waits).length;
@@ -703,8 +704,19 @@ export function DocumentComments({ notebookId, documentId, onOpenDocument }: { n
 
 /** A row of a listing: a comment, or [style9] a link waiting on you. `at`:
     when its newest words were written, for newest first; null for a comment
-    from an answer without `newest` (it keeps the reading order, last). */
-type ListingRow = { key: string; at: string | null } & ({ comment: GraphComment; link?: undefined } | { link: GraphEdgeLink; reply: ReplyView; comment?: undefined });
+    from an answer without `newest` (it keeps the reading order, last).
+    [lists10] `fresh`: new since this account's last visit (WALK9-06's rule). */
+type ListingRow = { key: string; at: string | null; fresh: boolean } & ({ comment: GraphComment; link?: undefined } | { link: GraphEdgeLink; reply: ReplyView; comment?: undefined });
+
+/** [lists10] Walk §5.5: the groups with a new row first, the one with the
+    newest new row before the others; the rest keep the order given (stable). */
+function freshFirst<T extends { rows: ListingRow[] }>(groups: T[]): T[] {
+  const newestFresh = (g: T) => g.rows.reduce((m, r) => (r.fresh && r.at !== null && r.at > m ? r.at : m), "");
+  return groups
+    .map((g, i) => ({ g, i, at: g.rows.some((r) => r.fresh) ? newestFresh(g) || "0" : "" }))
+    .sort((x, y) => (x.at === "" || y.at === "" ? Number(y.at !== "") - Number(x.at !== "") : y.at.localeCompare(x.at)) || x.i - y.i)
+    .map((x) => x.g);
+}
 
 /** [lists8] WALK8-02: every open comment of the project, in place of the
     Documents rows (the head's count, pressed): under each document's title,
@@ -742,6 +754,7 @@ export function AllComments({
   const waits = useWaitsForReply();
   const waitingReplyOf = useWaitingReply(); // [lists9] the one rule: no viewer, no account outside the project
   const isNew = useNewComments(); // [lists9] WALK9-06: new rows first
+  const isNewLink = useNewLinks(); // [lists10] walk §5.5: a link's row is new as its curve's dot is
   const listed = new Set(documents.map((d) => d.id));
   const linksOf = new Map<string, ListingRow[]>();
   if (waitingOnly && onOpenLink) {
@@ -751,23 +764,26 @@ export function AllComments({
         const reply = waitingReplyOf(l);
         const under = listed.has(l.fromDocumentId) ? l.fromDocumentId : listed.has(l.toDocumentId) ? l.toDocumentId : null;
         if (!reply || !under) continue;
-        linksOf.set(under, [...(linksOf.get(under) ?? []), { key: `link:${l.id}`, at: reply.createdAt, link: l, reply }]);
+        linksOf.set(under, [...(linksOf.get(under) ?? []), { key: `link:${l.id}`, at: reply.createdAt, fresh: isNewLink(l), link: l, reply }]);
       }
     }
   }
   const groups = documents.flatMap((d) => {
     const comments = openComments(coverage?.documents[d.id]).filter((c) => !waitingOnly || commentWaitsOn(c));
     const rows: ListingRow[] = [
-      ...comments.map((c): ListingRow => ({ key: `comment:${c.id}`, at: c.newest?.createdAt ?? c.createdAt ?? null, comment: c })),
+      ...comments.map((c): ListingRow => ({ key: `comment:${c.id}`, at: c.newest?.createdAt ?? c.createdAt ?? null, fresh: isNew(c), comment: c })),
       ...(linksOf.get(d.id) ?? []),
     ];
     if (rows.length === 0) return [];
     if (waitingOnly) rows.sort((x, y) => (y.at ?? "").localeCompare(x.at ?? ""));
     // [lists9] WALK9-06: in the comments listing the new rows come first, then the reading order.
-    else rows.sort((x, y) => Number(y.comment !== undefined && isNew(y.comment)) - Number(x.comment !== undefined && isNew(x.comment)));
+    else rows.sort((x, y) => Number(y.fresh) - Number(x.fresh));
     return [{ ...d, rows, newest: rows.reduce((m, r) => (r.at !== null && r.at > m ? r.at : m), "") }];
   });
   if (waitingOnly) groups.sort((x, y) => y.newest.localeCompare(x.newest));
+  // [lists10] Walk §5.5: in both listings the documents with something new come first, so the
+  // new rows sit together at the top; the rest keep their order (the reading order, or newest first).
+  const ordered = freshFirst(groups);
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const resolved = waitingOnly ? 0 : documents.reduce((n, d) => n + (coverage?.documents[d.id]?.comments ?? []).filter((c) => !c.open).length, 0);
   return (
@@ -789,7 +805,7 @@ export function AllComments({
               : t("graphCover.commentsOpenMany", { n: total })}
         </p>
       )}
-      {groups.map((g) => (
+      {ordered.map((g) => (
         <div key={g.id} className="flex flex-col gap-0.5">
           <p className={`px-2 ${TEXT_META} font-semibold text-sage-700`}>{g.title}</p>
           {g.rows.map((r) =>

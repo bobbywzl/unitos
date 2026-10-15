@@ -14,7 +14,7 @@ import { withoutGraphParams } from "@/components/graph/graph-content";
 import { useLinkPassages } from "@/components/graph/link-passages";
 import { noteLine, notesOnGraph, notesOnLink, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 import type { Point } from "@/lib/graph/curve-place";
-import { useAnyNewReplies } from "@/components/graph/link-replies"; // [layer5]
+import { useAnyNewReplies, useNewNotes } from "@/components/graph/link-replies"; // [layer5], [lists10]
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
 // node; a note shows where it is: a chip on each node it belongs to, its
@@ -325,6 +325,7 @@ const CARD_ROWS = 5;
 export function NodeNotes({ documentId }: { documentId: string }) {
   const ctx = useGraphNotes();
   const t = useT();
+  const isNew = useNewNotes(); // [lists10] WALK10-01
   const entry = ctx?.view.byDocument.get(documentId);
   if (!ctx || !entry) return null;
   return (
@@ -344,6 +345,10 @@ export function NodeNotes({ documentId }: { documentId: string }) {
           aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
           className="size-1.5 rounded-full bg-clay"
         />
+      )}
+      {/* [lists10] WALK10-01: a note another person wrote since this account's last visit: the dot every new mark on the graph draws (the comments chip's, the curve's). */}
+      {entry.notes.some((g) => isNew(g.note)) && (
+        <span data-graph-node-notes-new aria-label={t("graphNotes.newNoteTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
       )}
     </span>
   );
