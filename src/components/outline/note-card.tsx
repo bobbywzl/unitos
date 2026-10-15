@@ -1033,7 +1033,11 @@ const NoteCardBody = memo(function NoteCardBody({
         data-note-drop-target={takesDrop ? note.id : undefined}
         {...noteDrop.handlers}
         {...dragProps}
-        style={{ ...(draggable ? { touchAction: "pan-y" as const } : {}), ...(limit !== null ? { maxHeight: limit } : {}) }}
+        style={{
+          ...(draggable ? { touchAction: "pan-y" as const } : {}),
+          // The assistant reads the card's height (note-assistant.tsx).
+          ...(limit !== null ? ({ maxHeight: limit, "--note-edit-limit": `${limit}px` } as React.CSSProperties) : {}),
+        }}
         data-tip={
           dropTip ??
           (cardDrop.over
@@ -1048,15 +1052,19 @@ const NoteCardBody = memo(function NoteCardBody({
               ? t("outline.holdToMerge")
               : undefined)
         }
-        className={`flex flex-col ${pane ? "outline-2 -outline-offset-2" : "rounded-2xl bg-card shadow-soft outline-2"} ${
+        className={`group/edit flex flex-col pointer-coarse:has-[[data-note-assistant]]:overflow-y-auto ${pane ? "outline-2 -outline-offset-2" : "rounded-2xl bg-card shadow-soft outline-2"} ${
           cardDrop.over || isMergeTarget ? "outline-sage-500" : "outline-clay-400"
         } ${PADDING[variant]}${dropRing}`}
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
-        {/* The bar, then the title field, then the body (SPEC.md §6). */}
+        {/* The bar, then the title field, then the body (SPEC.md §6). On a
+            touch screen with the note's assistant open, the card scrolls as
+            one column and nothing shrinks under its words, so the
+            assistant never lies over the note; the assistant takes at most
+            the card's lower half (note-assistant.tsx). */}
         <NoteEditor
-          className="mt-2 min-h-0 flex-1"
+          className="mt-2 min-h-0 flex-1 pointer-coarse:group-has-[[data-note-assistant]]/edit:shrink-0"
           value={edit.body}
           onChange={editBody}
           onKeyDown={(e) => {

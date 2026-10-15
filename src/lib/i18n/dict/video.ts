@@ -143,7 +143,6 @@ const en = {
   ask: "Ask",
   askTitle: "Answer from the transcription in this range",
   stopAsk: "Stop. Whatever answered so far stays on screen.",
-  askFailed: "Ask failed",
 
   // Assistant on the media pane, with the two formalize skills
   assistant: "Assistant",
@@ -153,7 +152,6 @@ const en = {
   stopAssistant: "Stop the assistant. Your message stays; no reply lands.",
   assistantSpotChip: "Circled spot · {range}",
   assistantSpotClear: "Ask without the circled spot",
-  assistantFailed: "Assistant failed",
   assistantNoReply: "No answer came back. Try again.",
   assistantActionsUnsupported:
     "Document actions from this chat are not available on video and audio yet.",
@@ -323,7 +321,6 @@ const zh: Record<keyof typeof en, string> = {
   ask: "提问",
   askTitle: "从该区间的逐字稿作答",
   stopAsk: "停止。已作答的部分保留在屏幕上。",
-  askFailed: "提问失败",
 
   // Assistant on the media pane, with the two formalize skills
   assistant: "助手",
@@ -333,7 +330,6 @@ const zh: Record<keyof typeof en, string> = {
   stopAssistant: "停止助手。你的消息保留，不会收到回复。",
   assistantSpotChip: "圈选时刻 · {range}",
   assistantSpotClear: "提问时不带圈选内容",
-  assistantFailed: "助手请求失败",
   assistantNoReply: "没有收到回答。请重试。",
   assistantActionsUnsupported: "此对话中的文档操作暂不支持视频和音频。",
   skillArticle: "整理成文章",

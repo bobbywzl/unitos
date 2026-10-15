@@ -23,7 +23,7 @@ export function ClearConversation({
       onClick={onClear}
       data-track={track}
       data-tip={t("assistant.clearConversationTitle")}
-      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 ${className}`}
+      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:inline-flex pointer-coarse:h-9 pointer-coarse:items-center pointer-coarse:py-0 ${className}`}
     >
       {t("assistant.clearConversation")}
     </button>

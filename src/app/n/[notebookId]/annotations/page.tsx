@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { annotationKind } from "@/lib/annotations/kind";
+import { passageQuote } from "@/lib/annotations/passage";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { billingLinks } from "@/lib/billing/switch";
 import { peopleByIds, roleOf } from "@/lib/collab";
@@ -174,7 +175,13 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
           gist: n.gist,
           color: n.color,
           sourceId: source.id,
-          quotedText: source.quotedText,
+          // A passage across blocks: its whole quote (lib/annotations/passage.ts).
+          quotedText:
+            passageQuote(
+              n.content,
+              n.sources.filter((src) => src.documentId === source.documentId),
+              (id) => blockOrder.get(id),
+            ) ?? source.quotedText,
           orphaned: source.orphaned,
           figureLabel: null,
           layer: source.layer === "core" ? "core" : null,
