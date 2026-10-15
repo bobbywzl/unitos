@@ -1,3 +1,4 @@
+import { formatTime, formatTimeRange } from "@/lib/video/types";
 import type {
   DigestDocument,
   DigestNote,
@@ -31,7 +32,7 @@ export function corporaBudget(): RenderBudget {
 
 function timeRange(start: number | null, end: number | null): string | null {
   if (start == null) return null;
-  return end != null ? `${start.toFixed(1)}s–${end.toFixed(1)}s` : `${start.toFixed(1)}s`;
+  return end != null ? formatTimeRange(start, end) : formatTime(start);
 }
 
 // One reference to a source: quote, time range for video anchors, document.

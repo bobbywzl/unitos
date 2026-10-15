@@ -55,7 +55,10 @@ export type SuggestRequest = {
   /** The reader's message, and what the assistant's answer asks of it. */
   command: string;
   instruction: string;
+  /** The blocks themselves (a heading the heading alone), and the headings
+      whose whole section the command covers. */
   blockIds?: string[];
+  sections?: string[];
   /** The command moves blocks too: the order pass runs (lib/assistant/reorder.ts). */
   reorder?: boolean;
   /** The answer, which the command may ask to use. */

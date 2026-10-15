@@ -1,7 +1,7 @@
 import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { annotationKind } from "@/lib/annotations/kind";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
@@ -466,9 +466,12 @@ async function handle(req: Request, t: TFunc) {
   // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
+  // How hard this command runs (SPEC.md §7): the reader's choice, or Auto's
+  // reading of the command (lib/assistant/depth.ts).
+  const depthInput = { message: data.command, turns: history.length, attachments: attachedImage ? 1 : 0, scope: "document" as const };
   const chatCall = await featureCall(
     web ? "web" : attachedImage ? await pictureFeature("act") : "act",
-    thinkingEffort(data.thinking),
+    thinkingEffort(data.thinking, depthInput),
   );
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
@@ -527,7 +530,8 @@ async function handle(req: Request, t: TFunc) {
 
   // A revise action (a document without rich text, SPEC.md §7) is read part
   // by part now, as the sidebar's is: the plan carries the block actions it
-  // finds in its place. It covers the selected blocks when it names none.
+  // finds in its place. It covers the selected blocks when it names no
+  // blocks and no sections.
   const revise = actions.find((a): a is Extract<AssistantAction, { type: "revise" }> => a.type === "revise");
   if (revise) {
     const selected = [...new Set(passage.map((segment) => segment.blockId))];
@@ -543,10 +547,11 @@ async function handle(req: Request, t: TFunc) {
       instruction: revise.instruction,
       material: result.data.reply,
       history,
-      blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
+      blockIds: revise.blockIds ?? (!revise.sections && selected.length > 0 ? selected : undefined),
+      sections: revise.sections,
       reorder: revise.reorder,
       caretBlockId: null,
-      thinking: data.thinking ?? "deep",
+      thinking: resolvedThinking(data.thinking, depthInput),
       signal: AbortSignal.any([req.signal, deadline]),
       deadline,
     });
@@ -568,10 +573,11 @@ async function handle(req: Request, t: TFunc) {
     let window: { n: number; of: number; whole: boolean } | null = null;
     const cut: string[] = [];
     let onePassRows: string[] | null = null;
-    if (!suggest?.blockIds && passage.length > 0) scope = wordsScope(document.blocks, passage);
+    const named = Boolean(suggest?.blockIds || suggest?.sections);
+    if (!named && passage.length > 0) scope = wordsScope(document.blocks, passage);
     else {
-      const whole = !suggest?.blockIds;
-      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      const whole = !named;
+      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds ?? [], suggest!.sections);
       let windows = windowsOf(doc.rows, doc.places, inScope);
       let targeted = false;
       // A scope past one window and the one pass: the target pass names the
@@ -599,7 +605,8 @@ async function handle(req: Request, t: TFunc) {
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole: whole && !targeted };
       // A scope that fits one call goes by the one pass (lib/assistant/one-pass.ts).
-      const rowsInScope = whole ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
+      const rowsInScope = whole || suggest!.reorder ? [] : inScope;
       if (!chip && fitsOnePass(doc.rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null && suggest) {
@@ -619,7 +626,7 @@ async function handle(req: Request, t: TFunc) {
           material: null,
           history,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           plan: false,
           signal: req.signal,
         });
@@ -633,13 +640,12 @@ async function handle(req: Request, t: TFunc) {
       // A command that moves blocks: the order pass runs beside the window,
       // and its moves land after the window's words (lib/assistant/reorder.ts).
       const units = suggest?.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
-      const selected = [...new Set(passage.map((segment) => segment.blockId))];
       const ordering = suggest?.reorder
         ? runOrderPass({
             userId: user.id,
             document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
             units,
-            scopeRowIds: suggest.blockIds ? scopeOf(doc.rows, doc.places, suggest.blockIds) : selected,
+            scopeRowIds: [],
             profile,
             lang,
             t,
@@ -647,7 +653,7 @@ async function handle(req: Request, t: TFunc) {
             instruction: suggest.instruction,
             material: null,
             history,
-            thinking: data.thinking ?? "deep",
+            thinking: resolvedThinking(data.thinking, depthInput),
             signal: req.signal,
           }).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
         : null;
@@ -665,7 +671,7 @@ async function handle(req: Request, t: TFunc) {
           scope,
           window,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           budget: { chars: SUGGEST_MAX_NEW_CHARS },
           signal: req.signal,
           reorder: suggest?.reorder,
@@ -703,22 +709,34 @@ async function handle(req: Request, t: TFunc) {
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  // With suggestions, the reply shown and stored is their summary.
+  // With suggestions, the reply shown is their summary, one sentence whose
+  // subject is the suggestions; the stored turn adds that they are in the
+  // document, so a later confirmation reads as answered. A suggest run that
+  // landed nothing says why, not what it meant to change.
+  const landed = suggestions ? suggestions.ops.length > 0 : false;
   const answer =
     result.data.reply ??
     (suggestions
-      ? suggestions.summary || t(suggestions.ops.length > 0 ? "api.suggestMade" : "api.suggestNoChange")
+      ? landed
+        ? suggestions.summary
+        : suggestions.warnings[0]
+          ? t("api.suggestNoneLanded", { why: suggestions.warnings[0] })
+          : t("api.suggestNoChange")
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed.");
   const replyText = answer;
   // The stored turn names the actions it proposed, so a later "implement"
-  // reads which change it confirms.
-  const proposed = actions.map((a) => a.description).filter(Boolean);
+  // reads which change it confirms; a suggest that ran is not proposed, its
+  // suggestions are in the document, and the turn says so.
+  const proposed = actions.filter((a) => !(suggestions && a.type === "suggest")).map((a) => a.description).filter(Boolean);
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
-    { role: "assistant", content: proposed.length > 0 ? `${replyText}\n\nProposed actions: ${proposed.join("; ")}` : replyText },
+    {
+      role: "assistant",
+      content: [replyText, landed ? t("api.suggestMade") : "", proposed.length > 0 ? `Proposed actions: ${proposed.join("; ")}` : ""].filter(Boolean).join("\n\n"),
+    },
   ];
   if (data.sideChatOf) {
     // A side chat persists like the conversation it came from, on a note that

@@ -136,6 +136,13 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </p>
         </section>
 
+        {/* Breakwork (SPEC.md §32): the document sorted into buckets, and its assistant. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideStructureHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideStructureBody")}</p>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideStructureAssistantBody")}</p>
+        </section>
+
         {/* Collapse (SPEC.md §28): every block to its core, and Contents beside it. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideCollapseHeader")}</span>

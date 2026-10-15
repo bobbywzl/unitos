@@ -373,6 +373,9 @@ const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
   { id: "notebook", labelKey: "assistant.scopeProjectLabel", hintKey: "assistant.scopeProjectHint" },
 ];
 
+type Habit = { kind: string; text: string; count: number };
+const HABITS_HIDDEN_KEY = "unitos.assistant.habitsHiddenUntil";
+
 // Recommended functions for the open document, in this order.
 const RECOMMENDED: { depth: SummaryDepth; labelKey: TKey; hintKey: TKey }[] = [
   { depth: "layman", labelKey: "assistant.recLaymanLabel", hintKey: "assistant.recLaymanHint" },
@@ -483,7 +486,7 @@ export function AssistantPanel({
   const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
   // Web access (SPEC.md §7): the one toggle every surface shares (web-chip.tsx).
   const web = useWeb();
-  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // Auto, Fast, or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
   // The box's words: kept as a draft (initialBoxText above).
@@ -723,6 +726,36 @@ export function AssistantPanel({
   const [error, setError] = useState<string | null>(null);
   // Recommended output: generated in this session, over the stored initials.
   const [recDepth, setRecDepth] = useState<SummaryDepth | null>(null);
+  // The reader's habits (SPEC.md §7): the asks they repeat, offered again as
+  // chips under Recommended; Hide keeps them away for thirty days.
+  const [habits, setHabits] = useState<Habit[]>([]);
+  useEffect(() => {
+    let hidden = false;
+    try {
+      hidden = Number(localStorage.getItem(HABITS_HIDDEN_KEY) ?? 0) > Date.now();
+    } catch {
+      /* no storage */
+    }
+    if (hidden) return;
+    let gone = false;
+    fetch(`/api/assistant/habits?notebookId=${encodeURIComponent(notebookId)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ habits?: Habit[] }>) : null))
+      .then((json) => {
+        if (!gone && Array.isArray(json?.habits)) setHabits(json.habits);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [notebookId]);
+  function hideHabits() {
+    setHabits([]);
+    try {
+      localStorage.setItem(HABITS_HIDDEN_KEY, String(Date.now() + 30 * 86_400_000));
+    } catch {
+      /* no storage */
+    }
+  }
   const [recTexts, setRecTexts] = useState<SummaryLevels>({});
   const [recBusy, setRecBusy] = useState<SummaryDepth | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
@@ -1577,6 +1610,7 @@ export function AssistantPanel({
       command: command.slice(0, 4000),
       instruction: action.instruction,
       blockIds: action.blockIds,
+      sections: action.sections,
       reorder: action.reorder,
       material: material.slice(0, 20_000),
       history: history
@@ -2242,6 +2276,40 @@ export function AssistantPanel({
               </button>
             ))}
           </div>
+          {habits.length > 0 && (
+            <div className="space-y-1.5" data-track="assistant-habits">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("assistant.habits")}</span>
+                <button type="button" onClick={hideHabits} className="text-xs text-sand-500 hover:text-sand-800">
+                  {t("assistant.habitsHide")}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {habits.map((h) => (
+                  <button
+                    key={h.kind}
+                    type="button"
+                    onClick={() =>
+                      void send({
+                        key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                        content: h.text,
+                        question: h.text,
+                        quote: null,
+                        images: [],
+                        files: [],
+                      })
+                    }
+                    disabled={busy}
+                    title={t("assistant.habitsHint", { n: h.count })}
+                    data-track="assistant-habit"
+                    className="rounded-full bg-card px-3 py-1 text-left text-xs text-sand-800 shadow-soft hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+                  >
+                    {h.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {recDepth && (recommendedShown || recError || recBusy === recDepth) && (
             <div className="rounded-2xl bg-card p-4 shadow-soft">
               <div className="mb-2 flex items-center justify-between">

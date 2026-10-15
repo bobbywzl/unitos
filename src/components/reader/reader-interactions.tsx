@@ -81,6 +81,7 @@ import {
   useAnswerSelection,
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
+import { changeWindow } from "@/lib/assistant/diff-window";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
@@ -94,6 +95,7 @@ import {
   ChevronDownIcon,
   CheckIcon,
   CollapseIcon,
+  StructureIcon,
   CommentIcon,
   DefineIcon,
   ExpandIcon,
@@ -154,6 +156,14 @@ import {
 } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
+import dynamic from "next/dynamic";
+import type { PieceAnnotation } from "@/components/structure/structure-context";
+
+// Breakwork (SPEC.md §32) loads with its canvas only when it opens.
+const StructureOverlay = dynamic(
+  () => import("@/components/structure/structure-overlay").then((m) => m.StructureOverlay),
+  { ssr: false, loading: () => null },
+);
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { pageCellSelection, pageEditorIn, pageSelectionOfRange, tabOpensToolbox, wordAtCaret } from "@/components/docs/layer/anchor";
@@ -756,6 +766,8 @@ function blocksOnSide(
 }
 
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
+// The lines of a new list the plan card shows.
+const LIST_PREVIEW_LINES = 8;
 
 // Format targets of a format_block action, shown in the plan card.
 const FORMAT_KIND_KEY: Record<BlockKind, TKey> = {
@@ -788,10 +800,23 @@ function actionDetail(
     }
     case "add_section":
       return `“${action.title}”`;
-    case "edit_block":
-      return t("reader.detailTo", { text: clip(action.newText) });
-    case "insert_paragraph":
-      return `${action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : ""}“${clip(action.text)}”`;
+    case "edit_block": {
+      // The change itself, with the words around it, so a change late in
+      // a long paragraph reads in the card (lib/assistant/diff-window.ts).
+      const window = changeWindow(blockText(action.blockId), action.newText);
+      return t("reader.detailChange", { before: clip(window.before, 120), after: clip(window.after, 120) });
+    }
+    case "insert_paragraph": {
+      const kind = action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : "";
+      // A new list shows each of its lines, so the reader sees where every
+      // point and every sentence goes before Apply.
+      if (action.kind === "list" || action.kind === "numbered") {
+        const lines = action.text.split("\n").map((line) => line.replace(/^\s*(?:[-*+]|\d{1,3}[.)])\s+/, "").trim()).filter(Boolean);
+        const shown = lines.slice(0, LIST_PREVIEW_LINES).map((line, k) => `${action.kind === "numbered" ? `${k + 1}.` : "•"} ${clip(line, 120)}`);
+        return [kind.replace(/ · $/, ""), ...shown, ...(lines.length > shown.length ? ["…"] : [])].join("\n");
+      }
+      return `${kind}“${clip(action.text)}”`;
+    }
     case "remove_block":
       return `“${clip(blockText(action.blockId))}”`;
     case "link": {
@@ -813,6 +838,8 @@ function actionDetail(
       return `“${clip(blockText(action.blockId), 60)}” → ${action.name}`;
     case "rename_speaker":
       return `${action.previousName} → ${action.name}`;
+    case "create_document":
+      return t("reader.detailDocument", { title: clip(action.title, 60), n: action.quotes.length, s: plural(action.quotes.length) });
     default:
       return null;
   }
@@ -836,6 +863,7 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   split_line: "reader.actionSplitLine",
   set_speaker: "reader.actionSetSpeaker",
   rename_speaker: "reader.actionRenameSpeaker",
+  create_document: "reader.actionDocument",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -908,12 +936,16 @@ type ExplainBubble = ToolChat & {
   text: string;
   streaming: boolean;
   error: string | null;
-  // VISUALIZE only (SPEC.md §20): the model declined to draw, and this is why.
-  declined: string | null;
+  // VISUALIZE only (SPEC.md §20): the model is not certain the picture would
+  // be accurate, and this is why. The card asks the reader to confirm.
+  unsure: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
   run?: number; // the run streaming into this card (toolRunsRef); none once reopened from a mark
   runError?: string | null; // a Regenerate that did not land: why, under the output that stands
+  // VISUALIZE only: a Regenerate that came back unsure. Confirm under the
+  // picture that stands draws the new one anyway (SPEC.md §20).
+  runUnsure?: boolean;
 };
 
 // suggestKey: an answer that landed suggestions in the text (SPEC.md §29);
@@ -2191,7 +2223,7 @@ export function ReaderInteractions({
   // The assistant as an actor: a command becomes a plan; the plan runs after
   // approval in the plan card, never before. The sidebar assistant's plan
   // (SPEC.md §7) arrives by event and takes the same card.
-  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // Auto, Fast, or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
   const web = useWeb();
@@ -5076,7 +5108,7 @@ export function ReaderInteractions({
           text: stored.content,
           streaming: false,
           error: null,
-          declined: null,
+          unsure: null,
           anchor,
           noteId: stored.noteId,
         });
@@ -5493,6 +5525,31 @@ export function ReaderInteractions({
   );
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
+  // Breakwork (SPEC.md §32): the overlay over the reader, and its glow.
+  const [structureOpen, setStructureOpen] = useState(false);
+  const structureNew = useNewFeature("structure");
+  // What each block carries, for the pieces of the structure: every
+  // annotation and note anchored in it, its kind and its words.
+  const structureAnnotations = useMemo<Record<string, PieceAnnotation[]>>(() => {
+    const byBlock: Record<string, PieceAnnotation[]> = {};
+    const seen = new Set<string>();
+    for (const [blockId, list] of Object.entries(wholeAnchorHighlights)) {
+      for (const h of list) {
+        const key = `${blockId}|${h.sourceId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bubble = annotationBubbles[h.sourceId];
+        const stored = annotationsBySource[h.sourceId];
+        const item: PieceAnnotation = bubble
+          ? { kind: bubble.kind, color: null, text: bubble.content, sourceId: h.sourceId, noteId: bubble.noteId }
+          : stored
+            ? { kind: stored.kind, color: stored.color, text: stored.content, sourceId: h.sourceId, noteId: stored.noteId }
+            : { kind: "note", color: null, text: "", sourceId: h.sourceId, noteId: h.noteId };
+        (byBlock[blockId] ??= []).push(item);
+      }
+    }
+    return byBlock;
+  }, [wholeAnchorHighlights, annotationBubbles, annotationsBySource]);
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   // Collapse on or off, or one block read whole or folded, draws other
   // words: a card about words no longer drawn closes, and its mark reopens
@@ -6042,10 +6099,11 @@ export function ReaderInteractions({
 
   // ¶ chips in AI text (Markdown) jump to the block they cite. A part of the
   // contents lands on the core of a collapsed block (SPEC.md §28); every
-  // other jump lands on the block's words.
+  // other jump lands on the block's words. A chip for blocks named together
+  // (blockIds) lands on the first and flashes each of the others too.
   useEffect(() => {
     const onFlashBlock = (e: Event) => {
-      const { blockId, part } = (e as CustomEvent<{ blockId: string; part?: boolean }>).detail;
+      const { blockId, part, blockIds } = (e as CustomEvent<{ blockId: string; part?: boolean; blockIds?: string[] }>).detail;
       const container = containerRef.current;
       const el = container?.querySelector<HTMLElement>(
         `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
@@ -6062,6 +6120,10 @@ export function ReaderInteractions({
       }
       if (!part) {
         jumpToWords(blockId, 10);
+        for (const other of blockIds ?? []) {
+          const words = other === blockId || !container ? null : wordsOf(container, other);
+          if (words) flashElement(words);
+        }
         return;
       }
       // A part lands with its heading at the reading line, where a reader
@@ -6380,8 +6442,14 @@ export function ReaderInteractions({
   }
 
   // conversationOf: Regenerate on an annotation with a conversation (SPEC.md
-  // §4, §21): the new annotation takes its turns.
-  function deriveBody(type: string, anchor: Anchor, conversationOf?: string | null) {
+  // §4, §21): the new annotation takes its turns. extra: VISUALIZE's confirm
+  // (SPEC.md §20).
+  function deriveBody(
+    type: string,
+    anchor: Anchor,
+    conversationOf?: string | null,
+    extra: Record<string, unknown> = {},
+  ) {
     // The Web toggle (SPEC.md §7): the route searches for EXPLAIN and ANALYZE.
     return JSON.stringify({
       type,
@@ -6391,6 +6459,7 @@ export function ReaderInteractions({
       anchor: anchorBody(anchor),
       ...segmentsBody(anchor),
       ...(conversationOf ? { conversationOf } : {}),
+      ...extra,
     });
   }
 
@@ -6558,7 +6627,7 @@ export function ReaderInteractions({
             text,
             streaming: false,
             error: null,
-            declined: null,
+            unsure: null,
             anchor,
             noteId,
           });
@@ -6608,7 +6677,7 @@ export function ReaderInteractions({
     const { run, controller } = startToolRun();
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
     const replaceNoteId = replacing?.noteId ?? null;
-    setBubble({ ...slot, ...chatCarried(replacing), kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
+    setBubble({ ...slot, ...chatCarried(replacing), kind, text: "", streaming: true, error: null, unsure: null, anchor, noteId: null, run });
     try {
       const res = await aiFetch("/api/derive", {
         method: "POST",
@@ -6772,7 +6841,8 @@ export function ReaderInteractions({
   // VISUALIZE (SPEC.md §20, Unitos Ultra): the selection as a picture, into
   // the same card as EXPLAIN. The server answers behind a heartbeat stream
   // with the annotation's markdown (the picture and its caption), or with the
-  // reason the model declined to draw; a decline persists nothing.
+  // reason the picture may not be accurate; that persists nothing, and the
+  // card asks the reader to confirm. A confirmed run draws the picture anyway.
   async function visualize() {
     if (!popover || busy) return;
     if (!ultra) {
@@ -6786,7 +6856,7 @@ export function ReaderInteractions({
     markFreshAnchor(anchor);
     await runVisualize(anchor, claimSideSlot("explain", yTop, anchor));
   }
-  async function runVisualize(anchor: Anchor, slot: SideSlot, replacing?: ExplainBubble | null) {
+  async function runVisualize(anchor: Anchor, slot: SideSlot, replacing?: ExplainBubble | null, confirm = false) {
     const { run, controller } = startToolRun();
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
     const replaceNoteId = replacing?.noteId ?? null;
@@ -6797,7 +6867,7 @@ export function ReaderInteractions({
       text: "",
       streaming: true,
       error: null,
-      declined: null,
+      unsure: null,
       anchor,
       noteId: null,
       run,
@@ -6807,7 +6877,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody("VISUALIZE", anchor, turnsOf(replacing)),
+        body: deriveBody("VISUALIZE", anchor, turnsOf(replacing), confirm ? { confirm: true } : {}),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -6824,21 +6894,23 @@ export function ReaderInteractions({
         parsed = null;
       }
       const payload = parsed as {
-        declined?: boolean;
+        unsure?: boolean;
         reason?: string;
         noteId?: string;
         content?: string;
       } | null;
       if (!payload) throw new Error(t("reader.emptyResponse"));
-      if (payload.declined) {
+      if (payload.unsure && !payload.content) {
         const reason = payload.reason ?? "";
-        // A Regenerate that declines keeps the picture that stands (SPEC.md §20).
+        // A Regenerate that comes back unsure keeps the picture that stands
+        // (SPEC.md §20): the line under it says why, and its Confirm draws
+        // the new picture anyway, in the old one's place.
         if (replacing) {
-          const why = [t("reader.visualizeDeclined"), reason].filter(Boolean).join(" ");
-          setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why } : b));
+          const why = [t("reader.visualizeRegenUnsure"), reason].filter(Boolean).join(" ");
+          setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why, runUnsure: true } : b));
           return;
         }
-        setBubble((b) => (mine(b) ? { ...b, streaming: false, declined: reason } : b));
+        setBubble((b) => (mine(b) ? { ...b, streaming: false, unsure: reason } : b));
         return;
       }
       const content = payload.content ?? "";
@@ -8211,6 +8283,7 @@ export function ReaderInteractions({
     await landOps(key, result.ops, result.warnings, replacing);
     run.running = false;
     publishRun(key);
+    openReview(run);
     return key;
   }
 
@@ -8258,8 +8331,19 @@ export function ReaderInteractions({
   // Review suggested edits over this command's suggestions, the first one selected.
   function reviewRun(run: SuggestionRun) {
     pageEditorIn(containerRef.current)?.view.dom.dispatchEvent(
-      new CustomEvent("docs:review-suggestions", { detail: { ids: run.ids } }),
+      new CustomEvent("docs:review-suggestions", {
+        detail: { ids: run.ids, summary: run.summary, skipped: [...run.skipped, ...run.notes], assistant: true },
+      }),
     );
+  }
+
+  // The assistant's suggestions landed: the page's review box opens on them
+  // (components/docs/suggest/review.tsx), so the reader sees each change and
+  // accepts or rejects it, and reads why a change did not land. A run that
+  // landed nothing and skipped nothing opens no box.
+  function openReview(run: SuggestionRun) {
+    if (readerClosedRef.current || (run.ids.length === 0 && run.skipped.length === 0 && run.notes.length === 0)) return;
+    reviewRun(run);
   }
 
   // Accept all or Reject all of this command: one undo step.
@@ -8296,6 +8380,7 @@ export function ReaderInteractions({
           command: request.command,
           instruction: request.instruction,
           blockIds: request.blockIds,
+          sections: request.sections,
           reorder: request.reorder,
           caretBlockId: typeof caret === "string" && caret ? caret : undefined,
           material: request.material,
@@ -8323,6 +8408,7 @@ export function ReaderInteractions({
       run.running = false;
       run.controller = null;
       publishRun(request.key);
+      openReview(run);
     }
   }
   const suggestDocumentRef = useRef(suggestDocument);
@@ -8849,6 +8935,8 @@ export function ReaderInteractions({
     const undo: { description: string; run: () => Promise<unknown> }[] = [];
     let applied = 0;
     const failed: string[] = [];
+    // The titles of the documents the plan made, for the toast.
+    const madeDocuments: string[] = [];
     // A block as the plan's earlier actions left it: the routes answer with it.
     const changed = new Map<string, BlockData>();
     const current = (id: string) => changed.get(id) ?? blocks.find((b) => b.id === id);
@@ -8950,10 +9038,16 @@ export function ReaderInteractions({
             }
             // Assistant notes carry their authorship. The plan was approved,
             // so the note lands accepted (SPEC.md §1).
+            // A note that draws on several blocks sends every passage as a
+            // segment, the source first: each becomes a source of the note.
+            const segments = action.source && action.moreSources?.length
+              ? [action.source, ...action.moreSources].map((a) => ({ blockId: a.blockId, startOffset: a.startOffset, endOffset: a.endOffset, quotedText: a.quotedText, prefix: a.prefix, suffix: a.suffix }))
+              : undefined;
             const note = await api<{ id: string }>("/api/notes", "POST", {
               sectionId,
               content: action.content,
               source: action.source,
+              ...(segments ? { segments } : {}),
               origin: "assistant",
               pending: false,
             });
@@ -9042,6 +9136,22 @@ export function ReaderInteractions({
             });
             break;
           }
+          case "create_document": {
+            // A new document of the project (SPEC.md §7): written from the
+            // markdown with its quotes linked back to this document, attached
+            // beside it. Undo deletes it.
+            const created = await api<{ id: string; title: string }>("/api/documents/generated", "POST", {
+              notebookId,
+              fromDocumentId: documentId,
+              title: action.title,
+              markdown: action.markdown,
+              quotes: action.quotes,
+              command: action.description,
+            });
+            madeDocuments.push(created.title);
+            undo.push({ description: action.description, run: () => api(`/api/documents/${created.id}`, "DELETE") });
+            break;
+          }
           case "style": {
             // The style route toggles the span: the same request takes it back.
             const body = {
@@ -9065,6 +9175,7 @@ export function ReaderInteractions({
     router.refresh();
     const summary = [
       t("reader.actionsApplied", { n: applied, s: plural(applied) }),
+      ...madeDocuments.map((title) => t("reader.documentCreated", { title })),
       ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
       ...(warnings.length > 0 ? [warnings[0]] : []),
     ].join(" · ");
@@ -10547,6 +10658,25 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {collapseNew.isNew && <NewPill />}
     </button>
   );
+  // Breakwork (SPEC.md §32): the button at the top right, beside Collapse.
+  // Pressed, the structure opens over the reader.
+  const structureButton = (
+    <button
+      onClick={() => {
+        structureNew.seen();
+        setStructureOpen(true);
+      }}
+      data-track="structure"
+      data-tip={t("structure.structureButtonTitle")}
+      className={`flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
+        structureNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+      }`}
+    >
+      <StructureIcon size={13} />
+      {t("structure.structure")}
+      {structureNew.isNew && <NewPill />}
+    </button>
+  );
   // The annotation each card over the article holds, as a reference
   // (lib/annotation-reference.ts): what its grip and a hold on it drag.
   const annotationCardReference = annotationCard
@@ -10648,7 +10778,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </span>
               {action.description}
               {actionDetail(action, blocks, attachedDocuments, t) && (
-                <span className="mt-0.5 block text-[11px] text-sand-500">
+                <span className="mt-0.5 block whitespace-pre-line text-[11px] text-sand-500">
                   {actionDetail(action, blocks, attachedDocuments, t)}
                 </span>
               )}
@@ -10860,6 +10990,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* A blank document has no Contents. */}
           {!richText && articleMenu}
           <div className="relative ml-auto flex shrink-0 items-center gap-2">
+            {!richText && structureButton}
             {!richText && collapseButton}
             {distillButton}
             {/* The article's errors: under the buttons, over the text. */}
@@ -10924,6 +11055,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {t("common.done")}
           </button>
         )}
+        {!split && !transcript && !embedded && !richText && structureButton}
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
@@ -11012,9 +11144,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             ? {
                 ...richText,
                 canEdit,
-                // Collapse alone: the rail's Extract tab has Extract from
-                // the article (PAGE12-11).
-                aiControls: !embedded ? <div className="flex items-center gap-2">{collapseButton}</div> : null,
+                // Breakwork and Collapse: the rail's Extract tab has Extract
+                // from the article (PAGE12-11).
+                aiControls: !embedded ? (
+                  <div className="flex items-center gap-2">
+                    {structureButton}
+                    {collapseButton}
+                  </div>
+                ) : null,
                 notebookId,
                 documents: attachedDocuments,
                 // An import's References section stands under its pages,
@@ -12109,11 +12246,23 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* A failure keeps the words that had arrived, the line under them. */}
           {bubble.error && !bubble.text.trim() ? (
             <p className="text-sm break-words text-red-600">{bubble.error}</p>
-          ) : bubble.declined !== null ? (
+          ) : bubble.unsure !== null ? (
             <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
-              <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
-              {bubble.declined && <p className="mt-1">{bubble.declined}</p>}
-              <p className="mt-1 text-sand-600">{t("reader.visualizeDeclinedHint")}</p>
+              <p className="font-semibold">{t("reader.visualizeUnsure")}</p>
+              {bubble.unsure && <p className="mt-1 text-sand-600">{bubble.unsure}</p>}
+              {/* Confirm: the picture is drawn anyway, marked "May not be accurate." */}
+              <button
+                onClick={() => {
+                  if (!bubble.anchor) return;
+                  const { left, top, width, side, anchor } = bubble;
+                  void runVisualize(anchor, { left, top, width, side }, null, true);
+                }}
+                data-track="visualize-confirm"
+                className="mt-3 rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
+                data-tip={t("reader.visualizeConfirmTitle")}
+              >
+                {t("reader.visualizeConfirm")}
+              </button>
             </div>
           ) : bubble.text ? (
             <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
@@ -12128,12 +12277,25 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {bubble.runError}
                 </p>
               )}
+              {bubble.runUnsure && bubble.anchor && (
+                <button
+                  onClick={() => {
+                    if (!bubble.anchor) return;
+                    void runVisualize(bubble.anchor, slotOf(bubble), { ...bubble, runError: null, runUnsure: false }, true);
+                  }}
+                  data-track="visualize-confirm"
+                  className="mt-2 rounded-full bg-clay px-3.5 py-1.5 text-xs font-semibold text-clay-fg shadow-soft hover:bg-clay-600"
+                  data-tip={t("reader.visualizeConfirmTitle")}
+                >
+                  {t("reader.visualizeConfirm")}
+                </button>
+              )}
               {toolChatTurns(bubble)}
             </div>
           ) : (
             <ThinkingIndicator className="py-1 text-[12.5px]" />
           )}
-          {bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null && (
+          {bubble.noteId && !bubble.streaming && !bubble.error && bubble.unsure === null && (
             <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
               <RatingButtons
                 tool={bubble.kind}
@@ -12162,14 +12324,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
             </div>
           )}
-          {/* No foot row (a failed or declined run): the ⋯ alone, so
+          {/* No foot row (a failed or unsure run): the ⋯ alone, so
               Regenerate stays in reach. */}
-          {!(bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null) && !bubble.streaming && (
+          {!(bubble.noteId && !bubble.streaming && !bubble.error && bubble.unsure === null) && !bubble.streaming && (
             <div className="mt-2 flex shrink-0 justify-end empty:hidden">
               <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
             </div>
           )}
-          {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
+          {bubble.unsure === null && toolChatFoot("explain", bubble, bubble.kind)}
         </div>
       )}
       </Presence>
@@ -12731,7 +12893,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </>
           }
           foot={
-            bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
+            bubble.unsure === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
           }
           onClose={closeConversationView}
         />
@@ -12751,6 +12913,30 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           }
           foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
           onClose={closeConversationView}
+        />
+      )}
+      </Presence>
+
+      <Presence show={structureOpen} exit="fade">
+      {structureOpen && (
+        <StructureOverlay
+          notebookId={notebookId}
+          documentId={documentId}
+          title={title}
+          blocks={blocks}
+          annotationsByBlock={structureAnnotations}
+          onClose={() => setStructureOpen(false)}
+          onOpenBlock={(blockId, sourceId) => {
+            setStructureOpen(false);
+            // The overlay leaves first; the jump needs the reader's own scroller.
+            setTimeout(() => {
+              if (sourceId) {
+                window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+              } else {
+                window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }));
+              }
+            }, 50);
+          }}
         />
       )}
       </Presence>

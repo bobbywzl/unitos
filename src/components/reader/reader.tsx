@@ -81,8 +81,8 @@ export type TranscriptVariant = {
   // Lines covered by a time-anchored annotation: underlined, like a
   // highlighted span in an article.
   annotatedLineIds: Set<string>;
-  // The moment's tools, floating over a line on hover: comment, explain,
-  // open the note.
+  // The line's tool, in the margin beside a hovered line: an annotated line opens
+  // its annotation. Null when the line has none.
   lineTools: (line: TranscriptLine) => React.ReactNode;
   // Above the lines: the player, the tool bar, and the view bar. Below:
   // whatever the view bar's other views show.
@@ -307,19 +307,21 @@ function TranscriptBody({
                 html: null,
               };
               const annotated = annotatedLineIds.has(line.id);
+              const tools = lineTools(line);
               return (
                 <span key={line.id} className="group/line relative sm:static">
                   {/* The line's tools: in the margin left of the row the
                       line starts on, over no word (first in the line, so
-                      that is its place); on a phone, over the line. */}
-                  {toolsLine === line.id && (
+                      that is its place); on a phone, over the line.
+                      Only an annotated line has one (Open note). */}
+                  {toolsLine === line.id && tools && (
                     <span className="pointer-events-none absolute bottom-full left-0 z-10 inline-flex pb-1 sm:top-auto sm:right-full sm:bottom-auto sm:left-auto sm:mr-2 sm:pb-0">
                       <span
                         data-anchor-skip
                         onPointerEnter={() => clearTimeout(toolsTimer.current)}
                         className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
                       >
-                        {lineTools(line)}
+                        {tools}
                       </span>
                     </span>
                   )}

@@ -26,8 +26,8 @@ import type { CollapsedViewModel } from "@/components/use-collapsed-view";
 // the collapse chevron, the highlight's color, the id, and the kind when
 // asked for; then the body; then the actions. The card's border is the
 // annotation's kind color (lib/annotations/kind.ts): a comment's blue, an
-// explanation's red, a simplified rewrite's green, an analysis's teal, a
-// visualization's magenta, the assistant's violet, a highlight's own hue —
+// explanation's violet, a simplified rewrite's green, an analysis's teal, a
+// visualization's magenta, the assistant's Unitos orange, a highlight's own hue —
 // the color its mark carries in the text and its card carries over the
 // article. Collapsed, the header row is the whole card: the id and the gist.
 // A jump to the annotation from its mark in the text

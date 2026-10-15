@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import {
-  CommentIcon,
   LocateIcon,
   QuestionIcon,
   RegenerateIcon,
@@ -596,38 +595,6 @@ export function VideoPane({
     }
   }
 
-  // A transcript line is an anchor like a circled spot: same tools, same time
-  // range, no drawn region (SPEC.md §11).
-  function commentOnLine(line: TranscriptLine) {
-    if (!canEdit) return;
-    playerRef.current?.seek(line.startTime);
-    setActiveLineId(line.id);
-    setDrawing(false);
-    setExplaining(null);
-    setOpenNote(null);
-    setComposer({
-      region: null,
-      startTime: formatTime(line.startTime),
-      endTime: formatTime(Math.ceil(line.endTime)),
-      text: "",
-      busy: false,
-      error: null,
-    });
-  }
-
-  function explainLine(line: TranscriptLine) {
-    if (!canEdit) return;
-    playerRef.current?.seek(line.startTime);
-    setActiveLineId(line.id);
-    setDrawing(false);
-    setComposer(null);
-    void runExplain({
-      startTime: line.startTime,
-      endTime: Math.ceil(line.endTime),
-      region: null,
-    });
-  }
-
   async function onVisualDelete(noteId: string) {
     setRemoved((prev) => new Set(prev).add(noteId));
     router.refresh();
@@ -658,47 +625,24 @@ export function VideoPane({
 
   const lineAction =
     "inline-flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
-  // The moment's tools on a transcript line: a line is an anchor like a
-  // circled spot — same tools, same time range, no drawn region. Icons with
-  // their tips, so the row stands in the margin beside the line (reader.tsx).
+  // The one tool on a hovered transcript line: an annotated line opens its
+  // annotation. Comments and explanations on a line start from the selection
+  // toolbar or the tool bar above the lines, never from a pill over the text.
+  // An icon with its tip, so it stands in the margin beside the line
+  // (reader.tsx) and covers no word.
   const lineTools = (line: TranscriptLine) => {
     const annotated = annotationByLine.get(line.id);
+    if (!annotated) return null;
     return (
-      <>
-        {canEdit && (
-          <button
-            onClick={() => commentOnLine(line)}
-            data-track="video-line-comment"
-            className={lineAction}
-            aria-label={t("video.comment")}
-            data-tip={t("video.commentOnLineTitle")}
-          >
-            <CommentIcon size={13} />
-          </button>
-        )}
-        {canEdit && (
-          <button
-            onClick={() => explainLine(line)}
-            data-track="video-line-explain"
-            className={lineAction}
-            aria-label={t("video.explain")}
-            data-tip={t("video.explainThisMoment")}
-          >
-            <QuestionIcon size={13} />
-          </button>
-        )}
-        {annotated && (
-          <button
-            onClick={() => openAnnotation(annotated)}
-            data-track="video-line-open-note"
-            className={lineAction}
-            aria-label={t("video.openNote")}
-            data-tip={t("video.openNoteTitle")}
-          >
-            <LocateIcon size={13} />
-          </button>
-        )}
-      </>
+      <button
+        onClick={() => openAnnotation(annotated)}
+        data-track="video-line-open-note"
+        className={lineAction}
+        aria-label={t("video.openNote")}
+        data-tip={t("video.openNoteTitle")}
+      >
+        <LocateIcon size={13} />
+      </button>
     );
   };
   function openAnnotation(a: VideoAnnotationItem) {

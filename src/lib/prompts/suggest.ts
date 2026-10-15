@@ -104,7 +104,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
   const plan = ctx.target === "plan";
   const rules = [
     "Do what the command asks and nothing else. Change no word the command does not ask you to change.",
-    "Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them.",
+    "Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A change of register, tone, or wording changes the words that carry it and keeps every other word of the sentence as printed; a sentence with none of them stays word for word. A plain-words rewrite keeps a sentence that is already short and plain word for word.",
     "Keep every claim the document makes. New words may explain, connect, or restate; a new number, name, date, or finding appears only when the command asks for it or the material states it.",
     "Copy find exactly, character for character. Never paraphrase it.",
     "One op per change. Use the smallest op: replace_words for a word, a phrase, or a sentence; rewrite_block when most of a block changes.",
@@ -118,12 +118,12 @@ export function suggestPrompt(ctx: SuggestCtx): string {
           "Never change a FIGURE, PAGE, or VIDEO block, and never remove or replace an equation, a slide, a sheet, a table, or a transcript line.",
         ]
       : [
-          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",
+          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline formula stands in its block's words as $TeX$ and shows as its raw characters (a page draws TeX only in an equation block): replace_words with find the whole $TeX$ changes it. A command to fix it, clean it up, or make it readable asks for the same words as plain text: Unicode subscripts, arrows, and Greek letters, with no dollar signs, backslashes, or braces. A command that asks for the math in words (in plain words, in English, spelled out) asks for words: each formula as the fewest plain words that say it, with the sentence's own subject (\"the cost grows with the square of the length\"); a symbol that only names a thing keeps its name, with a Unicode subscript (Bank_2 becomes Bank₂), the same in every block. In an equation block, write TeX that KaTeX draws.",
           "Never remove, move, or replace a figure, an image, an equation, a smart chip, or a footnote number. A table cell's words change with replace_words, a table's rows and columns with the row and column ops.",
         ]),
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
     "why: one sentence on what the op changes and why.",
-    "summary: one or two sentences on what the suggestions change. When the command asks no change, return no ops and say so in summary.",
+    "summary: one sentence whose subject is the suggestion, or the suggestions when there are more than one, on the kind of change and where, in the command's own words (\"The suggestions write the two formulas as plain text.\"). Old and new words the command itself gives may be named; words the pass wrote (a correction, a rewrite, a translation) are never named, the selected words are never quoted back (they are \"the selected sentence\", line, or words), and what stays as it is is left out. When the command asks no change, return no ops and say so in summary.",
     ...(ctx.reorder
       ? [
           "Another pass of this command moves the blocks and adds a heading for each group. Never move, reorder, or group blocks, and add no heading for a group. Change only the words the command asks to change; when the command asks for nothing but a new order, return no ops.",
@@ -155,12 +155,13 @@ export function suggestPrompt(ctx: SuggestCtx): string {
       ? ["The conversation so far:", ...ctx.history.map((m) => `${m.role === "user" ? "Reader" : "Assistant"}: ${m.content}`)]
       : []),
     "",
-    "Ops:",
+    "Ops (each an object whose \"op\" is its name, with the fields its line names):",
     ...(plan ? PLAN_OP_LINES : OP_LINES),
     "",
     "Rules:",
     ...rules.map((rule, n) => `${n + 1}. ${rule}`),
     "",
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"summary": "…", "ops": [ … ]}',
   ].join("\n");
 }

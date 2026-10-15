@@ -715,6 +715,10 @@ model NotebookDocument {
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
   formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
+  // Structure (SPEC.md §32): the document's blocks sorted into buckets on a
+  // canvas, per project — {v, rev, buckets, pieces, connections}
+  // (lib/structure.ts). Null = no structure yet: every block unsorted.
+  structure     Json?
   // The folder the document sits in within this project (SPEC.md §6); null
   // = the project itself, outside every folder. Deleting the folder moves
   // the document up one level (the route does it before the delete); the

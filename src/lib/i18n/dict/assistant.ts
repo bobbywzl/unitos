@@ -4,6 +4,9 @@
 const en = {
   // Recommended functions
   recommended: "Recommended",
+  habits: "You often ask",
+  habitsHint: "Asked {n} times in the last two months, on two documents or more",
+  habitsHide: "Hide",
   recLaymanLabel: "Layman summary",
   recLaymanHint: "The core of the document, in plain words",
   recProfessionalLabel: "Professional summary",
@@ -84,14 +87,17 @@ const en = {
   // A tool's output continued into a conversation (SPEC.md §21): the pill on
   // the card's foot row; its tooltip names it whole.
   continue: "Continue",
-  // Thinking control (SPEC.md §7): one chip that names the choice, Fast
-  // Thinking or Deep Thinking; a click switches to the other.
+  // Thinking control (SPEC.md §7): one chip that names the choice, Auto
+  // Thinking, Fast Thinking, or Deep Thinking; a click switches to the next.
+  thinkingAuto: "Auto Thinking",
+  thinkingAutoHint:
+    "Auto Thinking is on: the assistant decides from the message how hard to think. A lookup, a one-place change, or a confirmation runs fast; a question of meaning runs deep; a change across the document, a comparison, or several asks at once run deepest. Click for Fast Thinking.",
   thinkingFast: "Fast Thinking",
   thinkingFastHint:
     "Fast Thinking is on: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly. Click for Deep Thinking.",
   thinkingDeep: "Deep Thinking",
   thinkingDeepHint:
-    "Deep Thinking is on: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material. Click for Fast Thinking.",
+    "Deep Thinking is on: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material. Click for Auto Thinking.",
   // Web access (SPEC.md §7)
   web: "Web",
   webOnTitle:
@@ -172,6 +178,9 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   recommended: "推荐",
+  habits: "你常问",
+  habitsHint: "最近两个月问过 {n} 次，涉及两篇及以上文档",
+  habitsHide: "隐藏",
   recLaymanLabel: "通俗摘要",
   recLaymanHint: "用大白话讲出文档的核心",
   recProfessionalLabel: "专业摘要",
@@ -236,10 +245,12 @@ const zh: Record<keyof typeof en, string> = {
   backToConversationTitle: "返回这条支线对话所属的对话。",
   sideChatOpened: "支线对话",
   continue: "继续",
+  thinkingAuto: "自动思考",
+  thinkingAutoHint: "自动思考已开启：助手根据消息决定思考多深。查找、改一处、确认一项改动时快速作答；理解类问题深度思考；跨全文的改动、对比或一次多个要求时想得最深。点击改为快速思考。",
   thinkingFast: "快速思考",
   thinkingFastHint: "快速思考已开启：助手作答前尽量少推理。更快，适合材料能直接回答的问题。点击改为深度思考。",
   thinkingDeep: "深度思考",
-  thinkingDeepHint: "深度思考已开启：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。点击改为快速思考。",
+  thinkingDeepHint: "深度思考已开启：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。点击改为自动思考。",
   web: "联网",
   webOnTitle: "联网已开启：助手会用网络核对答案，并注明所用的外部来源。点击后只根据项目作答。",
   webOffTitle: "联网已关闭：助手只根据项目作答。点击后允许它搜索网络并注明外部来源。",

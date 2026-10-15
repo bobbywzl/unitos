@@ -24,6 +24,9 @@ export type FixtureBlock = {
   html?: string;
   startTime?: number;
   endTime?: number;
+  // A transcript line's voice (SPEC.md §11): the `@Name` right after the
+  // times, kept off the line's words as Block.speaker is.
+  speaker?: string;
 };
 
 export type Fixture = { name: string; title: string; blocks: FixtureBlock[] };
@@ -87,9 +90,16 @@ export function parseFixture(path: string): Fixture {
   flush();
   const blocks: FixtureBlock[] = chunks.map((chunk, i) => {
     const id = `${name}-b${i + 1}`;
-    const stamp = chunk.match(/^\[(\d+:\d\d(?::\d\d)?)–(\d+:\d\d(?::\d\d)?)\]\s*([\s\S]*)$/);
+    const stamp = chunk.match(/^\[(\d+:\d\d(?::\d\d)?)–(\d+:\d\d(?::\d\d)?)\]\s*(?:@([A-Za-z][\w-]*)\s+)?([\s\S]*)$/);
     if (stamp) {
-      return { id, type: "TRANSCRIPT", text: stamp[3].trim(), startTime: seconds(stamp[1]), endTime: seconds(stamp[2]) };
+      return {
+        id,
+        type: "TRANSCRIPT",
+        text: stamp[4].trim(),
+        startTime: seconds(stamp[1]),
+        endTime: seconds(stamp[2]),
+        ...(stamp[3] ? { speaker: stamp[3] } : {}),
+      };
     }
     if (chunk.startsWith("```")) {
       return { id, type: "CODE", text: chunk.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "") };

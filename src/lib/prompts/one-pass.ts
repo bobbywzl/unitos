@@ -50,7 +50,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     ...(ctx.material ? ["The assistant's answer, which the command may ask you to use:", ctx.material] : []),
     ctx.scope.whole ? "Scope: the whole document." : `Scope: ${ctx.scope.runs.map(span).join(", ")}.`,
     "Change only blocks in the scope. The rest of the document is context.",
-    ...(ctx.together.length > 0 ? [`These blocks move as one (a list, a table): ${ctx.together.map(span).join(", ")}.`] : []),
+    ...(ctx.together.length > 0 ? [`These blocks move as one (a table, a list line with the lines nested under it): ${ctx.together.map(span).join(", ")}.`] : []),
     ...(ctx.fixed.length > 0 ? [`These blocks keep their place and their words: ${ctx.fixed.map((id) => `[block ${id}]`).join(", ")}.`] : []),
     ...(ctx.caretBlockId ? [`The caret stands in [block ${ctx.caretBlockId}]. "Here" means right after it.`] : []),
     ...(ctx.history.length > 0
@@ -60,23 +60,26 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     "The answer:",
     '- document: every block id of the scope, once each, in order: the new order when the command asks for one (group, organize, put in order), else the order as it stands. A block that stays as it is: its id alone, "<id>". A block whose words change: {"id": "<id>", "text": "<the block\'s whole new words>"}. New blocks: {"new": "<markdown>"} where they go.',
     "- remove: the ids of the blocks the command asks to take away. Leave them out of document.",
-    "- formats: the changes that are no words of a block's own, as ops, each with its why; an empty list when the command asks none:",
+    "- formats: the changes that are no words of a block's own, as ops (each an object whose \"op\" is its name, with the fields its line names), each with its why; an empty list when the command asks none:",
     ...(ctx.plan ? PLAN_OP_LINES : OP_LINES).filter((line) => FORMAT_OPS.test(line)).map((line) => `  ${line}`),
     "",
     "Rules:",
     "1. Do what the command asks and nothing else. A block the command does not ask to change stays as its id alone. Never retype a block to keep it.",
     "2. Remove a block only when the command asks for it: erase, delete, cut, remove, or keep only something else. When the command says to keep a kind of text (quotes, names, numbers, a part), every block and every word of that kind stays as it is.",
-    "3. Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A quotation stays word for word.",
+    "3. Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them. A quotation stays word for word. A change of register, tone, or wording changes the words that carry it and keeps every other word of the sentence as printed; a sentence with none of them stays word for word. A plain-words rewrite keeps a sentence that is already short and plain word for word.",
     "4. Keep every claim the document makes unless the command asks to cut it. New words may explain, connect, or restate; a new number, name, date, or finding appears only when the command asks for it or the material states it.",
-    "5. text: one paragraph, plain words, no blank line. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces more per level of nesting. To split a block, change it and add new blocks after it.",
+    ctx.plan
+      ? "5. text: one paragraph, plain words, no blank line. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces more per level of nesting. To split a block, change it and add new blocks after it."
+      : "5. text: one paragraph, plain words, no blank line, no marker: a LIST block is one line of its list, and its text is the line's words alone. A list's kind (bulleted, numbered, checklist) changes with set_style in formats, never with a marker or a number written into the text. To split a block, change it and add new blocks after it.",
     ctx.plan
       ? "6. new: markdown with # to ### headings, - bulleted lines, 1. numbered lines; plain words otherwise."
       : "6. new: markdown with # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url).",
     '7. A group the command asks for gets a heading: {"new": "## <what the group has in common>"} before its blocks, a level below the heading of the scope. A heading of the document that the new order makes wrong goes in remove.',
     "8. Keep together what belongs together: a quote and the words that comment on it, a sentence and the list it introduces, steps in their order.",
-    `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one or two sentences on what changes. why: one sentence on why.`,
+    `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one sentence whose subject is the suggestion, or the suggestions when there are more than one, on the kind of change and where, in the command's own words ("The suggestions write the two formulas as plain text."). Old and new words the command itself gives may be named; words the pass wrote (a correction, a rewrite, a translation) are never named, the selected words are never quoted back (they are "the selected sentence", line, or words), and what stays as it is is left out. why: one sentence on why.`,
     "10. When the command asks no change, return document as the blocks stand, remove empty, and say so in summary.",
     "",
+    "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"summary": "…", "why": "…", "document": ["<id>", {"id": "<id>", "text": "…"}, {"new": "…"}, …], "remove": ["<id>"], "formats": [ … ]}',
   ].join("\n");
 }

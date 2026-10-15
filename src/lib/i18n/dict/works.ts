@@ -118,11 +118,11 @@ const en = {
   guidePanelNotesBody:
     "The open document's notes: the notes written in it and the notes that quote it, under your sections, with the pending queue on top. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together. The four arrows open the notes full page: every note of the project, and By document — the notes as a grid, one column per document, one row per section, to compare across documents.",
   guidePanelAssistantBody:
-    "Ask about this page or the whole project, and run checks (contradictions, gaps). Conversations, at the top, lists your conversations of the project; click one to open it. New conversation starts an empty one and keeps the old one. Right above the box: the scope, then Fast Thinking or Deep Thinking, and Web. Layman summary and Professional summary are two of its suggestions: the whole document, in plain words or for an expert.",
+    "Ask about this page or the whole project, and run checks (contradictions, gaps). Conversations, at the top, lists your conversations of the project; click one to open it. New conversation starts an empty one and keeps the old one. Right above the box: the scope, then the thinking chip (Auto Thinking, Fast Thinking, or Deep Thinking), and Web. Layman summary and Professional summary are two of its suggestions: the whole document, in plain words or for an expert.",
   guidePanelDistillBody: "Every extraction of the open document; open one to read it.",
   guidePanelAnnotations: "Annotations",
   guidePanelAnnotationsBody:
-    "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
+    "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain violet, simplify green, analyze teal, visualize magenta, assistant Unitos orange; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
   guidePanelEdits: "History",
   guidePanelEditsBody: "Every edit and deletion in the project, from History at the top (More › History on a phone). This document narrows it to the open document's edits and deletions.",
   guidePanelGraphBody: "The project's documents and links drawn as nodes and curves. Stitch runs across the documents you pick in it, or every document.",
@@ -133,6 +133,12 @@ const en = {
     "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
     "The button to the right of a collapsed block reads it whole; the same button collapses it to its core again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
+  // Breakwork (SPEC.md §32): the document's blocks sorted into buckets on a canvas.
+  guideStructureHeader: "Breakwork — the document sorted into buckets",
+  guideStructureBody:
+    "The Breakwork button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag a bucket by its header, drag a block between buckets or back to Unsorted, open a block to read it whole with its annotations, and drag from the dot at the side of a bucket or a block to another to connect them with a label and a comment.",
+  guideStructureAssistantBody:
+    "The Breakwork assistant on the left: say how to sort the document — by its parts, by keywords, by what the paragraphs share — then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and Undo takes it back.",
   // The reading position and the left-off mark (SPEC.md §6).
   guideLeftOffHeader: "Where you left off",
   // Keys (guide-dialog.tsx): every key the reader answers to.
@@ -160,13 +166,16 @@ const en = {
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
   release20260924Title: "New: Collapse, the annotations full page, By document, Conversations",
   release20260924Body:
-    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
+    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain violet, simplify green, analyze teal, visualize magenta, assistant Unitos orange.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   release20260925Title: "New: Define",
   release20260925Body:
     "- **Define** — select one word in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Not on Chinese text. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   release20260925bTitle: "New: the reader opens where you left off",
   release20260925bBody:
     "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nOpen the guide with the ? at the top right of the reader, or More › Guide on a phone.",
+  release20261013Title: "New: Breakwork",
+  release20261013Body:
+    "- **Breakwork** — the button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag blocks between buckets, nest buckets, label blocks, and draw labeled connections between buckets or blocks. Every block opens whole with its annotations and the Explain and Simplify tools.\n- **The Breakwork assistant** — talk about how to sort the document, then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and it changes the structure as much as you ask.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   // Feedback button
   feedback: "Feedback",
   feedbackBug: "bug",
@@ -313,11 +322,11 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelNotesBody:
     "当前文档的笔记：在它里面写下的笔记和引用它的笔记，按你的章节排列，待定队列在最上面。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。四个箭头打开整页笔记：项目的每一条笔记，以及按文档——笔记排成网格，每个文档一列，每个章节一行，用来跨文档对比。",
   guidePanelAssistantBody:
-    "就此页面或整个项目提问，并运行检查（矛盾、疏漏）。顶部的对话列表列出你在此项目中的对话；点击一段即可打开。新对话会开始一段空对话，并保留当前对话。输入框正上方：范围，然后是快速思考或深度思考，以及联网。通俗摘要和专业摘要是它的两条建议：整篇文档，用大白话或面向专业读者。",
+    "就此页面或整个项目提问，并运行检查（矛盾、疏漏）。顶部的对话列表列出你在此项目中的对话；点击一段即可打开。新对话会开始一段空对话，并保留当前对话。输入框正上方：范围，然后是思考按钮（自动思考、快速思考或深度思考），以及联网。通俗摘要和专业摘要是它的两条建议：整篇文档，用大白话或面向专业读者。",
   guidePanelDistillBody: "当前文档的每次提取；打开一条即可阅读。",
   guidePanelAnnotations: "批注",
   guidePanelAnnotationsBody:
-    "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
+    "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释紫、简化绿、分析青、可视化品红、助手橙；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
   guidePanelEdits: "历史",
   guidePanelEditsBody: "此项目中的所有编辑与删除，从顶部的历史打开（手机上在“更多 › 历史”）。“此文档”只列出当前文档的编辑与删除。",
   guidePanelGraphBody: "项目的文档和链接画成节点和曲线。缝合作用于你在图谱中选取的文档，未选取时作用于每个文档。",
@@ -327,6 +336,11 @@ const zh: Record<keyof typeof en, string> = {
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
   guideCollapseWholeBody:
     "折叠后的块右侧的按钮可读全文；同一个按钮把它重新折叠为核心。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
+  guideStructureHeader: "Breakwork——把文档归入类别",
+  guideStructureBody:
+    "文章右上角、折叠旁边的 Breakwork 按钮。文档的块归入画布上的类别：按住类别标题可拖动类别，块可在类别之间拖动或拖回“未归类”，打开一个块可连同批注完整阅读，从类别或块侧边的圆点拖到另一个上即可建立带标签和评论的关联。",
+  guideStructureAssistantBody:
+    "左侧的 Breakwork 助手：说明如何归类文档——按部分、按关键词、按段落的共同点——然后让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，撤销可以恢复。",
   guideLeftOffHeader: "上次读到的位置",
   guideKeysHeader: "按键",
   guideKeyEscape: "关闭打开的卡片、列表或对话框。在图谱中先离开缝合框；输入的指令保留。",
@@ -351,13 +365,16 @@ const zh: Record<keyof typeof en, string> = {
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
   release20260924Body:
-    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
+    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释紫、简化绿、分析青、可视化品红、助手橙。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   release20260925Title: "新功能：定义",
   release20260925Body:
     "- **定义**——在任何文档里选中一个词：文章、PDF、逐字稿、幻灯片、工作表、空白文档。中文文本上不出现。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   release20260925bTitle: "新功能：阅读器在你上次读到的位置打开",
   release20260925bBody:
     "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
+  release20261013Title: "新功能：Breakwork",
+  release20261013Body:
+    "- **Breakwork**——文章右上角、折叠旁边的按钮。文档的块归入画布上的类别：块可在类别之间拖动，类别可以嵌套，块可以加标签，类别或块之间可以画带标签的关联。每个块都可以连同批注完整打开，并使用解释和简化工具。\n- **Breakwork 助手**——先聊聊如何归类文档，再让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，它可以按你的要求对结构做任何更改。\n\n新功能的控件会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   // Feedback button
   feedback: "反馈",
   feedbackBug: "问题",

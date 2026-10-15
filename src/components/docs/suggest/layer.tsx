@@ -266,7 +266,7 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
   const { myId } = useCollab();
   const authorOf = useAuthor();
   // Review suggested edits, open on every suggestion (null) or on some.
-  const [review, setReview] = useState<{ scope: readonly string[] | null } | null>(null);
+  const [review, setReview] = useState<{ scope: readonly string[] | null; summary?: string; skipped?: string[]; assistant?: boolean } | null>(null);
   const { active, ids } = useEditorState({
     editor,
     selector: ({ editor: e }) => ({ active: suggestionAt(e.state), ids: readSuggestions(e.state.doc).map((s) => s.id) }),
@@ -290,8 +290,9 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
   useEffect(() => {
     const dom = editor.view.dom;
     const open = (e: Event) => {
-      const scope = (e as CustomEvent<{ ids?: string[] } | null>).detail?.ids ?? null;
-      setReview({ scope });
+      const detail = (e as CustomEvent<{ ids?: string[]; summary?: string; skipped?: string[]; assistant?: boolean } | null>).detail;
+      const scope = detail?.ids ?? null;
+      setReview({ scope, summary: detail?.summary, skipped: detail?.skipped, assistant: detail?.assistant });
       const first = scope && readSuggestions(editor.state.doc).find((s) => scope.includes(s.id));
       if (first) focusSuggestion(editor, first.id);
       // Every suggestion: the keys go to the card of the one at the caret,
@@ -302,6 +303,9 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
     dom.addEventListener(REVIEW_EVENT, open);
     return () => dom.removeEventListener(REVIEW_EVENT, open);
   }, [editor]);
+  // A run's review shows while a suggestion of the run stands, or while it
+  // has something to say of what did not land; settled whole, it is gone.
+  const reviewShown = review !== null && (review.scope === null || review.scope.some((id) => ids.includes(id)) || Boolean(review.skipped?.length));
 
   // The QA scripts land fixed ops with no model in development.
   useEffect(() => {
@@ -396,7 +400,7 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
         {[...colors, active && !viewing ? `.docs-prose [data-suggestion="${CSS.escape(active)}"]{--docs-suggest-tint:24%}` : ""].join("\n")}
       </style>
       {column && !viewing && createPortal(cards, column)}
-      {review && header && !viewing && (
+      {review && reviewShown && header && !viewing && (
         <ReviewPanel
           editor={editor}
           header={header}
@@ -405,6 +409,9 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
           at={active}
           canSettle={canSettle}
           onClose={() => setReview(null)}
+          summary={review.summary}
+          skipped={review.skipped}
+          assistant={review.assistant}
         />
       )}
     </>

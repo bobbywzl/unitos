@@ -66,7 +66,7 @@ export function MediaAssistant({
   const t = useT();
   const router = useRouter();
   const ime = useImeGuard();
-  // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
+  // Auto, Fast, or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
   const web = useWeb();
