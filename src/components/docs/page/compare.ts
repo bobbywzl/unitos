@@ -86,6 +86,8 @@ function fresh(node: PMNode): PMNode | null {
     const copy = fresh(child);
     if (copy) children.push(copy);
   });
+  // An image row left with one image is that image; with none, nothing.
+  if (node.type.name === "imageRow" && children.length < 2) return children[0] ?? null;
   return node.type.create(attrs, Fragment.from(children), node.marks);
 }
 

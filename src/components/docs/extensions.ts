@@ -14,6 +14,7 @@ import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
 import { Citation } from "@/components/docs/insert/citation";
 import { Figure, type ImportedEditor } from "@/components/docs/insert/figure";
+import { ImageRow } from "@/components/docs/insert/image-row";
 import { PageStart, PageStartKeys } from "@/components/docs/insert/page-start";
 import { layerExtensions } from "@/components/docs/ext/layer";
 import { pageExtensions } from "@/components/docs/ext/page";
@@ -527,7 +528,8 @@ export function docsExtensions(imported?: ImportedEditor) {
     BackgroundColor,
     DocsFontFamily,
     FontSize,
-    TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right", "justify"] }),
+    // An image row takes the alignment buttons and keys as a paragraph does.
+    TextAlign.configure({ types: ["heading", "paragraph", "imageRow"], alignments: ["left", "center", "right", "justify"] }),
     Subscript,
     Superscript,
     SmallCaps,
@@ -546,6 +548,8 @@ export function docsExtensions(imported?: ImportedEditor) {
     PageBreak,
     // An import's figure objects, page starts, and citations.
     Figure.configure({ imported: imported ?? null }),
+    // Images and figure objects side by side, in a blank document and an import.
+    ImageRow,
     PageStart,
     PageStartKeys,
     Citation,

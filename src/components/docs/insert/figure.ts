@@ -4,6 +4,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import { createElement as h, useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { isSuggesting } from "@/components/docs/ext/suggest";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { MediaHtml } from "@/components/reader/figure-media";
@@ -146,8 +147,9 @@ const OWN_PRESS = "video, audio, iframe, button, [data-anchor-skip]";
 const CLICK_SLOP = 6;
 
 /** A click opens the figure's tools where it was clicked; a link in the
-    figure opens with Ctrl+click (⌘+click), as a link in the page does. The
-    figure object stays in place: no drag starts on it. */
+    figure opens with Ctrl+click (⌘+click), as a link in the page does. In a
+    page that takes edits the figure object drags as an image does (into an
+    image row, insert/image-row.ts); in Viewing no drag starts on it. */
 function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string) {
   useEffect(() => {
     if (!el) return;
@@ -175,7 +177,11 @@ function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string
     const onClick = (e: MouseEvent) => {
       if (link(e.target) && !(e.ctrlKey || e.metaKey)) e.preventDefault();
     };
-    const onDragStart = (e: DragEvent) => e.preventDefault();
+    // Suggesting mode would suggest the move as a new copy, under a new
+    // block id: the figure keeps its place there.
+    const onDragStart = (e: DragEvent) => {
+      if (!editor.isEditable || isSuggesting(editor) || own(e.target)) e.preventDefault();
+    };
     el.addEventListener("mousedown", onDown);
     el.addEventListener("mouseup", onUp);
     el.addEventListener("click", onClick);
@@ -242,9 +248,19 @@ function FigureView({ node, editor }: NodeViewProps) {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const figure = figureOf(node, importedOf(editor), editor);
   useFigureClicks(el, editor, figure.blockId);
+  // In an image row a PDF figure takes the width its PDF prints it at
+  // (css/insert.css); a web figure shares the row's room.
+  const width = figure.html ? null : figure.size?.width;
+  useEffect(() => {
+    const outer = el?.closest<HTMLElement>(".docs-figure");
+    if (!outer) return;
+    if (width) outer.style.setProperty("--docs-figure-w", `${width}px`);
+    else outer.style.removeProperty("--docs-figure-w");
+  }, [el, width]);
   return h(
     NodeViewWrapper,
-    { ref: setEl, className: "docs-figure-body" },
+    // The whole figure is its drag handle (Tiptap's node view drags from one).
+    { ref: setEl, className: "docs-figure-body", "data-drag-handle": "" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
       : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles, math: figure.math, captionSize: figure.captionSize }),
@@ -287,6 +303,12 @@ function figurePaste(editor: Editor): Plugin {
               return;
             }
             const content = keep(node.content);
+            // An image row whose items all stayed out goes with them: filled,
+            // it would get an empty image.
+            if (node.type.name === "imageRow") {
+              if (content.childCount > 0) out.push(node.copy(content));
+              return;
+            }
             out.push(node.type.createAndFill(node.attrs, content, node.marks) ?? node.copy(content));
           });
           return Fragment.fromArray(out);
@@ -305,8 +327,10 @@ export const Figure = Node.create<FigureOptions>({
   group: "block",
   atom: true,
   selectable: true,
-  // Round 1 moves a figure by cut and paste (the reader's drag guard).
-  draggable: false,
+  // A figure object drags as an image does, in a page that takes edits
+  // outside Suggesting mode (insert/image-row.ts): beside another image or
+  // figure object into an image row, or to a new place, keeping its block id.
+  draggable: true,
 
   addOptions() {
     return { imported: null };

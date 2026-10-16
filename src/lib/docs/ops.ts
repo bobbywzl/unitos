@@ -1,5 +1,5 @@
 import { inlineText } from "@/lib/docs/blocks";
-import { INDEXED_NODE_TYPES, newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { INDEXED_NODE_TYPES, newBlockId, withImageRows, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
 
 // Server-side edits to a document's rich text (SPEC.md §29). The block
 // routes — the assistant's approved plans, the history's restore, an image
@@ -144,13 +144,16 @@ export function replaceBlockText(doc: RichNode, blockId: string, text: string): 
 }
 
 /** Where a sibling of the node at `path` goes: a paragraph in a list item
-    gets a new list item after its own, so the new line is a list line. */
+    gets a new list item after its own, so the new line is a list line; an
+    image or figure object in an image row gets its sibling beside the row,
+    which holds images only. */
 function siblingPlace(doc: RichNode, path: Path): { path: Path; wrapItem: string | null } {
   const parentPath = path.slice(0, -1);
   const parent = nodeAt(doc, parentPath);
   if ((parent.type === "listItem" || parent.type === "taskItem") && parentPath.length > 0) {
     return { path: parentPath, wrapItem: parent.type };
   }
+  if (parent.type === "imageRow" && parentPath.length > 0) return { path: parentPath, wrapItem: null };
   return { path, wrapItem: null };
 }
 
@@ -172,8 +175,8 @@ export function paragraphNode(text: string, blockId = newBlockId()): RichNode {
 }
 
 /** The indexed node removed. A list item left empty goes with it, a list
-    left empty goes with it, and a table cell or the document left empty
-    keeps one empty paragraph. */
+    left empty goes with it, an image row left with one item is that item,
+    and a table cell or the document left empty keeps one empty paragraph. */
 export function removeBlock(doc: RichNode, blockId: string): RichNode | null {
   const hit = findBlock(doc, blockId);
   if (!hit) return null;
@@ -183,6 +186,10 @@ export function removeBlock(doc: RichNode, blockId: string): RichNode | null {
   while (path.length > 1) {
     const parentPath = path.slice(0, -1);
     const parent = nodeAt(next, parentPath);
+    if (parent.type === "imageRow" && (parent.content ?? []).length === 1) {
+      next = spliceAt(next, parentPath, (row) => withImageRows([row]));
+      break;
+    }
     if ((parent.content ?? []).length > 0) break;
     if (parent.type === "tableCell" || parent.type === "tableHeader") {
       next = spliceAt(next, parentPath, (cell) => [{ ...cell, content: [paragraphNode("")] }]);

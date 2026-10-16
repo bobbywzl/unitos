@@ -92,7 +92,7 @@ import { parseRegion, type Region } from "@/lib/video/types";
 // properties, lists become Word numbering, a suggestion becomes a tracked
 // change, a comment a Word comment, and the page setup becomes the section.
 // An import's figure object is its picture over its caption (§30); a page
-// start adds nothing. What Word has no place for (a chip, an equation) goes
+// start adds nothing; an image row is a one-row table without borders. What Word has no place for (a chip, an equation) goes
 // in as its words.
 
 type Block = Paragraph | Table;
@@ -624,19 +624,27 @@ function table(node: RichNode, ctx: Ctx): Table {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────
 
-function imageRun(node: RichNode, ctx: Ctx): ImageRun | null {
+/** An image's width in px as the page draws it: its own, else its
+    picture's, at most the text column's width. */
+function imageWidth(node: RichNode, ctx: Ctx): number {
+  const picture = ctx.pictures.get(node);
+  return num(node.attrs?.width) ?? Math.min(picture?.width ?? ctx.textWidth, ctx.textWidth);
+}
+
+/** `scale` is an image row's: every item scaled by one factor to fit. */
+function imageRun(node: RichNode, ctx: Ctx, scale = 1): ImageRun | null {
   const picture = ctx.pictures.get(node);
   if (!picture) return null;
   const a = node.attrs ?? {};
   // Unsized, an image is its own size, at most the text column's width.
-  const width = num(a.width) ?? Math.min(picture.width, ctx.textWidth);
-  const height = num(a.height) ?? (width * picture.height) / picture.width;
+  const width = imageWidth(node, ctx);
+  const height = (num(a.height) ?? (width * picture.height) / picture.width) * scale;
   const alt = typeof a.alt === "string" && a.alt ? a.alt : undefined;
   const change = changeOf(node);
   return new ImageRun({
     type: picture.type,
     data: picture.data,
-    transformation: { width, height, rotation: num(a.rotation) },
+    transformation: { width: width * scale, height, rotation: num(a.rotation) },
     altText: alt ? { name: alt, description: alt, title: alt } : undefined,
     insertion: change?.type === "insertion" ? revision(ctx, change) : undefined,
     deletion: change?.type === "deletion" ? revision(ctx, change) : undefined,
@@ -699,6 +707,58 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }
   return out;
+}
+
+/** The room between two items of an image row: 6 pt, in px. */
+const ROW_GAP = 6 * PX_PER_PT;
+
+/** An image row (SPEC.md §29), as the page draws it: a one-row table
+    without borders, one cell per item, the items standing on the row's
+    bottom, 6 pt apart. When their widths together pass the text column's,
+    every item scales by one factor. */
+function imageRow(node: RichNode, ctx: Ctx): Table {
+  const items = node.content ?? [];
+  const widths = items.map((item) => {
+    if (item.type === "image") return imageWidth(item, ctx);
+    // A figure object: the width its PDF prints it at, else its pictures'.
+    const { pictures, printed } = ctx.figures.get(item) ?? { pictures: [] };
+    const own = printed?.width ?? pictures.reduce((sum, p) => sum + p.width, 0);
+    return Math.min(own || ctx.textWidth / items.length, ctx.textWidth);
+  });
+  const room = ctx.textWidth - ROW_GAP * (items.length - 1);
+  const scale = Math.min(1, room / Math.max(1, widths.reduce((sum, w) => sum + w, 0)));
+  const none = { style: BorderStyle.NONE, size: 0, color: "auto" };
+  const align = node.attrs?.textAlign;
+  const textWidth = ctx.textWidth;
+  const cells = items.map((item, i) => {
+    const width = widths[i] * scale;
+    const gap = i < items.length - 1 ? ROW_GAP : 0;
+    let children: Paragraph[];
+    if (item.type === "image") {
+      const run = imageRun(item, ctx, scale);
+      children = [para(ctx, { children: [run ?? new TextRun(String(item.attrs?.alt ?? ""))] })];
+    } else {
+      // The figure draws in its cell's width.
+      ctx.textWidth = width;
+      children = figure(item, ctx);
+      ctx.textWidth = textWidth;
+    }
+    return new TableCell({
+      children: children.length > 0 ? children : [new Paragraph({})],
+      width: { size: Math.round((width + gap) * 15), type: WidthType.DXA },
+      verticalAlign: VerticalAlignTable.BOTTOM,
+      margins: { top: 0, bottom: 0, left: 0, right: Math.round(gap * 15) },
+      borders: { top: none, right: none, bottom: none, left: none },
+    });
+  });
+  const columnWidths = items.map((_, i) => Math.round((widths[i] * scale + (i < items.length - 1 ? ROW_GAP : 0)) * 15));
+  return new Table({
+    columnWidths,
+    width: { size: columnWidths.reduce((sum, w) => sum + w, 0), type: WidthType.DXA },
+    alignment: align === "center" ? AlignmentType.CENTER : align === "right" ? AlignmentType.RIGHT : undefined,
+    borders: { top: none, right: none, bottom: none, left: none, insideHorizontal: none, insideVertical: none },
+    rows: [new TableRow({ children: cells, cantSplit: true })],
+  });
 }
 
 /** A caption style's mark (lib/docs/schema.ts CaptionStyle). */
@@ -776,6 +836,11 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
         break;
       case "figure":
         out.push(...figure(node, ctx));
+        break;
+      case "imageRow":
+        if (ctx.breakBefore) out.push(new Paragraph({ children: [new PageBreak()] }));
+        ctx.breakBefore = false;
+        out.push(imageRow(node, ctx));
         break;
       case "tableOfContents": {
         const levels = Array.isArray(a.levels) ? a.levels : [1, 2, 3];

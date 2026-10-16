@@ -260,6 +260,10 @@ const en = {
   advancedOptions: "Advanced options",
   altTitle: "Title",
   pagelessInline: "A pageless document takes In line only",
+  // An image row (insert/image-row.ts)
+  sideBySide: "Side by side with next image",
+  separateImages: "Separate images",
+  rowInline: "An image in an image row takes In line only",
   // Links
   headingsAndBookmarks: "Headings and bookmarks",
   headings: "Headings",
@@ -624,6 +628,9 @@ const zh: Record<keyof typeof en, string> = {
   advancedOptions: "高级选项",
   altTitle: "标题",
   pagelessInline: "无分页格式的文档只能嵌入行内",
+  sideBySide: "与下一张图片并排",
+  separateImages: "分开图片",
+  rowInline: "图片行里的图片只能嵌入行内",
   headingsAndBookmarks: "标题和书签",
   headings: "标题",
   bookmarks: "书签",

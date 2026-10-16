@@ -41,6 +41,8 @@ import {
   type Wrap,
   type WrapSide,
 } from "@/components/docs/insert/image";
+import { rowOf } from "@/components/docs/insert/image-row";
+import { ImageRowItems } from "@/components/docs/insert/image-row-menu";
 import { ImageSourcePicker } from "@/components/docs/insert/image-source";
 import { FloatingBox, LengthField, PanelSection, Seg, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import { MASKS, maskPath, type Mask } from "@/lib/docs/mask";
@@ -129,6 +131,10 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const anchor = box ? { left: box.left, top: box.top, bottom: box.bottom } : null;
   const a = imageAttrs(hit.node);
   const pageless = ctx.pageSetup.pageless;
+  // In an image row an image stands In line, as on a pageless page.
+  const inRow = rowOf(editor.state.doc, hit.pos) !== null;
+  const inlineOnly = pageless || inRow;
+  const inlineTip = t(inRow ? "docsInsert.rowInline" : "docsInsert.pagelessInline");
   const set = (attrs: Record<string, unknown>) => setImageAttrs(editor.view, hit.pos, attrs);
   const button = (label: TKey, icon: ReactNode, onClick: () => void) => (
     <button type="button" className="docs-tb-btn" aria-label={t(label)} data-tip={t(label)} onClick={onClick}>
@@ -170,16 +176,16 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
               key={wrap}
               type="button"
               className="docs-tb-btn"
-              aria-pressed={(pageless ? "inline" : a.wrap) === wrap}
+              aria-pressed={(inlineOnly ? "inline" : a.wrap) === wrap}
               aria-label={t(label)}
-              data-tip={pageless && wrap !== "inline" ? t("docsInsert.pagelessInline") : t(label)}
-              disabled={pageless && wrap !== "inline"}
+              data-tip={inlineOnly && wrap !== "inline" ? inlineTip : t(label)}
+              disabled={inlineOnly && wrap !== "inline"}
               onClick={() => set({ wrap })}
             >
               <Icon />
             </button>
           ))}
-          {!pageless && (a.wrap === "wrap" || a.wrap === "break") && (
+          {!inlineOnly && (a.wrap === "wrap" || a.wrap === "break") && (
             <DropBtn
               label={t("docsInsert.margin")}
               track="image-margin"
@@ -245,25 +251,29 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           {button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
           <Sep />
           <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreVertIcon />}>
-            {(close) =>
-              (
-                [
-                  ["size", "docsInsert.sizeRotation"],
-                  ["alt", "docsInsert.altText"],
-                  ["wrap", "docsInsert.allImageOptions"],
-                ] as const
-              ).map(([section, label]) => (
-                <MenuItem
-                  key={section}
-                  onSelect={() => {
-                    close();
-                    setPanel(section);
-                  }}
-                >
-                  {t(label)}
-                </MenuItem>
-              ))
-            }
+            {(close) => (
+              <>
+                {(
+                  [
+                    ["size", "docsInsert.sizeRotation"],
+                    ["alt", "docsInsert.altText"],
+                    ["wrap", "docsInsert.allImageOptions"],
+                  ] as const
+                ).map(([section, label]) => (
+                  <MenuItem
+                    key={section}
+                    onSelect={() => {
+                      close();
+                      setPanel(section);
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))}
+                {/* Side by side with next image, Separate images (an image row). */}
+                <ImageRowItems editor={editor} pos={hit.pos} onDone={close} />
+              </>
+            )}
           </DropBtn>
         </FloatingBox>
       )}
@@ -349,6 +359,9 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
     set({ width: Math.max(16, Math.round(width)), height: Math.max(16, Math.round(height)) });
   };
   const pageless = ctx.pageSetup.pageless;
+  // In an image row an image stands In line, and the row takes the alignment.
+  const inRow = rowOf(editor.state.doc, hit.pos) !== null;
+  const inlineOnly = pageless || inRow;
 
   return (
     <SidePanel title={t("docsInsert.imageOptions")} icon={<ImageOptionsIcon />} onClose={onClose}>
@@ -392,9 +405,9 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
               key={wrap}
               type="button"
               className="docs-wrap-mode"
-              aria-pressed={(pageless ? "inline" : a.wrap) === wrap}
-              disabled={pageless && wrap !== "inline"}
-              data-tip={pageless && wrap !== "inline" ? t("docsInsert.pagelessInline") : undefined}
+              aria-pressed={(inlineOnly ? "inline" : a.wrap) === wrap}
+              disabled={inlineOnly && wrap !== "inline"}
+              data-tip={inlineOnly && wrap !== "inline" ? t(inRow ? "docsInsert.rowInline" : "docsInsert.pagelessInline") : undefined}
               onClick={() => set({ wrap })}
             >
               <Icon size={28} />
@@ -402,7 +415,7 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
             </button>
           ))}
         </div>
-        {!pageless && a.wrap === "wrap" && (
+        {!inlineOnly && a.wrap === "wrap" && (
           <label className="docs-side-field">
             <span className="docs-side-label">{t("docsInsert.wrap")}</span>
             <select className="docs-field" value={a.wrapSide} onChange={(e) => set({ wrapSide: e.target.value as WrapSide })}>
@@ -412,10 +425,10 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
             </select>
           </label>
         )}
-        {!pageless && a.wrap !== "inline" && (
+        {!inlineOnly && a.wrap !== "inline" && (
           <LengthField label={t("docsInsert.marginFromText")} pt={a.wrapMargin} onChange={(pt) => set({ wrapMargin: Math.min(72, pt) })} />
         )}
-        {(pageless || a.wrap === "inline" || a.wrap === "break") && (
+        {!inRow && (pageless || a.wrap === "inline" || a.wrap === "break") && (
           <Seg
             label={t("docsInsert.alignment")}
             value={a.align}

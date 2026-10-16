@@ -102,8 +102,9 @@ function landingAt(view: EditorView, x: number, y: number): Landing | null {
 }
 
 /** The drop line: where dropped images would land, or, for words, a caret
-    where they would go in. */
-class DropLine {
+    where they would go in. An image dragged onto another image's side
+    draws it upright there (insert/image-row.ts). */
+export class DropLine {
   private el: HTMLElement | null = null;
   private idle: ReturnType<typeof setTimeout> | null = null;
 
@@ -122,6 +123,11 @@ class DropLine {
 
   line(line: Line): void {
     this.place(line.left, line.y - 1, Math.max(0, line.right - line.left), 2);
+  }
+
+  /** An upright line at `x`, from `top` to `bottom`. */
+  upright(x: number, top: number, bottom: number): void {
+    this.place(x - 1, top, 2, Math.max(0, bottom - top));
   }
 
   caret(view: EditorView, x: number, y: number): void {

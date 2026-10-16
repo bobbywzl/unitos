@@ -152,6 +152,9 @@ const en = {
   release20261013Title: "New: Breakwork",
   release20261013Body:
     "- **Breakwork** — the button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag blocks between buckets, nest buckets, label blocks, and draw labeled connections between buckets or blocks. Every block opens whole with its annotations and the Explain and Simplify tools.\n- **The Breakwork assistant** — talk about how to sort the document, then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and it changes the structure as much as you ask.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+  release20261016Title: "New: image rows",
+  release20261016Body:
+    "- **Image rows** — in a blank document or an import, put two to four images or figures side by side on one line. Drag an image onto the left or right side of another, or choose Side by side with next image in the image's menu or the right-click menu.\n- **Separate images** — in the same menus, puts each image back on a line of its own. Drag an image out of the row to move it on its own.\n\nThe controls that are new glow until you press them.",
   // Feedback button
   feedback: "Feedback",
   sendFeedback: "Send feedback",
@@ -325,6 +328,9 @@ const zh: Record<keyof typeof en, string> = {
   release20261013Title: "新功能：Breakwork",
   release20261013Body:
     "- **Breakwork**——文章右上角、折叠旁边的按钮。文档的块归入画布上的类别：块可在类别之间拖动，类别可以嵌套，块可以加标签，类别或块之间可以画带标签的关联。每个块都可以连同批注完整打开，并使用解释和简化工具。\n- **Breakwork 助手**——先聊聊如何归类文档，再让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，它可以按你的要求对结构做任何更改。\n\n新功能的控件会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+  release20261016Title: "新功能：图片行",
+  release20261016Body:
+    "- **图片行**——在空白文档或导入中，把两到四张图片或插图并排放在一行。把一张图片拖到另一张的左侧或右侧，或在图片菜单或右键菜单中选择“与下一张图片并排”。\n- **分开图片**——在同样的菜单中，让每张图片回到各自的一行。把图片拖出图片行，即可单独移动它。\n\n新功能的控件会发光，直到你按下它。",
   // Feedback button
   feedback: "反馈",
   sendFeedback: "发送反馈",

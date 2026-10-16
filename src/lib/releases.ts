@@ -50,6 +50,15 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20261013Body",
     features: ["structure"],
   },
+  {
+    // The image row (SPEC.md §29): Side by side with next image glows in the
+    // image's menu and the right-click menu.
+    id: "2026-10-16",
+    date: "2026-10-16",
+    titleKey: "works.release20261016Title",
+    bodyKey: "works.release20261016Body",
+    features: ["imageRow"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

@@ -42,23 +42,32 @@ import {
   PinIcon,
   RefreshIcon,
   ResetIcon,
+  SeparateImagesIcon,
+  SideBySideIcon,
   SortIcon,
   SplitIcon,
   TextFormatIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
 import { imageViewAt, isChartImage, isDrawingImage, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { selectedItem, separateImages, sideBySideWithNext } from "@/components/docs/insert/image-row";
+import { imageRowChoices } from "@/components/docs/insert/image-row-menu";
+import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import { openLinkHref } from "@/components/docs/insert/links";
 import { distributeRows, pinnedCount, tableRectOf } from "@/components/docs/insert/table";
 import { refreshTocs } from "@/components/docs/insert/toc";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The right-click menu (SPEC.md §29), Google Docs' own in place of the
-// browser's, for text, an image, a table, and a table of contents.
+// browser's, for text, an image or a figure object, a table, and a table of
+// contents.
 // Shift+right-click keeps the browser's menu; Shift+F10, Ctrl+Shift+X, and
 // Ctrl+Shift+\ open it from the keys.
 
-type Entry = { label: string; icon?: ReactNode; shortcut?: string; disabled?: boolean; run?: () => void; submenu?: Entry[] } | "sep";
+/** A menu entry; `feature` names the release control it is (the New glow). */
+type Entry =
+  | { label: string; icon?: ReactNode; shortcut?: string; disabled?: boolean; run?: () => void; submenu?: Entry[]; feature?: string }
+  | "sep";
 
 type Place = { x: number; y: number; byKeys: boolean; spelling?: Misspelling };
 
@@ -126,7 +135,7 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
       if (e.shiftKey) return;
       e.preventDefault();
       const view = editor.view;
-      const atom = (e.target as Element | null)?.closest<HTMLElement>("figure.docs-img, [data-toc]");
+      const atom = (e.target as Element | null)?.closest<HTMLElement>("figure.docs-img, .docs-figure, [data-toc]");
       let spelling: Promise<Misspelling | null> | null = null;
       if (atom) {
         const pos = view.posAtDOM(atom, 0);
@@ -225,6 +234,13 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
         return shown ? <MenuSeparator key={`sep${i}`} /> : null;
       }
       const { run } = entry;
+      const select =
+        run &&
+        (() => {
+          onClose();
+          run();
+        });
+      if (entry.feature) return <NewMenuItem key={entry.label} feature={entry.feature} label={entry.label} icon={entry.icon} onSelect={select} />;
       return (
         <MenuItem
           key={entry.label}
@@ -232,13 +248,7 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
           shortcut={entry.shortcut}
           disabled={entry.disabled}
           submenu={entry.submenu ? items(entry.submenu) : undefined}
-          onSelect={
-            run &&
-            (() => {
-              onClose();
-              run();
-            })
-          }
+          onSelect={select}
         >
           {entry.label}
         </MenuItem>
@@ -252,6 +262,28 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
         {items([...suggestions, ...entries])}
       </DropdownPanel>
     </>
+  );
+}
+
+/** A menu item a release added: the New glow and its pill until it is pressed. */
+function NewMenuItem({ feature, label, icon, onSelect }: { feature: string; label: string; icon?: ReactNode; onSelect?: () => void }) {
+  const glow = useNewFeature(feature);
+  return (
+    <MenuItem
+      icon={icon}
+      label={label}
+      className={glow.isNew ? NEW_GLOW_CLASS : ""}
+      onSelect={
+        onSelect &&
+        (() => {
+          glow.seen();
+          onSelect();
+        })
+      }
+    >
+      {label}
+      {glow.isNew && <NewPill />}
+    </MenuItem>
   );
 }
 
@@ -285,6 +317,19 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
     "sep",
   ];
 
+  // An image or a figure object: Side by side with next image, Separate
+  // images (an image row, insert/image-row.ts).
+  const rowItem = editing ? selectedItem(state) : null;
+  const choices = rowItem ? imageRowChoices(editor, rowItem.pos) : { sideBySide: false, separate: false };
+  const rowEntries: Entry[] = rowItem
+    ? [
+        ...(choices.sideBySide
+          ? [item("docsInsert.sideBySide", <SideBySideIcon />, () => sideBySideWithNext(editor.view, rowItem.pos), { feature: "imageRow" })]
+          : []),
+        ...(choices.separate ? [item("docsInsert.separateImages", <SeparateImagesIcon />, () => separateImages(editor.view, rowItem.pos))] : []),
+      ]
+    : [];
+
   if (image && editing) {
     const pos = image.pos;
     return [
@@ -296,8 +341,11 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       item("docsInsert.imageOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "image-options" })),
       item("docsInsert.altText", <AltTextIcon />, () => emitInsert(editor, { type: "image-options", section: "alt" }), { shortcut: keys("Mod+Alt+Y") }),
       item("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, pos)),
+      ...(rowEntries.length > 0 ? ["sep" as const, ...rowEntries] : []),
     ];
   }
+  // A figure object's own entries come before the page's.
+  if (rowEntries.length > 0) out.push(...rowEntries, "sep");
 
   if (toc && editing) {
     return [

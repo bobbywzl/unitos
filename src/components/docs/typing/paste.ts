@@ -458,10 +458,12 @@ export async function insertImageUrls(editor: Editor, images: DroppedImageUrl[],
 
 /** A new image selected in `tr` hands the caret to the empty line under it,
     a new one when the next line holds words, as Google Docs leaves the caret
-    after a new image: the next key never replaces it. */
+    after a new image: the next key never replaces it. An image in an image
+    row hands it to the line under the row. */
 export function caretUnderImage(tr: Transaction): boolean {
   if (!(tr.selection instanceof NodeSelection) || tr.selection.node.type.name !== "image") return false;
-  const after = tr.selection.to;
+  const $image = tr.selection.$from;
+  const after = $image.parent.type.name === "imageRow" ? $image.after() : tr.selection.to;
   const next = tr.doc.resolve(after).nodeAfter;
   if (!next?.isTextblock || next.content.size > 0) tr.insert(after, tr.doc.type.schema.nodes.paragraph.create());
   tr.setSelection(TextSelection.create(tr.doc, after + 1));

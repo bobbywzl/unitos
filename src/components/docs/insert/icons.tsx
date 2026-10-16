@@ -212,3 +212,6 @@ export const BehindTextIcon = icon(
   "BehindTextIcon",
 );
 export const InFrontIcon = icon("M3 8h3v2H3V8zm15 0h3v2h-3V8zM3 14h3v2H3v-2zm15 0h3v2h-3v-2zM7 5h10v14H7V5z", "InFrontIcon");
+/** An image row: two images on one line; Separate images: one above the other. */
+export const SideBySideIcon = icon("M3 6h8v12H3V6zm10 0h8v12h-8V6zM3 20h18v2H3v-2zM3 2h18v2H3V2z", "SideBySideIcon");
+export const SeparateImagesIcon = icon("M6 3h12v8H6V3zm0 10h12v8H6v-8zM2 7h2v2H2V7zm18 0h2v2h-2V7zM2 15h2v2H2v-2zm18 0h2v2h-2v-2z", "SeparateImagesIcon");

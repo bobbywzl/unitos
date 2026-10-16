@@ -265,6 +265,15 @@ function blockMd(node: PMNode, indent = ""): string {
     }
     case "image":
       return `![${String(node.attrs.alt ?? "")}](${String(node.attrs.src ?? "")})`;
+    case "imageRow": {
+      // An image row: its images on one line, as Markdown draws images in a line.
+      const images: string[] = [];
+      node.forEach((item) => {
+        const md = blockMd(item);
+        if (md) images.push(md);
+      });
+      return images.join(" ");
+    }
     case "footnotes": {
       const notes: string[] = [];
       node.forEach((note) => {
