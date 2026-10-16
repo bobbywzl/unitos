@@ -40,7 +40,7 @@ export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
-// The assistant (SPEC.md §7): its answers and its edit commands. Called as
+// The assistant (SPEC.md §7): its answers (its edit commands run on ACT_MODEL). Called as
 // written, not as the gemini role's default: the bimonthly model update
 // moves the video's flash, and the assistant stays on 3.8 Flash until
 // someone changes this line. Gemini reads pictures, so a picture in the
@@ -211,7 +211,7 @@ export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // together skip every pass but the answer: the answer pass reads them
 // whole. Not a DerivationType — it runs through
 // /api/notebooks/[notebookId]/stitch.
-export const STITCH_MODEL = GLM_5_3; // the answer pass
+export const STITCH_MODEL = CLAUDE_SONNET_5_5; // the answer pass: it writes the generated document and draws the links
 export const STITCH_SELECT_MODEL = GLM_5_3_FLASH; // the route and select passes: readings of the skeletons
 export const STITCH_ROUTE_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_EFFORT: KimiEffort = "low";
@@ -320,10 +320,19 @@ export const SUGGEST_PARALLEL = 4; // windows at once: the gateway's rate limits
 export const SUGGEST_MAX_NEW_CHARS = 100_000; // new text per command, across its windows
 export const SUGGEST_DEADLINE_MS = 270_000; // the route allows 300 s; windows not started by then are reported
 
+// The assistant's edit commands (SPEC.md §7 `act`): a request to change the
+// document, the notes, or the project. Every assistant that makes a change
+// the reader asked for runs on Claude Sonnet 5.5: on the Breakwork loop's 54
+// request shapes it followed the requests as well as Opus 5.5 and Fable 5.1
+// and won the blind comparison against both, at half and a fifth of their
+// price (scripts/eval/structure/rounds.md). The assistant's answers stay on
+// DERIVATION_MODEL.SYNTHESIS.
+export const ACT_MODEL = CLAUDE_SONNET_5_5;
+
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
 // It rewrites the reader's own words, so it reasons at the reader's effort.
-export const MERGE_MODEL = GLM_5_3;
+export const MERGE_MODEL = CLAUDE_SONNET_5_5;
 export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 
 // The gist of a note — the phrase its collapsed row shows (SPEC.md §6): a

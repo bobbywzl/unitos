@@ -97,4 +97,9 @@ On the 15 harder shapes: Sonnet 55 / 58, Opus 57 / 58, Fable 57 / 58; Sonnet's a
 | round | change | targeted cases (2 samples each) | against control | kept |
 |---|---|---|---|---|
 | r20 | a part the reader leaves out (except X, only Y, leave the rest alone) stays unsorted, course lines included | zh-except, rm-except, sp-methods-only, sp-numbers, nz-only-genealogy, tm-actions, zh-my-thoughts | 7 / 7 and 7 / 7 against 7 / 7 and 7 / 7 on the checks | yes: no measured change, and it removes the conflict between "place every block" and the reader's exclusion |
+| r21 | a change the reader asks for (a move, a rename, a merge, a split, a delete, labels) draws no new connection unless asked | the 14 narrow-edit cases | 28 / 28 cases fully followed against 19 / 28 for the controls; shorter answers (225 against 260 tokens) | yes |
+
+The live prompt and the branch prompt, blind on all 54 cases (one sample each, before r21): 18 / 18 / 18, margins 27 to 21 for the branch. Both follow 99% of the hard checks in the sandbox. Two production causes the sandbox cannot show were found and fixed: until October 15 Breakwork called claude-sonnet-5, which the deploy's provider answered with Not Found, so every turn failed; and after Apply the canvas did not move to the new buckets, so the reader could see none of what was done.
+
+The model: on the user's word, every assistant that makes a change the reader asked for runs on Claude Sonnet 5.5 (the assistant's edit commands, Merge with AI, and Stitch's answer pass moved from Gemini 3.8 Flash and GLM 5.3).
 

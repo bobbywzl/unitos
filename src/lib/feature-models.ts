@@ -1,6 +1,7 @@
 import type { DerivationType } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  ACT_MODEL,
   CLASSIFY_MODEL,
   COLLAPSE_MODEL,
   STRUCTURE_MODEL,
@@ -98,7 +99,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   suggest: SUGGEST_MODEL,
   visualize: VISUALIZE_MODEL,
   assistant: DERIVATION_MODEL.SYNTHESIS,
-  act: DERIVATION_MODEL.SYNTHESIS,
+  act: ACT_MODEL,
   web: WEB_SEARCH_MODEL,
   vision: VISION_MODEL,
   "svg-chart": SVG_CHART_MODEL,
