@@ -23,6 +23,7 @@ import {
 } from "@/lib/structure-assist";
 import { childBuckets, emptyStructure, parseRanges, pieceHash, piecePreview, type Structure } from "@/lib/structure";
 import { STRUCTURE_CASES, type StructureCase } from "./cases";
+import { runFollow } from "./follow";
 
 const ROOT = join(process.cwd(), ".eval", "structure");
 const FIXTURES = join(process.cwd(), "scripts", "eval", "structure", "fixtures");
@@ -138,6 +139,7 @@ function check(): void {
     if (c.lang === "zh") add("language", /[一-鿿]/.test(answer.reply), "the reply is in Chinese");
     add("tokens", tokens <= 3000, `${tokens} tokens`);
     let packet = "";
+    if (!answer.structure) for (const f of c.follow ?? []) add(`follow:${f.why}`, false, "no structure");
     if (answer.structure) {
       const { structure, summary } = resolveProposal(answer, current, byNumber);
       const numberOf = new Map(readable.map((b, i) => [b.id, i + 1]));
@@ -166,6 +168,13 @@ function check(): void {
         add("no-labels", Object.keys(answer.structure.labels).length === 0, `${Object.keys(answer.structure.labels).length} labels written`);
       }
       for (const keep of c.expect.keep ?? []) add(`keep:${keep}`, structure.buckets.some((b) => b.id === keep), "");
+      // What the request asked for, as hard facts (follow.ts).
+      const canvasMap = new Map(
+        (c.canvas ?? []).map((b) => [b.id, { title: b.title, parent: b.parent ?? null, blocks: parseRanges(b.blocks, readable.length) }]),
+      );
+      for (const f of runFollow(c.follow ?? [], { structure, canvas: canvasMap, numberOf, blockCount: readable.length })) {
+        add(`follow:${f.why}`, f.ok, f.detail);
+      }
       // The judge's packet: the structure as the reader would see it.
       const lineOf = (blockId: string) => {
         const n = numberOf.get(blockId)!;
@@ -199,7 +208,13 @@ function check(): void {
       ].join("\n");
     }
     const failed = checks.filter((x) => !x.ok);
-    writeJson(join(dir, "result.json"), { checks, tokens, failed: failed.map((x) => x.name) });
+    const follows = checks.filter((x) => x.name.startsWith("follow:"));
+    writeJson(join(dir, "result.json"), {
+      checks,
+      tokens,
+      failed: failed.map((x) => x.name),
+      follow: { passed: follows.filter((x) => x.ok).length, total: follows.length },
+    });
     // The structure as text, for the side-by-side judge (pair).
     writeFileSync(join(dir, "packet.md"), [`## The assistant's reply\n${answer.reply}`, "", packet || "## The structure\n(none: the assistant answered in words only)"].join("\n"));
     const doc = readable.map((b, i) => `[${i + 1}] (${b.type}) ${b.text.replace(/\s+/g, " ")}`).join("\n");
@@ -353,7 +368,39 @@ function score(): void {
   console.log(report);
 }
 
-if (command === "prepare") prepare();
+// ── follow: how often each round did what was asked ─────────────────────
+//   run.ts follow --rounds m-haiku,m-sonnet [--cases a,b]
+function followTable(): void {
+  const rounds = (flag("rounds") ?? round).split(",").filter(Boolean);
+  const head = `| case | ${rounds.join(" | ")} |`;
+  const lines = [head, `|---|${rounds.map(() => "---").join("|")}|`];
+  const totals = rounds.map(() => ({ passed: 0, total: 0, cases: 0, clean: 0, tokens: 0 }));
+  for (const c of cases()) {
+    const cells = rounds.map((r, i) => {
+      const res = readText(join(dirOf(r, c.id), "result.json"));
+      if (!res) return "–";
+      const { follow, failed, tokens } = JSON.parse(res) as { follow?: { passed: number; total: number }; failed?: string[]; tokens?: number };
+      const t = totals[i];
+      t.cases++;
+      t.tokens += tokens ?? 0;
+      const f = follow ?? { passed: 0, total: 0 };
+      t.passed += f.passed;
+      t.total += f.total;
+      const missed = (failed ?? []).filter((x) => x.startsWith("follow:") || x === "kind" || x === "schema");
+      if (missed.length === 0) t.clean++;
+      return missed.length ? `${f.passed}/${f.total} ✗ ${missed.map((x) => x.replace("follow:", "")).join("; ").slice(0, 80)}` : `${f.passed}/${f.total}`;
+    });
+    if (cells.every((x) => x === "–")) continue;
+    lines.push(`| ${c.id} | ${cells.join(" | ")} |`);
+  }
+  lines.push(`| **checks passed** | ${totals.map((t) => `${t.passed}/${t.total} (${t.total ? Math.round((100 * t.passed) / t.total) : 0}%)`).join(" | ")} |`);
+  lines.push(`| **cases fully followed** | ${totals.map((t) => `${t.clean}/${t.cases}`).join(" | ")} |`);
+  lines.push(`| **mean answer tokens** | ${totals.map((t) => (t.cases ? Math.round(t.tokens / t.cases) : 0)).join(" | ")} |`);
+  console.log(lines.join("\n"));
+}
+
+if (command === "follow") followTable();
+else if (command === "prepare") prepare();
 else if (command === "batches") batches();
 else if (command === "check") check();
 else if (command === "score") score();
