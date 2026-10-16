@@ -604,7 +604,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     follow: [
       { kind: "tops", min: 2, max: 2, why: "two buckets" },
       { kind: "in", blocks: "8,18,19,28,29", title: "decid|decision", why: "every decision" },
-      { kind: "in", blocks: "11,22,33,34", title: "question|answer|open|undecided", why: "every open question" },
+      { kind: "in", blocks: "11,33,34", title: "question|answer|open|undecided", why: "every open question (22 was settled in meeting 3)" },
     ],
   },
   {
