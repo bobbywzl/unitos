@@ -18,12 +18,15 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 // speaks it. The key is MOONSHOT_API_KEY. MOONSHOT_BASE_URL points a local
 // run at a stand-in server (scripts/qa) or at the China platform
 // (https://api.moonshot.cn/v1). Under the gateway (lib/gateway.ts) the chat
-// calls go to its OpenAI-compatible route as moonshot/<id> or zai/<id> —
-// GLM 5.3 and GLM 5.3 Flash are reached through the gateway alone — the
+// calls go to its OpenAI-compatible route as moonshot/<id> or zai/<id>, the
 // formula and model-list calls to its Moonshot pass-through, and Z.ai's web
-// search to its Z.ai pass-through; the key is the app key.
+// search to its Z.ai pass-through; the key is the app key. Without the
+// gateway, GLM 5.3 and GLM 5.3 Flash call Z.ai's own OpenAI-compatible API
+// with ZAI_API_KEY (ZAI_BASE_URL overrides the root), and so does Z.ai's
+// web search.
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
+const ZAI_DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4";
 
 /** The key a Kimi call sends: the app key under the gateway, else MOONSHOT_API_KEY. */
 export function kimiApiKey(): string | undefined {
@@ -49,16 +52,29 @@ export function moonshotApiUrl(): string {
   return kimiBaseUrl();
 }
 
+/** Z.ai's API root: the gateway's Z.ai pass-through, or Z.ai's own. */
+function zaiApiUrl(): string {
+  if (gatewayConfigured()) return gatewayUrl("/zai");
+  return (process.env.ZAI_BASE_URL || ZAI_DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
 let provider: MoonshotAIProvider | null = null;
+let zaiProvider: MoonshotAIProvider | null = null;
 
 /** The model to call. The provider is built once per process, on first use.
     A role's default id (KIMI_K3, GLM_5_3) resolves to the role's current id
     — the newest version the bimonthly model update found (lib/models.ts),
-    and Kimi's when a GLM id is asked for without the gateway; the returned
-    model's modelId is the id called. */
+    and Kimi's when a GLM id is asked for with neither the gateway nor
+    ZAI_API_KEY; the returned model's modelId is the id called. Z.ai speaks
+    the same API, so a direct GLM call takes the same provider at Z.ai's
+    root. */
 export async function kimi(modelId: string): Promise<LanguageModel> {
-  provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
   const id = await resolveModelId(modelId);
+  if (isGlmModel(id) && !gatewayConfigured()) {
+    zaiProvider ??= createMoonshotAI({ apiKey: keyFor("zai"), baseURL: zaiApiUrl() });
+    return zaiProvider(id);
+  }
+  provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
   return provider(gatewayModelId(isGlmModel(id) ? "zai" : "moonshot", id));
 }
 
@@ -71,10 +87,10 @@ export function kimiOptions(effort: KimiEffort = DEFAULT_EFFORT) {
 
 // The assistant's web access (SPEC.md §7): the model asks for a search as a
 // standard function call, and the search follows the model that answers.
-// Under GLM 5.3 it is Z.ai's Web Search API (the gateway's /zai pass-through;
-// GLM is reached through the gateway alone): the results come back as plain
+// Under GLM 5.3 it is Z.ai's Web Search API (the gateway's /zai pass-through,
+// or Z.ai's own root with ZAI_API_KEY): the results come back as plain
 // text — title, site, date, link, summary — and the model cites the links.
-// Under Kimi K3 — what a GLM id resolves to without the gateway — it is
+// Under Kimi K3 — what a GLM id resolves to without Z.ai — it is
 // Moonshot's web-search formula, whose result comes back encrypted, readable
 // by Kimi alone. Either way the links the model writes are the sources the
 // reader sees. Z.ai bills a search $0.01, Moonshot $0.005, on top of the tokens.
@@ -122,7 +138,7 @@ async function searchMoonshot(query: string, abortSignal: AbortSignal | undefine
 }
 
 async function searchZai(query: string, abortSignal: AbortSignal | undefined): Promise<string> {
-  const res = await outboundFetch(`${gatewayUrl("/zai")}/web_search`, {
+  const res = await outboundFetch(`${zaiApiUrl()}/web_search`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${keyFor("zai") ?? ""}`,

@@ -2,9 +2,9 @@
 // provider. With LITELLM_BASE_URL and LITELLM_API_KEY set, every AI call goes
 // to the gateway — GLM, Kimi, Claude, Gemini, Groq and OpenAI Whisper, OpenAI
 // TTS, DeepL, Z.ai's and Moonshot's web search, and the model lists the bimonthly model
-// update reads. GLM 5.3 and GLM 5.3 Flash have no direct client: they are
-// reached through the gateway alone, and without it Kimi K3 takes their
-// calls (lib/models.ts). The gateway holds the provider keys, applies the app key's
+// update reads. Without the gateway, GLM 5.3 and GLM 5.3 Flash call Z.ai
+// directly with ZAI_API_KEY; with neither, Kimi K3 takes their calls
+// (lib/models.ts). The gateway holds the provider keys, applies the app key's
 // rate limits and budget, records spend per call, and runs the fallbacks in
 // litellm/config.yaml. The app then needs no provider key but Deepgram's
 // (lib/video/deepgram.ts: its body is the media bytes, which the gateway
@@ -47,7 +47,7 @@ export type GatewayProvider =
   | "typesafe";
 
 const KEY_ENV: Record<GatewayProvider, string> = {
-  zai: "ZAI_API_KEY", // read on the gateway host alone
+  zai: "ZAI_API_KEY",
   moonshot: "MOONSHOT_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   gemini: "GEMINI_API_KEY",
@@ -108,7 +108,6 @@ export function keyFor(provider: GatewayProvider): string | undefined {
     the gateway, so its own key decides. */
 export function providerConfigured(provider: GatewayProvider): boolean {
   if (provider === "deepgram") return Boolean(providerKey(provider));
-  if (provider === "zai") return gatewayConfigured();
   return gatewayConfigured() || Boolean(providerKey(provider));
 }
 
