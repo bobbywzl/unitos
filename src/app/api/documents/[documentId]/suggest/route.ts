@@ -240,7 +240,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ done: true, summary, warnings });
       } catch (err) {
         console.error("[suggest] failed:", err);
-        send({ error: t("api.suggestFailed", { reason: modelErrorMessage(err) }) });
+        // The one pass already says the suggestions could not be written.
+        const reason = modelErrorMessage(err);
+        const said = t("api.suggestFailed", { reason: "" }).trim();
+        send({ error: reason.startsWith(said) ? reason : t("api.suggestFailed", { reason }) });
       } finally {
         stopHeartbeat();
         if (!cancelled) controller.close();
