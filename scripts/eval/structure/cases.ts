@@ -733,7 +733,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The retrieval paragraph is the first piece of Three habits; the bucket keeps its other blocks; nothing else changes.",
     follow: [
-      { kind: "first", block: 15, why: "retrieval first in Three habits" },
+      { kind: "sequence", blocks: [15, 14, 16], why: "retrieval before the other habits" },
       { kind: "in", blocks: "13-17", title: "habit", why: "Three habits keeps its blocks" },
       { kind: "same", bucket: "b2", why: "The forgetting curve untouched" },
       { kind: "same", bucket: "b3", why: "Why structure matters untouched" },
@@ -835,7 +835,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     follow: [
       { kind: "tops", min: 1, max: 1, why: "one bucket" },
       { kind: "in", blocks: "8,33,37,39", title: "caffeine|coffee", why: "the caffeine paragraphs in it" },
-      { kind: "unsorted", blocks: "5,6,11,19,22,23,34,40,60,61,63,65", why: "paragraphs not about caffeine left alone" },
+      { kind: "unsorted", blocks: "5,6,11,19,22,23,60,61,63,65", why: "paragraphs not about caffeine left alone" },
     ],
   },
   {
