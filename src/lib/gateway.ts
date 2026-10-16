@@ -1,3 +1,9 @@
+// The gateway is retired: the Railway host that ran it is gone, so
+// gatewayBaseUrl() returns nothing whatever LITELLM_BASE_URL says, and every
+// client calls its provider directly with its own key from the app's host
+// (MOONSHOT_API_KEY, ANTHROPIC_API_KEY, ZAI_API_KEY, ...). To bring a gateway
+// back, read LITELLM_BASE_URL in gatewayBaseUrl() again.
+//
 // The AI gateway (SPEC.md §2): LiteLLM, one host in front of every AI
 // provider. With LITELLM_BASE_URL and LITELLM_API_KEY set, every AI call goes
 // to the gateway — GLM, Kimi, Claude, Gemini, Groq and OpenAI Whisper, OpenAI
@@ -64,9 +70,9 @@ function cleanKey(value: string | undefined): string | undefined {
   return value?.replace(/\s+/g, "") || undefined;
 }
 
+/** Nothing: the gateway is retired (the note at the top). */
 export function gatewayBaseUrl(): string | undefined {
-  const url = process.env.LITELLM_BASE_URL?.trim();
-  return url ? url.replace(/\/+$/, "") : undefined;
+  return undefined;
 }
 
 /** The app key: what every model call authenticates with. */
