@@ -3,11 +3,12 @@ import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 import type { AssistantAction } from "@/lib/types";
 
-// The models (SPEC.md §2). The assistant — its answers and its edit
-// commands — runs on Gemini 3.8 Flash (GEMINI_3_8_FLASH below; the client is
-// lib/gemini.ts); where no Gemini key is set it falls back to GLM 5.3
-// (lib/feature-models.ts). GLM 5.3, Z.ai's flagship, is behind the reader's
-// tools, the assistant with Web on, Stitch's answer, and the merge of notes; GLM 5.3
+// The models (SPEC.md §2). Every assistant that makes a change the reader
+// asked for — the sidebar assistant, its edit commands, the page editor's
+// suggestions, the notes' assistants, Stitch's answer, the merge of notes,
+// and Breakwork — runs on Claude Sonnet 5.5; where no Anthropic key is set
+// the assistant falls back to GLM 5.3 (lib/feature-models.ts). GLM 5.3,
+// Z.ai's flagship, is behind the reader's tools and the assistant with Web on; GLM 5.3
 // Flash, its small sibling, behind every reading but the parse — the
 // readings copy claims into structure, and Flash reads a million tokens for
 // a tenth of the price. The parse passes run on Claude Opus 5.5 at max
@@ -40,11 +41,9 @@ export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
-// The assistant (SPEC.md §7): its answers (its edit commands run on ACT_MODEL). Called as
-// written, not as the gemini role's default: the bimonthly model update
-// moves the video's flash, and the assistant stays on 3.8 Flash until
-// someone changes this line. Gemini reads pictures, so a picture in the
-// assistant stays on it too (VISION_MODEL is for the models that cannot).
+// Gemini 3.8 Flash, called as written, not as the gemini role's default:
+// the assistant ran on it until it moved to Claude Sonnet 5.5 with every
+// assistant that makes a change (ACT_MODEL); the gateway keeps its route.
 export const GEMINI_3_8_FLASH = "gemini-3.8-flash";
 
 // The constants above are the roles' defaults. The bimonthly model update
@@ -91,7 +90,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SALIENCE: GLM_5_3_FLASH,
   EXTRACT: GLM_5_3_FLASH,
   SUMMARIZE: GLM_5_3,
-  SYNTHESIS: GEMINI_3_8_FLASH,
+  SYNTHESIS: CLAUDE_SONNET_5_5, // the assistant: its answers and the changes it plans (ACT_MODEL)
   FIND: GLM_5_3_FLASH,
   DISTILL: KIMI_K3, // Extract: the reader's question and the quotes that answer it
   FORMALIZE: GLM_5_3,
@@ -325,8 +324,8 @@ export const SUGGEST_DEADLINE_MS = 270_000; // the route allows 300 s; windows n
 // the reader asked for runs on Claude Sonnet 5.5: on the Breakwork loop's 54
 // request shapes it followed the requests as well as Opus 5.5 and Fable 5.1
 // and won the blind comparison against both, at half and a fifth of their
-// price (scripts/eval/structure/rounds.md). The assistant's answers stay on
-// DERIVATION_MODEL.SYNTHESIS.
+// price (scripts/eval/structure/rounds.md). The sidebar assistant plans its
+// changes in its answer, so its answers run on it too (DERIVATION_MODEL.SYNTHESIS).
 export const ACT_MODEL = CLAUDE_SONNET_5_5;
 
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
