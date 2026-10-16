@@ -355,7 +355,7 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
       return;
     }
     if (INDEXED_NODE_TYPES.has(node.type)) {
-      const id = node.attrs?.blockId;
+      const id = movedId(node, standing) ?? node.attrs?.blockId;
       if (typeof id !== "string" || !id) {
         page = lastPageIn(node) ?? page;
         return;
@@ -459,10 +459,40 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
   };
   // The assistant's suggestions read as not made yet: their words, blocks,
   // and format changes as before them.
-  for (const node of withoutSuggestions([doc], isAssistantSuggestion)) {
+  const nodes = withoutSuggestions([doc], isAssistantSuggestion);
+  const standing = standingIds(nodes);
+  for (const node of nodes) {
     walk(node, { list: null, quote: false, cell: null, places: null, table: 0 });
   }
   return out;
+}
+
+/** The block ids the paragraph index reads: every indexed node's that no
+    person's suggestion removes. */
+function standingIds(nodes: RichNode[]): Set<string> {
+  const ids = new Set<string>();
+  const walk = (node: RichNode) => {
+    if (node.marks?.some((m) => m.type === "deletion")) return;
+    const id = node.attrs?.blockId;
+    if (INDEXED_NODE_TYPES.has(node.type) && typeof id === "string" && id) ids.add(id);
+    node.content?.forEach(walk);
+  };
+  nodes.forEach(walk);
+  return ids;
+}
+
+/** A person's pending move of a block (an image or a figure object dragged
+    in Suggesting mode, components/docs/insert/image-row.ts) reads as made:
+    its copy reads under the moved block's id (`movedFrom`), as it will hold
+    it once the move is accepted (ext/suggest.ts adoptMovedIds), so the
+    block's row and every anchor on it stay. Only while no standing block
+    holds that id; the first copy takes it. */
+function movedId(node: RichNode, standing: Set<string>): string | null {
+  const from = node.attrs?.movedFrom;
+  if (typeof from !== "string" || !from || standing.has(from)) return null;
+  if (!node.marks?.some((m) => m.type === "insertion")) return null;
+  standing.add(from);
+  return from;
 }
 
 /** A figure object's region attribute (a JSON string) as the row stores

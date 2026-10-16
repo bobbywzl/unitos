@@ -79,10 +79,12 @@ const BlockIds = Extension.create({
             parseHTML: (el) => el.getAttribute("data-block-id"),
             renderHTML: (attrs) => (attrs.blockId ? { "data-block-id": attrs.blockId } : {}),
           },
-          // A copy the assistant's move suggestion adds (suggest/assistant.ts
-          // moveBlocks): the id of the block it moves. Once the move is
-          // accepted and that block is gone, the copy takes its id, so every
-          // anchor on it stays (ext/suggest.ts settle).
+          // A copy a move suggestion adds — the assistant's
+          // (suggest/assistant.ts moveBlocks), or an image or a figure
+          // object dragged in Suggesting mode (insert/image-row.ts): the id
+          // of the block it moves. Once the move is accepted and that block
+          // is gone, the copy takes its id, so every anchor on it stays
+          // (ext/suggest.ts settle).
           movedFrom: {
             default: null,
             keepOnSplit: false,

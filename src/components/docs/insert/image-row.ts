@@ -6,7 +6,7 @@ import { dropPoint } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { isSuggesting } from "@/components/docs/ext/suggest";
 import { DropLine } from "@/components/docs/typing/drop";
-import { IMAGE_ROW_ITEMS, MAX_IMAGE_ROW_ITEMS } from "@/lib/docs/schema";
+import { IMAGE_ROW_ITEMS, MAX_IMAGE_ROW_ITEMS, SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 
 // An image row (SPEC.md §29): two to four images or figure objects on one
 // line of the page, side by side, as Google Docs draws in-line images that
@@ -22,8 +22,9 @@ import { IMAGE_ROW_ITEMS, MAX_IMAGE_ROW_ITEMS } from "@/lib/docs/schema";
 // of it lands as a block, and a row left with one item is that item again.
 // Each is one undo step. The items keep their nodes, so each keeps its block
 // id and its paragraph index row (lib/docs/blocks.ts). In Suggesting mode a
-// row is neither made nor taken apart: a drop moves the image as any drop
-// does, and the menu items stay off.
+// row is neither made nor taken apart: a drop suggests the image's move, a
+// copy that carries the image's id as movedFrom (moveByDrop), and the menu
+// items stay off.
 
 export const IMAGE_ROW = "imageRow";
 
@@ -156,12 +157,17 @@ export function joinBeside(view: EditorView, dragged: RowItem, target: RowItem, 
 /** A dragged image or figure object let go elsewhere moves as the page's
     own drop moves it, but as itself: it keeps its block id, where the
     page's drop would give the copy a new one (extensions.ts BlockIds). Out
-    of an image row it lands as a block. */
-function moveByDrop(view: EditorView, dragged: RowItem, event: DragEvent): boolean {
+    of an image row it lands as a block. In Suggesting mode the move is a
+    suggestion: the item struck where it was, and a copy added where it
+    lands that carries the item's id as movedFrom. Accepted, the copy takes
+    that id (ext/suggest.ts adoptMovedIds); rejected, the copy goes and the
+    item stands as it was. */
+function moveByDrop(view: EditorView, dragged: RowItem, event: DragEvent, suggesting: boolean): boolean {
   const { state } = view;
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
   if (!at) return false;
-  const slice = new Slice(Fragment.from(dragged.node), 0, 0);
+  const node = suggesting ? moveCopy(dragged.node) : dragged.node;
+  const slice = new Slice(Fragment.from(node), 0, 0);
   const drop = dropPoint(state.doc, at.pos, slice) ?? at.pos;
   // Let go on itself: nothing moves.
   if (drop >= dragged.pos && drop <= dragged.pos + dragged.node.nodeSize) return true;
@@ -169,16 +175,26 @@ function moveByDrop(view: EditorView, dragged: RowItem, event: DragEvent): boole
   NodeSelection.create(state.doc, dragged.pos).replace(tr);
   const pos = tr.mapping.map(drop);
   const before = tr.doc;
-  tr.replaceRangeWith(pos, pos, dragged.node);
+  tr.replaceRangeWith(pos, pos, node);
   if (tr.doc.eq(before)) return false;
   // replaceRangeWith may put the node a step outside `pos`: find it there.
   const $pos = tr.doc.resolve(pos);
-  const landed = $pos.nodeAfter?.eq(dragged.node) ? pos : $pos.nodeBefore?.eq(dragged.node) ? pos - dragged.node.nodeSize : null;
+  const landed = $pos.nodeAfter?.eq(node) ? pos : $pos.nodeBefore?.eq(node) ? pos - node.nodeSize : null;
   closeHistory(tr);
   if (landed !== null) tr.setSelection(NodeSelection.create(tr.doc, landed));
   view.focus();
   view.dispatch(tr.setMeta("uiEvent", "drop"));
   return true;
+}
+
+/** The copy a suggested move adds: no id of its own yet (BlockIds gives it
+    one), the moved item's id as movedFrom, and none of the item's own
+    suggestion marks (the move is a suggestion of its own). An item that is
+    itself a pending move's copy passes on the id it carries. */
+function moveCopy(node: PMNode): PMNode {
+  const from: unknown = node.attrs.movedFrom ?? node.attrs.blockId;
+  const marks = node.marks.filter((m) => !SUGGESTION_MARK_TYPES.has(m.type.name));
+  return node.type.create({ ...node.attrs, blockId: null, movedFrom: typeof from === "string" ? from : null }, node.content, marks);
 }
 
 /** The image or figure object the page's own drag carries, if the drag
@@ -238,13 +254,6 @@ function rowPlugins(editor: Editor): Plugin[] {
       key: new PluginKey("docsImageRowDrop"),
       props: {
         handleDOMEvents: {
-          // A figure object moves only where rows are made: Suggesting mode
-          // would suggest the move as a copy under a new block id.
-          dragstart: (_view, event) => {
-            if (takesRows(editor) || !(event.target instanceof Element && event.target.closest(".docs-figure"))) return false;
-            event.preventDefault();
-            return true;
-          },
           dragover: (view, event) => {
             const dragged = takesRows(editor) ? draggedItem(view) : null;
             const drop = dragged && sideDropAt(view, dragged, event.clientX, event.clientY);
@@ -268,14 +277,15 @@ function rowPlugins(editor: Editor): Plugin[] {
         },
         handleDrop: (view, event, _slice, moved) => {
           clear();
-          const dragged = moved && takesRows(editor) ? draggedItem(view) : null;
+          const dragged = moved && editor.isEditable ? draggedItem(view) : null;
           if (!dragged) return false;
+          if (isSuggesting(editor)) return moveByDrop(view, dragged, event, true);
           const drop = sideDropAt(view, dragged, event.clientX, event.clientY);
           if (drop) {
             joinBeside(view, dragged, drop.target, drop.side);
             return true;
           }
-          return moveByDrop(view, dragged, event);
+          return moveByDrop(view, dragged, event, false);
         },
       },
       view: () => ({ destroy: clear }),

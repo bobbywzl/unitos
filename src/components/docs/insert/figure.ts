@@ -4,7 +4,6 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import { createElement as h, useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { isSuggesting } from "@/components/docs/ext/suggest";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { MediaHtml } from "@/components/reader/figure-media";
@@ -177,10 +176,8 @@ function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string
     const onClick = (e: MouseEvent) => {
       if (link(e.target) && !(e.ctrlKey || e.metaKey)) e.preventDefault();
     };
-    // Suggesting mode would suggest the move as a new copy, under a new
-    // block id: the figure keeps its place there.
     const onDragStart = (e: DragEvent) => {
-      if (!editor.isEditable || isSuggesting(editor) || own(e.target)) e.preventDefault();
+      if (!editor.isEditable || own(e.target)) e.preventDefault();
     };
     el.addEventListener("mousedown", onDown);
     el.addEventListener("mouseup", onUp);
@@ -328,8 +325,10 @@ export const Figure = Node.create<FigureOptions>({
   atom: true,
   selectable: true,
   // A figure object drags as an image does, in a page that takes edits
-  // outside Suggesting mode (insert/image-row.ts): beside another image or
-  // figure object into an image row, or to a new place, keeping its block id.
+  // (insert/image-row.ts): beside another image or figure object into an
+  // image row, or to a new place, keeping its block id; in Suggesting mode
+  // to a new place, as a suggested move that keeps its block id once
+  // accepted.
   draggable: true,
 
   addOptions() {
