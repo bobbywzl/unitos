@@ -36,7 +36,15 @@ export type Follow =
   // holding one) and the other on a `to` block (or a bucket holding one).
   | { kind: "connections"; min: number; from?: string; to?: string; why: string }
   // The top buckets that match the patterns come in this order.
-  | { kind: "order"; titles: string[]; why: string };
+  | { kind: "order"; titles: string[]; why: string }
+  // The block comes first in its bucket.
+  | { kind: "first"; block: number; why: string }
+  // The listed blocks share one bucket and come in this order in it.
+  | { kind: "sequence"; blocks: number[]; why: string }
+  // Some bucket holds blocks from at least two of the groups.
+  | { kind: "mixes"; groups: string[]; why: string }
+  // No one bucket holds more than `max` of the listed blocks.
+  | { kind: "maxSize"; blocks: string; max: number; why: string };
 
 export type FollowContext = {
   structure: Pick<Structure, "buckets" | "pieces" | "connections">;
@@ -157,6 +165,38 @@ export function runFollow(rules: Follow[], ctx: FollowContext): FollowResult[] {
           return (hits(a, from) && hits(b, to)) || (hits(b, from) && hits(a, to));
         }).length;
         return res(n >= rule.min, `${n} matching connections`);
+      }
+      case "first": {
+        const b = bucketOfBlock.get(rule.block);
+        if (!b) return res(false, "unsorted");
+        const first = structure.pieces.filter((p) => p.bucketId === b).sort((x, y) => x.order - y.order)[0];
+        return res(numberOf.get(first.blockId) === rule.block, `first is ${numberOf.get(first.blockId)}`);
+      }
+      case "sequence": {
+        const at = new Set(rule.blocks.map((n) => bucketOfBlock.get(n) ?? "unsorted"));
+        if (at.size !== 1 || at.has("unsorted")) return res(false, `${at.size} places`);
+        const order = new Map(structure.pieces.map((p) => [numberOf.get(p.blockId) ?? 0, p.order]));
+        const seq = rule.blocks.map((n) => order.get(n) ?? 0);
+        const ok = seq.every((o, i) => i === 0 || o > seq[i - 1]);
+        const shown = [...rule.blocks].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+        return res(ok, ok ? "" : `order ${shown.join(", ")}`);
+      }
+      case "mixes": {
+        const groups = rule.groups.map((g) => new Set(nums(g)));
+        const mixed = structure.buckets.some((b) => {
+          const held = structure.pieces.filter((p) => p.bucketId === b.id).map((p) => numberOf.get(p.blockId) ?? 0);
+          return groups.filter((g) => held.some((n) => g.has(n))).length >= 2;
+        });
+        return res(mixed, mixed ? "" : "every bucket keeps to one group");
+      }
+      case "maxSize": {
+        const list = new Set(nums(rule.blocks));
+        const sizes = structure.buckets.map((b) => ({
+          title: b.title,
+          n: structure.pieces.filter((p) => p.bucketId === b.id && list.has(numberOf.get(p.blockId) ?? 0)).length,
+        }));
+        const big = sizes.filter((x) => x.n > rule.max);
+        return res(big.length === 0, big.map((x) => `${x.title}: ${x.n}`).join("; "));
       }
       case "order": {
         const tops = childBuckets(structure, null).map((b) => b.title);

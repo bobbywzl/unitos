@@ -148,7 +148,8 @@ function check(): void {
       const coverage = placed / Math.max(1, content.length);
       if (c.expect.whole) add("coverage", coverage >= 0.85, `${placed} of ${content.length} blocks placed (${Math.round(coverage * 100)}%)`);
       const tops = childBuckets(structure, null);
-      add("tops", tops.length >= 2 && tops.length <= 12, `${tops.length} top buckets`);
+      // A case that names its own count (follow "tops") is held to that alone.
+      if (!(c.follow ?? []).some((f) => f.kind === "tops")) add("tops", tops.length >= 2 && tops.length <= 12, `${tops.length} top buckets`);
       const count = (id: string): number =>
         structure.pieces.filter((p) => p.bucketId === id).length + childBuckets(structure, id).reduce((s, b) => s + count(b.id), 0);
       const tiny = structure.buckets.filter((b) => count(b.id) < 2);
