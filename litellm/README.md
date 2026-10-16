@@ -1,5 +1,11 @@
 # The AI gateway
 
+**Retired.** The Railway host that ran the gateway is gone. The app ignores
+`LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_ADMIN_KEY`
+(`gatewayBaseUrl()` in `src/lib/gateway.ts` returns nothing) and calls every
+provider directly with its own key on the app's host (`.env.example`). The
+rest of this file describes the gateway as it was, for when it comes back.
+
 LiteLLM in front of every AI provider the app calls (SPEC.md §2). The app
 reaches it with one key. The provider keys live here. The gateway applies
 the app key's rate limits and budget, records spend per call, and runs the

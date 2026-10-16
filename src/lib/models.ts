@@ -1,6 +1,6 @@
 import { CLAUDE_FABLE_5_1, CLAUDE_OPUS_5_5, CLAUDE_SONNET_5_5, GEMINI_FLASH, GLM_5_3, GLM_5_3_FLASH, KIMI_K3 } from "@/lib/derive/config";
 import { db } from "@/lib/db";
-import { gatewayConfigured } from "@/lib/gateway";
+import { providerConfigured } from "@/lib/gateway";
 
 // The model per role (SPEC.md §2). Each role has a default id, the constant
 // in lib/derive/config.ts, and may have a ModelChoice row: the newest version
@@ -24,7 +24,7 @@ export const MODEL_ROLES: Record<ModelRole, { provider: string; defaultId: strin
 
 export const ROLE_ORDER: ModelRole[] = ["glm", "glmFlash", "kimi", "claude", "opus", "sonnet", "gemini"];
 
-/** A GLM id: Z.ai's model, reached through the gateway alone. */
+/** A GLM id: Z.ai's model, reached through the gateway or with ZAI_API_KEY. */
 export function isGlmModel(modelId: string): boolean {
   return modelId.startsWith("glm-");
 }
@@ -71,12 +71,12 @@ export async function currentModelId(role: ModelRole): Promise<string> {
 }
 
 /** A default id becomes the role's current id; any other id stays. A GLM
-    id resolves to Kimi's current id when the gateway is not set: GLM has no
-    direct client, and Kimi K3 does every job GLM does. */
+    id resolves to Kimi's current id when neither the gateway nor
+    ZAI_API_KEY is set: Kimi K3 does every job GLM does. */
 export async function resolveModelId(modelId: string): Promise<string> {
   const role = roleOfDefault(modelId);
   const id = role ? await currentModelId(role) : modelId;
-  if (isGlmModel(id) && !gatewayConfigured()) return currentModelId("kimi");
+  if (isGlmModel(id) && !providerConfigured("zai")) return currentModelId("kimi");
   return id;
 }
 
