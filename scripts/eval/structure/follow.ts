@@ -43,6 +43,8 @@ export type Follow =
   | { kind: "sequence"; blocks: number[]; why: string }
   // Some bucket holds blocks from at least two of the groups.
   | { kind: "mixes"; groups: string[]; why: string }
+  // At most `max` connections in all (a narrow edit draws none unasked).
+  | { kind: "connectionsMax"; max: number; why: string }
   // No one bucket holds more than `max` of the listed blocks.
   | { kind: "maxSize"; blocks: string; max: number; why: string };
 
@@ -189,6 +191,8 @@ export function runFollow(rules: Follow[], ctx: FollowContext): FollowResult[] {
         });
         return res(mixed, mixed ? "" : "every bucket keeps to one group");
       }
+      case "connectionsMax":
+        return res(structure.connections.length <= rule.max, `${structure.connections.length} connections`);
       case "maxSize": {
         const list = new Set(nums(rule.blocks));
         const sizes = structure.buckets.map((b) => ({

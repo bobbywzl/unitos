@@ -237,6 +237,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The chess masters paragraph moves to Three habits; nothing else moves or changes name.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "11", title: "habit", why: "the chess paragraph in Three habits" },
       { kind: "in", blocks: "8-10,12", title: "structure", why: "the rest of the structure part stays" },
       { kind: "same", bucket: "b1", why: "Opening untouched" },
@@ -260,6 +261,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "Three habits and Limits become one bucket titled Using it, holding 13-21 in order; the other three buckets stay exactly as they were.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "hasTitle", title: "using it", why: "a bucket called Using it" },
       { kind: "together", blocks: "13-21", why: "the habits and the limits in one bucket" },
       { kind: "tops", min: 4, max: 4, why: "four buckets after the merge" },
@@ -284,6 +286,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "Only the title of Part 3 changes; every bucket keeps its blocks, and the other titles stay.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "title", bucket: "b3", title: "structure beats rereading", why: "Part 3 renamed" },
       { kind: "in", blocks: "8-12", title: "structure beats rereading", why: "its blocks stay in it" },
       { kind: "same", bucket: "b1", why: "Part 1 untouched" },
@@ -372,6 +375,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", labels: true },
     good: "Labels on the three habit paragraphs (and at most the heading and the closing paragraph of that bucket) that each say the action (ask a question first, retrieve in five lines, sort into your buckets); nothing else labeled, nothing moved.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "labels", blocks: "14-16", within: "13-17", why: "the habits labeled, nothing outside" },
       { kind: "same", bucket: "b4", why: "Three habits keeps its blocks" },
       { kind: "same", bucket: "b3", why: "Why structure matters untouched" },
@@ -396,6 +400,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The two opening paragraphs move into The forgetting curve (first, or as a bucket inside it); the Opening bucket goes or empties; the other buckets stay.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "2-3", title: "forget|curve", why: "the opening under the forgetting curve" },
       { kind: "same", bucket: "b3", why: "Why structure matters untouched" },
       { kind: "same", bucket: "b4", why: "Three habits untouched" },
@@ -472,6 +477,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "A new Claims bucket holding the two claim paragraphs; the introduction keeps its other paragraphs; the other buckets are untouched.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "hasTitle", title: "claim", why: "a bucket called Claims" },
       { kind: "in", blocks: "7-8", title: "claim", why: "the two claims in it" },
       { kind: "in", blocks: "5,6,9", title: "intro", why: "the rest of the introduction stays" },
@@ -497,6 +503,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "Limitations is gone and its blocks are unsorted; every other bucket is untouched.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "gone", bucket: "b5", why: "Limitations deleted" },
       { kind: "unsorted", blocks: "43-51", why: "its blocks unsorted" },
       { kind: "same", bucket: "b1", why: "Introduction untouched" },
@@ -571,6 +578,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The 非礼勿视 原文 and its 讲解 move to 礼; nothing else moves.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "42-43", title: "^礼", why: "the two lines in 礼" },
       { kind: "same", bucket: "b3", why: "学 untouched" },
       { kind: "same", bucket: "b4", why: "孝 untouched" },
@@ -733,6 +741,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The retrieval paragraph is the first piece of Three habits; the bucket keeps its other blocks; nothing else changes.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "sequence", blocks: [15, 14, 16], why: "retrieval before the other habits" },
       { kind: "in", blocks: "13-17", title: "habit", why: "Three habits keeps its blocks" },
       { kind: "same", bucket: "b2", why: "The forgetting curve untouched" },
@@ -755,6 +764,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "The Dunlosky paragraph moves to a new bucket, Evidence; nothing else moves.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "9", title: "evidence", why: "the Dunlosky paragraph in Evidence" },
       { kind: "in", blocks: "8,10-12", title: "structure", why: "the rest of the part stays" },
       { kind: "same", bucket: "b1", why: "Opening untouched" },
@@ -779,6 +789,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "All three changes and nothing else: Opening is titled Intro with the same blocks; Limits is gone and its blocks unsorted; the outlining paragraph sits in Three habits.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "title", bucket: "b1", title: "^intro", why: "Opening renamed Intro" },
       { kind: "in", blocks: "2-3", title: "^intro", why: "Intro keeps its blocks" },
       { kind: "gone", bucket: "b5", why: "Limits deleted" },
@@ -906,6 +917,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The two meeting 3 decisions join Decisions and the two meeting 3 questions join Open questions; nothing else changes.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "8,18,19,28,29", title: "decision", why: "all decisions in Decisions" },
       { kind: "in", blocks: "11,22,33,34", title: "question", why: "all questions in Open questions" },
       { kind: "tops", min: 2, max: 2, why: "still two buckets" },
@@ -941,6 +953,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "Only the title of 学 changes, to 学与思.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "title", bucket: "b3", title: "^学与思$", why: "学 renamed 学与思" },
       { kind: "in", blocks: "4-7,17-19", title: "学与思", why: "its blocks stay" },
       { kind: "same", bucket: "b1", why: "仁 untouched" },
@@ -979,6 +992,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "The lines about the camel (the camel metamorphosis and the critique that maps the camel onto Schopenhauer's man) move into Schopenhauer's man; nothing else moves.",
     follow: [
+      { kind: "connectionsMax", max: 0, why: "no connection nobody asked for" },
       { kind: "in", blocks: "157", title: "schopenhauer", why: "the camel line in Schopenhauer's man" },
       { kind: "same", bucket: "b2", why: "Rousseau's man untouched" },
       { kind: "same", bucket: "b3", why: "Goethe's man untouched" },
