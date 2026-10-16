@@ -200,6 +200,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", whole: true },
     good: "Three top buckets named by the three questions (the opening may sit in the first). The forgetting curve under why we forget; rereading, structure, chunking, and the three habits under what helps; the limits under what we don't know.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 3, max: 4, why: "three buckets, one per question" },
       { kind: "in", blocks: "5-7", title: "forget|why", why: "the curve under why we forget" },
       { kind: "in", blocks: "14-16", title: "help|work|habit|what to do", why: "the habits under what helps" },
@@ -215,6 +216,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", whole: true, tinyOk: true },
     good: "Exactly two top buckets. The problem: forgetting, the curve, rereading does little. The fixes: structure, chunking, outlining, the three habits. Limits go where they fit best or are named in the reply.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 2, max: 2, why: "exactly two buckets" },
       { kind: "in", blocks: "5-6", title: "problem", why: "the curve under the problem" },
       { kind: "in", blocks: "14-16", title: "fix", why: "the habits under the fixes" },
@@ -311,6 +313,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "Three top buckets that together hold every block that was placed: for example the problem (opening and curve), what works (structure and habits), and limits.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 3, max: 3, why: "three buckets" },
       { kind: "placed", blocks: "2-21", why: "nothing placed falls out" },
     ],
@@ -331,6 +334,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "The old part buckets are gone. One bucket holds the findings (Ebbinghaus, later studies, Dunlosky, chunking, outlining, the measured gains), one holds the advice (the three habits, use them on the texts that matter).",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 2, max: 3, why: "two buckets (a third for leftovers at most)" },
       { kind: "in", blocks: "5,6,9,11", title: "find|research|evidence|stud", why: "the studies under findings" },
       { kind: "in", blocks: "14-16", title: "advice|habit|what to do|tips", why: "the habits under advice" },
@@ -441,6 +445,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "One bucket, Numbers, with the paragraphs that report this study's figures (the sample, the timing, the results 29-34, the conclusion's figures); the introduction's claims and the references stay unsorted.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 1, max: 1, why: "one bucket" },
       { kind: "hasTitle", title: "number", why: "called Numbers" },
       { kind: "in", blocks: "12,30-34", title: "number", why: "the sample and the results in Numbers" },
@@ -456,6 +461,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "Two buckets: strengths (randomized design, concealed allocation, blind scoring, preregistration, polysomnography, the dose-response with slow-wave sleep) and weaknesses (every limitation bullet). Other blocks may stay unsorted.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 2, max: 2, why: "two buckets" },
       { kind: "in", blocks: "44-51", title: "weak|limit", why: "the limitations under weaknesses" },
       { kind: "in", blocks: "16", title: "strength", why: "the concealed allocation under strengths" },
@@ -557,6 +563,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "One bucket holding every 我的想法 line and nothing else; every other line stays unsorted.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 1, max: 1, why: "one bucket" },
       { kind: "in", blocks: "7,10,16,19,24,30,35,38,44,51,59", title: "想法|思考|我", why: "every thought in it" },
       { kind: "onlyPlaced", blocks: "7,10,16,19,24,30,35,38,44,51,59", why: "nothing else placed" },
@@ -610,6 +617,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "Exactly two buckets: every Decision line, and every Open question line. Other lines may stay unsorted.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 2, max: 2, why: "two buckets" },
       { kind: "in", blocks: "8,18,19,28,29", title: "decid|decision", why: "every decision" },
       { kind: "in", blocks: "11,33,34", title: "question|answer|open|undecided", why: "every open question (22 was settled in meeting 3)" },
@@ -624,6 +632,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "Two buckets of customer quotes only: praise (Bluebird Labs, Northwind's second quote) and complaints (Northwind's first, the graduate student, the law clerk); the freelance editor's mixed quote goes where its main point is.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "onlyPlaced", blocks: "6,7,15,16,26,27", why: "only customer quotes placed" },
       { kind: "in", blocks: "15,26", title: "prais|positive|like|love|good|work", why: "the praise" },
       { kind: "in", blocks: "6,16", title: "complain|negative|problem|pain|frustr|issue", why: "the complaints" },
@@ -677,6 +686,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "One bucket holding every My critique and My take line, and nothing else placed.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 1, max: 1, why: "one bucket" },
       { kind: "placed", blocks: "23,24,29,34,41,46,55,56,61,68,78,79,81,84,93,94,104,105,107,110,123,124,133,134,139,152,153,154,162,163,167,170,178,179,184,185,190,191,203,204", why: "every critique placed" },
       { kind: "onlyPlaced", blocks: "23,24,29,34,41,46,55,56,61,68,78,79,81,84,93,94,104,105,107,110,123,124,133,134,139,152,153,154,162,163,167,170,178,179,184,185,190,191,203,204", why: "nothing else placed" },
@@ -844,6 +854,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure" },
     good: "One bucket holding the paragraphs about caffeine (the second claim, the caffeine dose and design, the alertness result, the discussion of why caffeine feels helpful, the caffeine limitations); nothing else placed.",
     follow: [
+      { kind: "flat", why: "no bucket inside the named ones" },
       { kind: "tops", min: 1, max: 1, why: "one bucket" },
       { kind: "in", blocks: "8,33,37,39", title: "caffeine|coffee", why: "the caffeine paragraphs in it" },
       { kind: "unsorted", blocks: "5,6,11,19,22,23,60,61,63,65", why: "paragraphs not about caffeine left alone" },

@@ -43,6 +43,8 @@ export type Follow =
   | { kind: "sequence"; blocks: number[]; why: string }
   // Some bucket holds blocks from at least two of the groups.
   | { kind: "mixes"; groups: string[]; why: string }
+  // No bucket sits inside another (the reader named the buckets).
+  | { kind: "flat"; why: string }
   // At most `max` connections in all (a narrow edit draws none unasked).
   | { kind: "connectionsMax"; max: number; why: string }
   // No one bucket holds more than `max` of the listed blocks.
@@ -190,6 +192,10 @@ export function runFollow(rules: Follow[], ctx: FollowContext): FollowResult[] {
           return groups.filter((g) => held.some((n) => g.has(n))).length >= 2;
         });
         return res(mixed, mixed ? "" : "every bucket keeps to one group");
+      }
+      case "flat": {
+        const inner = structure.buckets.filter((b) => b.parentId);
+        return res(inner.length === 0, inner.length ? `inside: ${inner.map((b) => b.title).join("; ").slice(0, 120)}` : "");
       }
       case "connectionsMax":
         return res(structure.connections.length <= rule.max, `${structure.connections.length} connections`);
