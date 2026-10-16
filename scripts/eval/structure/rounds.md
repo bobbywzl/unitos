@@ -78,3 +78,23 @@ r18, the regression round after r17: every case, two samples, against the two r1
 | r19 | the reply says only what the structure does (counts its buckets, claims no rule it breaks); titles carry no prefix such as "On" or «论» | zh-themes 4, 4; nz-themes-archetypes 4, 4; nz-retry-complaint 4, 3 | 1 / 4 / 1, margins 1 to 7 (the losses are placements the rules do not touch) | no: reverted |
 
 Where the loop stands: the kept prompt is r1 + r4 + r5 + r8 + r11 + r13 + the r16 label rule + r17, and it beats r1 11 / 8 / 1 over two samples of every case (r18). Rounds r14, r16's second rule, and r19 lost on placements their rules do not reach: a single targeted round now sits near the judges' noise, so a further rule needs more samples than two to show.
+
+## Request following and the model (October 16)
+
+The reader reported that the assistant often does not do what was asked. The loop gained hard request-following checks (`follow.ts`: blocks in the bucket named for them, buckets left untouched, nothing placed outside a partial sort, labels only where asked, connections between the named blocks, bucket counts and order, order inside a bucket) and 44 new request shapes: partial sorts, moves, merges, renames, fewer buckets, start over, delete, labels, connections, follow-ups, several changes in one message, everything except a part, references by content, corrections, and a new fixture of team meeting notes. 54 cases in all.
+
+Four stand-in models answered the 39 first cases with the kept prompt, and each was judged blind against Sonnet:
+
+| model | checks passed | blind pairs against Sonnet (wins / losses / ties, margins) | price in / out per million tokens |
+|---|---|---|---|
+| Haiku 5.5 | 136 / 137 | 8 / 23 / 8, 10 to 34 | $0.10 / $0.50 |
+| Sonnet 5.5 | 136 / 137 | – | $2 / $10 |
+| Opus 5.5 | 136 / 137 | 11 / 23 / 5, 16 to 31 | $4 / $20 |
+| Fable 5.1 | 136 / 137 | 11 / 21 / 7, 14 to 28 | $10 / $50 |
+
+On the 15 harder shapes: Sonnet 55 / 58, Opus 57 / 58, Fable 57 / 58; Sonnet's and Opus's one real miss was the same (除了第五讲, everything but lecture 5, still got a bucket for lecture 5). Sonnet 5.5 stays the model: every model follows the plain requests, Haiku's structures and talking replies lose clearly, and Opus and Fable more often add what nobody asked for (connections, nesting, the action items filed under decisions) at two to five times the price. The stand-ins are agents, not single calls at a set effort; the prompt was tuned on Sonnet stand-ins, which favors Sonnet a little.
+
+| round | change | targeted cases (2 samples each) | against control | kept |
+|---|---|---|---|---|
+| r20 | a part the reader leaves out (except X, only Y, leave the rest alone) stays unsorted, course lines included | zh-except, rm-except, sp-methods-only, sp-numbers, nz-only-genealogy, tm-actions, zh-my-thoughts | 7 / 7 and 7 / 7 against 7 / 7 and 7 / 7 on the checks | yes: no measured change, and it removes the conflict between "place every block" and the reader's exclusion |
+

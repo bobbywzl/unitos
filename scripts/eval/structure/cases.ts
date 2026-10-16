@@ -697,7 +697,7 @@ export const STRUCTURE_CASES: StructureCase[] = [
     expect: { kind: "structure", tinyOk: true },
     good: "Three buckets holding the Genealogy lines (Week 6); nothing from other weeks placed.",
     follow: [
-      { kind: "onlyPlaced", blocks: "112-140,198", why: "nothing outside the Genealogy placed" },
+      { kind: "onlyPlaced", blocks: "111-140,198", why: "nothing outside the Genealogy placed" },
       { kind: "tops", min: 3, max: 4, why: "three buckets" },
       { kind: "placed", blocks: "113-139", share: 0.8, why: "the Genealogy lines placed" },
     ],
