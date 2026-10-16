@@ -1,5 +1,5 @@
 import { createMoonshotAI, type MoonshotAIProvider } from "@ai-sdk/moonshotai";
-import { tool, type LanguageModel } from "ai";
+import { tool, wrapLanguageModel, type LanguageModel } from "ai";
 import { z } from "zod";
 import { DEFAULT_EFFORT, type KimiEffort } from "@/lib/derive/config";
 import {
@@ -9,7 +9,7 @@ import {
   keyFor,
   providerConfigured,
 } from "@/lib/gateway";
-import { isGlmModel, resolveModelId } from "@/lib/models";
+import { currentModelId, isGlmModel, resolveModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // The OpenAI-compatible client (SPEC.md §2): every model call but Claude's
@@ -67,14 +67,41 @@ let zaiProvider: MoonshotAIProvider | null = null;
     and Kimi's when a GLM id is asked for with neither the gateway nor
     ZAI_API_KEY; the returned model's modelId is the id called. Z.ai speaks
     the same API, so a direct GLM call takes the same provider at Z.ai's
-    root. */
+    root. A direct GLM call that fails runs again on Kimi K3, as the
+    gateway's fallbacks did (litellm/config.yaml): a Z.ai plan can cover
+    GLM 5.3 and not GLM 5.3 Flash, which then answers "Insufficient
+    balance". The usage row still names the GLM id. */
 export async function kimi(modelId: string): Promise<LanguageModel> {
   const id = await resolveModelId(modelId);
+  provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
   if (isGlmModel(id) && !gatewayConfigured()) {
     zaiProvider ??= createMoonshotAI({ apiKey: keyFor("zai"), baseURL: zaiApiUrl() });
-    return zaiProvider(id);
+    const fallback = provider(await currentModelId("kimi"));
+    return wrapLanguageModel({
+      model: zaiProvider(id),
+      middleware: {
+        specificationVersion: "v4",
+        wrapGenerate: async ({ doGenerate, params }) => {
+          try {
+            return await doGenerate();
+          } catch (err) {
+            if (params.abortSignal?.aborted) throw err;
+            console.warn(`[models] ${id} failed, running on ${fallback.modelId}:`, err);
+            return fallback.doGenerate(params);
+          }
+        },
+        wrapStream: async ({ doStream, params }) => {
+          try {
+            return await doStream();
+          } catch (err) {
+            if (params.abortSignal?.aborted) throw err;
+            console.warn(`[models] ${id} failed, running on ${fallback.modelId}:`, err);
+            return fallback.doStream(params);
+          }
+        },
+      },
+    });
   }
-  provider ??= createMoonshotAI({ apiKey: kimiApiKey(), baseURL: kimiBaseUrl() });
   return provider(gatewayModelId(isGlmModel(id) ? "zai" : "moonshot", id));
 }
 
