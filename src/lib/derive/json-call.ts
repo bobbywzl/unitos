@@ -9,7 +9,9 @@ import { gatewayConfigured, gatewayHeaders } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
 import { computeCostUsd, recordUsage, sdkTokens, type UsageMeta } from "@/lib/usage";
 
-type JsonCallResult<T> = { ok: true; data: T } | { ok: false; error: string };
+// truncated: the answer was cut at the output budget, and what it wrote
+// before the cut is the data.
+type JsonCallResult<T> = { ok: true; data: T; truncated?: boolean } | { ok: false; error: string };
 
 // One model call's answer: its text and why it stopped.
 type Attempt = { text: string; finishReason: string };
@@ -17,6 +19,10 @@ type Attempt = { text: string; finishReason: string };
 // The request's language, or English outside a request (background jobs).
 async function outputBudgetSpent(): Promise<string> {
   return (await serverT())("api.outputBudgetSpent");
+}
+
+async function modelRefused(): Promise<string> {
+  return (await serverT())("api.modelRefused");
 }
 
 // The AI SDK's provider options, as generateText takes them.
@@ -37,7 +43,7 @@ export function modelErrorMessage(err: unknown): string {
   // does not say what was not found.
   const http = httpFailure(err);
   if (http && !raw.includes(String(http.status))) {
-    return redacted(`${raw} (HTTP ${http.status}${http.model ? `, ${http.model}` : ""})`);
+    return redacted(`${raw} (HTTP ${[http.status, http.model, http.path].filter(Boolean).join(", ")})`);
   }
   return redacted(raw);
 }
@@ -47,14 +53,21 @@ function redacted(raw: string): string {
   return message.length > 400 ? `${message.slice(0, 400)}…` : message;
 }
 
-/** The status and the model of a failed HTTP call, through the SDK's
-    retries; null for any other error. */
-export function httpFailure(err: unknown): { status: number; model: string | null } | null {
+/** The status, the model, and the path of a failed HTTP call, through the
+    SDK's retries; null for any other error. */
+export function httpFailure(err: unknown): { status: number; model: string | null; path: string | null } | null {
   const last = RetryError.isInstance(err) ? err.lastError : err;
   if (!APICallError.isInstance(last) || last.statusCode == null) return null;
   const body = last.requestBodyValues;
   const model = body && typeof body === "object" && "model" in body && typeof body.model === "string" ? body.model : null;
-  return { status: last.statusCode, model };
+  // The path alone, never the host: a 404 from the gateway names its route.
+  let path: string | null = null;
+  try {
+    path = new URL(last.url).pathname;
+  } catch {
+    path = null;
+  }
+  return { status: last.statusCode, model, path };
 }
 
 /** The id a model is called by. */
@@ -175,9 +188,11 @@ export async function callForJson<S extends z.ZodType>(params: {
   // closes a truncated object back into valid JSON — so the budget is a
   // failure only when nothing usable came back. Retrying is pointless here:
   // the same budget cuts the second answer in the same place.
+  // A refusal the fallback did not answer: the JSON retry cannot help.
+  if (first.finishReason === "content-filter") return { ok: false, error: await modelRefused() };
   if (first.finishReason === "length") {
     const salvaged = parseJson(params.schema, first.text);
-    if (salvaged !== null) return { ok: true, data: salvaged };
+    if (salvaged !== null) return { ok: true, data: salvaged, truncated: true };
     return { ok: false, error: await outputBudgetSpent() };
   }
   const firstJson = extractJson(first.text);
@@ -203,9 +218,10 @@ export async function callForJson<S extends z.ZodType>(params: {
     console.error(`[derive] ${params.label} model call failed on retry:`, err);
     return { ok: false, error: modelErrorMessage(err) };
   }
+  if (second.finishReason === "content-filter") return { ok: false, error: await modelRefused() };
   if (second.finishReason === "length") {
     const salvaged = parseJson(params.schema, second.text);
-    if (salvaged !== null) return { ok: true, data: salvaged };
+    if (salvaged !== null) return { ok: true, data: salvaged, truncated: true };
     return { ok: false, error: await outputBudgetSpent() };
   }
   const secondJson = extractJson(second.text);

@@ -158,9 +158,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
           const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
           const ops = [...pass.ops, ...moves];
-          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          // Nothing landed: the summary says why, never the change it meant.
+          const summary = ops.length === 0 && pass.warnings.length > 0 ? t("api.suggestNoneLanded", { why: pass.warnings[0] }) : pass.summary;
+          send({ window: 1, ops, warnings: pass.warnings, summary });
           console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
-          send({ done: true, summary: pass.summary, warnings });
+          send({ done: true, summary, warnings });
           return;
         }
         send({ windows: windows.length + (data.reorder ? 1 : 0) });
@@ -241,7 +243,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
       } catch (err) {
         console.error("[suggest] failed:", err);
         // The one pass already says the suggestions could not be written.
-        const reason = modelErrorMessage(err);
+        // A pass the deadline stopped says time ran out, not a raw abort.
+        const reason = deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : modelErrorMessage(err);
         const said = t("api.suggestFailed", { reason: "" }).trim();
         send({ error: reason.startsWith(said) ? reason : t("api.suggestFailed", { reason }) });
       } finally {

@@ -112,6 +112,22 @@ for (let round = 0; round < 3000; round++) {
   check(!orderBlockActions(units, [0, 1, 2, 3], plan, "why").some((a) => a.type === "move_block" && a.blockId === "P"), "a fixed block never moves");
 }
 
+// A new block the answer puts after a unit stays right after it, ahead of
+// the units the answer left out ("expand on this paragraph").
+{
+  const units: OrderUnit[] = ["a", "b", "c"].map((id) => ({ rowIds: [id], fixed: false, heading: false }));
+  const plan = planOrder(units, [0, 1, 2], { order: [{ blockId: "a" }, { markdown: "More on a." }], removeHeadings: [] })!;
+  const sequence = plan.sequence.map((item) => ("unit" in item ? ["a", "b", "c"][item.unit] : "markdown" in item ? "new" : "heading"));
+  check(JSON.stringify(sequence) === JSON.stringify(["a", "new", "b", "c"]), `a new block after a lands after a: ${sequence.join(" ")}`);
+}
+
+// The one pass reads an id written as its tag, and an answer with no block is no answer.
+{
+  const tagged = onePassAnswerSchema.safeParse({ summary: "s", document: ["[block a]", { id: "[block b]", text: "x" }], remove: ["[block c]"] });
+  check(tagged.success && JSON.stringify(tagged.data.document) === JSON.stringify([{ id: "a" }, { id: "b", text: "x" }]) && tagged.data.remove[0] === "c", "an id written as [block id] reads as the id");
+  check(!onePassAnswerSchema.safeParse({ summary: "s", answer: [] }).success, "an answer that lists no block fails, so the call runs again");
+}
+
 // The one pass on an article (lib/assistant/one-pass.ts, revise.ts): a
 // recorded answer read, grounded, and turned into the plan card's actions.
 {
