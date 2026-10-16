@@ -9,6 +9,7 @@
 // leave a row holding a paragraph or lose an item.
 // Run: npx tsx scripts/qa/image-row-check.ts
 import { deriveBlocks, type DerivedBlock } from "@/lib/docs/blocks";
+import { mergeRichText } from "@/lib/docs/merge";
 import { findBlock, insertAfterBlock, paragraphNode, removeBlock } from "@/lib/docs/ops";
 import { sanitizeRichText, stableJson, withDocumentFigures, withImageRows, type RichNode } from "@/lib/docs/schema";
 
@@ -126,6 +127,41 @@ check(
   "removing the image leaves the figure as a block where the row stood, its id kept",
   removed?.content?.map((n) => n.type),
 );
+
+// 7. Two copies met (lib/docs/merge.ts): one tab made the row while another
+// changed an item, in either order; every block stays, once.
+const resized = { ...image, attrs: { ...image.attrs, width: 120, height: 80 } };
+const flat = (doc: RichNode) => ids(deriveBlocks(doc));
+const once = (doc: RichNode) => new Set(flat(doc)).size === flat(doc).length;
+const editorRowed = mergeRichText(before, after, { ...before, content: before.content!.map((n) => (n === image ? resized : n)) });
+check(
+  stableJson(flat(editorRowed)) === stableJson(ids(blocksBefore)) && once(editorRowed) && stableJson(editorRowed).includes('"width":120'),
+  "the editor made the row while the stored copy resized the image: the row stands with the resized image",
+  flat(editorRowed),
+);
+const storedRowed = mergeRichText(before, { ...before, content: before.content!.map((n) => (n === image ? resized : n)) }, after);
+check(
+  stableJson(flat(storedRowed)) === stableJson(ids(blocksBefore)) && once(storedRowed) && storedRowed.content!.some((n) => n.type === "imageRow"),
+  "the stored copy made the row while the editor resized the image: the row stands, no item lost",
+  flat(storedRowed),
+);
+const third: RichNode = { ...second };
+const rowedApart = mergeRichText(
+  before,
+  withRow([figure, image]),
+  { ...before, content: [...before.content!.slice(0, 2), row([figure, second]), image, before.content![4], before.content![6]] },
+);
+check(
+  new Set(flat(rowedApart)).size === new Set(ids(blocksBefore)).size && once(rowedApart),
+  "two tabs put the figure in two different rows: every block stays, once",
+  { got: flat(rowedApart), third: third.attrs?.blockId },
+);
+const listed = mergeRichText(
+  { type: "doc", content: [paragraphNode("One", "dL1"), paragraphNode("Two", "dL2")] },
+  { type: "doc", content: [paragraphNode("One, changed", "dL1"), paragraphNode("Two", "dL2")] },
+  { type: "doc", content: [{ type: "bulletList", content: [{ type: "listItem", content: [paragraphNode("One", "dL1")] }, { type: "listItem", content: [paragraphNode("Two", "dL2")] }] }] },
+);
+check(stableJson(flat(listed).sort()) === stableJson(["dL1", "dL2"]), "a line the other copy put in a list stays too", flat(listed));
 
 if (failures > 0) {
   console.log(`image-row-check: ${failures} failed`);
