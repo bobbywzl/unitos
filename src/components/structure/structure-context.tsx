@@ -66,6 +66,10 @@ export type StructureContextValue = {
   /** Runs Explain or Simplify on the whole block; the output shows under the piece. */
   runTool: (blockId: string, kind: "explain" | "simplify") => void;
   toolRuns: Record<string, PieceToolRun>;
+  /** Counts the proposals applied: the canvas fits its view to the whole
+      structure each time it changes, so the reader sees what the assistant
+      did, wherever the new buckets landed. */
+  fitRequest: number;
 };
 
 const StructureContext = createContext<StructureContextValue | null>(null);

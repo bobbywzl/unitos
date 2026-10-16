@@ -307,10 +307,13 @@ export function StructureOverlay({
     };
   }, [change, blockMap]);
 
-  /** The assistant's proposal, applied whole (one undo step). */
+  /** The assistant's proposal, applied whole (one undo step); then the
+      canvas fits its view to the whole structure. */
+  const [fitRequest, setFitRequest] = useState(0);
   const applyProposal = useCallback(
     (proposed: StructureBody) => {
       change(() => proposed);
+      setFitRequest((n) => n + 1);
     },
     [change],
   );
@@ -417,6 +420,7 @@ export function StructureOverlay({
     openBlock,
     runTool,
     toolRuns,
+    fitRequest,
   };
 
   // The overlay stands over the whole page, out of the pane's own stacking

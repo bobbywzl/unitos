@@ -9,6 +9,7 @@ import ReactFlow, {
   getBezierPath,
   ReactFlowProvider,
   useNodesState,
+  useReactFlow,
   useUpdateNodeInternals,
   type Connection,
   type Edge as FlowEdge,
@@ -230,7 +231,22 @@ const edgeTypes = { connection: ConnectionEdge };
 
 function Canvas() {
   const t = useT();
-  const { structure, canEdit, ops, selectConnection } = useStructure();
+  const { structure, canEdit, ops, selectConnection, fitRequest } = useStructure();
+  const { fitView } = useReactFlow();
+  // After a proposal is applied, fit the view to the whole structure once
+  // its nodes are drawn and measured (two frames), so new buckets placed
+  // under the old ones, or into an empty view, are on screen.
+  useEffect(() => {
+    if (fitRequest === 0) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1, duration: 400 }));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [fitRequest, fitView]);
   const tops = useMemo(
     () => structure.buckets.filter((b) => !b.parentId),
     [structure.buckets],
