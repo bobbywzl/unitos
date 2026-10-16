@@ -1138,6 +1138,44 @@ textarea.docs-field:focus {
   left: auto !important;
   top: auto !important;
 }
+/* An image row (insert/image-row.ts): its items side by side across the
+   text's width, 6 pt apart, standing on the row's bottom. Each item asks
+   for its own width (--docs-img-w, an image's; --docs-figure-w, a PDF
+   figure's); when they pass the row's width, flex takes from each in
+   proportion to it, so all scale by one factor and keep their ratios. An
+   image in an image row stands In line. */
+.docs-prose .docs-image-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6pt;
+  margin: 6pt 0;
+  white-space: normal;
+}
+.docs-prose .docs-image-row figure.docs-img[data-wrap] {
+  flex: 0 1 var(--docs-img-w, auto);
+  min-width: 0;
+  float: none;
+  height: auto;
+  max-width: none;
+  margin: 0;
+  z-index: auto;
+}
+.docs-prose .docs-image-row figure.docs-img[data-wrap] .docs-img-box {
+  position: relative;
+  left: auto !important;
+  top: auto !important;
+}
+.docs-prose .docs-image-row > .docs-figure {
+  flex: 0 1 var(--docs-figure-w, 100%);
+  min-width: 0;
+  margin: 0;
+}
+/* While an image dragged onto another's side would join it there, the
+   upright drop line says so and the page's own drop caret steps aside. */
+body.docs-side-drop .prosemirror-dropcursor-block,
+body.docs-side-drop .prosemirror-dropcursor-inline {
+  display: none;
+}
 .docs-img-box {
   position: relative;
   display: inline-block;

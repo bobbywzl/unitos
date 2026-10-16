@@ -1,7 +1,7 @@
 import { Extension, type CommandProps, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from "@tiptap/pm/model";
-import { Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { liftListItem, sinkListItem } from "@tiptap/pm/schema-list";
 import { canJoin, canSplit, findWrapping, liftTarget } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
@@ -361,6 +361,11 @@ function backspaceAtStart(editor: Editor, $from: ResolvedPos, word: boolean): bo
     // 6. Never into a table. An empty line after one is the table area's
     // (insert/table.ts): the caret goes into the last cell.
     if (prev.type.name === "table") return block.content.size > 0;
+    // An image row's last item is selected, as an image before the line is.
+    if (prev.type.name === "imageRow" && prev.lastChild) {
+      view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, blockPos - 1 - prev.lastChild.nodeSize)));
+      return true;
+    }
     // 7. A page break goes with its paragraph break.
     if (prev.type.name === "pageBreak") {
       tr = state.tr.delete(prevPos, blockPos);

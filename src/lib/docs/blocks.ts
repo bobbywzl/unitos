@@ -14,9 +14,12 @@ import {
 // derived from it on every save, one per node a reader can select — a
 // paragraph, a heading, a list item's paragraph, a table cell's paragraph, a
 // code block — plus images and figure objects (FIGURE) and horizontal lines
-// (SEPARATOR). A row's id is the node's blockId and its text is the node's
-// words as if every person's suggestion were accepted and every one of the
-// assistant's rejected, counted as the editor's anchors count them
+// (SEPARATOR). An image row adds no Block row: each image or figure object
+// in it keeps its own FIGURE row, the left item first, with the id and the
+// words it had before it joined the image row. A row's id is the node's
+// blockId and its text is the node's words as if every person's suggestion
+// were accepted and every one of the assistant's rejected, counted as the
+// editor's anchors count them
 // (layer/anchor.ts), so an anchor captured in the editor (data-block-id +
 // offsets, SPEC.md §5) resolves against the row. The same function runs in
 // the editor and on the server, so both sides agree.

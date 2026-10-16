@@ -62,7 +62,14 @@ export const RICH_NODE_TYPES = [
   // An import's: a figure object (its media in FigureMedia) and a page start.
   "figure",
   "pageStart",
+  // An image row: two to four images or figure objects side by side
+  // (components/docs/insert/image-row.ts).
+  "imageRow",
 ] as const;
+
+/** What an image row holds: images and figure objects, two to four. */
+export const IMAGE_ROW_ITEMS: ReadonlySet<string> = new Set(["image", "figure"]);
+export const MAX_IMAGE_ROW_ITEMS = 4;
 
 /** The smart chips: each draws its `label`, which is its words in the
     paragraph index (lib/docs/blocks.ts). */
@@ -613,7 +620,7 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
     }
     // A figure object and a page start hold nothing.
     if (node.content && !ATOM_TYPES.has(node.type)) {
-      const content = node.content.map(walk).filter((c): c is RichNode => c !== null);
+      const content = withImageRows(node.content.map(walk).filter((c): c is RichNode => c !== null));
       if (count > MAX_NODES) return null;
       if (content.length > 0) out.content = content;
     }
@@ -624,6 +631,27 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
   if (!doc || count > MAX_NODES) return null;
   if (!doc.content || doc.content.length === 0) doc.content = [{ type: "paragraph" }];
   return doc;
+}
+
+/** Nodes with each image row as the page editor holds one: two to four
+    images or figure objects. An image row of one item is that item; one of
+    none goes; one that holds anything else, or more than four, stands as
+    its items, each a block of its own, so nothing it held is lost. The
+    suggestion marks an image row carries go to the items it leaves. */
+export function withImageRows(nodes: RichNode[]): RichNode[] {
+  if (!nodes.some((n) => n.type === "imageRow")) return nodes;
+  return nodes.flatMap((node) => {
+    if (node.type !== "imageRow") return [node];
+    const items = node.content ?? [];
+    const fits = items.length >= 2 && items.length <= MAX_IMAGE_ROW_ITEMS && items.every((item) => IMAGE_ROW_ITEMS.has(item.type));
+    if (fits) return [node];
+    const rowMarks = node.marks ?? [];
+    return items.map((item) => {
+      const marks = [...(item.marks ?? [])];
+      for (const mark of rowMarks) if (!marks.some((m) => m.type === mark.type)) marks.push(mark);
+      return marks.length > 0 ? { ...item, marks } : item;
+    });
+  });
 }
 
 /** JSON with sorted keys: a value read back from a jsonb column has its
@@ -718,7 +746,11 @@ export function withDocumentFigures(doc: RichNode, media: ReadonlyMap<string, Fi
     if (!node.content) return node;
     const content = node.content.map(fix).filter((c): c is RichNode => c !== null);
     if (content.length === node.content.length && content.every((c, i) => c === node.content![i])) return node;
-    return { ...node, content: content.length > 0 ? content : [{ type: "paragraph", attrs: { blockId: newBlockId() } }] };
+    // An image row never takes a paragraph: an image row left with one item
+    // is that item, and one left with none goes (withImageRows).
+    if (node.type === "imageRow") return content.length > 0 ? { ...node, content } : null;
+    const kept = withImageRows(content);
+    return { ...node, content: kept.length > 0 ? kept : [{ type: "paragraph", attrs: { blockId: newBlockId() } }] };
   };
   return fix(doc) ?? doc;
 }

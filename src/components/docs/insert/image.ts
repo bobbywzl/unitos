@@ -240,7 +240,7 @@ class ImageView implements NodeView {
     else this.img.removeAttribute("title");
     const sized = a.width !== null && a.height !== null;
     const box = this.box.style;
-    box.width = a.width !== null ? `${a.width}px` : "";
+    this.boxWidth(a.width !== null ? `${a.width}px` : "");
     box.aspectRatio = sized ? `${a.width} / ${a.height}` : "";
     box.transform = a.rotation ? `rotate(${a.rotation}deg)` : "";
     const floating = a.wrap === "behind" || a.wrap === "front";
@@ -275,6 +275,15 @@ class ImageView implements NodeView {
       !a.mask && a.borderColor && a.borderWidth > 0 ? `${a.borderWidth}pt ${a.borderDash} ${a.borderColor}` : "";
     this.drawEdge(a);
     if (this.selected) this.placeChrome();
+  }
+
+  /** The box's width; in an image row also the room the image asks for
+      there (--docs-img-w, css/insert.css), where every item scales by one
+      factor when the row runs past the text's width. */
+  private boxWidth(width: string) {
+    this.box.style.width = width;
+    if (width) this.dom.style.setProperty("--docs-img-w", width);
+    else this.dom.style.removeProperty("--docs-img-w");
   }
 
   /** A masked image's border: its shape's outline over the image. */
@@ -451,7 +460,7 @@ class ImageView implements NodeView {
         w = Math.max(MIN_SIZE, w);
         h = Math.max(MIN_SIZE, h);
         next = { w, h };
-        this.box.style.width = `${w}px`;
+        this.boxWidth(`${w}px`);
         this.box.style.aspectRatio = `${w} / ${h}`;
         this.box.classList.add("is-sized");
         this.img.style.width = this.img.style.position === "absolute" ? this.img.style.width : "100%";
@@ -547,7 +556,7 @@ class ImageView implements NodeView {
       onDown,
     };
     // The box keeps its size in pixels while the crop changes.
-    this.box.style.width = `${w}px`;
+    this.boxWidth(`${w}px`);
     this.box.style.aspectRatio = `${w} / ${h}`;
     this.ghost = document.createElement("img");
     this.ghost.className = "docs-img-ghost";
@@ -570,7 +579,7 @@ class ImageView implements NodeView {
     if (!c || !this.ghost) return;
     const w = c.fullW * (1 - c.left - c.right);
     const h = c.fullH * (1 - c.top - c.bottom);
-    this.box.style.width = `${w}px`;
+    this.boxWidth(`${w}px`);
     this.box.style.aspectRatio = `${w} / ${h}`;
     this.box.style.translate = c.shiftX || c.shiftY ? `${c.shiftX}px ${c.shiftY}px` : "";
     const img = this.img.style;
@@ -852,11 +861,12 @@ export const DocsImage = Extension.create({
             image: (node, view, getPos) => new ImageView(node, view, getPos, editor),
           },
           handleDOMEvents: {
-            // An image drags as the page's own node (ProseMirror moves it,
-            // with the drop caret): the reader's figure gesture never sees
-            // the drag, which would cancel it, and the toolbar steps aside.
+            // An image or a figure object drags as the page's own node
+            // (ProseMirror moves it, with the drop caret; an image row's
+            // drop, insert/image-row.ts): the reader's figure gesture never
+            // sees the drag, which would cancel it, and the toolbar steps aside.
             dragstart: (_view, event) => {
-              if (!(event.target instanceof Element && event.target.closest(".docs-img"))) return;
+              if (!(event.target instanceof Element && event.target.closest(".docs-img, .docs-figure"))) return;
               event.stopPropagation();
               document.body.classList.add("docs-img-moving");
             },

@@ -870,12 +870,14 @@ function fit(parent: PMNode, content: Fragment): Fragment {
 
 /** Where new blocks go after a block: into its list as lines after its line
     when they are a list of its kind, else after the list it stands in, else
-    right after it; with no block, at the document's start. */
+    right after it (after the image row an image stands in); with no block,
+    at the document's start. */
 function insertion(doc: PMNode, afterBlockId: string | null, content: Fragment): { pos: number; content: Fragment } | null {
   if (afterBlockId === null) return { pos: 0, content };
   const block = findIndexed(doc, afterBlockId);
   if (!block) return null;
   const $pos = doc.resolve(block.pos);
+  if ($pos.parent.type.name === "imageRow") return { pos: $pos.after(), content };
   let inner = 0;
   let outer = 0;
   for (let depth = $pos.depth; depth > 0; depth--) {

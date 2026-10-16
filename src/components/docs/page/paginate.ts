@@ -11,8 +11,8 @@ import { coreSlotOf } from "@/components/docs/layer/core-slot";
 //   single lines), or moves whole;
 // - a heading, the Title, and the Subtitle stay whole, on the page of the
 //   paragraph after them (Keep lines together, Keep with next);
-// - a table row, an image, and a line move whole ("row" and "block"
-//   spacers); a table's pinned header rows stay with the row after them and
+// - a table row, an image, an image row, and a line move whole ("row" and
+//   "block" spacers); a table's pinned header rows stay with the row after them and
 //   start every page the table continues on;
 // - a core the collapsed view draws in a node's place moves whole;
 // - a page break sends what follows to the next page;
@@ -158,7 +158,9 @@ function collectUnits(view: EditorView): { units: Unit[]; footnotes: Map<string,
       if (el) units.push({ type: "text", pos, node, dom: el, spacerPos, spacerKind, refs: refsIn(node, pos), header: null, ...textFlags(node) });
       return;
     }
-    if (node.isLeaf || node.isAtom) {
+    // An image row moves whole, as tall as its tallest item: its items
+    // stand on one line.
+    if (node.isLeaf || node.isAtom || name === "imageRow") {
       const el = dom(pos);
       const type = name === "pageBreak" ? "break" : "atom";
       if (el) units.push({ type, pos, node, dom: el, spacerPos, spacerKind, refs: [], header: null, keepNext: false, ...whole });

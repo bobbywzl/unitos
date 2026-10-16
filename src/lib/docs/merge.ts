@@ -11,7 +11,9 @@ import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, type RichNode } from "@/lib/
 // words — a page start between them is one unit, kept once, and a citation
 // is a mark on its words; else the editor's copy, the one on screen, wins
 // that paragraph — unless its only change is the assistant's suggestions: a
-// person's words win over those, and each of them goes whole.
+// person's words win over those, and each of them goes whole. A block both
+// copies hold never goes, even when one copy put it in an image row or a
+// list and the other changed it.
 
 type Entry = { key: string; node: RichNode; json: string };
 
@@ -107,6 +109,12 @@ function assistantIds(node: RichNode, ids = new Set<string>()): Set<string> {
   return ids;
 }
 
+/** An image row with `item` in the place of the item that shares its key. */
+function withItem(row: RichNode, item: RichNode): RichNode {
+  const key = keyOf(item);
+  return withContent(row, row.attrs, (row.content ?? []).map((c) => (keyOf(c) === key ? item : c)));
+}
+
 /** One node both copies hold, merged against its base. The assistant's
     suggestions a paragraph gives up to the stored copy go in `dropped`. */
 function mergeNode(base: Entry, local: Entry, remote: Entry, dropped: Set<string>): RichNode {
@@ -118,6 +126,11 @@ function mergeNode(base: Entry, local: Entry, remote: Entry, dropped: Set<string
     for (const id of assistantIds(l)) if (!kept.has(id)) dropped.add(id);
     return r;
   }
+  // One copy put the node in an image row, the other changed it: the row
+  // stands with the other copy's node in its place, so neither the row's
+  // other items nor the change go.
+  if (l.type === "imageRow" && r.type !== "imageRow") return withItem(l, r);
+  if (r.type === "imageRow" && l.type !== "imageRow") return withItem(r, l);
   if (l.type !== r.type || l.type !== b.type) return l;
   const attrs = stable(l.attrs ?? null) !== stable(b.attrs ?? null) ? l.attrs : r.attrs;
   if (INDEXED_NODE_TYPES.has(l.type)) {
@@ -196,10 +209,75 @@ function mergeWords(base: RichNode[], local: RichNode[], remote: RichNode[]): Ri
   return out;
 }
 
+/** The indexed nodes of `nodes`, in order, by blockId. */
+function indexedNodes(nodes: RichNode[]): Map<string, RichNode> {
+  const out = new Map<string, RichNode>();
+  const walk = (node: RichNode) => {
+    const id = node.attrs?.blockId;
+    if (INDEXED_NODE_TYPES.has(node.type) && typeof id === "string") {
+      if (!out.has(id)) out.set(id, node);
+      return;
+    }
+    node.content?.forEach(walk);
+  };
+  nodes.forEach(walk);
+  return out;
+}
+
+/** Every block both copies hold stays, with both copies' changes. A block
+    one copy moved into a container the other did not (an image into an
+    image row, a line into a list) pairs with the container's first block
+    only. When the merge keeps the editor's container, a block in it that
+    only the stored copy changed takes that change; when it keeps the copy
+    that does not hold a block, the block goes back on a line of its own
+    after the block before it in the editor's copy. */
+function keepHeldBlocks(merged: RichNode[], base: RichNode[], local: RichNode[], remote: RichNode[]): RichNode[] {
+  const [baseBy, localBy, inRemote] = [indexedNodes(base), indexedNodes(local), indexedNodes(remote)];
+  const changed = new Map<string, RichNode>();
+  for (const [id, r] of inRemote) {
+    const [b, l] = [baseBy.get(id), localBy.get(id)];
+    if (b && l && stable(l) === stable(b) && stable(r) !== stable(b)) changed.set(id, r);
+  }
+  const takeChanges = (node: RichNode): RichNode => {
+    const id = node.attrs?.blockId;
+    if (INDEXED_NODE_TYPES.has(node.type) && typeof id === "string") {
+      const r = changed.get(id);
+      return r && stable(node) === stable(localBy.get(id)) ? r : node;
+    }
+    return node.content ? { ...node, content: node.content.map(takeChanges) } : node;
+  };
+  const withChanges = changed.size > 0 ? merged.map(takeChanges) : merged;
+  const kept = indexedNodes(withChanges);
+  const order = [...localBy];
+  if (order.every(([id]) => kept.has(id) || !inRemote.has(id))) return withChanges;
+  const out = [...withChanges];
+  // The top-level node that holds each block of the result.
+  const topOf = (id: string) => out.findIndex((node) => indexedNodes([node]).has(id));
+  order.forEach(([id, node], i) => {
+    if (kept.has(id) || !inRemote.has(id)) return;
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const top = topOf(order[j][0]);
+      if (top >= 0) {
+        at = top + 1;
+        break;
+      }
+    }
+    out.splice(at, 0, node);
+    kept.set(id, node);
+  });
+  return out;
+}
+
 /** The stored copy with the editor's changes since `base` laid over it. */
 export function mergeRichText(base: RichNode, local: RichNode, remote: RichNode): RichNode {
   const dropped = new Set<string>();
-  const merged = mergeList(base.content ?? [], local.content ?? [], remote.content ?? [], dropped);
+  const merged = keepHeldBlocks(
+    mergeList(base.content ?? [], local.content ?? [], remote.content ?? [], dropped),
+    base.content ?? [],
+    local.content ?? [],
+    remote.content ?? [],
+  );
   // A suggestion that gave up one paragraph leaves the others too: none stays half made.
   const content = dropped.size > 0 ? withoutSuggestions(merged, (id) => dropped.has(String(id))) : merged;
   // The doc node's attributes (the named styles): the editor's when it changed them.

@@ -155,6 +155,9 @@ const en = {
   release20261014Title: "New: name a document before you add it, pin documents, reopen where you left off",
   release20261014Body:
     "- **Title** — every link and file in the add dialog has a Title field. Write a title, and the document is added under it. Empty keeps the document's own title.\n- **Pin to top** — in a document's ⋯ in the document list. Pinned documents list first, under Pinned, for everyone in the project.\n- **Where you left off** — a project opens on the document you last had open in it, at the place you left off.\n- **Breakwork** — the assistant answers long documents in well under a minute, sorts every block, and keeps a failed turn in the conversation with Try again.",
+  release20261016Title: "New: image rows",
+  release20261016Body:
+    "- **Image rows** — in a blank document or an import, put two to four images or figures side by side on one line. Drag an image onto the left or right side of another, or choose Side by side with next image in the image's menu or the right-click menu.\n- **Separate images** — in the same menus, puts each image back on a line of its own. Drag an image out of the row to move it on its own.\n\nThe controls that are new glow until you press them.",
   // Feedback button
   feedback: "Feedback",
   sendFeedback: "Send feedback",
@@ -331,6 +334,9 @@ const zh: Record<keyof typeof en, string> = {
   release20261014Title: "新功能：添加前命名文档、置顶文档、回到上次的位置",
   release20261014Body:
     "- **标题**——添加对话框里的每个链接和文件都有标题栏。写下标题，文档就以这个标题添加。留空则保留文档自己的标题。\n- **置顶**——在文档列表里文档的 ⋯ 中。置顶的文档排在最前，在“已置顶”下，项目里的每个人都能看到。\n- **回到上次的位置**——项目打开时显示你上次打开的文档，停在你上次读到的位置。\n- **Breakwork**——助手在一分钟内处理长文档，归类每个块，失败的回合会留在对话里并附有重试。",
+  release20261016Title: "新功能：图片行",
+  release20261016Body:
+    "- **图片行**——在空白文档或导入中，把两到四张图片或插图并排放在一行。把一张图片拖到另一张的左侧或右侧，或在图片菜单或右键菜单中选择“与下一张图片并排”。\n- **分开图片**——在同样的菜单中，让每张图片回到各自的一行。把图片拖出图片行，即可单独移动它。\n\n新功能的控件会发光，直到你按下它。",
   // Feedback button
   feedback: "反馈",
   sendFeedback: "发送反馈",

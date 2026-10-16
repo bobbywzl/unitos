@@ -78,7 +78,8 @@
 //   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记 ·
 //   Breakwork(把文档的块归入画布上类别的工具) 不翻译 · structure(文档的块归入画布上的类别) 结构 · bucket(结构里的一个框) 类别 ·
 //   piece(归入类别的一个块) 片块 · connection(类别或片块之间的关联) 关联 ·
-//   unsorted(尚未归类的块) 未归类 · Breakwork assistant Breakwork 助手
+//   unsorted(尚未归类的块) 未归类 · Breakwork assistant Breakwork 助手 ·
+//   image row(一行里并排的两到四张图片或插图) 图片行
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

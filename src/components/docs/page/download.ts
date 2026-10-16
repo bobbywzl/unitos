@@ -21,7 +21,8 @@ import { KATEX_MACROS } from "@/lib/katex";
 // Viewing mode shows it; PDF is the print dialog's Save as PDF. An import's
 // figure object (§30) goes in the web page as the page draws it, a PDF
 // figure's crop inside, and in Markdown as its pictures over its caption;
-// a page start adds nothing to any of them.
+// a page start adds nothing to any of them. An image row is its items side
+// by side in the web page and its images on one line in Markdown.
 
 export type DownloadFormat = "docx" | "pdf" | "txt" | "html" | "md";
 
@@ -115,19 +116,34 @@ function figurePictures(editor: Editor, node: PMNode): { src: string; alt: strin
 }
 
 /** The rich text with each figure object as Markdown writes it: its
-    pictures as images, then its caption as a paragraph. */
+    pictures as images, then its caption as a paragraph. In an image row the
+    pictures stay on the row's line and the captions follow the row. */
 function withFigurePictures(editor: Editor, doc: PMNode): PMNode {
   const { schema } = doc.type;
+  const caption = (node: PMNode) => String(node.attrs.caption ?? "").trim();
   const swap = (fragment: Fragment): Fragment => {
     const out: PMNode[] = [];
     fragment.forEach((node) => {
+      if (node.type.name === "imageRow") {
+        const images: PMNode[] = [];
+        const captions: PMNode[] = [];
+        node.forEach((item) => {
+          if (item.type.name === "figure") {
+            for (const { src, alt } of figurePictures(editor, item)) images.push(schema.nodes.image.create({ src, alt }));
+            if (caption(item)) captions.push(schema.nodes.paragraph.create(null, schema.text(caption(item))));
+          } else images.push(item);
+        });
+        // A copy the schema does not check: Markdown only reads it.
+        if (images.length > 0) out.push(node.copy(Fragment.from(images)));
+        out.push(...captions);
+        return;
+      }
       if (node.type.name !== "figure") {
         out.push(node.isTextblock || node.isLeaf ? node : node.copy(swap(node.content)));
         return;
       }
       for (const { src, alt } of figurePictures(editor, node)) out.push(schema.nodes.image.create({ src, alt }));
-      const caption = String(node.attrs.caption ?? "").trim();
-      if (caption) out.push(schema.nodes.paragraph.create(null, schema.text(caption)));
+      if (caption(node)) out.push(schema.nodes.paragraph.create(null, schema.text(caption(node))));
     });
     return Fragment.from(out);
   };
@@ -204,6 +220,8 @@ sup[data-footnote-ref][data-symbol]::after { content: attr(data-symbol); }
 [data-footnote][data-symbol] { counter-increment: none; }
 [data-footnote][data-symbol] > p:first-child::before { content: attr(data-symbol) " "; }
 [data-page-break] { break-after: page; }
+.docs-image-row { display: flex; align-items: flex-end; gap: 6pt; margin: 6pt 0; }
+.docs-image-row > :is(img, .docs-figure) { flex: 0 1 auto; min-width: 0; margin: 0; }
 .docs-figure { margin: 9pt 0; }
 .docs-figure .reader-figure > figure { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; column-gap: 2%; row-gap: 8px; max-width: 100%; margin: 0; }
 .docs-figure .reader-figure figure figure { display: flex; flex-direction: column; align-items: center; min-width: 0; margin: 0; padding: 0 1%; box-sizing: border-box; }
