@@ -7,6 +7,7 @@ import { layerBlocks } from "@/lib/anchors/layer";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { addedQuotes, anchorsOfQuote } from "@/lib/notes/added-quotes";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
@@ -57,9 +58,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     if (passage.length === 0) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
-    await db.source.createMany({
-      data: passageSources(source.documentId, passage, layer).map((row) => ({ ...row, noteId })),
+    // An anchor the note already holds is not added twice: the save of the
+    // note's text may have given the dropped quote its source first.
+    const held = await db.source.findMany({
+      where: { noteId, documentId: source.documentId, layer },
+      select: { blockId: true, startOffset: true, endOffset: true, quotedText: true },
     });
+    const holds = (row: { blockId: string; startOffset: number; endOffset: number; quotedText: string }) =>
+      held.some(
+        (s) =>
+          s.blockId === row.blockId &&
+          ((s.startOffset === row.startOffset && s.endOffset === row.endOffset) ||
+            s.quotedText.trim() === row.quotedText.trim()),
+      );
+    const rows = passageSources(source.documentId, passage, layer).filter((row) => !holds(row));
+    if (rows.length > 0) await db.source.createMany({ data: rows.map((row) => ({ ...row, noteId })) });
   }
 
   if (data.copySourcesFrom) {
@@ -134,6 +147,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
       const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
       const left = sourcesLeftByQuotes(note.content, data.content, sources);
       if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
+      // A quote the edit added whole — the note's assistant's change, a
+      // paste — gets its source in the note's document (lib/notes/added-quotes.ts).
+      const kept = sources.filter((s) => !left.includes(s.id));
+      const added = addedQuotes(note.content, data.content, kept);
+      if (added.length > 0) await addQuoteSources(noteId, note.documentId, added);
     }
   }
 
@@ -165,6 +183,27 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   });
   if (section) await bumpNotebook(section.notebookId);
   return NextResponse.json(updated);
+}
+
+/** Sources for the quotes an edit added: each quote found in the note's
+    document — its own, else its first source's — when that document is in
+    the note's project. A quote no block holds keeps no source. */
+async function addQuoteSources(noteId: string, ownDocumentId: string | null, quotes: string[]) {
+  const first = ownDocumentId
+    ? null
+    : await db.source.findFirst({ where: { noteId, documentId: { not: null } }, select: { documentId: true } });
+  const documentId = ownDocumentId ?? first?.documentId ?? null;
+  if (!documentId) return;
+  const note = await db.note.findUnique({ where: { id: noteId }, select: { section: { select: { notebookId: true } } } });
+  if (!note) return;
+  const attached = await db.notebookDocument.findFirst({
+    where: { documentId, notebookId: note.section.notebookId },
+    select: { documentId: true },
+  });
+  if (!attached) return;
+  const blocks = await layerBlocks(documentId, null);
+  const rows = quotes.flatMap((quote) => anchorsOfQuote(quote, blocks)).map((anchor) => ({ ...anchor, noteId, documentId }));
+  if (rows.length > 0) await db.source.createMany({ data: rows });
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: string }> }) {
