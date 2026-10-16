@@ -135,6 +135,17 @@ async function main() {
     check(last?.id === "c2", `the rewritten, moved block keeps its id (${last?.id})`);
     editor.destroy();
   }
+  // A later window's new block after a block an earlier window of the same
+  // command rewrote: both land, and the rewrite is not rejected.
+  {
+    const editor = make();
+    const first = applyAssistantOps(editor, [{ i: 0, op: "rewrite_block", blockId: "c2", base: "Geology is slow.", text: "Slow.", why: "Shorter." }], author);
+    const second = applyAssistantOps(editor, [{ i: 1, op: "insert_blocks", afterBlockId: "c2", markdown: "Rivers take millions of years.", why: "Expand." }], author);
+    const pending = readSuggestions(editor.state.doc).map((s) => s.id);
+    check(second.skipped.length === 0 && second.ids.length > 0, `the later window's new block lands (skipped: ${JSON.stringify(second.skipped)})`);
+    check(first.ids.every((id) => pending.includes(id)), "the earlier window's rewrite stays a suggestion");
+    editor.destroy();
+  }
   {
     const editor = make();
     applyAssistantOps(editor, [{ i: 0, op: "rewrite_block", blockId: "c2", base: "Geology is slow.", text: "Slow.", why: "Shorter." }], author);

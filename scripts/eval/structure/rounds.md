@@ -1,6 +1,6 @@
 # Breakwork loop rounds
 
-Model agents: Sonnet, standing in for `STRUCTURE_MODEL` (Claude Sonnet 5). Judges: one agent per two cases. Overall is 1 to 5; the mean is over 8 cases.
+Model agents: Sonnet, standing in for `STRUCTURE_MODEL` (Claude Sonnet 5.5). Judges: one agent per two cases. Overall is 1 to 5; the mean is over 8 cases.
 
 From r3 on, every judge also compares the candidate with the current best answer side by side, blind (`run.ts pair`), and a change is kept when it wins more cases than it loses and no case falls under 3. Two cases joined at r3: a keyword request (nz-keyword) and a rework of a structure on the canvas (nz-rework); their baseline is r3base, the r1 prompt.
 

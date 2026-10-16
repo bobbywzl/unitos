@@ -5,7 +5,7 @@ description: The Breakwork quality loop (SPEC.md §32, §25). Subagents stand in
 
 # breakworkloop
 
-What the loop improves: the Breakwork assistant — the prompt (`src/lib/prompts/structure.ts`), the answer's schema and its resolution into a structure (`src/lib/structure-assist.ts`), and the structure library (`src/lib/structure.ts`). No API key is needed: agents answer the prompt files. Breakwork runs on Claude Sonnet 5 in production, so a Sonnet agent is the same family; its answers stand for the model's.
+What the loop improves: the Breakwork assistant — the prompt (`src/lib/prompts/structure.ts`), the answer's schema and its resolution into a structure (`src/lib/structure-assist.ts`), and the structure library (`src/lib/structure.ts`). No API key is needed: agents answer the prompt files. Breakwork runs on Claude Sonnet 5.5 in production, so a Sonnet agent is the same family; its answers stand for the model's.
 
 ## One round
 

@@ -5688,6 +5688,9 @@ export function ReaderInteractions({
     const suggestKey = plan.suggestions
       ? await landSuggestions(plan.suggestions, anchor ? `${command}\n\n${passageText(anchor)}` : command, replacing)
       : undefined;
+    // An action the plan dropped says why, under the reply too: the plan
+    // card shows the warnings only when it has actions.
+    if (!plan.suggestions && actions.length === 0 && parts.length > 0) parts.push(...plan.warnings);
     if (parts.length === 0) parts.push(plan.suggestions?.summary || (plan.warnings[0] ?? t("reader.noActions")));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
@@ -5734,9 +5737,15 @@ export function ReaderInteractions({
   // page switches Viewing mode to Editing to show them).
   async function landOps(key: string, ops: ResolvedOp[], warnings: string[], replacing: readonly string[] = []) {
     const run = suggestRunsRef.current.get(key);
-    const editor = pageEditorIn(containerRef.current);
-    if (!run || !editor) return;
+    if (!run) return;
     run.skipped.push(...warnings);
+    // No page to land on: the row says so, never "No suggestions".
+    const closed = () => {
+      if (ops.length > 0 && !run.notes.includes(t("docsSuggest.pageClosed"))) run.notes.push(t("docsSuggest.pageClosed"));
+      publishRun(key);
+    };
+    const editor = pageEditorIn(containerRef.current);
+    if (!editor) return closed();
     // An import another account's project holds too takes no edits: nothing
     // lands, and the row says why.
     const shared = t("api.importShared");
@@ -5744,7 +5753,7 @@ export function ReaderInteractions({
       if (ops.length > 0 && !run.notes.includes(shared)) run.notes.push(shared);
     } else if (ops.length > 0) {
       const code = await suggestCode();
-      if (editor.isDestroyed) return;
+      if (editor.isDestroyed) return closed();
       const landed = code.applyAssistantOps(editor, ops, assistantAuthor(myId), replacing);
       run.ops.push(...ops);
       run.ids.push(...landed.ids);
@@ -5752,7 +5761,16 @@ export function ReaderInteractions({
       for (const { i, reason } of landed.skipped) {
         const why = ops.find((op) => op.i === i)?.why ?? "";
         run.skipped.push(
-          t(reason === "object" ? "docsSuggest.skipObject" : reason === "overlap" ? "api.suggestSkipOverlap" : "docsSuggest.skipChanged", { why }),
+          t(
+            reason === "object"
+              ? "docsSuggest.skipObject"
+              : reason === "overlap"
+                ? "api.suggestSkipOverlap"
+                : reason === "notText"
+                  ? "api.suggestSkipNotText"
+                  : "docsSuggest.skipChanged",
+            { why },
+          ),
         );
       }
       watchRuns(editor, code.readSuggestions);
@@ -5861,18 +5879,34 @@ export function ReaderInteractions({
         const json = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(json?.error ?? t("assistant.suggestFailedStatus", { status: res.status }));
       }
+      // The stream ends with done or an error; an end with neither (the
+      // connection cut, the server stopped) says so.
+      let ended = false;
       for await (const event of readNdjson<SuggestEvent>(res)) {
         if ("ops" in event) {
           // The windows' summaries until the run's own: a stopped run keeps them.
           if (event.ops.length > 0) run.summary = [run.summary, event.summary].filter(Boolean).join(" ");
-          await landOps(request.key, event.ops, event.warnings);
+          // One window that fails to land leaves the next windows to land.
+          try {
+            await landOps(request.key, event.ops, event.warnings);
+          } catch (err) {
+            console.error("[suggest] a window did not land:", err);
+            run.notes.push(t("reader.assistantFailed"));
+          }
         } else if ("done" in event) {
+          ended = true;
           run.summary = event.summary;
           run.notes.push(...event.warnings);
-        } else if ("error" in event) run.notes.push(event.error);
+        } else if ("error" in event) {
+          if (!("window" in event)) ended = true;
+          run.notes.push(event.error);
+        }
       }
+      if (!ended && !controller.signal.aborted) run.notes.push(t("docsSuggest.streamEnded"));
     } catch (err) {
-      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("reader.assistantFailed"));
+      // A cut connection or a garbled line reads as the plain failure, not the browser's words.
+      const plain = !(err instanceof Error) || err instanceof TypeError || err instanceof SyntaxError;
+      if (!controller.signal.aborted) run.notes.push(plain ? t("reader.assistantFailed") : err.message);
     } finally {
       run.running = false;
       run.controller = null;

@@ -1097,11 +1097,13 @@ export function AssistantPanel({
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text: answered, error: streamError } = splitStreamError(streamed);
-      const { text, plan } = splitStreamPlan(answered);
-      if (streamError || !text.trim()) {
+      const { text: written, plan } = splitStreamPlan(answered);
+      if (streamError || (!written.trim() && !plan?.actions.length)) {
         setAnswer("");
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
+      // An answer that is its actions alone reads as what they do.
+      const text = written.trim() ? written : plan!.actions.map((a) => a.description).filter(Boolean).join(" ");
       // The assistant's suggestions go to the open page (SPEC.md §29); the
       // other actions go to the reader's plan card (SPEC.md §7), where they
       // wait for approval, and Undo follows them.
@@ -1182,7 +1184,8 @@ export function AssistantPanel({
     const request: SuggestRequest = {
       documentId,
       key: queuedKey(),
-      command: command.slice(0, 4000),
+      // A message of attachments alone has no words: the instruction says the change.
+      command: (command.trim() || action.instruction).slice(0, 4000),
       instruction: action.instruction,
       blockIds: action.blockIds,
       sections: action.sections,

@@ -112,7 +112,9 @@ const requestSchema = z.object({
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(4000),
+        // An answer runs to 8000 characters (chatTurnSchema): a follow-up
+        // after a long answer is never refused.
+        content: z.string().min(1).max(8000),
       }),
     )
     .max(20)
@@ -693,17 +695,18 @@ async function handle(req: Request, t: TFunc) {
   // document, so a later confirmation reads as answered. A suggest run that
   // landed nothing says why, not what it meant to change.
   const landed = suggestions ? suggestions.ops.length > 0 : false;
+  // A model reply that says what it would change never stands in for that.
   const answer =
-    result.data.reply ??
+    suggestions && !landed
+      ? suggestions.warnings[0]
+        ? t("api.suggestNoneLanded", { why: suggestions.warnings[0] })
+        : t("api.suggestNoChange")
+      : (result.data.reply ??
     (suggestions
-      ? landed
-        ? suggestions.summary
-        : suggestions.warnings[0]
-          ? t("api.suggestNoneLanded", { why: suggestions.warnings[0] })
-          : t("api.suggestNoChange")
+      ? suggestions.summary
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
-        : "No actions proposed.");
+        : "No actions proposed."));
   const replyText = answer;
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
