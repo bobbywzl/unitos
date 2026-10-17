@@ -15,6 +15,7 @@ import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile } from "@/lib/office-file";
+import type { SameFileIn } from "@/lib/parse/attach";
 import type { PageRange } from "@/lib/pdf-pages";
 import { isMediaUrl, MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
@@ -71,10 +72,12 @@ export type UploadRequest = (
 };
 
 // What the box opens when it is done: the first added document, or the
-// document a repeat add's Open the one I have named (SPEC.md §15).
-// notebookId: absent, this project; a project's id, that project; null, the
-// document is in no project (the Library), and opening it attaches it here.
-export type OpenTarget = { kind: "document"; id: string; notebookId?: string | null };
+// document a repeat add's Open the one I have named (SPEC.md §15), or the
+// edited import an add made a new copy of (kind "existing"), which opens
+// plainly. notebookId: absent, this project; a project's id, that project;
+// null, the document is in no project (the Library), and opening it attaches
+// it here.
+export type OpenTarget = { kind: "document" | "existing"; id: string; notebookId?: string | null };
 
 // What an add that failed hands back when the box closes (CLAUDE.md rule
 // zero 6): the links and files the server could not take go back into Add a
@@ -97,7 +100,7 @@ function runs(phase: Phase): boolean {
 type Added = { id: string; title: string };
 type IngestEvent =
   | { stage: string; detail?: string }
-  | { id: string; title: string; deduped: boolean; documents?: Added[] }
+  | { id: string; title: string; deduped: boolean; documents?: Added[]; sameFileIn?: SameFileIn }
   | { error: string; duplicate?: unknown };
 type IngestResult = Extract<IngestEvent, { id: string }>;
 
@@ -170,6 +173,27 @@ function hasFigureCheck(detail: string): boolean {
     pages (SPEC.md §15). */
 export function blockDocumentLine(detail: string): "panes.uploadBlockDocument" | "panes.uploadBlockDocumentPdf" {
   return hasFigureCheck(detail) ? "panes.uploadBlockDocument" : "panes.uploadBlockDocumentPdf";
+}
+
+/** The line for an add that made a new copy beside an edited import of the
+    same file or page (SPEC.md §30): the import's title opens it. */
+export function SameFileLine({ same, onOpen }: { same: SameFileIn; onOpen: (id: string) => void }) {
+  const t = useT();
+  const mark = "\u0001";
+  const [before, after] = t(same.page ? "panes.uploadSamePage" : "panes.uploadSameFile", { title: mark }).split(mark);
+  return (
+    <>
+      {before}
+      <button
+        onClick={() => onOpen(same.id)}
+        data-track="upload-open-same-file"
+        className="font-semibold underline decoration-dotted underline-offset-2 hover:text-clay-800"
+      >
+        {same.title}
+      </button>
+      {after}
+    </>
+  );
 }
 
 /** The save stage's detail says the document is the pages of a PDF
@@ -349,6 +373,10 @@ export function UploadAssistant({
   // reason, which keeps the box open until Close.
   const conversionFailedRef = useRef<string | null>(null);
   const [conversionFailed, setConversionFailed] = useState<string | null>(null);
+  // The edited imports this add made new copies beside (SPEC.md §30): one
+  // line each, which keeps the box open until Close.
+  const sameFilesRef = useRef<SameFileIn[]>([]);
+  const [sameFiles, setSameFiles] = useState<SameFileIn[]>([]);
 
   // ── The adds: one streamed request per file or Drive pick, progress in the box ──
   async function streamIngest(res: Response): Promise<IngestResult> {
@@ -419,6 +447,7 @@ export function UploadAssistant({
 
   async function ingestAndFinish(res: Response): Promise<IngestResult> {
     const result = await streamIngest(res);
+    if (result.sameFileIn) sameFilesRef.current.push(result.sameFileIn);
     const documents = result.documents ?? [{ id: result.id, title: result.title }];
     // The document is saved and reads well: past the mark it opens now; before
     // it, a timer opens it at the mark should the finishing step still run.
@@ -635,6 +664,7 @@ export function UploadAssistant({
     };
     saveDetailRef.current = null;
     conversionFailedRef.current = null;
+    sameFilesRef.current = [];
     addStartedAtRef.current = Date.now();
     setAddStartedAt(addStartedAtRef.current);
     earlyOpenRef.current = "pending";
@@ -733,6 +763,7 @@ export function UploadAssistant({
     setAdded(collected);
     setFailures(failed);
     setFailedItems(back);
+    setSameFiles(sameFilesRef.current);
     setHeadline(null);
     // Open the one I have: that document opens when the box is done, in the
     // project that holds it.
@@ -757,8 +788,8 @@ export function UploadAssistant({
     const target: OpenTarget = chosenTarget ?? { kind: "document", id: collected[0].id };
     setOpenTarget(target);
     // Clean adds close themselves; failures stay visible until Close, and so
-    // does a lost figure: a single add whose figure check found a caption
-    // without a figure, and an import the size guard kept out of the page
+    // does a new copy beside an edited import, and a lost figure: a single
+    // add whose figure check found a caption without a figure, and an import the size guard kept out of the page
     // editor, and pages that did not convert to text. A clean figure check
     // line shows long enough to read.
     const failedConversion = itemCount === 1 ? conversionFailedRef.current : null;
@@ -768,7 +799,7 @@ export function UploadAssistant({
       ((ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0 ||
         keptBlockDocument(saveDetailRef.current) ||
         failedConversion !== null);
-    if (failed.length === 0 && !lost) {
+    if (failed.length === 0 && !lost && sameFilesRef.current.length === 0) {
       setTimeout(() => onClose(target), collected.length > 1 || saveDetailRef.current ? 900 : 300);
     } else if (hiddenRef.current) {
       // A hidden box comes back with the failure or the lost figure to read.
@@ -946,7 +977,12 @@ export function UploadAssistant({
             {conversionFailed !== null && (
               <p className={amberNote}>{t("panes.uploadConvertFailed", { reason: conversionFailed })}</p>
             )}
-            {(failures.length > 0 || lostFigures || blockDocument || conversionFailed !== null) && (
+            {sameFiles.map((same) => (
+              <p key={same.id} className="text-xs text-sand-600">
+                <SameFileLine same={same} onOpen={(id) => finish({ kind: "existing", id })} />
+              </p>
+            ))}
+            {(failures.length > 0 || lostFigures || blockDocument || conversionFailed !== null || sameFiles.length > 0) && (
               <>
                 {failures.length > 0 && (
                   <ul className="flex flex-col gap-1 text-xs text-red-500">

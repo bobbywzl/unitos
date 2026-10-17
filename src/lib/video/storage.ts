@@ -12,10 +12,15 @@ export function sniffMedia(bytes: Uint8Array): string | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
   if (bytes.length >= 12 && ascii(4, 8) === "ftyp") {
     const brand = ascii(8, 12);
-    if (brand.startsWith("qt")) return "video/quicktime";
     // M4A/M4B brands mark an audio-only MPEG-4 container.
     if (brand.startsWith("M4A") || brand.startsWith("M4B")) return "audio/mp4";
-    return "video/mp4";
+    // Other brands (isom, mp42, iso5, 3GPP, QuickTime's qt) carry audio
+    // alone as often as video: the tracks decide when the moov box is in
+    // the bytes. Media bench finding: a QuickTime file of sound alone
+    // opened in the video player with no picture.
+    const handlers = mp4Handlers(bytes);
+    if (handlers && !handlers.includes("vide") && handlers.includes("soun")) return "audio/mp4";
+    return brand.startsWith("qt") ? "video/quicktime" : "video/mp4";
   }
   if (
     bytes.length >= 4 &&
@@ -24,25 +29,151 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     bytes[2] === 0xdf &&
     bytes[3] === 0xa3
   ) {
+    // The Tracks element decides, when it is in the bytes: no video track
+    // and an audio track is audio/webm (a voice recording, a WebM or MKA
+    // audio file).
+    const types = ebmlTrackTypes(bytes);
+    if (types && !types.includes(1) && types.includes(2)) return "audio/webm";
     return "video/webm";
   }
   if (bytes.length >= 4 && ascii(0, 4) === "OggS") {
-    // The first Ogg page names the codec: Theora is video; Vorbis, Opus, and
-    // FLAC are audio. An unrecognized codec keeps the old video answer.
+    // The first Ogg page names the codec: Theora is video; Vorbis, Opus,
+    // FLAC, and Speex are audio. An unrecognized codec keeps the old video
+    // answer.
     const head = ascii(0, Math.min(bytes.length, 512));
     if (head.includes("theora")) return "video/ogg";
-    if (head.includes("vorbis") || head.includes("OpusHead") || head.includes("FLAC")) {
+    if (head.includes("vorbis") || head.includes("OpusHead") || head.includes("FLAC") || head.includes("Speex   ")) {
       return "audio/ogg";
     }
     return "video/ogg";
   }
-  if (bytes.length >= 3 && ascii(0, 3) === "ID3") return "audio/mpeg";
+  if (bytes.length >= 3 && ascii(0, 3) === "ID3") {
+    // An ID3v2 tag heads MP3 files, and also ADTS AAC files (a podcast's
+    // .aac) and some FLAC files: the bytes after the tag decide, when they
+    // are in the chunk. Media bench finding: an ADTS file with a tag was
+    // stored as audio/mpeg.
+    const after = id3End(bytes);
+    if (after !== null && after + 4 <= bytes.length) {
+      if (bytes[after] === 0xff && (bytes[after + 1] & 0xf6) === 0xf0) return "audio/aac";
+      if (ascii(after, after + 4) === "fLaC") return "audio/flac";
+    }
+    return "audio/mpeg";
+  }
   if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
     // MPEG audio frame sync. Layer bits 00 mean ADTS AAC; anything else is MP3.
     return ((bytes[1] >> 1) & 0x03) === 0 ? "audio/aac" : "audio/mpeg";
   }
-  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
+  // RIFF, and RF64 (EBU Tech 3306: the WAV a field recorder writes when the
+  // file may pass 4 GB; FFmpeg reads both as WAV). Media bench finding: an
+  // RF64 file was refused as not media.
+  if (bytes.length >= 12 && (ascii(0, 4) === "RIFF" || ascii(0, 4) === "RF64") && ascii(8, 12) === "WAVE") return "audio/wav";
   if (bytes.length >= 4 && ascii(0, 4) === "fLaC") return "audio/flac";
+  return null;
+}
+
+// Where the bytes after an ID3v2 tag start: the 10-byte header, the size
+// (four 7-bit bytes), and a 10-byte footer when the header says so. Null
+// when the header does not read.
+function id3End(bytes: Uint8Array): number | null {
+  if (bytes.length < 10 || bytes.subarray(6, 10).some((b) => b > 0x7f)) return null;
+  const size = (bytes[6] << 21) | (bytes[7] << 14) | (bytes[8] << 7) | bytes[9];
+  return 10 + size + (bytes[5] & 0x10 ? 10 : 0);
+}
+
+// The handler type of every track (moov/trak/mdia/hdlr): "vide", "soun",
+// "text", ... Null when no whole moov box is in the bytes (a file whose moov
+// sits at its end).
+function mp4Handlers(bytes: Uint8Array): string[] | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ascii = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
+  // The child boxes of [from, to): [type, body start, box end].
+  const boxes = (from: number, to: number): [string, number, number][] | null => {
+    const out: [string, number, number][] = [];
+    let at = from;
+    while (at + 8 <= to) {
+      let size = view.getUint32(at);
+      let header = 8;
+      if (size === 1) {
+        if (at + 16 > to) return out;
+        size = Number(view.getBigUint64(at + 8));
+        header = 16;
+      } else if (size === 0) {
+        size = to - at;
+      }
+      if (size < header) return null;
+      out.push([ascii(at + 4), at + header, at + size]);
+      at += size;
+    }
+    return out;
+  };
+  const moov = boxes(0, bytes.length)?.find(([type, , end]) => type === "moov" && end <= bytes.length);
+  if (!moov) return null;
+  const handlers: string[] = [];
+  for (const [type, start, end] of boxes(moov[1], moov[2]) ?? []) {
+    if (type !== "trak") continue;
+    const mdia = boxes(start, end)?.find(([t]) => t === "mdia");
+    const hdlr = mdia && boxes(mdia[1], mdia[2])?.find(([t]) => t === "hdlr");
+    // hdlr: version and flags (4), pre_defined (4), then handler_type.
+    if (hdlr && hdlr[1] + 12 <= hdlr[2]) handlers.push(ascii(hdlr[1] + 8));
+  }
+  return handlers;
+}
+
+// The TrackType of every track in a WebM or Matroska file (Segment/Tracks/
+// TrackEntry/TrackType): 1 video, 2 audio, 17 subtitle, ... Null when the
+// Tracks element is not whole in the bytes.
+const EBML_SEGMENT = 0x18538067;
+const EBML_TRACKS = 0x1654ae6b;
+const EBML_TRACK_ENTRY = 0xae;
+const EBML_TRACK_TYPE = 0x83;
+const EBML_CLUSTER = 0x1f43b675;
+
+function ebmlTrackTypes(bytes: Uint8Array): number[] | null {
+  // A variable-length integer at `at`: its value (the marker bit kept for an
+  // ID, dropped for a size), its length, and whether a size is "unknown".
+  const vint = (at: number, keepMarker: boolean) => {
+    const first = bytes[at];
+    if (first === undefined || first === 0) return null;
+    const length = Math.clz32(first) - 23;
+    if (at + length > bytes.length) return null;
+    let value = keepMarker ? first : first & (0xff >> length);
+    let allOnes = value === (0xff >> length);
+    for (let i = 1; i < length; i++) {
+      value = value * 256 + bytes[at + i];
+      if (bytes[at + i] !== 0xff) allOnes = false;
+    }
+    return { value, length, unknown: !keepMarker && allOnes };
+  };
+  // The child elements of [from, to): [id, body start, body end].
+  const elements = function* (from: number, to: number): Generator<[number, number, number]> {
+    let at = from;
+    while (at < to) {
+      const id = vint(at, true);
+      const size = id && vint(at + id.length, false);
+      if (!id || !size) return;
+      const start = at + id.length + size.length;
+      const end = size.unknown ? to : start + size.value;
+      yield [id.value, start, end];
+      if (size.unknown) return;
+      at = end;
+    }
+  };
+  for (const [id, start, end] of elements(0, bytes.length)) {
+    if (id !== EBML_SEGMENT) continue;
+    for (const [child, from, to] of elements(start, Math.min(end, bytes.length))) {
+      if (child === EBML_CLUSTER) return null;
+      if (child !== EBML_TRACKS) continue;
+      if (to > bytes.length) return null;
+      const types: number[] = [];
+      for (const [entry, entryFrom, entryTo] of elements(from, to)) {
+        if (entry !== EBML_TRACK_ENTRY) continue;
+        for (const [field, fieldFrom, fieldTo] of elements(entryFrom, entryTo)) {
+          if (field === EBML_TRACK_TYPE && fieldTo - fieldFrom === 1) types.push(bytes[fieldFrom]);
+        }
+      }
+      return types;
+    }
+  }
   return null;
 }
 

@@ -1883,6 +1883,8 @@ RISKS.R9 = async (theme) => {
     const second = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-again.pdf", type: "application/pdf", confirmDuplicate: true });
     const secondRow = second.id ? await documentRow(second.id) : null;
     check("R9", second.id && second.id !== solo.id && secondRow?.importRev === secondRow?.richTextRev, "the same PDF added again, confirmed, gives a new unedited import", `first ${solo.id}, second ${second.id}, second rev ${secondRow?.richTextRev}/${secondRow?.importRev}`);
+    // The new copy's add names the edited import, so the upload box says so.
+    check("R9", second.sameFileIn?.id === solo.id && second.sameFileIn?.page === false, "the new copy's add names the edited import of the same file", JSON.stringify(second.sameFileIn ?? null));
     const third = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-third.pdf", type: "application/pdf", confirmDuplicate: true });
     check("R9", third.id && third.id !== second.id && third.id !== solo.id, "an unedited import is never handed out again", `third ${third.id}`);
   }

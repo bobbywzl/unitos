@@ -259,7 +259,7 @@ function freeDetail(f: FreeScores, candidate: Doc) {
 function glyphDetail(g: GlyphScores) {
   console.log(`\nThe PDF's math glyphs: ${g.hazards} whose text layer string is not their symbol; symbols the candidate prints fewer times than the pages draw them: ${g.garbles}.`);
   if (g.missing.length > 0) console.log(`  ${g.missing.map(([s, n]) => `${s}×${n}`).join("  ")}`);
-  console.log(`Equations shown as pictures (a region of TeX fonts with a math glyph): ${g.mathImages}.`);
+  console.log(`Equations shown as pictures (a region of TeX fonts with a math glyph, no caption, no drawn shape): ${g.mathImages}.`);
   console.log(`Display equations checked against the region's glyphs: ${g.passed} of ${g.checked} draw exactly its symbols at their script levels, on the page's rows (${g.rowsWrong} on other rows).`);
   for (const f of g.fails.slice(0, 30)) {
     console.log(`  ${clip(f.latex, 110)}`);

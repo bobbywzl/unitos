@@ -61,6 +61,138 @@ function loadRenderer(): Promise<PdfJs> {
   return renderer;
 }
 
+// pdf.js 6.1.200 paints an opaque RGB image (ImageKind RGB_24BPP: every
+// photo, every color or gray scan) by turning it into RGBA 16 rows at a time
+// (putBinaryImageData, convertRGBToRGBA), and that conversion's tail loop
+// starts from the image's first byte instead of the chunk's (j = i * 4, not
+// srcPos + i * 4): each chunk walks every byte before it, writing nothing.
+// The time grows with the square of the image's height — a 12 MP photo's
+// page took 11 s, a 9000 x 9000 scan's two renders 5 minutes. pdf.js fixed
+// the loop later. Here such an image turns into RGBA once, as its data
+// reaches the page (PDFObjects.resolve, for the page's objects and the
+// document's shared ones), and pdf.js paints it by copy: the same pixels,
+// the same render. Images benchmark finding: page images of photos and
+// scans were the slowest step of every add of one.
+const RGB_24BPP = 2;
+const RGBA_32BPP = 3;
+type ImageData24 = { kind?: unknown; data?: unknown; width?: unknown; height?: unknown };
+let rgbPaintFixed = false;
+
+function rgbaImage(value: unknown): unknown {
+  const image = value as ImageData24 | null;
+  if (!image || typeof image !== "object" || image.kind !== RGB_24BPP) return value;
+  const { data, width, height } = image;
+  if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return value;
+  if (typeof width !== "number" || typeof height !== "number") return value;
+  const pixels = width * height;
+  if (data.length < pixels * 3) return value;
+  const rgba = new Uint8ClampedArray(pixels * 4);
+  for (let p = 0, q = 0; q < rgba.length; p += 3, q += 4) {
+    rgba[q] = data[p];
+    rgba[q + 1] = data[p + 1];
+    rgba[q + 2] = data[p + 2];
+    rgba[q + 3] = 255;
+  }
+  return { ...image, kind: RGBA_32BPP, data: rgba };
+}
+
+// pdf.js paints an image through a canvas of the image's own size: a
+// 25000 x 18000 one-bit scan (56 MB as decoded) asks for a 1.8 GB canvas,
+// and a 35000 x 35000 one asks for 4.9 GB, which Skia refuses. An image past
+// PAINT_MAX_PIXELS is box-averaged by a whole factor to at most
+// PAINT_TARGET_PIXELS before it reaches the page: no page image draws more
+// than 24 MP (pageImageWidth), so the page looks the same. An image at or
+// under PAINT_MAX_PIXELS is untouched, so every render it was in before
+// stays the same. Images benchmark finding: a large-format JBIG2 scan took
+// the add past 2 GB, and a giant CCITT scan's pages drew nothing.
+const GRAYSCALE_1BPP = 1;
+const PAINT_MAX_PIXELS = 100_000_000;
+const PAINT_TARGET_PIXELS = 16_000_000;
+
+type DecodedImage = { kind: number; data: Uint8Array | Uint8ClampedArray; width: number; height: number };
+
+function decodedImage(value: unknown): DecodedImage | null {
+  const image = value as ImageData24 | null;
+  if (!image || typeof image !== "object") return null;
+  const { kind, data, width, height } = image;
+  if (kind !== GRAYSCALE_1BPP && kind !== RGB_24BPP && kind !== RGBA_32BPP) return null;
+  if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return null;
+  if (typeof width !== "number" || typeof height !== "number" || width < 1 || height < 1) return null;
+  const length = kind === GRAYSCALE_1BPP ? ((width + 7) >> 3) * height : width * height * (kind === RGB_24BPP ? 3 : 4);
+  return data.length >= length ? { kind, data, width, height } : null;
+}
+
+/** An image past PAINT_MAX_PIXELS, box-averaged to at most
+    PAINT_TARGET_PIXELS, as RGBA; any other value as it is. */
+function reducedImage(value: unknown): unknown {
+  const image = decodedImage(value);
+  if (!image || image.width * image.height <= PAINT_MAX_PIXELS) return value;
+  const { kind, data, width, height } = image;
+  const k = Math.ceil(Math.sqrt((width * height) / PAINT_TARGET_PIXELS));
+  const w = Math.ceil(width / k);
+  const h = Math.ceil(height / k);
+  const channels = kind === GRAYSCALE_1BPP ? 1 : kind === RGB_24BPP ? 3 : 4;
+  const stride = kind === GRAYSCALE_1BPP ? (width + 7) >> 3 : width * channels;
+  const sum = new Float64Array(w * 4);
+  const count = new Uint32Array(w);
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let ty = 0; ty < h; ty++) {
+    sum.fill(0);
+    count.fill(0);
+    const y1 = Math.min(height, (ty + 1) * k);
+    for (let y = ty * k; y < y1; y++) {
+      const row = y * stride;
+      if (kind === GRAYSCALE_1BPP) {
+        // A set bit is white, a clear bit black (pdf.js
+        // convertBlackAndWhiteToRGBA); rows are padded to whole bytes.
+        for (let x = 0; x < width; x++) {
+          const tx = (x / k) | 0;
+          count[tx]++;
+          if ((data[row + (x >> 3)] >> (7 - (x & 7))) & 1) sum[tx * 4] += 255;
+        }
+      } else {
+        for (let x = 0, p = row; x < width; x++, p += channels) {
+          const tx = (x / k) | 0;
+          count[tx]++;
+          sum[tx * 4] += data[p];
+          sum[tx * 4 + 1] += data[p + 1];
+          sum[tx * 4 + 2] += data[p + 2];
+          sum[tx * 4 + 3] += channels === 4 ? data[p + 3] : 255;
+        }
+      }
+    }
+    for (let tx = 0; tx < w; tx++) {
+      const n = count[tx] || 1;
+      const q = (ty * w + tx) * 4;
+      if (kind === GRAYSCALE_1BPP) {
+        out[q] = out[q + 1] = out[q + 2] = sum[tx * 4] / n;
+        out[q + 3] = 255;
+      } else {
+        out[q] = sum[tx * 4] / n;
+        out[q + 1] = sum[tx * 4 + 1] / n;
+        out[q + 2] = sum[tx * 4 + 2] / n;
+        out[q + 3] = sum[tx * 4 + 3] / n;
+      }
+    }
+  }
+  return { ...(value as object), kind: RGBA_32BPP, data: out, width: w, height: h };
+}
+
+/** Once per process: images reach the page as RGBA (see above). objs is a
+    page's PDFObjects; its class is not exported, so the fix goes on its
+    prototype. */
+function fixRgbPaint(objs: unknown): void {
+  if (rgbPaintFixed || !objs) return;
+  const proto = Object.getPrototypeOf(objs) as { resolve?: (id: string, data?: unknown) => void };
+  const resolve = proto.resolve;
+  if (typeof resolve !== "function") return;
+  proto.resolve = function (this: unknown, id: string, data: unknown = null) {
+    const reduced = reducedImage(data);
+    return resolve.call(this, id, reduced === data ? rgbaImage(data) : reduced);
+  };
+  rgbPaintFixed = true;
+}
+
 /** The PDF opened for rendering, from a copy of the bytes (pdf.js detaches
     its buffer). The caller destroys it. */
 async function openForRender(bytes: Uint8Array): Promise<RenderDocument> {
@@ -69,11 +201,13 @@ async function openForRender(bytes: Uint8Array): Promise<RenderDocument> {
 }
 
 /** One page drawn on a node canvas at width. page is 1-based. */
-async function drawPage(pdf: RenderDocument, n: number, width: number) {
+async function drawPage(pdf: RenderDocument, n: number, renderWidth: RenderWidth) {
   const { createCanvas } = await import("@napi-rs/canvas");
   const page = await pdf.getPage(n);
+  fixRgbPaint(page.objs);
   try {
     const base = page.getViewport({ scale: 1 });
+    const width = widthFor(renderWidth, base.width, base.height, n);
     const size = pageSizeAt(base.width, base.height, width);
     const viewport = page.getViewport({ scale: width / Math.max(1, base.width) });
     const canvas = createCanvas(size.width, size.height);
@@ -108,6 +242,37 @@ export const PAGE_IMAGE_QUALITY = 85;
 
 export type PageSize = { width: number; height: number };
 
+// A new document's page image (pageImageWidth): a page more than twice as
+// wide as tall keeps PAGE_IMAGE_SHORT_SIDE px of height; no page draws more
+// than PAGE_IMAGE_MAX_PIXELS, the picture an image add keeps
+// (lib/handwritten/image-pdf.ts), nor more than JPEG_MAX_SIDE px a side (JPEG
+// stops at 65535).
+const PAGE_IMAGE_SHORT_SIDE = 700;
+const PAGE_IMAGE_MAX_PIXELS = 24_000_000;
+const JPEG_MAX_SIDE = 65_000;
+
+/** The width a new document's page image draws at, from the page's size in
+    points: PAGE_IMAGE_WIDTH, wider for a wide page, narrower for a page so
+    tall it would pass the pixel cap. A stored page image keeps the width it
+    was drawn at (PageImage.width, lib/handwritten/page-images.ts): an old
+    document draws at PAGE_IMAGE_WIDTH as it always did. Images benchmark
+    finding: a 9000 x 1000 panorama drew 1400 x 156, its words a few pixels
+    high, and a 1170 x 16000 screenshot drew 1400 x 19144, 27 megapixels. */
+export function pageImageWidth(pageWidth: number, pageHeight: number): number {
+  const aspect = Math.max(1, pageWidth) / Math.max(1, pageHeight);
+  const wanted = aspect > PAGE_IMAGE_WIDTH / PAGE_IMAGE_SHORT_SIDE ? PAGE_IMAGE_SHORT_SIDE * aspect : PAGE_IMAGE_WIDTH;
+  const capped = Math.min(wanted, Math.sqrt(PAGE_IMAGE_MAX_PIXELS * aspect), JPEG_MAX_SIDE, JPEG_MAX_SIDE * aspect);
+  return Math.max(1, Math.floor(capped));
+}
+
+/** A render's width: one width for every page, or one per page from its
+    size in points and its number (1-based). */
+export type RenderWidth = number | ((pageWidth: number, pageHeight: number, page: number) => number);
+
+function widthFor(width: RenderWidth, pageWidth: number, pageHeight: number, page: number): number {
+  return typeof width === "number" ? width : width(pageWidth, pageHeight, page);
+}
+
 /** The PDF's page count, from a copy of the bytes (pdf.js detaches its buffer). */
 export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
   const { getDocumentProxy } = await import("unpdf");
@@ -119,7 +284,7 @@ export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
 export async function renderPdfPage(
   bytes: Uint8Array,
   page: number,
-  width: number = PAGE_IMAGE_WIDTH,
+  width: RenderWidth = PAGE_IMAGE_WIDTH,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const pdf = await openForRender(bytes);
   try {
@@ -134,7 +299,7 @@ export async function renderPdfPage(
     (index 0 = page 1). Reads the page boxes only — no render. */
 export async function pdfPageSizes(
   bytes: Uint8Array,
-  width: number = PAGE_IMAGE_WIDTH,
+  width: RenderWidth = PAGE_IMAGE_WIDTH,
 ): Promise<PageSize[]> {
   const { getDocumentProxy } = await import("unpdf");
   const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
@@ -143,7 +308,7 @@ export async function pdfPageSizes(
     for (let n = 1; n <= pdf.numPages; n++) {
       const page = await pdf.getPage(n);
       const viewport = page.getViewport({ scale: 1 });
-      sizes.push(pageSizeAt(viewport.width, viewport.height, width));
+      sizes.push(pageSizeAt(viewport.width, viewport.height, widthFor(width, viewport.width, viewport.height, n)));
       page.cleanup();
     }
     return sizes;
@@ -164,7 +329,7 @@ function pageSizeAt(pageWidth: number, pageHeight: number, width: number): PageS
 export async function renderPdfPagesJpeg(
   bytes: Uint8Array,
   pages: number[],
-  width: number,
+  width: RenderWidth,
   onPage: (page: number, image: Uint8Array<ArrayBuffer>, size: PageSize) => Promise<boolean | void>,
 ): Promise<void> {
   const pdf = await openForRender(bytes);

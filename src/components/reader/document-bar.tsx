@@ -43,6 +43,7 @@ import {
 } from "@/components/reader/document-delete";
 import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
 import type { DocumentKind } from "@/lib/document-order";
+import type { SameFileIn } from "@/lib/parse/attach";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -61,6 +62,7 @@ import { setRevealFlag } from "@/components/reader/reveal";
 import {
   blockDocumentLine,
   keptBlockDocument,
+  SameFileLine,
   UploadAssistant,
   uploadItemTitle,
   type OpenTarget,
@@ -108,7 +110,7 @@ type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // reason "edited": a re-parse would replace an import's edits (SPEC.md §29).
 type IngestEvent =
   | { stage: string; detail?: string }
-  | { id: string; title: string; deduped: boolean }
+  | { id: string; title: string; deduped: boolean; sameFileIn?: SameFileIn }
   | { error: string; reason?: string; duplicate?: unknown };
 
 // The re-parse route's answer when a re-parse would replace an import's
@@ -623,6 +625,15 @@ export function DocumentBar({
     setTimeout(() => setNotice(null), ms);
   }
 
+  // An add from the bar made a new copy beside an edited import of the same
+  // file or page (SPEC.md §30): a passing notice whose title opens the import.
+  const [sameFile, setSameFile] = useState<SameFileIn | null>(null);
+  function showSameFile(same: SameFileIn | undefined) {
+    if (!same) return;
+    setSameFile(same);
+    setTimeout(() => setSameFile((shown) => (shown === same ? null : shown)), 10000);
+  }
+
   // The question comes back where Re-parse is: the document's actions open
   // with it, when the server answers that the import was edited.
   function askEdited(doc: AttachedDocument, as?: "article" | "handwritten") {
@@ -780,7 +791,13 @@ export function DocumentBar({
     fileLabel: string,
     kind: IngestKind,
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
-  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
+  ): Promise<{
+    id: string;
+    title: string;
+    deduped: boolean;
+    sameFileIn?: SameFileIn;
+    blockDocument: ReturnType<typeof blockDocumentLine> | null;
+  }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const emit = (stage: string, detail?: string) =>
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
@@ -973,6 +990,7 @@ export function DocumentBar({
       setDialog(false);
       openAdded(result.id);
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
+      showSameFile(result.sameFileIn);
       return true;
     } catch (err) {
       if (err instanceof DuplicateDocumentError) repeat = err.documents;
@@ -1142,6 +1160,7 @@ export function DocumentBar({
       setDialog(false);
       openAdded(result.id);
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
+      showSameFile(result.sameFileIn);
       return true;
     } catch (err) {
       if (err instanceof DuplicateDocumentError) repeat = err.documents;
@@ -1690,6 +1709,17 @@ export function DocumentBar({
           {notice}
         </span>
       )}
+      {sameFile && (
+        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs text-sage-800">
+          <SameFileLine
+            same={sameFile}
+            onOpen={(id) => {
+              setSameFile(null);
+              open(id);
+            }}
+          />
+        </span>
+      )}
       {capture?.status === "running" && (
         <span
           role="status"
@@ -1737,7 +1767,11 @@ export function DocumentBar({
               setAssistant(null);
               setAssistantHidden(false);
             }
-            if (target && target.notebookId !== undefined) openTarget(target);
+            // A repeat add's Open the one I have opens where that document
+            // is; the edited import an add made a new copy of opens plainly
+            // here (openTarget: no notebookId), and the refresh brings the
+            // new copy into the list.
+            if (target && (target.kind === "existing" || target.notebookId !== undefined)) openTarget(target);
             else if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.

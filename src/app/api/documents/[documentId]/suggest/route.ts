@@ -159,9 +159,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
           const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
           const ops = [...pass.ops, ...moves];
-          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          // Nothing landed: the summary says why, never the change it meant.
+          const summary = ops.length === 0 && pass.warnings.length > 0 ? t("api.suggestNoneLanded", { why: pass.warnings[0] }) : pass.summary;
+          send({ window: 1, ops, warnings: pass.warnings, summary });
           console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
-          send({ done: true, summary: pass.summary, warnings });
+          send({ done: true, summary, warnings });
           return;
         }
         send({ windows: windows.length + (data.reorder ? 1 : 0) });
@@ -241,7 +243,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ done: true, summary, warnings });
       } catch (err) {
         console.error("[suggest] failed:", err);
-        send({ error: failureLine(t, err, "suggest") });
+        // A pass the deadline stopped says time ran out, in the reader's
+        // words; any other failure is the one failure line (the raw text
+        // goes to the server log).
+        send({
+          error:
+            deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : failureLine(t, err, "suggest"),
+        });
       } finally {
         stopHeartbeat();
         if (!cancelled) controller.close();

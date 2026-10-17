@@ -1879,6 +1879,17 @@ export function openTypeSizedByAdvance(char: string, advance: number): TexCode |
   return SIZE_BY_CHAR.get(`Size${best + 1}-Regular`)?.get(char) ?? null;
 }
 
+/** A big operator (∑, ∏, ∫, …) of a math font the tables do not know,
+    read by its character: TeX's extension font's code for its text form or
+    its display form, with KaTeX's size font's box, since such a font stands
+    its operators on the baseline as OpenType fonts do (TeX's extension font
+    hangs them from the origin). Null for a character that is no operator
+    of the size fonts. */
+export function sizedOperator(char: string, display: boolean): TexCode | null {
+  if (!/^[∑∏∐∫∮⋃⋂⋀⋁⨄⨆⨁⨂⨀]$/u.test(char)) return null;
+  return SIZE_BY_CHAR.get(display ? "Size2-Regular" : "Size1-Regular")?.get(char) ?? null;
+}
+
 export type OpenTypeGlyph = TexCode & { gid: number; advance: number };
 
 /** The OpenType math font's glyphs a character can be, with their glyph ids

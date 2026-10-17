@@ -18,14 +18,26 @@ export type Rect = { x1: number; y1: number; x2: number; y2: number };
 /** A run of text as pdf.js's text layer reads it: its box (from its baseline, 0.8 of its size above and 0.2
     below; a column of vertical writing, its width about its origin) and its words. */
 export type TextItem = Rect & { text: string; vertical?: true };
-export type PagePaint = { width: number; height: number; images: Rect[]; items: TextItem[] };
+/** A ligature's glyph in a right-to-left script: its box, as a TextItem's, and its letters as the font's map
+    gives them, in reading order ("في", "تي", "لا"). */
+export type Ligature = Rect & { text: string };
+/** A glyph of a right-to-left script (a letter, a ligature, or a mark), its box as a TextItem's and its letters
+    as the font's map gives them; zero: the glyph draws with no advance (a mark set over a letter). */
+export type RtlGlyph = Rect & { text: string; zero?: true };
+export type PagePaint = { width: number; height: number; images: Rect[]; items: TextItem[]; ligatures?: Ligature[]; rtl?: RtlGlyph[] };
 
 /** The walk's pages kept between runs (never committed), named by the PDF's
     bytes and the walk's code, as the glyph checks keep theirs (glyphs.ts). */
 const DISK = join(ROOT, ".bench", "cache", "paint");
 const WALK_CODE = join(ROOT, "src", "lib", "parse", "pdf", "drawing.ts");
 /** This file's own reading of the walk: a change to it reads every PDF anew. */
-const FORMAT = "2";
+const FORMAT = "4";
+
+/** Letters of a right-to-left script only, no marks. */
+const RTL_LETTERS_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
+
+/** A glyph of a right-to-left script: one of its letters or a mark among the glyph's characters. */
+const RTL_GLYPH_RE = /[\p{scx=Arabic}\p{scx=Hebrew}\p{scx=Syriac}\p{scx=Thaana}\p{scx=Nko}]/u;
 
 const memo = new Map<string, Promise<PagePaint[]>>();
 
@@ -72,6 +84,16 @@ export function pdfPaint(path: string): Promise<PagePaint[]> {
             const rect = { x1: Math.max(0, Math.min(...xs)), y1: Math.max(0, Math.min(...ys)), x2: Math.min(viewport.width, Math.max(...xs)), y2: Math.min(viewport.height, Math.max(...ys)) };
             if (rect.x2 - rect.x1 >= 2 && rect.y2 - rect.y1 >= 2) out.images.push(rect);
           }
+          for (const g of drawing.glyphs) {
+            if (RTL_GLYPH_RE.test(g.unicode)) {
+              const [[x1, y], [x2]] = [at(g.x, g.y), at(g.x + g.w, g.y)];
+              const zero = g.w <= g.size * 0.02 ? { zero: true as const } : {};
+              (out.rtl ??= []).push({ x1: Math.min(x1, x2), y1: y - 0.8 * g.size, x2: Math.max(x1, x2), y2: y + 0.2 * g.size, text: g.unicode, ...zero });
+            }
+            if (Array.from(g.unicode).length < 2 || !RTL_LETTERS_RE.test(g.unicode)) continue;
+            const [[x1, y], [x2]] = [at(g.x, g.y), at(g.x + g.w, g.y)];
+            (out.ligatures ??= []).push({ x1: Math.min(x1, x2), y1: y - 0.8 * g.size, x2: Math.max(x1, x2), y2: y + 0.2 * g.size, text: g.unicode });
+          }
           const content = (await page.getTextContent()) as { items: { str?: string; transform?: number[]; width?: number; height?: number; dir?: string }[] };
           for (const item of content.items) {
             const text = (item.str ?? "").trim();
@@ -110,7 +132,12 @@ const inkMemo = new Map<string, { counts: Uint16Array; top: number } | null>();
 /** The ink in a box of a page (1-based): each pixel row's count of dark
     pixels (under 150 of 255), poppler drawing the page at SCALE pixels a
     point; the rows start at `top` (points). pdftoppm writes the picture to
-    its output only (no file). */
+    its output only (no file). A fill's inside is no ink: rows of one gray
+    across the box, three points tall or more, count none (parse bench
+    finding: a Keynote deck's slides are purple, 138 of 255, and a callout
+    box on a slide is purple too; every row under a block read as ink, and
+    a title slide's subtitle, 150 pt over its author, as a block whose
+    space no ink under it shows). A rule, thinner, stays ink. */
 export function inkRows(path: string, page: number, box: Rect): { counts: Uint16Array; top: number } | null {
   const [x, y] = [Math.max(0, Math.floor(box.x1 * SCALE)), Math.max(0, Math.floor(box.y1 * SCALE))];
   const [w, h] = [Math.ceil(box.x2 * SCALE) - x, Math.ceil(box.y2 * SCALE) - y];
@@ -129,10 +156,27 @@ export function inkRows(path: string, page: number, box: Rect): { counts: Uint16
         const [width, height] = [Number(head[1]), Number(head[2])];
         const start = head[0].length;
         const counts = new Uint16Array(height);
+        const even = new Uint8Array(height);
         for (let r = 0; r < height; r++) {
           let n = 0;
-          for (let c = 0; c < width; c++) if (pgm[start + r * width + c] < 150) n++;
+          let [lo, hi] = [255, 0];
+          for (let c = 0; c < width; c++) {
+            const v = pgm[start + r * width + c];
+            if (v < 150) n++;
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
           counts[r] = n;
+          even[r] = n > 0 && hi - lo <= 30 ? 1 : 0;
+        }
+        for (let r = 0; r < height; ) {
+          if (!even[r]) {
+            r++;
+            continue;
+          }
+          const from = r;
+          while (r < height && even[r]) r++;
+          if (r - from >= 3 * SCALE) counts.fill(0, from, r);
         }
         out = { counts, top: y / SCALE };
       }
@@ -168,8 +212,9 @@ export function inkRight(path: string, page: number, box: Rect): number | null {
 
 /** A run of rows with ink: its top and bottom, and where its letters stand
     (the last row with a third of the band's most ink or more: under it only
-    descenders reach), in points. */
-export type InkBand = { top: number; bottom: number; baseline: number };
+    descenders reach), in points; ink: the median of its rows' ink across, in
+    points (a frame's side is a rule's width, a line of words far more). */
+export type InkBand = { top: number; bottom: number; baseline: number; ink?: number };
 
 /** The bands of ink in a box of a page, top to bottom. */
 export function inkBands(path: string, page: number, box: Rect): InkBand[] {
@@ -188,7 +233,8 @@ export function inkBands(path: string, page: number, box: Rect): InkBand[] {
     const most = Math.max(...band);
     let base = r - 1;
     while (base > start && counts[base] * 3 < most) base--;
-    out.push({ top: top + start / SCALE, bottom: top + r / SCALE, baseline: top + (base + 1) / SCALE });
+    const ink = [...band].sort((x, y) => x - y)[band.length >> 1] / SCALE;
+    out.push({ top: top + start / SCALE, bottom: top + r / SCALE, baseline: top + (base + 1) / SCALE, ink });
   }
   return out;
 }

@@ -12,6 +12,7 @@ globalThis.fetch = (async () => {
   throw new Error("offline");
 }) as typeof fetch;
 const { parseHtmlContent } = await import("@/lib/parse/url");
+const { decodePage } = await import("@/lib/parse/charset");
 
 const AEB = join(import.meta.dirname, "..", "..", ".bench", "web", "aeb");
 const id = process.argv[2];
@@ -19,7 +20,7 @@ const file = readdirSync(join(AEB, "html")).find((f) => f.startsWith(id));
 if (!file) throw new Error(`No page ${id}`);
 const truth = JSON.parse(readFileSync(join(AEB, "ground-truth.json"), "utf8")) as Record<string, { url: string }>;
 const hash = file.replace(/\.html\.gz$/, "");
-const html = gunzipSync(readFileSync(join(AEB, "html", file))).toString("utf8");
+const html = decodePage(gunzipSync(readFileSync(join(AEB, "html", file))));
 const parsed = await parseHtmlContent(html, truth[hash].url);
 console.log(`title: ${parsed.title}`);
 for (const b of parsed.blocks) console.log(`${b.type.padEnd(9)} ${b.text.replace(/\s+/g, " ").slice(0, 160)}`);

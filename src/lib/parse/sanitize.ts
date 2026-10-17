@@ -63,6 +63,8 @@ const ALLOWED: Record<string, Set<string>> = {
   source: new Set(["src", "type"]),
 };
 
+const INLINE_MATH_ATTRS = new Set(["data-type", "data-latex"]);
+
 const DROP_ENTIRELY = new Set(["script", "style", "iframe", "object", "embed", "noscript", "form", "input", "button", "link", "meta"]);
 
 // Embedded players kept as iframes; anything else is dropped by DROP_ENTIRELY.
@@ -196,9 +198,20 @@ export function sanitizeSvgElement(svg: Element): boolean {
   return walk(svg);
 }
 
+// One parser for every call. A jsdom window per call built the window's
+// whole interface set each time, for a fragment of a few elements, once per
+// figure and table of a page (parse loop finding: a twentieth of a web
+// page's parse). A DOMParser document parses the same html the same way:
+// the same parser, scripting off as jsdom's default window has it.
+let parser: DOMParser | null = null;
+
+function parseBody(html: string): Document {
+  if (!parser) parser = new new JSDOM("").window.DOMParser();
+  return parser.parseFromString(`<body>${html}</body>`, "text/html");
+}
+
 export function sanitizeHtml(html: string, baseUrl?: string): string {
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const document = dom.window.document;
+  const document = parseBody(html);
 
   const resolveUrl = (el: Element, attr: string): boolean => {
     const value = el.getAttribute(attr) ?? "";
@@ -286,8 +299,11 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         continue;
       }
       const allowed = ALLOWED[tag];
+      // An inline formula keeps its TeX (lib/parse/url.ts normalizeInlineMath):
+      // an import's table cell draws it as an inline equation.
+      const inlineMath = tag === "span" && child.getAttribute("data-type") === "inline-math";
       for (const attr of [...child.attributes]) {
-        if (!allowed.has(attr.name)) child.removeAttribute(attr.name);
+        if (!allowed.has(attr.name) && !(inlineMath && INLINE_MATH_ATTRS.has(attr.name))) child.removeAttribute(attr.name);
       }
       if ((tag === "p" || tag === "figcaption") && centered && child.closest("figure")) child.setAttribute("class", "center");
       if (wordStyle) child.setAttribute("style", wordStyle);

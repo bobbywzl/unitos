@@ -64,6 +64,31 @@ export function readSidx(bytes: Uint8Array, index: ByteRange): Segment[] | null 
   return segments;
 }
 
+/** Every media segment of the stream. A stream may index its segments in a
+    chain: a sidx box before each segment (or run of segments), the next
+    one right after the segments the last one indexes. Null when a moof or
+    mdat box is left that no sidx indexes: a split would drop its audio. */
+function indexedSegments(bytes: Uint8Array, index: ByteRange): Segment[] | null {
+  const segments: Segment[] = [];
+  let next: ByteRange | null = index;
+  while (next) {
+    const run = readSidx(bytes, next);
+    if (!run) return null;
+    segments.push(...run);
+    const last = run[run.length - 1];
+    const at = last.offset + last.size;
+    next = at + 8 <= bytes.length && box(bytes, at) === "sidx" ? { start: at, end: at + u32(bytes, at) - 1 } : null;
+  }
+  const last = segments[segments.length - 1];
+  for (let at = last.offset + last.size; at + 8 <= bytes.length; ) {
+    const size = u32(bytes, at);
+    if (box(bytes, at) === "moof" || box(bytes, at) === "mdat") return null;
+    if (size < 8) break;
+    at += size;
+  }
+  return segments;
+}
+
 /** The stream split into chunks under `maxChunkBytes`, each the init segment
     plus a run of whole media segments, with the time its first segment
     starts at. Null when the stream is not indexed the way YouTube's are, or
@@ -74,7 +99,7 @@ export function splitFmp4(
   maxChunkBytes: number,
 ): Mp3Chunk[] | null {
   if (ranges.init.start !== 0 || ranges.init.end + 1 !== ranges.index.start) return null;
-  const segments = readSidx(bytes, ranges.index);
+  const segments = indexedSegments(bytes, ranges.index);
   if (!segments) return null;
   const init = bytes.subarray(ranges.init.start, ranges.init.end + 1);
   if (init.length >= maxChunkBytes) return null;
