@@ -11006,7 +11006,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           Extract — stands over the scroller's top, in the place and height
           of the page editor's title row (docs-editor.tsx) or of the block
           article's top padding, so a view switch moves nothing (SPEC.md
-          §6). The page editor keeps Collapse in its toolbar, as in Normal. */}
+          §6). The page editor keeps Breakwork and Collapse under its toolbar. */}
       {split && !transcript && (
         <div
           className={`${PANE_HEADER}${richText ? "" : " bg-paper"}`}
@@ -11170,13 +11170,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             ? {
                 ...richText,
                 canEdit,
-                // Breakwork and Collapse: the rail's Extract tab has Extract
-                // from the article (PAGE12-11).
+                // Breakwork, Collapse, and Extract: under the toolbar's
+                // right end, as at the article's top right. In a split view
+                // Extract stays in the pane header.
                 aiControls: !embedded ? (
-                  <div className="flex items-center gap-2">
+                  <>
                     {structureButton}
                     {collapseButton}
-                  </div>
+                    {!split && distillButton}
+                  </>
                 ) : null,
                 notebookId,
                 documents: attachedDocuments,

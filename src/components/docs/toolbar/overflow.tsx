@@ -24,12 +24,9 @@ export type ToolbarGroup = {
   fold?: number;
 };
 
-/** The mode's name box, open and folded, and a Unitos tool folded to its
-    symbol (Collapse; 8 px apart) (css/toolbar.css). */
+/** The mode's name box, open and folded (css/toolbar.css). */
 const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
-const UNITOS_FOLDED = 30;
-const UNITOS_GAP = 8;
 /** More (⋯) with its margins. */
 const MORE = 32;
 /** How long after the row mounts the mode's name starts to slide when it folds. */
@@ -48,7 +45,7 @@ export function ToolbarRow({
   onEscape,
 }: {
   groups: ToolbarGroup[];
-  /** The right end: the status, the Unitos tools (in .docs-tb-unitos), and the mode. */
+  /** The right end: the status and the mode. */
   right: ReactNode;
   label: string;
   moreLabel: string;
@@ -59,11 +56,10 @@ export function ToolbarRow({
   const rightRef = useRef<HTMLDivElement>(null);
   const groupRefs = useRef(new Map<string, HTMLDivElement>());
   const widths = useRef(new Map<string, number>());
-  const unitosOpen = useRef(0);
   const moreRef = useRef<HTMLButtonElement>(null);
   // The keys of the groups in More, in the row's order, joined by a space.
   const [hiddenKeys, setHiddenKeys] = useState("");
-  const [folded, setFolded] = useState<"tools" | "mode" | null>(null);
+  const [folded, setFolded] = useState<"mode" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   // The groups that just came back from the bubble fade in.
   const [lastHidden, setLastHidden] = useState(hiddenKeys);
@@ -84,18 +80,12 @@ export function ToolbarRow({
     // The right end without the boxes that fold (the name's width animates),
     // then with them open and folded.
     const caption = rightEl.querySelector<HTMLElement>(".docs-mode-caption");
-    const unitos = rightEl.querySelector<HTMLElement>(".docs-tb-unitos");
-    if (unitos && !rightEl.hasAttribute("data-folded")) unitosOpen.current = unitos.offsetWidth;
-    const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0) - (unitos?.offsetWidth ?? 0);
-    const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
-    // Only the drawn tools: Extract is hidden below md.
-    const tools = unitos ? [...unitos.querySelectorAll("button")].filter((b) => b.getClientRects().length > 0).length : 0;
-    const unitosFolded = tools * UNITOS_FOLDED + Math.max(0, tools - 1) * UNITOS_GAP;
-    const rightTools = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
-    const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + unitosFolded;
+    const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0);
+    const rightOpen = base + (caption ? CAPTION_OPEN : 0);
+    const rightFolded = base + (caption ? CAPTION_FOLDED : 0);
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
-    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightTools ? "tools" : "mode";
+    const nextFolded = total <= inner - rightOpen ? null : "mode";
     const room = inner - rightFolded;
     const hide = new Set<number>();
     if (total > room) {
@@ -131,9 +121,9 @@ export function ToolbarRow({
   });
 
   // The row fits when its groups change, and when the row, a group on it,
-  // or the right end changes size (the status's words, the Unitos tools, a
-  // style's name): a render alone measures nothing, so typing in a long
-  // document forces no layout here (EDGE15-12).
+  // or the right end changes size (the status's words, a style's name): a
+  // render alone measures nothing, so typing in a long document forces no
+  // layout here (EDGE15-12).
   const groupKeys = groups.map((g) => g.key).join(" ");
   useLayoutEffect(() => {
     fitRef.current();

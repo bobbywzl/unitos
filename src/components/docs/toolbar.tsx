@@ -230,7 +230,6 @@ export function DocsToolbar({
   canEdit,
   zoom,
   onZoom,
-  aiControls,
   headerHidden,
   onToggleHeader,
   onInsertImage,
@@ -248,7 +247,6 @@ export function DocsToolbar({
   canEdit: boolean;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
-  aiControls?: ReactNode;
   /** The document's status and the version clock, at the row's right end. */
   status?: ReactNode;
   /** The pane is too narrow for the page: the outline's button is on the
@@ -837,7 +835,6 @@ export function DocsToolbar({
               </Btn>
             )}
             {status && <div className="docs-tb-status">{status}</div>}
-            {aiControls && <div className="docs-tb-unitos">{aiControls}</div>}
             {canEdit && (
               <>
                 <Sep className="docs-tb-mode-sep" />

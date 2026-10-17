@@ -501,7 +501,8 @@ export function DocsEditor({
   highlightsByBlock: Record<string, Highlight[]>;
   /** The reader saves the editor's typing before it stores an anchor. */
   flushRef: React.MutableRefObject<(() => Promise<void>) | null>;
-  /** The Unitos tools that sit at the toolbar's right end (Extract). */
+  /** The Unitos tools (Breakwork, Collapse, Extract): a row under the
+      toolbar's right end. */
   aiControls?: ReactNode;
   /** An import; null for a blank document. */
   imported?: Imported | null;
@@ -731,9 +732,9 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
-  // The save state and the Unitos tools reach the toolbar's row on their
-  // own (useLive): a save, or a render of the reader around the page (its
-  // toolbox opening), redraws them, not the whole row.
+  // The save state and the Unitos tools reach the header on their own
+  // (useLive): a save, or a render of the reader around the page (its
+  // toolbox opening), redraws them, not the whole toolbar.
   const saveLive = useLive(shownSaveState);
   const aiLive = useLive<ReactNode>(aiControls ?? null);
   const hasAi = Boolean(aiControls);
@@ -982,7 +983,6 @@ export function DocsEditor({
             zoom={zoom}
             onZoom={setZoom}
             pageless={shownSetup.pageless}
-            aiControls={hasAi ? <LiveSlot live={aiLive} /> : undefined}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
             narrowPane={!outlineRoom}
@@ -995,6 +995,13 @@ export function DocsEditor({
             onInsertImage={insertImage}
           />
           {!narrow && <PageRuler {...area} />}
+          {/* The Unitos tools: under the toolbar's right end, over the
+              canvas, so the page does not move down. */}
+          {hasAi && (
+            <div className="docs-unitos-row">
+              <LiveSlot live={aiLive} />
+            </div>
+          )}
         </ModeLock.Provider>
       ),
     [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, hasAi, aiLive, headerHidden, insertImage, writable, saveLive, outlineRoom, narrow],
