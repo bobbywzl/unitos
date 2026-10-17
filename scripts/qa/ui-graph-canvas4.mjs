@@ -1,8 +1,9 @@
 // Round 4 canvas checks (GRAPH4): the view stays where the reader clicks
 // (WALK4-01), a tapped node stays above the phone's sheet (WALK4-10), the
 // open link is lit (WALK4-04), labels tell titles apart and stay inside the
-// canvas (VIEW4-05), a quiet far zoom (VIEW4-06), the key explains the curve
-// marks (WALK4-13), and a sent reply and an Accept show at once (WALK4-15).
+// canvas (VIEW4-05), a quiet canvas at every zoom (VIEW4-06), the key says
+// where the counts are (WALK4-13), and a sent reply and an Accept show at
+// once (WALK4-15).
 //   BASE=http://localhost:3162 DB=dissect_r4graph4 TAG=after node scripts/qa/ui-graph-canvas4.mjs
 // WRITES=1 adds the reply and Accept checks (they write a reply and accept a
 // recommended link in DB, so run them on a copy).
@@ -108,11 +109,13 @@ try {
     await page.waitForTimeout(300);
     const key = await page.locator('[role="dialog"][aria-label]').filter({ has: page.locator("ul") }).last().innerText();
     if (lang === "en") await shot(page, "WALK4-13");
-    // [view10] VIEW10-03: the key says each mark once; the pending dot is explained in the notes chip's row
-    // ("…; a dot when one is pending" / "…有待定笔记时带一个点"), and the ? and the far-zoom ring in one row.
-    const want = lang === "en" ? ["number of links", "Open replies", "quote both documents", "a dot when one is pending", "Zoomed out"] : ["链接数", "未解决回复", "同时引用", "待定笔记", "缩小视图"];
-    check(`WALK4-13 ${lang} the key names the curve marks`, want.every((w) => key.includes(w)), want.filter((w) => !key.includes(w)).join(", "));
-    check(`WALK4-13 ${lang} no chip reads 0`, (await page.locator("[data-graph-node-notes]").allInnerTexts()).every((s) => !/^\s*0\b/.test(s)));
+    // The canvas draws no notes chip and no curve mark (Linda, 17 Oct): the key's notes group is the note
+    // curve alone, and its last line says where the counts are (the node card, the curve's list).
+    const want = lang === "en" ? ["quotes both documents", "in its card", "in its list"] : ["同时引用这两个文档", "卡片", "列表"];
+    check(`WALK4-13 ${lang} the key names the note curve and where the counts are`, want.every((w) => key.includes(w)), want.filter((w) => !key.includes(w)).join(", "));
+    const gone = lang === "en" ? ["number of links", "Open replies", "a dot when one is pending", "Zoomed out"] : ["链接数", "未解决回复", "待定笔记", "缩小视图"];
+    check(`WALK4-13 ${lang} the key names no curve mark`, gone.every((w) => !key.includes(w)), gone.filter((w) => key.includes(w)).join(", "));
+    check(`WALK4-13 ${lang} the canvas draws no notes chip`, (await page.locator("[data-graph-node-notes], [data-graph-node-comments]").count()) === 0);
     await context.close();
   }
 
@@ -196,35 +199,40 @@ try {
     await context.close();
   }
 
-  // ── VIEW4-06: a quiet far zoom; marks at a near zoom ──
+  // ── VIEW4-06: a quiet canvas at every zoom (Linda, 17 Oct): no chip on a node, no mark on a curve ──
+  const quiet = (page) =>
+    page.evaluate(() => ({
+      zoom: document.querySelector(".corpus-graph")?.style.getPropertyValue("--graph-zoom") || "",
+      chips: document.querySelectorAll("[data-graph-node-notes], [data-graph-node-comments]").length,
+      marks: document.querySelectorAll("[data-curve-marks], [data-graph-curve-mark], .graph-edge-pill").length,
+      rings: document.querySelectorAll(".graph-coverage-ring").length,
+      nodes: document.querySelectorAll(".react-flow__node").length,
+    }));
   for (const [nb, w, h] of [[BIG, 1440, 900], [NB40, 390, 844], [NB40, 1440, 900]]) {
     const { page, context } = await open(nb, w, h, "en");
-    const m = await page.evaluate(() => {
-      const shown = (sel) => [...document.querySelectorAll(sel)].filter((e) => e.getBoundingClientRect().width > 0).length;
-      return {
-        far: document.querySelector(".corpus-graph")?.hasAttribute("data-far"),
-        chips: shown("[data-graph-node-notes]"),
-        notes: shown('[data-graph-curve-mark="notes"]'),
-        counts: shown('[data-graph-curve-mark="count"]'),
-        replies: shown('[data-graph-curve-mark="replies"]'),
-        repliesAll: document.querySelectorAll('[data-graph-curve-mark="replies"]').length,
-      };
-    });
+    const m = await quiet(page);
     await shot(page, `VIEW4-06-${nb.slice(-4)}-${w}`);
-    if (m.far) check(`VIEW4-06 ${nb.slice(-4)} ${w}: far zoom hides chips and pills`, m.chips === 0 && m.notes === 0 && m.counts === 0, JSON.stringify(m));
-    else console.log(`note: ${nb.slice(-4)} ${w} is not at a far zoom`, JSON.stringify(m));
-    check(`VIEW4-06 ${nb.slice(-4)} ${w}: the reply marks still draw`, m.replies === m.repliesAll, JSON.stringify(m));
+    check(`VIEW4-06 ${nb.slice(-4)} ${w}: no chip on a node, no mark on a curve`, m.nodes > 0 && m.chips === 0 && m.marks === 0, JSON.stringify(m));
     await context.close();
   }
   {
     const { page, context } = await open(NB, 1440, 900, "en");
-    const m = await page.evaluate(() => ({
-      far: document.querySelector(".corpus-graph")?.hasAttribute("data-far"),
-      chips: [...document.querySelectorAll("[data-graph-node-notes]")].filter((e) => e.getBoundingClientRect().width > 0).length,
-      ones: [...document.querySelectorAll('[data-graph-curve-mark="notes"]')].map((e) => e.textContent),
-    }));
-    check("VIEW4-06 7 documents: the near zoom keeps the chips", !m.far && m.chips > 0, JSON.stringify(m));
-    check("VIEW3-08 a one-note pill shows the mark alone", m.ones.every((s) => s !== "1"), JSON.stringify(m.ones));
+    const m = await quiet(page);
+    check("VIEW4-06 7 documents: no chip on a node, no mark on a curve", m.nodes > 0 && m.chips === 0 && m.marks === 0, JSON.stringify(m));
+    // The notes are in the node card (graph-notes.tsx NodeNotesRows): hover a document a note quotes.
+    const noted = psql(
+      `SELECT d.id FROM "Document" d JOIN "NotebookDocument" nd ON nd."documentId" = d.id WHERE nd."notebookId" = '${NB}' AND EXISTS (SELECT 1 FROM "Note" n JOIN "Section" s ON s.id = n."sectionId" WHERE s."notebookId" = '${NB}' AND NOT s.hidden AND (n."documentId" = d.id OR EXISTS (SELECT 1 FROM "Source" so WHERE so."noteId" = n.id AND so."documentId" = d.id))) LIMIT 1`,
+    );
+    if (noted) {
+      const nb0 = await nodeBox(page, noted);
+      await page.mouse.move(nb0.x + nb0.width / 2, nb0.y + nb0.height / 2);
+      await page.waitForTimeout(900);
+      const rows = await page.locator("[data-graph-hover-notes] [data-graph-note-row]").count();
+      await shot(page, "VIEW4-06-card");
+      check("VIEW4-06 7 documents: the node card lists the notes", rows > 0, `${rows} rows`);
+      await page.mouse.move(4, 300);
+      await page.waitForTimeout(400);
+    } else console.log("note: no document with a note in the 7-document project");
 
     // ── WALK4-15 (writes) ──
     if (WRITES) {

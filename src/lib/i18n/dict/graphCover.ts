@@ -44,21 +44,15 @@ const en = {
   commentOpenTitle: "Open this comment in the reader",
   commentResolved: "Resolved",
   commentWaitsTitle: "Waiting on you: the newest words are another person's and not resolved",
-  keyComments: "Open comments on a document",
-  // [view10] VIEW10-03: the waiting mark, explained once: the ? and the far-zoom ring.
-  keyWaiting: "? beside a count: a reply or a comment waits on you; zoomed out, the ring turns comment blue.",
-  keyNodeNotes: "Notes written in this document or quoting it; a dot when one is pending",
   // [lists8] WALK8-02: the Documents head's open comments, pressed.
   commentsAllTitle: "List every open comment, under its document. Press again for the documents.",
   // [lists8] WALK8-11: a card whose comments are all resolved.
   commentsResolvedOne: "1 resolved comment",
   commentsResolvedMany: "{n} resolved comments",
-  // [layer5] Replies another person wrote since this account last opened the link (WALK5-07).
+  // [layer5] Replies another person wrote since this account last opened the link (WALK5-07; the link's panel).
   newRepliesOne: "1 new",
   newRepliesMany: "{n} new",
-  newRepliesTitle: "A reply since you last opened this link",
-  // [lists9] What is new since this account's last visit (WALK9-06): a link another person made, a comment or a reply another person wrote.
-  newLinkTitle: "A link made since your last visit",
+  // [lists9] What is new since this account's last visit (WALK9-06): a comment or a reply another person wrote; the lists' counts.
   newCommentTitle: "A comment or a reply since your last visit",
   newSinceVisitOne: "1 new",
   newSinceVisitMany: "{n} new",
@@ -134,16 +128,11 @@ const zh: Record<keyof typeof en, string> = {
   commentOpenTitle: "在阅读器中打开这条评论",
   commentResolved: "已解决",
   commentWaitsTitle: "待你回复：最新一段话是别人写的且未解决",
-  keyComments: "文档上未解决的评论",
-  keyWaiting: "数字旁的 ?：有回复或评论待你回复；缩小视图时，改为把环画成评论颜色。",
-  keyNodeNotes: "在这个文档中写下或引用它的笔记；有待定笔记时带一个点",
   commentsAllTitle: "按文档列出每条未解决的评论。再按一次回到文档。",
   commentsResolvedOne: "1 条已解决的评论",
   commentsResolvedMany: "{n} 条已解决的评论",
   newRepliesOne: "1 条新回复",
   newRepliesMany: "{n} 条新回复",
-  newRepliesTitle: "你上次打开这条链接之后的回复",
-  newLinkTitle: "你上次来之后别人新加的链接",
   newCommentTitle: "你上次来之后别人新写的评论或回复",
   newSinceVisitOne: "1 项新内容",
   newSinceVisitMany: "{n} 项新内容",

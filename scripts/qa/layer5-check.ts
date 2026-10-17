@@ -1,15 +1,15 @@
 // The reader's layer on the graph (round 5 LAYER5: VIEW5-01/02/07/08,
 // WALK5-06/07): the comments in the coverage answer, the whole-document
-// part, Gaps only's reasons, No reply's "waiting for your reply", the
-// comments chip as a room for a curve's marks, and how long the coverage
-// read takes. Projects missing from the database are skipped.
+// part, Gaps only's reasons, No reply's "waiting for your reply", and how
+// long the coverage read takes (the comments chip and the curve marks are
+// gone from the canvas: Linda, 17 Oct). Projects missing from the database
+// are skipped.
 // Run: DATABASE_URL=postgresql://postgres:postgres@localhost:5432/<db> npx tsx scripts/qa/layer5-check.ts
 // Read only: it writes nothing.
 import assert from "node:assert/strict";
 import { db } from "@/lib/db";
 import { projectCoverage } from "@/lib/graph/coverage";
 import { gapReasons, openComments, waitsForReply, commentWaits, type DocumentCoverage } from "@/lib/graph/coverage-view";
-import { nodeRoom } from "@/lib/graph/curve-place";
 
 let pass = 0;
 const ok = (cond: boolean, label: string) => {
@@ -74,9 +74,6 @@ async function main() {
   ok(gapReasons(doc([{ blockId: "a", noted: 1, annotated: 0 }])).length === 0, "a noted, opened document has no gap");
   ok(JSON.stringify(gapReasons(doc([{ blockId: "", noted: 0, annotated: 0, whole: true }], false))) === '[{"kind":"notOpened"},{"kind":"whole"}]', "not opened, no note on the whole document");
   ok(JSON.stringify(gapReasons(doc([{ blockId: "a", noted: 0, annotated: 0 }, { blockId: "b", noted: 2, annotated: 0 }]))) === '[{"kind":"parts","n":1,"m":2}]', "1 of 2 parts with no note");
-  const [plain] = nodeRoom(0, 0, 1, "A");
-  const [chipped] = nodeRoom(0, 0, 1, "A", 30);
-  ok(chipped.x1 - plain.x1 === 34, "the comments chip widens the node's room (VIEW5-01 (a))");
 
   // Linda's shape with an hour of reading (seed-hour.mjs): 10 comments, 1 resolved.
   const LINDA = process.env.LINDA ?? "cmuy46sr4005b7doy5eghkkeq";

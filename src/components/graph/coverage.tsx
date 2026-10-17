@@ -12,14 +12,14 @@
 // useCoverageGaps, AllComments.
 //
 // [layer5] The reader's layer (VIEW5-01/02, WALK5-06/07): the comments on
-// each document (a small mark on the node, one line in the card and the
-// row that opens into them, the count in the head text), a document with
-// no parts as one part,
-// the whole document, Gaps only as "no note here" with the reason on each
-// row, and "waiting on you" (the last open words are another person's).
-// NodeComments, NodeCommentsLine, DocumentComments, GapReasons,
-// useWaitsForReply. [style9] VIEW9-05, WALK9-03: "N waiting on you" is a
-// press that lists every waiting link and comment (AllComments, waitingOnly).
+// each document (one line in the card and the row that opens into them, the
+// count in the head text; the node itself draws no comment mark, Linda,
+// 17 Oct), a document with no parts as one part, the whole document, Gaps
+// only as "no note here" with the reason on each row, and "waiting on you"
+// (the last open words are another person's). NodeCommentsLine,
+// DocumentComments, GapReasons, useWaitsForReply. [style9] VIEW9-05,
+// WALK9-03: "N waiting on you" is a press that lists every waiting link and
+// comment (AllComments, waitingOnly).
 
 import { ACTION, ACTION_ON, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -258,8 +258,8 @@ export function CoverageHead({
   ].filter(Boolean);
   const people = [
     // [lists8] WALK8-02: the open comments, a press that lists them all.
-    // [view10] VIEW10-02: the chip form, as on the node and the card: the
-    // comment mark and the count; the words are the name and the tooltip.
+    // [view10] VIEW10-02: the comment mark and the count, as in the card;
+    // the words are the name and the tooltip.
     open.length > 0 && (
       <button
         key="comments"
@@ -294,7 +294,7 @@ export function CoverageHead({
       </button>
     ),
     // [lists9] WALK9-06: the links, comments, and replies another person made
-    // since this account's last visit (the dot on the curve and on the chip).
+    // since this account's last visit (the dot on the rows).
     fresh > 0 && (
       <span key="new" data-graph-coverage-new={fresh} data-tip={t("graphCover.newSinceVisitTitle", { n: fresh })} className="text-[var(--kind-comment)]">
         {fresh === 1 ? t("graphCover.newSinceVisitOne") : t("graphCover.newSinceVisitMany", { n: fresh })}
@@ -446,13 +446,7 @@ export function PartDot({ documentId, blockId }: { documentId: string; blockId: 
 export function CoverageRing({ documentId, size }: { documentId: string; size: number }) {
   const t = useT();
   const c = useDocumentCoverage(documentId);
-  // [style9] VIEW9-01: a comment waiting on this account marks the ring
-  // (data-waits): zoomed out, where the comments chip hides, globals.css
-  // draws the ring in the comment color, so every waiting node is marked at
-  // rest, at 40 documents and on a phone too.
-  const waits = useCommentWaits();
   if (!c || (c.parts.length === 0 && c.notes === 0)) return null;
-  const waiting = openComments(c).some(waits);
   const share = notedShare(c);
   const box = size + 11;
   const noted = c.parts.filter((p) => p.noted > 0).length;
@@ -468,7 +462,6 @@ export function CoverageRing({ documentId, size }: { documentId: string; size: n
     <svg
       data-graph-coverage-ring={documentId}
       data-share={share.toFixed(2)}
-      data-waits={waiting ? "" : undefined}
       role="img"
       aria-label={label}
       width={box}
@@ -483,10 +476,11 @@ export function CoverageRing({ documentId, size }: { documentId: string; size: n
   );
 }
 
-// [layer5] The reader's comments on the graph (VIEW5-01/02): a small mark
-// right of the node's notes chip, one line in the card and in the Documents
-// row that opens into the comments. Every row opens the comment in the reader, at the address an
-// annotation reference uses. Stored rows only (the coverage answer).
+// [layer5] The reader's comments on the graph (VIEW5-01/02): one line in
+// the node's card and in the Documents row that opens into the comments; the
+// node itself draws no mark. Every row opens the comment in the reader, at
+// the address an annotation reference uses. Stored rows only (the coverage
+// answer).
 
 /** The "?" a comment waiting on this account carries ([lists8] WALK8-01:
     commentWaits, not the comment's last character). */
@@ -508,45 +502,6 @@ export function useProjectCoverage(): ProjectCoverage | null {
   return useContext(CoverageContext).coverage;
 }
 
-/** On a node: the comment glyph and the open comments, a "?" when one
-    waits on this account. Hidden at a far zoom, like the notes chip;
-    [style10] WALK10-03: on a phone a waiting node keeps it (data-waits,
-    globals.css), since the + button never reaches the chips there. */
-export function NodeComments({ documentId }: { documentId: string }) {
-  const t = useT();
-  const waits = useCommentWaits();
-  const isNew = useNewComments();
-  const open = useDocumentComments(documentId).filter((c) => c.open);
-  if (open.length === 0) return null;
-  const label = open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length });
-  const waiting = open.some(waits);
-  return (
-    <span
-      data-graph-node-comments={open.length}
-      data-waits={waiting ? "" : undefined}
-      aria-label={label}
-      data-tip={label}
-      className={`flex items-center gap-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}
-    >
-      <CommentIcon size={10} />
-      {open.length}
-      {waiting && "?"}
-      {/* [lists9] A comment or a reply another person wrote since this account's last visit (WALK9-06): the curve's dot. */}
-      {open.some(isNew) && <span data-graph-node-new aria-label={t("graphCover.newCommentTitle")} className="ml-px size-1.5 rounded-full bg-[var(--kind-comment)]" />}
-    </span>
-  );
-}
-
-/** How wide the node's comments chip runs, in flow units (curve-place.ts
-    keeps a curve's marks off it). 0: no chip. `waits`: useCommentWaits, so
-    the "?" counts only where the chip draws it ([lists9] WALK9-02, WALK9-09:
-    not for a viewer, not on a removed collaborator's words). */
-export function nodeCommentsWidth(c: DocumentCoverage | null | undefined, waits: (x: GraphComment) => boolean): number {
-  const open = openComments(c);
-  if (open.length === 0) return 0;
-  return 13 + String(open.length).length * 6 + (open.some(waits) ? 5 : 0);
-}
-
 /** One comment as a row: [lists8] its author's badge (WALK8-02), its words
     (three lines), [style9] WALK9-04: when it waits on this account, the
     newest reply's words under them with their author's badge (the words
@@ -559,7 +514,7 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
   const router = useRouter();
   const { myId, people } = useCollab();
   const commentWaitsOn = useCommentWaits();
-  // [lists9] WALK9-06: new since this account's last visit (the chip's dot); the press marks it looked at.
+  // [lists9] WALK9-06: new since this account's last visit (the row's dot); the press marks it looked at.
   const fresh = useNewComment(c);
   const markSeen = useMarkCommentSeen();
   // The badge only when the project has another person: a reader alone wrote every comment.
@@ -606,7 +561,7 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
           </span>
         )}
       </span>
-      {/* [lists9] WALK9-06: the same 6 px dot as the node's chip. */}
+      {/* [lists9] WALK9-06: the 6 px dot of what is new. */}
       {fresh && <span data-graph-comment-new aria-label={t("graphCover.newCommentTitle")} className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--kind-comment)]" />}
       {waiting && (
         <span className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 ${TEXT_META} text-[var(--kind-comment)]`}>
@@ -704,10 +659,9 @@ export function NodeCommentsLine({
           className={`inline-flex min-h-6 items-center gap-1 ${TEXT_META} font-semibold hover:underline pointer-coarse:min-h-10 ${noneOpen ? "text-sand-600" : "text-[var(--kind-comment)]"}`}
         >
           <CommentIcon size={11} />
-          {/* [style9] On a phone the press takes the node chip's form, the
-              glyph and the count ("1 ?"), so the facts line and it share
-              one line of the bottom card (VIEW8-04); the words stay for a
-              screen reader. */}
+          {/* [style9] On a phone the press is the glyph and the count
+              ("1 ?"), so the facts line and it share one line of the bottom
+              card (VIEW8-04); the words stay for a screen reader. */}
           <span className="max-md:sr-only">
             {noneOpen
               ? resolved === 1

@@ -25,24 +25,17 @@ import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
-import { CommentIcon, FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
+import { FilmIcon, MaximizeIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
-import { nodeRoom, placeMarks, type MarkCurve } from "@/lib/graph/curve-place";
 import { labelStarts } from "@/lib/graph/label-start";
 import { useWantProvenance } from "@/components/graph/provenance-want";
 import { markAccepted, unmarkAccepted } from "@/components/graph/accepted-now";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
-  CurveMarks,
-  MarkPlacesContext,
-  marksWidth,
-  noteControl,
-  openReplies,
   useGraphNotes,
-  NodeNotes,
   NodeNotesRows,
   NoteEdge,
   PairNotes,
@@ -57,9 +50,7 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
 import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
-import { CoverageRing, useDocumentCoverage, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
-// [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
-import { NodeComments, nodeCommentsWidth, useCommentWaits, useProjectCoverage } from "@/components/graph/coverage";
+import { CoverageRing, useDocumentCoverage, useProjectCoverage } from "@/components/graph/coverage"; // [cover4] [layer5]
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
@@ -123,15 +114,6 @@ const lodKeep = (w: number, h: number) => Math.max(4, Math.min(12, Math.round((w
 const LABEL_SCALE_MAX = 1 / FIT_MIN_ZOOM;
 const LABEL_WIDTH_SCALE_MAX = 1.35;
 const labelScale = (zoom: number) => Math.min(LABEL_SCALE_MAX, Math.max(1, 1 / zoom));
-// Below this zoom the canvas is quiet (VIEW4-06): no notes chip on a node,
-// and a curve's link count and notes pill only while it is lit; the replies
-// mark always draws. The counts stay in the cards.
-// [style10] VIEW10-05: a band, not one threshold: far turns on under
-// FAR_ZOOM_ON and off over FAR_ZOOM_OFF; between them the last state holds,
-// so a pinch across 0.70 does not pop the chips in and out or flip the
-// waiting rings between sage and comment blue.
-const FAR_ZOOM_ON = 0.68;
-const FAR_ZOOM_OFF = 0.73;
 
 /** A node's extent in flow units around its dot's center, label included,
     at a zoom: what the fit frames and what a pinned card keeps in view. */
@@ -305,16 +287,6 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       >
         {data.title}
       </span>
-      {/* [graph-notes] The notes chip sits right of the dot, clear of the
-          label under it. */}
-      {/* [style10] VIEW10-05: the chips clear the ring, which grows in flow units as the view zooms out (--graph-ring-grow, globals.css). */}
-      <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px + var(--graph-ring-grow, 0px))` }}>
-        <span className="flex items-center gap-1">
-          <NodeNotes documentId={id} />
-          {/* [layer5] The reader's open comments (VIEW5-01). */}
-          {!data.generated && <NodeComments documentId={id} />}
-        </span>
-      </span>
       {/* [view2] Find's passages in this document: a clay count left of the dot. */}
       {found > 0 && (
         <span
@@ -354,8 +326,8 @@ function useScreenPoint(p: Point): Point {
 // made, and the passage at each end, its replies, and Note on this link — and
 // pins the curve so the list stays. A loop (source === target, SPEC.md §13)
 // is the links inside one document: the curve leaves the node's top, rises,
-// and returns to the same point, like a loop in graph theory; its pill and
-// list sit at the loop's top. A large project draws the curve in one solid
+// and returns to the same point, like a loop in graph theory; its list
+// sits at the loop's top. A large project draws the curve in one solid
 // tone, without the gradient.
 const LOOP_HEIGHT = 64; // the control points' rise above the node's center
 const LOOP_HALF_WIDTH = 34;
@@ -367,14 +339,14 @@ function linkControl(id: string, s: Point, e: Point): Point {
   return { x: (s.x + e.x) / 2 - ((e.y - s.y) / chord) * bowSize, y: (s.y + e.y) / 2 + ((e.x - s.x) / chord) * bowSize };
 }
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
-  const { plain, showProvenance, hoverEdge, scheduleClear, pinEdge } = useContext(SpotlightContext);
+  const { plain, showProvenance } = useContext(SpotlightContext);
   const listOpen = useEdgeListOpen(id);
   const count = data?.count ?? 1;
   const recommendedOnly = data?.recommendedOnly ?? false;
   const allLinks = data?.links ?? [];
   const links = showProvenance ? allLinks : allLinks.filter((l) => !l.provenance);
   const loop = source === target;
-  // The pill's and the list's anchor: the curve's middle, or the loop's top.
+  // The list's anchor: the curve's middle, or the loop's top.
   const midX = loop ? sourceX : (sourceX + targetX) / 2;
   const midY = loop ? sourceY - LOOP_HEIGHT * 0.75 : (sourceY + targetY) / 2;
   const control = loop ? { x: midX, y: midY } : linkControl(id, { x: sourceX, y: sourceY }, { x: targetX, y: targetY });
@@ -390,10 +362,6 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   // [view2] A pair holding a link the last Stitch answer proposed: a violet halo.
   const { proposedLinkIds } = useGraphContent();
   const proposed = proposedLinkIds.size > 0 && links.some((l) => proposedLinkIds.has(l.id));
-  // [style9] VIEW9-01: a link of the pair waits on this account (the rule
-  // the head and the Links list keep): the replies mark says "?".
-  const waitsForReply = useWaitsForReply();
-  const waits = links.some((l) => !l.recommended && !l.provenance && waitsForReply(l));
   return (
     <g className="graph-curve" data-rec={recommendedOnly ? "" : undefined}>
       {proposed && (
@@ -435,19 +403,6 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       {/* Wide invisible twin so the thin curve is hoverable (wider still
           under a finger, graph rules in globals.css). */}
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
-      {/* The exact link count, the open replies, and the notes quoting both
-          [graph-notes], above the nodes and off them (VIEW3-01); they grow
-          with the labels when the view zooms out. */}
-      <CurveMarks
-        pair={id}
-        links={links}
-        count={count}
-        at={loop ? { x: midX, y: midY } : anchor}
-        waits={waits}
-        onEnter={() => hoverEdge(id)}
-        onLeave={scheduleClear}
-        onClick={() => pinEdge(id)}
-      />
       {listOpen && links.length > 0 && (
         <EdgeLinkList edgeId={id} loop={loop} anchor={loop ? { x: midX, y: midY - 10 } : anchor} links={links} />
       )}
@@ -480,12 +435,10 @@ function ProvenanceEdge({ sourceX, sourceY, targetX, targetY }: EdgeProps) {
 // [graph-notes] A pair that only notes join: the sage dotted curve.
 function NoteEdgeHost(props: EdgeProps<NoteEdgeData>) {
   const listOpen = useEdgeListOpen(props.id);
-  const { hoverEdge, scheduleClear, pinEdge } = useContext(SpotlightContext);
   return (
     <NoteEdge
       {...props}
       listOpen={listOpen}
-      marks={{ onEnter: () => hoverEdge(props.id), onLeave: scheduleClear, onClick: () => pinEdge(props.id) }}
       renderList={(anchor, children) => (
         <CurveListFrame edgeId={props.id} loop={false} anchor={anchor} wide={false}>
           {children}
@@ -891,18 +844,6 @@ function GraphKey({
               </svg>,
               "panes.graphKeyLoop",
             )}
-            {/* The marks on a curve (WALK4-13): the link count, the open
-                replies, the notes that quote both documents. */}
-            {row(
-              <span className={`flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>3</span>,
-              "graphNotes.keyCurveCount",
-            )}
-            {row(
-              <span className={`flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 ${TEXT_META} font-bold tabular-nums text-[var(--kind-comment)]`}>
-                <CommentIcon size={11} />2?
-              </span>,
-              "graphNotes.keyCurveReplies",
-            )}
             {provenance &&
               row(
                 <svg width="28" height="10" aria-hidden>
@@ -915,51 +856,19 @@ function GraphKey({
         {group(
           t("graphNotes.keyNotesGroup"),
           <>
-            {/* [graph-notes] The note curve and the node's notes chip. */}
+            {/* [graph-notes] The note curve. A node's notes and comments, and a curve's links, show in their cards: the canvas draws no chip (Linda, 17 Oct). */}
             {row(
               <svg width="28" height="10" aria-hidden>
                 <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sage-600)" strokeWidth={2.2} strokeDasharray="1.5 6" strokeLinecap="round" />
               </svg>,
               "graphNotes.noteCurveHint",
             )}
-            {/* [view10] VIEW10-03: the notes chip and its pending dot, one row. */}
-            {row(
-              <span className={`flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
-                <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
-              </span>,
-              "graphCover.keyNodeNotes",
-            )}
-            {row(
-              <span className={`flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
-                <NotesIcon size={11} />2
-              </span>,
-              "graphNotes.keyCurveNotes",
-            )}
-            {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
-            {row(
-              <span className={`flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}>
-                <CommentIcon size={10} />2
-              </span>,
-              "graphCover.keyComments",
-            )}
-            {/* [view10] VIEW10-03: the waiting mark once: the ? on a chip, and the far-zoom ring. */}
-            {row(
-              <span className="flex items-center gap-0.5">
-                <span className={`rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1 ${TEXT_META} font-bold text-[var(--kind-comment)]`} aria-hidden>
-                  ?
-                </span>
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-                  <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--kind-comment)" strokeWidth={2} />
-                </svg>
-              </span>,
-              "graphCover.keyWaiting",
-            )}
           </>,
         )}
       </div>
       <p className={`border-t border-line pt-2 ${TEXT_META} leading-relaxed text-sand-600`}>
         {t(coarse ? (clickSelects ? "graphView.gesturesTouchSelect" : "graphView.gesturesTouchOpen") : clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] [view10] */}
-        <span className="mt-1 block">{t(coarse ? "graphNotes.keyFarTouch" : "graphNotes.keyFar") /* [style10] WALK10-03 */}</span>
+        <span className="mt-1 block">{t("graphNotes.keyCards")}</span>
       </p>
     </div>
   );
@@ -1029,7 +938,6 @@ function saveLayout(notebookId: string, aspect: number, layout: Map<string, Poin
 // variables and an attribute on the canvas, so a zoom re-renders no node.
 function LabelScale({ target, lodZoom }: { target: RefObject<HTMLDivElement | null>; lodZoom: number }) {
   const zoom = useStore((s) => s.transform[2]);
-  const far = useRef(false); // [style10] VIEW10-05: the last state, kept inside the band
   useEffect(() => {
     const el = target.current;
     if (!el) return;
@@ -1042,9 +950,6 @@ function LabelScale({ target, lodZoom }: { target: RefObject<HTMLDivElement | nu
     el.style.setProperty("--graph-zoom", zoom.toFixed(3));
     if (lod) el.setAttribute("data-lod", "");
     else el.removeAttribute("data-lod");
-    far.current = zoom < FAR_ZOOM_ON || (zoom <= FAR_ZOOM_OFF && far.current);
-    if (far.current) el.setAttribute("data-far", "");
-    else el.removeAttribute("data-far");
   }, [zoom, target, lodZoom]);
   return null;
 }
@@ -1116,8 +1021,6 @@ function useSpotlightAttributes(
       for (const id of edgeIds ?? []) {
         const edge = el.querySelector(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`);
         if (edge) lit.add(edge);
-        const marks = el.querySelector(`[data-curve-marks=${JSON.stringify(id)}]`);
-        if (marks) lit.add(marks);
       }
       for (const e of lit) e.setAttribute("data-lit", "");
       if (missing && frames-- > 0) raf = requestAnimationFrame(apply);
@@ -1824,46 +1727,6 @@ function GraphCanvas({
     [visibleEdges, noteEdges, t],
   );
 
-  // Where each curve's marks sit (VIEW3-01): placed together, off the
-  // nodes' rooms and off each other, at the label scale of the zoom.
-  const notesView = useGraphNotes()?.view;
-  const markCoverage = useProjectCoverage(); // [layer5] the comments chips are rooms too
-  const markWaits = useCommentWaits(); // [lists8] the chip's "?" is commentWaits; [lists9] by the hook's two rules
-  const markScale = useStore((s) => Math.round(labelScale(s.transform[2]) * 10) / 10);
-  const markPlaces = useMemo(() => {
-    const at = new Map(flowNodes.map((n) => [n.id, n.position]));
-    const center = (id: string) => {
-      const p = at.get(id);
-      return p ? { x: p.x + NODE_W / 2, y: p.y + 16 } : null;
-    };
-    const rooms = flowNodes.flatMap((n) =>
-      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id], markWaits)),
-    );
-    const curves: MarkCurve[] = [];
-    for (const f of flowEdges) {
-      if (f.type === "provenance") continue;
-      const s = center(f.source);
-      const e = center(f.target);
-      if (!s || !e) continue;
-      const data = f.data as LinkEdgeData | NoteEdgeData | undefined;
-      const links = f.type === "link" ? ((data as LinkEdgeData | undefined)?.links ?? []).filter((l) => showProvenance || !l.provenance) : [];
-      const count = f.type === "link" ? ((data as LinkEdgeData | undefined)?.count ?? 0) : 0;
-      const w = marksWidth(count, openReplies(links), notesView?.byPair.get(f.id)?.length ?? 0);
-      if (w === 0) continue;
-      const loop = f.source === f.target;
-      const c = loop ? null : f.type === "note" ? noteControl(f.id, s, e) : linkControl(f.id, s, e);
-      curves.push({
-        id: f.id,
-        curve: c ? { s, c, e } : null,
-        at: { x: s.x, y: s.y - LOOP_HEIGHT * 0.75 },
-        w: (w + 6) * markScale,
-        h: 22 * markScale,
-      });
-    }
-    // The widest marks first: they have the fewest free places.
-    curves.sort((a, b) => b.w - a.w || a.id.localeCompare(b.id));
-    return placeMarks(curves, rooms);
-  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage, markWaits]);
 
   // The curves the spotlight lights: a hovered node's, a hovered or pinned
   // curve, or the curves between a hovered note's documents.
@@ -2273,7 +2136,6 @@ function GraphCanvas({
         {t("panes.graphKeysHelp")}
       </p>
       <SpotlightContext.Provider value={spotlight}>
-      <MarkPlacesContext.Provider value={markPlaces}>
       {/* [style9] VIEW9-07: the zoom stack comes before the canvas in the
           DOM, so Tab meets it where it is drawn (top left, before the
           nodes), not after the focused node. It is a reactflow Panel: the
@@ -2365,7 +2227,6 @@ function GraphCanvas({
         <LabelEdges target={wrapRef} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
       </ReactFlow>
-      </MarkPlacesContext.Provider>
       {hoveredNodeId && hoveredNodeId !== focusedId /* [view2] its card is pinned */ && !dragging && (
         <NodeCard
           key={hoveredNodeId}

@@ -1,6 +1,6 @@
 // UI strings of the notes and the link replies on the graph (SPEC.md §13):
-// note chips on the nodes, the notes that join two documents, the replies on
-// a link, Note on this link, and the Notes list beside the canvas. zh
+// the notes rows of a node's card, the notes that join two documents, the
+// replies on a link, Note on this link, and the Notes list beside the canvas. zh
 // glossary: dict/common.ts — note 笔记 · section 章节 · source 出处 ·
 // link 链接 · reply 回复 · resolve 解决 · pending 待定 · graph 图谱.
 
@@ -8,27 +8,16 @@ const en = {
   // Replies on a link (link-replies.tsx)
   replyCountOne: "1 reply",
   replyCountMany: "{n} replies",
-  openRepliesTitle: "Open replies on the links between these documents",
 
-  // Notes on the nodes and between them (node-notes.tsx)
+  // Notes in a node's card and between two nodes (graph-notes.tsx, node-card.tsx)
   nodeNotesOne: "1 note",
   nodeNotesMany: "{n} notes",
-  nodeNotesPending: "{n} pending",
-  nodeNotesTitle: "Notes written in this document or quoting it",
   nodeNotesMore: "+ {n} more",
   pairNotes: "Notes quoting both",
-  pairNotesTitle: "Notes that quote both documents",
   noteCurveHint: "A note quotes both documents",
-  // How to read the graph: the curve marks (WALK4-13).
-  keyCurveCount: "The number of links between two documents",
-  // [style9] VIEW9-01: the "?" on a curve, as on a node's comments chip.
-  // [view10] VIEW10-03: the ? and the far-zoom ring are explained once, in graphCover.keyWaiting.
-  keyCurveReplies: "Open replies on the links between two documents",
-  keyCurveNotes: "Notes that quote both documents",
   keyNotesGroup: "Notes and comments",
-  keyFar: "Zoomed out, link counts and notes hide until a curve is lit; replies stay.",
-  // [style10] WALK10-03: on a phone the waiting node keeps its comments chip, and its card is the way to the comments.
-  keyFarTouch: "Zoomed out, link counts and notes hide until a curve is lit; replies stay. Press the node for its comments.",
+  // The canvas draws no count: a node's notes and comments are in its card, a curve's links and notes in its list (Linda, 17 Oct).
+  keyCards: "A node's notes and comments are in its card. A curve's links and notes are in its list.",
   noteCurveLabelOne: "1 note quotes {a} and {b}",
   noteCurveLabel: "{n} notes quote {a} and {b}",
   showNote: "Show this note in the notes tray",
@@ -52,7 +41,7 @@ const en = {
   notesOneDocumentOne: "1 note quotes one document.",
   notesOneDocumentShow: "Show them",
   notesOneDocumentHide: "Hide them",
-  // [lists10] WALK10-01: the dot on a Notes row and on the node's notes chip.
+  // [lists10] WALK10-01: the dot on a Notes row and on a note row of the node's card.
   newNoteTitle: "A note another person wrote since your last visit",
   notesFullPage: "Notes full page",
   notesShown: "Shown on graph",
@@ -83,22 +72,14 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   replyCountOne: "1 条回复",
   replyCountMany: "{n} 条回复",
-  openRepliesTitle: "这两个文档之间链接上的未解决回复",
 
   nodeNotesOne: "1 条笔记",
   nodeNotesMany: "{n} 条笔记",
-  nodeNotesPending: "{n} 条待定",
-  nodeNotesTitle: "在这个文档中写下或引用它的笔记",
   nodeNotesMore: "+ 另外 {n} 条",
   pairNotes: "同时引用两者的笔记",
-  pairNotesTitle: "同时引用这两个文档的笔记",
   noteCurveHint: "有笔记同时引用这两个文档",
-  keyCurveCount: "两个文档之间的链接数",
-  keyCurveReplies: "两个文档之间链接上的未解决回复",
-  keyCurveNotes: "同时引用这两个文档的笔记",
   keyNotesGroup: "笔记和评论",
-  keyFar: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。",
-  keyFarTouch: "缩小视图时，链接数和笔记隐藏，曲线点亮时才显示；回复始终显示。按节点查看它的评论。",
+  keyCards: "节点的笔记和评论在它的卡片中。连线的链接和笔记在它的列表中。",
   noteCurveLabelOne: "1 条笔记同时引用 {a} 和 {b}",
   noteCurveLabel: "{n} 条笔记同时引用 {a} 和 {b}",
   showNote: "在笔记栏中显示这条笔记",

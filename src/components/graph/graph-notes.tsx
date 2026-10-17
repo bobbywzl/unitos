@@ -4,25 +4,24 @@ import { SECTION_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { EdgeLabelRenderer, type Edge as FlowEdge, type EdgeProps } from "reactflow";
+import type { Edge as FlowEdge, EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { withoutGraphParams } from "@/components/graph/graph-content";
 import { useLinkPassages } from "@/components/graph/link-passages";
 import { noteLine, notesOnGraph, notesOnLink, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
-import type { Point } from "@/lib/graph/curve-place";
-import { useAnyNewReplies, useNewNotes } from "@/components/graph/link-replies"; // [layer5], [lists10]
+import type { Point } from "@/components/graph/graph-layout";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
-// node; a note shows where it is: a chip on each node it belongs to, its
-// lines in the node's card (node-card.tsx), a sage pill on a curve whose two documents
+// node; a note shows where it is: its lines in the node's card
+// (node-card.tsx), a Notes quoting both list on a curve whose two documents
 // one note quotes, and a sage dotted curve where only a note joins two
-// documents. The Notes list beside the canvas (graph-notes-list.tsx) is a
-// lens on the same data: a hovered row lights the documents it quotes, and
-// the section filter narrows the chips, the note curves, and the list.
+// documents. The canvas itself draws no note count on a node or a curve
+// (Linda, 17 Oct). The Notes list beside the canvas (graph-notes-list.tsx)
+// is a lens on the same data: a hovered row lights the documents it quotes,
+// and the section filter narrows the cards, the note curves, and the list.
 // Everything here reads the workspace's notes; nothing is edited on the graph
 // that the tray edits, except a new note on a link (link-note-composer.tsx).
 
@@ -314,45 +313,9 @@ export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
   }, [view, edges, titleOf, t]);
 }
 
-// ── Node chip ──────────────────────────────────────────────────────────────
+// ── Node card rows ─────────────────────────────────────────────────────────
 
 const CARD_ROWS = 5;
-
-/** Right of a node's dot: the number of accepted notes that belong to the
-    document, a dot for pending ones; with only pending notes, "1 pending"
-    (WALK4-13: never "0"). The notes themselves list in the node's card
-    (NodeNotesRows), so a node shows one card (VIEW2-01). */
-export function NodeNotes({ documentId }: { documentId: string }) {
-  const ctx = useGraphNotes();
-  const t = useT();
-  const isNew = useNewNotes(); // [lists10] WALK10-01
-  const entry = ctx?.view.byDocument.get(documentId);
-  if (!ctx || !entry) return null;
-  return (
-    <span
-      data-graph-node-notes={documentId}
-      data-tip={t("graphNotes.nodeNotesTitle")}
-      className={`flex shrink-0 items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold whitespace-nowrap tabular-nums text-sage-800`} /* [ui5] WALK5-15: never wraps */
-    >
-      <NotesIcon size={10} />
-      {entry.accepted === 0 && entry.pending > 0 ? (
-        <span data-pending>{t("graphNotes.nodeNotesPending", { n: entry.pending })}</span>
-      ) : (
-        entry.accepted
-      )}
-      {entry.accepted > 0 && entry.pending > 0 && (
-        <span
-          aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
-          className="size-1.5 rounded-full bg-clay"
-        />
-      )}
-      {/* [lists10] WALK10-01: a note another person wrote since this account's last visit: the dot every new mark on the graph draws (the comments chip's, the curve's). */}
-      {entry.notes.some((g) => isNew(g.note)) && (
-        <span data-graph-node-notes-new aria-label={t("graphNotes.newNoteTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
-      )}
-    </span>
-  );
-}
 
 /** The node card's notes (graph-view.tsx NodeCard): the newest five notes
     that belong to the document, each a row that shows it in the tray. */
@@ -491,131 +454,6 @@ export function PairNotes({ pair }: { pair: string }) {
   );
 }
 
-/** Where each curve's marks sit, by curve id: the canvas places them all
-    at once, so they keep off the nodes and off each other (curve-place.ts). */
-export const MarkPlacesContext = createContext<Map<string, Point>>(new Map());
-
-/** The open replies on a curve's links. */
-export function openReplies(links: GraphEdgeLink[]): number {
-  return links.reduce((n, l) => n + (l.replies ?? []).filter((r) => r.resolvedById === null).length, 0);
-}
-
-/** The marks' row width on screen at scale 1: the count pill (more than
-    one link), the replies mark, the notes pill, 4 px apart. */
-export function marksWidth(count: number, open: number, notes: number): number {
-  const parts = [
-    count > 1 ? 14 + String(count).length * 7 : 0,
-    open > 0 ? 32 + String(open).length * 6 : 0,
-    notes > 1 ? 32 + String(notes).length * 6 : notes > 0 ? 24 : 0,
-  ].filter((w) => w > 0);
-  return parts.reduce((a, b) => a + b, 0) + Math.max(0, parts.length - 1) * 4;
-}
-
-/** On a curve, above the nodes (the HTML label layer; VIEW3-01): the link
-    count when the pair has more than one, the open replies on the pair's
-    links (the comment glyph and the number, in the comment kind color), and
-    the notes that quote both documents (a sage pill). They ride the curve's
-    middle, or slide along it to the first point no node's room covers
-    (curve-place.ts; the canvas places them, MarkPlacesContext); a loop's
-    sit at its top. Hovering them lights the curve, and a click pins its
-    list, as on the curve itself. */
-export function CurveMarks({
-  pair,
-  links,
-  count,
-  at,
-  waits = false,
-  onEnter,
-  onLeave,
-  onClick,
-}: {
-  pair: string;
-  links: GraphEdgeLink[];
-  /** The pair's link count: a pill when more than one. */
-  count: number;
-  /** Where the marks sit until the canvas has placed them. */
-  at: Point;
-  /** [style9] VIEW9-01: one of the pair's links waits on this account
-      (useWaitsForReply, the rule the head and the Links list keep): the
-      replies mark ends with "?", as a node's comments chip does. */
-  waits?: boolean;
-  onEnter?: () => void;
-  onLeave?: () => void;
-  onClick?: () => void;
-}) {
-  const ctx = useGraphNotes();
-  const t = useT();
-  const places = useContext(MarkPlacesContext);
-  const open = openReplies(links);
-  const fresh = useAnyNewReplies(links); // [layer5] WALK5-07
-  const notes = ctx?.view.byPair.get(pair)?.length ?? 0;
-  const showCount = count > 1;
-  if (!showCount && open === 0 && notes === 0 && !fresh) return null;
-  const p = places.get(pair) ?? at;
-  const pill = `flex h-[18px] items-center gap-1 rounded-full px-1.5 ${TEXT_META} font-semibold tabular-nums`;
-  return (
-    <EdgeLabelRenderer>
-      <div
-        data-curve-marks={pair}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick?.();
-        }}
-        className="graph-curve-marks nodrag nopan absolute cursor-pointer"
-        style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
-      >
-        <div className="graph-edge-pill flex items-center gap-1">
-          {showCount && (
-            <span data-graph-curve-mark="count" className={`${pill} justify-center border border-line bg-card text-sand-700`}>
-              {count}
-            </span>
-          )}
-          {open > 0 && (
-            <span
-              data-graph-curve-mark="replies"
-              data-tip={t("graphNotes.openRepliesTitle")}
-              aria-label={`${t("graphNotes.openRepliesTitle")}: ${open}`}
-              className={`${pill} border-[1.5px] border-[var(--kind-comment)] bg-card font-bold text-[var(--kind-comment)]`}
-            >
-              <CommentIcon size={11} />
-              <span data-n>{open}</span>
-              {waits && (
-                <span data-graph-curve-waits aria-label={t("graphCover.commentWaitsTitle")} className="-ml-0.5">
-                  ?
-                </span>
-              )}
-              {/* [layer5] A reply another person wrote since this account last opened the link. */}
-              {fresh && (
-                <span data-graph-curve-new aria-label={t("graphCover.newRepliesTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
-              )}
-            </span>
-          )}
-          {/* [lists9] A link another person made since this account's last visit, no reply on it yet (WALK9-06): the same dot, on its own. */}
-          {open === 0 && fresh && (
-            <span data-graph-curve-mark="new" className={`${pill} border-[1.5px] border-[var(--kind-comment)] bg-card`}>
-              <span data-graph-curve-new aria-label={t("graphCover.newLinkTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
-            </span>
-          )}
-          {notes > 0 && (
-            <span
-              data-graph-curve-mark="notes"
-              data-tip={t("graphNotes.pairNotesTitle")}
-              aria-label={`${t("graphNotes.pairNotesTitle")}: ${notes}`}
-              className={`${pill} border border-dashed border-sage-500 bg-sage-100 text-sage-800`}
-            >
-              <NotesIcon size={11} />
-              {/* One note: the mark alone, as the link count shows from two (VIEW3-08). */}
-              {notes > 1 && <span data-n>{notes}</span>}
-            </span>
-          )}
-        </div>
-      </div>
-    </EdgeLabelRenderer>
-  );
-}
-
 // The same pseudo-random bow a link curve takes (graph-view.tsx's seeded).
 function seededBow(id: string): number {
   let h = 3;
@@ -639,11 +477,8 @@ export function NoteEdge({
   targetY,
   listOpen,
   renderList,
-  marks,
 }: EdgeProps<NoteEdgeData> & {
   listOpen: boolean;
-  /** The marks' hover and click: those of the curve (graph-view.tsx). */
-  marks?: { onEnter: () => void; onLeave: () => void; onClick: () => void };
   /** Draws the list where the canvas puts a curve's list (graph-view.tsx). */
   renderList: (anchor: { x: number; y: number }, children: React.ReactNode) => React.ReactNode;
 }) {
@@ -658,13 +493,6 @@ export function NoteEdge({
       <title>{t("graphNotes.noteCurveHint")}</title>
       <path d={path} fill="none" stroke="var(--sage-600)" /* [view10] VIEW10-06 */ strokeLinecap="round" strokeDasharray="1.5 6" className="graph-note-stroke" />
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
-      <CurveMarks
-        pair={id}
-        links={[]}
-        count={0}
-        at={{ x: midX + bow / 2, y: midY }}
-        {...marks}
-      />
       {listOpen &&
         renderList(
           { x: midX + bow / 2, y: midY },

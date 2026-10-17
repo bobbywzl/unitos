@@ -2,7 +2,7 @@
 // reader (WALK5-09), the Links pill after Back (WALK5-04), Show on the graph
 // and the URL after Open in notes (VIEW5-10, WALK5-05), one saved line at a
 // time (WALK5-14), the phone's fold of generated documents (WALK5-11), the
-// Draft tag (WALK5-13), the zh chip and the reply buttons (WALK5-15).
+// Draft tag (WALK5-13), no chip on the canvas and the reply buttons (WALK5-15).
 //
 //   BASE=http://localhost:3166 DB=dissect_r5ui5 OUT=<dir> MODE=after LANG_UI=en \
 //     [ONLY=a11y,back,show,phone,draft,sizes] node scripts/qa/ui-graph-ui5.mjs
@@ -312,13 +312,12 @@ if (ONLY.includes("draft")) {
   }
 }
 
-// ── WALK5-15: the zh chip and the reply buttons ──
+// ── WALK5-15: no chip on the canvas, and the reply buttons ──
 if (ONLY.includes("sizes")) {
   const { ctx, page } = await open(1440);
-  // [chrome6] VIEW6-05: a small project may frame at zoom 1.3; a chip's height is read in flow units.
-  const zoom = await page.evaluate(() => Number(document.querySelector(".corpus-graph")?.style.getPropertyValue("--graph-zoom")) || 1);
-  const chips = await page.locator("[data-graph-node-notes]").evaluateAll((els, z) => els.map((e) => Math.round(e.getBoundingClientRect().height / z)), zoom);
-  check(chips.every((h) => h <= 20) || !after, "every node's notes chip is one line", chips.join(","));
+  // The canvas draws no notes chip and no comments mark (Linda, 17 Oct); the counts are in the node card.
+  const chips = await page.locator("[data-graph-node-notes], [data-graph-node-comments], [data-curve-marks]").count();
+  check(chips === 0 || !after, "the canvas draws no chip and no curve mark", String(chips));
   await page.click('[data-track="graph-links"]');
   await page.locator(`[data-graph-links-row="${FLUTE}"]`).click();
   await page.locator('[data-track="reply-resolve"]').first().waitFor({ timeout: 10000 }).catch(() => {});

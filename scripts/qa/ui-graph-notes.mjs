@@ -1,6 +1,7 @@
 // The notes and the link replies on the graph (SPEC.md §13): the walk over
 // the seed "QA Graph Notes" (.qa-tmp/stitch/gn/seed-gn.mjs). Checks the node
-// chips, the curve marks, the reply thread in an expanded link, Notes
+// card's notes rows, the quiet canvas (no chip on a node, no mark on a
+// curve: Linda, 17 Oct), the reply thread in an expanded link, Notes
 // quoting both, the note curve, the node card, the Notes list and its
 // section filter, and Note on this link (draft kept over a reload, the note
 // saved with both ends as sources). With SESSION=<token> (a dev server with
@@ -82,6 +83,11 @@ const expectedChip = (documentId) =>
   sql(
     `select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}' and not s.hidden and n.status='ACCEPTED' and (n."documentId"='${documentId}' or exists (select 1 from "Source" so where so."noteId"=n.id and so."documentId"='${documentId}'))`,
   );
+// The notes the node card lists: the accepted and the pending ones (lib/graph/notes.ts notesOnGraph).
+const expectedNotes = (documentId) =>
+  sql(
+    `select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}' and not s.hidden and n.status in ('ACCEPTED','PENDING') and (n."documentId"='${documentId}' or exists (select 1 from "Source" so where so."noteId"=n.id and so."documentId"='${documentId}'))`,
+  );
 
 async function pin(page, id, at = 0.35) {
   await page.mouse.move(4, 300);
@@ -105,7 +111,27 @@ async function newPage(width, lang) {
 
 // A link opens in the side panel beside the canvas (GRAPH2, WALK2-05).
 const panelOf = (page, id) => page.locator(`[data-graph-link-panel="${id}"]`);
-const nodeChip = (page, id) => page.locator(`[data-graph-node-notes="${id}"]`);
+// The node card's notes rows (graph-notes.tsx NodeNotesRows): the canvas draws no chip (Linda, 17 Oct).
+// Hover the node's dot (a tap on a phone), read the card, then move away.
+async function cardNotes(page, id) {
+  const dot = await page.locator(`.react-flow__node[data-id="${id}"] [data-graph-dot]`).boundingBox();
+  if (!dot) return { head: "", rows: 0, pending: 0 };
+  const phone = page.viewportSize().width < 500;
+  if (phone) await page.mouse.click(dot.x + dot.width / 2, dot.y + dot.height / 2);
+  else await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+  await page.waitForTimeout(900);
+  const notes = page.locator("[data-graph-hover-notes]");
+  const out = {
+    head: (await notes.locator("p").first().innerText().catch(() => "")).trim(),
+    rows: await notes.locator("[data-graph-note-row]").count(),
+    pending: await notes.locator("[data-graph-note-row] button span.rounded-full").count(),
+  };
+  if (phone) await page.keyboard.press("Escape");
+  await page.mouse.move(4, 300);
+  await page.waitForTimeout(500);
+  return out;
+}
+const listsNotes = (card, n) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(card.head) && card.rows === Math.min(5, Number(n));
 
 for (const lang of ["en", "zh"]) {
   for (const width of [1440, 390]) {
@@ -123,30 +149,26 @@ for (const lang of ["en", "zh"]) {
       continue;
     }
 
-    // Package 2: node chips (accepted count, pending dot).
-    const chipA = (await nodeChip(page, A).innerText().catch(() => "")).trim();
-    const chipC = (await nodeChip(page, C).innerText().catch(() => "")).trim();
-    const dotE = await nodeChip(page, E).locator("span.rounded-full").count();
-    check(chipA === expectedChip(A), `${tag} Heat pumps chip reads ${expectedChip(A)}`, chipA);
-    check(chipC === expectedChip(C), `${tag} Household chip reads ${expectedChip(C)}`, chipC);
-    check(dotE === 1, `${tag} State rebate chip has a pending dot`);
+    // Package 2: the canvas draws no chip and no curve mark (Linda, 17 Oct); the node card lists the notes.
+    const marks = await page.evaluate(() => document.querySelectorAll("[data-graph-node-notes], [data-graph-node-comments], [data-curve-marks], [data-graph-curve-mark]").length);
+    check(marks === 0, `${tag} the canvas draws no chip and no curve mark`, String(marks));
+    const cardA = await cardNotes(page, A);
+    const cardC = await cardNotes(page, C);
+    const cardE = await cardNotes(page, E);
+    check(listsNotes(cardA, expectedNotes(A)), `${tag} Heat pumps card lists ${expectedNotes(A)} notes (${expectedChip(A)} accepted)`, JSON.stringify(cardA));
+    check(listsNotes(cardC, expectedNotes(C)), `${tag} Household card lists ${expectedNotes(C)} notes`, JSON.stringify(cardC));
+    check(cardE.pending >= 1, `${tag} State rebate card marks its pending note`, JSON.stringify(cardE));
     // The note curve: Household ⇄ State rebate has no link, one note.
     check((await page.locator(`[data-graph-note-curve="${pair(C, E)}"]`).count()) === 1, `${tag} sage dotted curve Household ⇄ State rebate`);
-    // Package 1: the A–B curve carries the open-reply mark (2 on the seed; a
-    // database copy may hold more links on the pair, as SAFE's seed does) and
-    // a notes pill. Links with no project count while no project held them.
-    const OPEN = Number(sql(`select count(*) from "Reply" r join "DocLink" l on l.id=r."docLinkId" where r."resolvedById" is null and not l.recommended and ((l."fromDocumentId"='${A}' and l."toDocumentId"='${B}') or (l."fromDocumentId"='${B}' and l."toDocumentId"='${A}')) and (l."notebookId"='${NB}' or (l."notebookId" is null and l."formerNotebookId" is null))`));
-    // The curve's marks draw in the label layer above the nodes (VIEW3-01).
-    const abEdge = page.locator(`[data-curve-marks="${pair(A, B)}"]`);
-    const repliesMark = (await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "")) ?? "";
-    check(repliesMark.trim() === String(OPEN), `${tag} A–B curve shows ${OPEN} open replies`, repliesMark);
-    check((await abEdge.locator('[data-graph-curve-mark="notes"]').count()) === 1, `${tag} A–B curve shows a notes pill`);
-
+    // Package 1: the A–B curve draws no mark (Linda, 17 Oct); its list counts
+    // the link's open replies and lists Notes quoting both.
+    const OPEN_AB = Number(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and "resolvedById" is null`));
+    const rowReads = (text, n) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(text);
     // Pin the A–B curve: the row counts replies, the expanded link shows the thread.
     check(await pin(page, pair(A, B)), `${tag} pinned A–B`);
     const list = page.locator('[data-track-surface="graph-links"]');
     const rowCount = await list.locator(`[data-graph-link-replies="${LINK_AB}"]`).innerText().catch(() => "");
-    check(/2/.test(rowCount), `${tag} row reads 2 replies`, rowCount);
+    check(rowReads(rowCount, OPEN_AB), `${tag} row reads ${OPEN_AB} replies`, rowCount);
     const pairNotes = await list.locator(`[data-graph-pair-notes="${pair(A, B)}"]`).innerText().catch(() => "");
     check(/COP 2\.6/.test(pairNotes), `${tag} Notes quoting both lists the COP note`);
     await list.locator('[data-track="graph-link-expand"]').first().click();
@@ -165,19 +187,17 @@ for (const lang of ["en", "zh"]) {
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
       // The reply shows once the refresh lands (the first call compiles the route in dev).
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
-      await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]', { hasText: String(OPEN + 1) }).waitFor({ timeout: 15000 }).catch(() => {});
       const sent = await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
       check(sent.includes(REPLY), "signed in: the sent reply shows in the thread");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}'`) === "1", "signed in: SQL finds the reply on the A–B link");
-      const mark = await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "");
-      check(mark?.trim() === String(OPEN + 1), `signed in: the curve mark counts ${OPEN + 1}`, mark ?? "");
       await page.screenshot({ path: `${OUT}/reply-sent-${tag}.png` });
       const row = panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
       await row.locator('[data-track="reply-resolve"]').click();
-      await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]', { hasText: String(OPEN) }).waitFor({ timeout: 20000 }).catch(() => {});
-      const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "");
-      check(mark2?.trim() === String(OPEN), `signed in: resolved, the curve mark counts ${OPEN}`, mark2 ?? "");
+      await page.waitForTimeout(1500);
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}' and "resolvedById" is not null`) === "1", "signed in: SQL finds the reply resolved");
+      // The canvas draws no mark: the curve's list row carries the count. Pin the curve again to read it.
+      const rowBack = (await pin(page, pair(A, B))) ? await list.locator(`[data-graph-link-replies="${LINK_AB}"]`).innerText().catch(() => "") : "";
+      check(rowReads(rowBack, OPEN_AB), `signed in: resolved, the row counts ${OPEN_AB} open replies`, rowBack);
       await page.screenshot({ path: `${OUT}/reply-resolved-${tag}.png` });
     }
 
@@ -224,8 +244,8 @@ for (const lang of ["en", "zh"]) {
       await page.waitForTimeout(700);
       const after = [await op(A), await op(D), await op(B), await op(C)];
       check(Number(after[0]) > 0.9 && Number(after[1]) > 0.9 && Number(after[2]) < 0.5 && Number(after[3]) < 0.5, `${tag} section Open questions keeps Heat pumps and Contractor lit`, after.join(","));
-      const chipA2 = (await nodeChip(page, A).innerText().catch(() => "")).trim();
-      check(chipA2 === "1", `${tag} with the section, Heat pumps chip reads 1`, chipA2);
+      const cardA2 = await cardNotes(page, A);
+      check(listsNotes(cardA2, "1"), `${tag} with the section, Heat pumps card lists 1 note`, JSON.stringify(cardA2));
       await page.screenshot({ path: `${OUT}/notes-section-${tag}-${MODE}.png` });
       await aside.locator('[data-track="graph-notes-section"]').selectOption("");
       await page.waitForTimeout(300);
