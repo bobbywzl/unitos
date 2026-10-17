@@ -11,10 +11,20 @@ type Router = { push: (href: string) => void; replace: (href: string) => void };
 let graphEntry = false;
 let mounted = 0;
 
+/** Whether the open graph is in the address (`graph=1`, SPEC.md §13): then
+    the workspace owns the graph's entry — it pushed it, Back from a document
+    opened from the graph returns to it with the card and the find in its
+    address — and no entry is pushed here. */
+function graphInAddress(): boolean {
+  return new URLSearchParams(window.location.search).get("graph") === "1";
+}
+
 /** The graph opened: push its entry (once, though a development re-run
     mounts it twice). Calls `onBack` when Back takes the entry off. Returns
-    the cleanup. */
+    the cleanup. With the graph in the address, nothing is pushed: the
+    address is the entry. */
 export function enterGraphHistory(onBack: () => void): () => void {
+  if (graphInAddress()) return () => {};
   if (!graphEntry) {
     window.history.pushState(window.history.state, "");
     graphEntry = true;
@@ -47,7 +57,9 @@ export function leaveGraphHistory(close: () => void): void {
   else close();
 }
 
-/** Open an address from the graph: it takes the graph's entry's place. */
+/** Open an address from the graph: it takes the graph's entry's place. With
+    the graph in the address, it is pushed, so Back returns to the graph as
+    it was (§13). */
 export function graphNavigate(router: Router, href: string): void {
   if (graphEntry) {
     graphEntry = false;
@@ -56,10 +68,9 @@ export function graphNavigate(router: Router, href: string): void {
 }
 
 /** Open an address of the same page from the graph (the graph's parameters
-    taken off the URL): it takes the graph's entry's place with no server
-    round trip (Next syncs a native replace), so Back opens the graph again.
-    A page that was never pushed onto the graph's entry would be popped by
-    the cleanup above instead. */
+    taken off the URL) with no server round trip (Next syncs a native push
+    or replace): with the graph in the address it is pushed, else it takes
+    the graph's entry's place; either way Back opens the graph again. */
 export function graphNavigateSamePage(href: string): void {
   if (graphEntry) {
     graphEntry = false;

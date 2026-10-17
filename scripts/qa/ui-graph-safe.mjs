@@ -226,15 +226,20 @@ await shot(page, "WALK2-01-notes-list");
 if (after) {
   const r1 = notes.locator('[data-graph-notes-row="safe-pending-1"]');
   const r2 = notes.locator('[data-graph-notes-row="safe-pending-2"]');
-  // A refused Reject: the row stays, with the error.
+  // A Reject the server answers with a 5xx waits in the queue (SPEC.md §12): the row leaves with
+  // Undo as on any reject, the server has nothing yet, and the retry lands it once the server answers.
   await page.route("**/api/notes/safe-pending-1", (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"SAFE reject refused"}' }),
   );
   await r1.locator('[data-track="graph-notes-reject"]').click();
   await page.waitForTimeout(1000);
-  check((await r1.count()) === 1 && /SAFE reject refused/.test(await r1.innerText()), "a refused Reject shows its error on the row");
-  await shot(page, "REV2-08-reject-error");
+  const line1 = notes.locator('[data-graph-notes-rejected="safe-pending-1"]');
+  const status1 = sql(`select status from "Note" where id='safe-pending-1'`);
+  check((await line1.count()) === 1 && status1 === "PENDING", "a refused Reject: the row reads rejected with Undo while the queue holds the write", `${await line1.count()} line, server ${status1}`);
+  await shot(page, "REV2-08-reject-queued");
   await page.unroute("**/api/notes/safe-pending-1");
+  await waitSql(`select status from "Note" where id='safe-pending-1'`, "REJECTED", 40000);
+  check(sql(`select status from "Note" where id='safe-pending-1'`) === "REJECTED", "the retry lands the Reject");
   // Reject, then Undo.
   await r2.locator('[data-track="graph-notes-reject"]').click();
   await page.waitForTimeout(150);
