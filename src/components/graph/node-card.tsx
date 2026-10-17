@@ -377,7 +377,7 @@ export function NodeCardPanel({
       )}
 
       {notes.length > 0 && (
-        <section>
+        <section data-graph-card-notes>
           <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardNotesHead")}</h3>
           <div className="flex flex-col gap-0.5">
             {(showAllNotes ? notes : notes.slice(0, NOTE_ROWS)).map((n) => (

@@ -111,27 +111,32 @@ async function newPage(width, lang) {
 
 // A link opens in the side panel beside the canvas (GRAPH2, WALK2-05).
 const panelOf = (page, id) => page.locator(`[data-graph-link-panel="${id}"]`);
-// The node card's notes rows (graph-notes.tsx NodeNotesRows): the canvas draws no chip (Linda, 17 Oct).
-// Hover the node's dot (a tap on a phone), read the card, then move away.
+// The node card's notes rows: the canvas draws no chip (Linda, 17 Oct). The
+// hover card lists five (graph-notes.tsx NodeNotesRows, "2 notes" as its
+// head); the pinned card, a tap on a phone, lists six under Notes
+// (node-card.tsx NodeCardPanel). Read the card, then move away.
 async function cardNotes(page, id) {
   const dot = await page.locator(`.react-flow__node[data-id="${id}"] [data-graph-dot]`).boundingBox();
-  if (!dot) return { head: "", rows: 0, pending: 0 };
+  if (!dot) return { head: "", rows: 0, pending: 0, cap: 0 };
   const phone = page.viewportSize().width < 500;
   if (phone) await page.mouse.click(dot.x + dot.width / 2, dot.y + dot.height / 2);
   else await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
   await page.waitForTimeout(900);
-  const notes = page.locator("[data-graph-hover-notes]");
+  const hover = page.locator("[data-graph-hover-notes]");
+  const notes = (await hover.count()) > 0 ? hover : page.locator("[data-graph-node-card] [data-graph-card-notes]");
   const out = {
-    head: (await notes.locator("p").first().innerText().catch(() => "")).trim(),
+    head: (await notes.locator("p, h3").first().innerText().catch(() => "")).trim(),
     rows: await notes.locator("[data-graph-note-row]").count(),
     pending: await notes.locator("[data-graph-note-row] button span.rounded-full").count(),
+    cap: notes === hover ? 5 : 6,
   };
   if (phone) await page.keyboard.press("Escape");
   await page.mouse.move(4, 300);
   await page.waitForTimeout(500);
   return out;
 }
-const listsNotes = (card, n) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(card.head) && card.rows === Math.min(5, Number(n));
+// The card lists the notes: all of them up to its cap, and the hover card's head counts them.
+const listsNotes = (card, n) => card.rows === Math.min(card.cap, Number(n)) && (card.cap !== 5 || new RegExp(`(^|\\D)${n}(\\D|$)`).test(card.head));
 
 for (const lang of ["en", "zh"]) {
   for (const width of [1440, 390]) {
