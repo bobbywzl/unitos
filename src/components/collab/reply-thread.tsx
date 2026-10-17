@@ -133,6 +133,10 @@ export function ReplyThread({
   const [draft, setDraftState] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Resolve and Reopen answer at once (WALK2-12): the row reads the new state
+  // until the server's copy moves (the refresh after the write), and goes back
+  // when the server refuses. `was` is the server's state the answer replaced.
+  const [resolvedNow, setResolvedNow] = useState<Record<string, { value: string | null; was: string | null }>>({});
   const hidden = useSyncExternalStore(subscribeGoing, () => going, () => NONE);
   const key = draftKey(target);
   const keyRef = useRef(key);
@@ -158,7 +162,12 @@ export function ReplyThread({
   const outside = crossAccount?.outside === true;
   const canReply = canEdit && !outside;
 
-  const shown = replies.filter((r) => !hidden.has(r.id));
+  const shown = replies
+    .filter((r) => !hidden.has(r.id))
+    .map((r) => {
+      const now = resolvedNow[r.id];
+      return now && r.resolvedById === now.was ? { ...r, resolvedById: now.value } : r;
+    });
   // Replies need an account to sign them: with sign-in off there is no Reply.
   // Any editor replies, on a shared corpus or their own — a reply on one's
   // own note is a dated update under it.
@@ -167,16 +176,19 @@ export function ReplyThread({
   const openReplies = shown.filter((r) => r.resolvedById === null);
   const resolvedReplies = shown.filter((r) => r.resolvedById !== null);
 
-  async function run(fn: () => Promise<unknown>) {
-    if (busy) return;
+  /** Runs one write; true when the server took it (or the queue holds it). */
+  async function run(fn: () => Promise<unknown>): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     try {
       await fn();
       refreshWhenOnline(router);
       onChange?.();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -242,8 +254,19 @@ export function ReplyThread({
       },
     });
   };
-  const setResolved = (id: string, resolvedValue: boolean) =>
-    void run(() => api(replyPath(id, target), "PATCH", { resolved: resolvedValue }));
+  const setResolved = (id: string, resolvedValue: boolean) => {
+    if (busy) return;
+    const was = replies.find((r) => r.id === id)?.resolvedById ?? null;
+    setResolvedNow((prev) => ({ ...prev, [id]: { value: resolvedValue ? (myId ?? "me") : null, was } }));
+    void run(() => api(replyPath(id, target), "PATCH", { resolved: resolvedValue })).then((ok) => {
+      if (ok) return;
+      setResolvedNow((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    });
+  };
 
   const row = (reply: ReplyView) => {
     const person = people[reply.userId];

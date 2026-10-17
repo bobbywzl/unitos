@@ -116,7 +116,15 @@ for (const lang of ["en", "zh"]) {
         const gist = await page.locator("[data-graph-hover-gist]").innerText().catch(() => "");
         check(`${tag} hover: the gist's first words`, gist.startsWith("From The Antichrist"), gist.slice(0, 60));
         const notes = await page.locator("[data-graph-hover-notes]").innerText().catch(() => "");
-        check(`${tag} hover: the notes`, /Pity as the hinge/.test(notes), notes.replace(/\n/g, " | ").slice(0, 80));
+        // The newest five notes of the document and the count of the rest (graph-notes.tsx NodeNotesRows);
+        // the suite's note is among the five only while nothing newer was written on the document.
+        const noteCount = Number(/(\d+)/.exec(notes)?.[1] ?? "0");
+        const noteRows = await page.locator("[data-graph-hover-notes] [data-graph-note-row]").count();
+        check(
+          `${tag} hover: the notes`,
+          noteCount >= 1 && noteRows === Math.min(noteCount, 5) && (noteCount > 5 || /Pity as the hinge/.test(notes)),
+          `${noteCount} notes, ${noteRows} rows; ${notes.replace(/\n/g, " | ").slice(0, 80)}`,
+        );
       }
       await page.mouse.move(5, h - 5);
       await page.waitForTimeout(400);
@@ -148,6 +156,9 @@ for (const lang of ["en", "zh"]) {
     );
     const groups = await card.locator("[data-graph-card-group]").evaluateAll((els) => els.map((e) => e.getAttribute("data-graph-card-group")));
     check(`${tag} card: links grouped by document`, groups.includes(FN) && groups.includes(id("Extra notes on Schopenhauer as educator")), groups.length + " groups");
+    // The card lists six notes and folds the rest behind "N more" (node-card.tsx NOTE_ROWS): open them all.
+    const moreNotes = card.locator('[data-track="graph-card-notes-more"]');
+    if (await moreNotes.count()) await moreNotes.click();
     const cardText = await card.innerText();
     check(`${tag} card: the notes`, cardText.includes("Pity as the hinge"));
     check(`${tag} card: a link's part`, /in 7–13: Pity, theologians, and Kant|位于“7–13: Pity, theologians, and Kant”/.test(cardText));

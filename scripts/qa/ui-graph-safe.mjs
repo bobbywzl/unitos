@@ -185,16 +185,20 @@ if (after) {
   await page.waitForTimeout(2500);
   await page.unroute("**/api/replies/**");
   check(sql(`select count(*) from "Reply" where content='${DRAFT}' and "resolvedById" is not null`) === "1", "SQL finds the reply resolved");
-  // A refused resolve comes back with the error.
+  // A Reopen the server answers with a 5xx waits in the queue (SPEC.md §12): the row keeps the
+  // reader's answer, the server has nothing yet, and the retry lands it once the server answers.
   await page.route("**/api/replies/**", (route) => route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"SAFE refused"}' }));
   const resolvedToggle = thread(LINK_AB).locator('[data-track="reply-show-resolved"]');
   if (await resolvedToggle.count()) await resolvedToggle.click();
   const reopen = thread(LINK_AB).locator("div.flex.items-start", { hasText: DRAFT }).locator('[data-track="reply-resolve"]');
   await reopen.click();
   await page.waitForTimeout(800);
-  check((await thread(LINK_AB).locator("text=SAFE refused").count()) > 0, "a refused Reopen shows the error");
-  check(sql(`select count(*) from "Reply" where content='${DRAFT}' and "resolvedById" is not null`) === "1", "the refused Reopen changed nothing");
+  const reopenLabel = await thread(LINK_AB).locator("div.flex.items-start", { hasText: DRAFT }).locator('[data-track="reply-resolve"]').textContent().catch(() => "");
+  check(!/Reopen|重新打开/.test(reopenLabel ?? ""), "a refused Reopen keeps the row's answer while the queue holds the write", String(reopenLabel));
+  check(sql(`select count(*) from "Reply" where content='${DRAFT}' and "resolvedById" is not null`) === "1", "…and the server has nothing yet");
   await page.unroute("**/api/replies/**");
+  await waitSql(`select count(*) from "Reply" where content='${DRAFT}' and "resolvedById" is null`, "1", 40000);
+  check(sql(`select count(*) from "Reply" where content='${DRAFT}' and "resolvedById" is null`) === "1", "the retry lands the Reopen");
 
   // ── REV2-01: another account's link hides what this account may not change ──
   await page.mouse.click(4, 300);

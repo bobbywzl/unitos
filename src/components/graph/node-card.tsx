@@ -386,7 +386,7 @@ export function NodeCardPanel({
             ))}
           </div>
           {notes.length > NOTE_ROWS && !showAllNotes && (
-            <button onClick={() => setShowAllNotes(true)} className={`mt-1 min-h-6 px-2 ${TEXT_META} text-clay-700 hover:underline pointer-coarse:min-h-10`}>
+            <button onClick={() => setShowAllNotes(true)} data-track="graph-card-notes-more" className={`mt-1 min-h-6 px-2 ${TEXT_META} text-clay-700 hover:underline pointer-coarse:min-h-10`}>
               {t("graphView.cardMore", { n: notes.length - NOTE_ROWS })}
             </button>
           )}
