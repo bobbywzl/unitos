@@ -4,7 +4,7 @@ import type { loadProfile } from "@/lib/derive/context";
 import type { DocumentPick } from "@/lib/digest/render";
 import type { DigestDocument } from "@/lib/digest/types";
 import { readSkeleton } from "@/lib/graph/skeleton";
-import { loadDocuments, pickBlocks, readingOf } from "@/lib/graph/stitch";
+import { commandKind, loadDocuments, pickBlocks, readingOf } from "@/lib/graph/stitch";
 
 // The assistant at Project scope over a long project (SPEC.md §7). Under
 // ASSISTANT_WHOLE_THRESHOLD of document text the digest goes whole, as it
@@ -44,6 +44,9 @@ export async function projectPicks(input: {
     userId: input.userId,
     feature: "assistant",
     signal: input.signal,
+    // A question reads a question's budget, not a page's: the kind of the
+    // message, by Stitch's rule.
+    kind: commandKind(input.question),
   });
   const picks = new Map<string, DocumentPick>(
     reading.read.map((r) => [r.doc.id, { blockIds: new Set<string>(), gist: readSkeleton(r.doc.skeleton)?.gist ?? "" }]),

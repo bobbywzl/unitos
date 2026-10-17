@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
+import type { AttachedDocument } from "@/lib/attached-document";
 import { dropEarlyKeys, earlyKeysFor, keepEarlyKeys } from "@/lib/docs/early-keys";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
@@ -42,7 +43,6 @@ import {
   useDocumentReach,
 } from "@/components/reader/document-delete";
 import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
-import type { DocumentKind } from "@/lib/document-order";
 import type { SameFileIn } from "@/lib/parse/attach";
 import {
   IngestProgress,
@@ -75,36 +75,7 @@ import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile, SHEETS_ACCEPT, SLIDES_ACCEPT, WORD_ACCEPT } from "@/lib/office-file";
 import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
-export type AttachedDocument = {
-  id: string;
-  title: string;
-  sourceUrl: string | null;
-  parserVersion: number;
-  hasFile: boolean;
-  pdf: boolean; // the stored file is a PDF: Re-parse asks which shape (SPEC.md §16)
-  hasVideo: boolean; // re-parses by transcribing again (SPEC.md §11)
-  handwritten: boolean; // pages, not text blocks; the menu flips the shape (SPEC.md §16)
-  // The browser render for scripted figures (Document.figureRenderAt,
-  // figureRenderError): none has run, or when the last ran and why it did
-  // not deliver (SPEC.md §15).
-  figureRenderAt: string | null;
-  figureRenderError: string | null;
-  // The folder the document sits in within this project (SPEC.md §6); null
-  // = the project itself.
-  folderId: string | null;
-  // Its place in its list under Sort by Custom order (SPEC.md §6); null =
-  // never placed by a drag.
-  position: number | null;
-  // An import edited since it was imported (SPEC.md §29): Re-parse asks
-  // before it replaces the edits. Absent: the server's 409 "edited" asks.
-  importEdited?: boolean;
-  // The document list's Sort by (SPEC.md §6; lib/document-order.ts): what
-  // the document was made from, when it was added, and its last edit in
-  // this project (documentEditedAt).
-  kind: DocumentKind;
-  addedAt: string;
-  editedAt: string;
-};
+export type { AttachedDocument } from "@/lib/attached-document";
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
 // reason "edited": a re-parse would replace an import's edits (SPEC.md §29).
@@ -1564,7 +1535,8 @@ export function DocumentBar({
           >
             <span className="overflow-hidden whitespace-nowrap">{pillDoc ? clipWords(pillDoc.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
-              {opening ? <LoadingDots /> : documents.length}
+              {/* [cover4] The documents the graph counts: generated ones aside (WALK4-03). */}
+              {opening ? <LoadingDots /> : documents.filter((d) => d.kind !== "generated").length || documents.length}
             </span>
             <ChevronDownIcon
               size={13}

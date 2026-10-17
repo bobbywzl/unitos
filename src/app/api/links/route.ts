@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { documentBlocks, resolveAnchor, type ResolvedAnchor } from "@/lib/anchors/resolve";
-import { bumpDocument, documentAccess } from "@/lib/collab";
+import { bumpDocument, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -20,6 +20,10 @@ const createSchema = z.object({
   toDocumentId: z.string().min(1),
   anchor: anchorSchema,
   toAnchor: anchorSchema.optional(), // the other end; absent = document-level link
+  // The project the link is made in: it shows only there (SPEC.md §13).
+  // Absent = a tab opened before links carried a project; the link then
+  // shows wherever both documents are, as every link did.
+  notebookId: z.string().min(1).optional(),
 });
 
 // Link a text range in one document to another document. Recorded as a LINK_ADD
@@ -39,8 +43,18 @@ export async function POST(req: Request) {
 
   const fromDocument = await db.document.findUnique({ where: { id: data.fromDocumentId } });
   if (!fromDocument) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
-  const access = await documentAccess(data.fromDocumentId, "editor");
+  const access = data.notebookId
+    ? await notebookAccess(data.notebookId, "editor")
+    : await documentAccess(data.fromDocumentId, "editor");
   if (access instanceof NextResponse) return access;
+  if (data.notebookId) {
+    const attached = await db.notebookDocument.count({
+      where: { notebookId: data.notebookId, documentId: { in: [data.fromDocumentId, data.toDocumentId] } },
+    });
+    if (attached < new Set([data.fromDocumentId, data.toDocumentId]).size) {
+      return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+    }
+  }
 
   // Both ends resolve through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document — a
@@ -70,6 +84,7 @@ export async function POST(req: Request) {
     const created = await tx.docLink.create({
       data: {
         createdById: access.user.id,
+        notebookId: data.notebookId ?? null,
         fromDocumentId: data.fromDocumentId,
         fromBlockId: anchor.blockId,
         startOffset: anchor.startOffset,
@@ -97,6 +112,7 @@ export async function POST(req: Request) {
         kind: "LINK_ADD",
         meta: {
           linkId: created.id,
+          ...(data.notebookId ? { notebookId: data.notebookId } : {}),
           toDocumentId: data.toDocumentId,
           toTitle: toDocument.title,
           quotedText: anchor.quotedText,

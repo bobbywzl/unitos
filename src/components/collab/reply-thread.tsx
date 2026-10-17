@@ -9,7 +9,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { postUndoPill } from "@/lib/notes/undo-pill";
 import { tabAccount } from "@/lib/tab-account";
 import { loadCardDrafts, writeCardDrafts } from "@/lib/toolbar-drafts";
-import type { ReplyView } from "@/lib/types";
+import type { CrossAccountView, ReplyView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
@@ -38,13 +38,24 @@ function replyFormat(lang: string): Intl.DateTimeFormat {
   return format;
 }
 
-type Target = { noteId: string } | { blockEditId: string } | { docLinkId: string };
+/** What the thread is under: a note, an edit, or a link. A reply on a link
+    names the project it is changed from (SPEC.md §13: a link belongs to a
+    project, and a link of another project is not found there). */
+type Target = { noteId: string } | { blockEditId: string } | { docLinkId: string; notebookId?: string };
 
 /** The reply box's draft key in the card drafts (toolbar-drafts.ts). */
 function draftKey(target: Target): string {
   if ("noteId" in target) return `reply:note:${target.noteId}`;
   if ("blockEditId" in target) return `reply:edit:${target.blockEditId}`;
   return `reply:link:${target.docLinkId}`;
+}
+
+/** The route of one reply; a reply on a link carries the project (lib/link-scope.ts). */
+function replyPath(id: string, target: Target): string {
+  const path = `/api/replies/${encodeURIComponent(id)}`;
+  return "docLinkId" in target && target.notebookId
+    ? `${path}?notebookId=${encodeURIComponent(target.notebookId)}`
+    : path;
 }
 
 function keepDraft(key: string, text: string | null) {
@@ -75,16 +86,31 @@ function subscribeGoing(listener: () => void) {
 // shows the Undo pill (lib/notes/undo-pill.ts); the server delete waits for
 // the pill to go. The words typed in the reply box are kept with the card
 // drafts until the server takes the reply. Editors reply; viewers read.
+// On a link shared across accounts (crossAccount, SPEC.md §13) no one
+// deletes another account's reply, and a viewer outside the link maker's
+// projects resolves and deletes only its own replies and writes none.
 export function ReplyThread({
   target,
   replies,
   onChange,
+  crossAccount,
+  openRequest,
+  composerFirst = false,
 }: {
   target: Target;
   replies: ReplyView[];
   /** Runs after a reply is sent, resolved, reopened, or deleted: a caller
       that loaded the replies itself loads them again. */
   onChange?: () => void;
+  /** A link shared across accounts (lib/types.ts): what this account may do
+      to the replies on it. */
+  crossAccount?: CrossAccountView;
+  /** The caller draws its own Reply (the link panel's action row): each new
+      value opens the box, and the thread draws no Reply of its own. Left
+      out: the thread's own Reply. */
+  openRequest?: number;
+  /** The box sits above the replies, under the caller's Reply. */
+  composerFirst?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -94,10 +120,23 @@ export function ReplyThread({
   const [composing, setComposing] = useState(false);
   // The box takes the focus when the reader opens it, not when a kept draft does.
   const [focusBox, setFocusBox] = useState(false);
+  // The caller's Reply pressed: the box opens and takes the focus.
+  const [seenRequest, setSeenRequest] = useState(openRequest);
+  if (seenRequest !== openRequest) {
+    setSeenRequest(openRequest);
+    if ((openRequest ?? 0) > 0) {
+      setFocusBox(true);
+      setComposing(true);
+    }
+  }
   const [showResolved, setShowResolved] = useState(false);
   const [draft, setDraftState] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Resolve and Reopen answer at once (WALK2-12): the row reads the new state
+  // until the server's copy moves (the refresh after the write), and goes back
+  // when the server refuses. `was` is the server's state the answer replaced.
+  const [resolvedNow, setResolvedNow] = useState<Record<string, { value: string | null; was: string | null }>>({});
   const hidden = useSyncExternalStore(subscribeGoing, () => going, () => NONE);
   const key = draftKey(target);
   const keyRef = useRef(key);
@@ -118,25 +157,38 @@ export function ReplyThread({
     keepDraft(key, text);
   };
 
-  const shown = replies.filter((r) => !hidden.has(r.id));
+  // Outside the link maker's projects, this account reads and keeps to its
+  // own replies.
+  const outside = crossAccount?.outside === true;
+  const canReply = canEdit && !outside;
+
+  const shown = replies
+    .filter((r) => !hidden.has(r.id))
+    .map((r) => {
+      const now = resolvedNow[r.id];
+      return now && r.resolvedById === now.was ? { ...r, resolvedById: now.value } : r;
+    });
   // Replies need an account to sign them: with sign-in off there is no Reply.
   // Any editor replies, on a shared corpus or their own — a reply on one's
   // own note is a dated update under it.
-  if (shown.length === 0 && (!authOn || !canEdit)) return null;
+  if (shown.length === 0 && (!authOn || !canReply)) return null;
 
   const openReplies = shown.filter((r) => r.resolvedById === null);
   const resolvedReplies = shown.filter((r) => r.resolvedById !== null);
 
-  async function run(fn: () => Promise<unknown>) {
-    if (busy) return;
+  /** Runs one write; true when the server took it (or the queue holds it). */
+  async function run(fn: () => Promise<unknown>): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     try {
       await fn();
       refreshWhenOnline(router);
       onChange?.();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -167,7 +219,7 @@ export function ReplyThread({
       message: t("common.replyDeleted"),
       undo: back,
       commit: async () => {
-        const path = `/api/replies/${encodeURIComponent(id)}`;
+        const path = replyPath(id, target);
         const failed = (reason: unknown) => {
           console.error("reply delete", reason);
           back();
@@ -202,12 +254,24 @@ export function ReplyThread({
       },
     });
   };
-  const setResolved = (id: string, resolvedValue: boolean) =>
-    void run(() => api(`/api/replies/${id}`, "PATCH", { resolved: resolvedValue }));
+  const setResolved = (id: string, resolvedValue: boolean) => {
+    if (busy) return;
+    const was = replies.find((r) => r.id === id)?.resolvedById ?? null;
+    setResolvedNow((prev) => ({ ...prev, [id]: { value: resolvedValue ? (myId ?? "me") : null, was } }));
+    void run(() => api(replyPath(id, target), "PATCH", { resolved: resolvedValue })).then((ok) => {
+      if (ok) return;
+      setResolvedNow((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    });
+  };
 
   const row = (reply: ReplyView) => {
     const person = people[reply.userId];
     const isResolved = reply.resolvedById !== null;
+    const mine = reply.userId === myId;
     return (
       <div key={reply.id} className={`flex items-start gap-2 ${isResolved ? "opacity-60" : ""}`}>
         {person && <PersonBadge person={person} size={16} />}
@@ -219,26 +283,26 @@ export function ReplyThread({
             <span suppressHydrationWarning className="text-[10px] text-sand-500">
               {replyTime(reply.createdAt, lang)}
             </span>
-            <span className="ml-auto flex items-center gap-2">
-              {canEdit && (
+            <span className="-my-1 ml-auto flex items-center gap-2 pointer-coarse:-my-2.5 pointer-coarse:gap-3">
+              {canEdit && (!outside || mine) && (
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}
                   data-track="reply-resolve"
                   data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
-                  className="text-[10px] font-semibold text-sand-500 hover:text-sage-700"
+                  className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-2.5"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
                 </button>
               )}
-              {(reply.userId === myId || role === "owner") && (
+              {(mine || (role === "owner" && !crossAccount)) && (
                 <button
                   onClick={() => remove(reply.id)}
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
                   data-tip={t("common.delete")}
-                  // The × stays small; its press area is the card buttons' 28 px (36 on touch),
-                  // from Resolve's edge (7 px of the 8 px gap) to the right, so it never covers Resolve.
-                  className="relative text-[11px] text-sand-400 after:absolute after:top-1/2 after:-right-[14px] after:-left-[7px] after:h-7 after:-translate-y-1/2 after:content-[''] hover:text-red-600 pointer-coarse:after:-right-[22px] pointer-coarse:after:h-9"
+                  // The × stays small; its box is 24 px, 40 under a finger (WALK4-16), and the
+                  // row's negative margin keeps the line's height.
+                  className="flex size-6 items-center justify-center text-[11px] text-sand-400 hover:text-red-600 pointer-coarse:size-10 pointer-coarse:text-[15px]"
                 >
                   ×
                 </button>
@@ -257,10 +321,49 @@ export function ReplyThread({
     );
   };
 
+  const composer = canReply && composing && (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+      className="flex items-end gap-1.5"
+    >
+      <textarea
+        autoFocus={focusBox}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        {...ime.props}
+        onKeyDown={(e) => {
+          if (ime.isImeEnter(e) || isImeKey(e)) return;
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+          // The box closes; its words stay in the draft for the next Reply.
+          if (e.key === "Escape") setComposing(false);
+        }}
+        placeholder={t("common.replyPlaceholder")}
+        rows={1}
+        className="min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+      />
+      <VoiceTypingButton track="reply-voice-typing" />
+      <button
+        type="submit"
+        data-track="reply-send"
+        disabled={!draft.trim() || busy}
+        className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-4"
+      >
+        {t("common.reply")}
+      </button>
+    </form>
+  );
+
   return (
     <div
       className={`flex flex-col gap-2 ${shown.length > 0 ? "mt-2.5 border-t border-line pt-2.5" : "mt-1.5"}`}
     >
+      {composerFirst && composer}
       {openReplies.map(row)}
 
       {resolvedReplies.length > 0 && (
@@ -276,7 +379,7 @@ export function ReplyThread({
       )}
       {showResolved && resolvedReplies.map(row)}
 
-      {canEdit && !composing && (
+      {canReply && !composing && openRequest === undefined && (
         <button
           onClick={() => {
             setFocusBox(true);
@@ -284,48 +387,12 @@ export function ReplyThread({
           }}
           data-track="reply"
           data-tip={t("common.replyTitle")}
-          className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700"
+          className="inline-flex items-center self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
         >
           {t("common.reply")}
         </button>
       )}
-      {canEdit && composing && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-          className="flex items-end gap-1.5"
-        >
-          <textarea
-            autoFocus={focusBox}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            {...ime.props}
-            onKeyDown={(e) => {
-              if (ime.isImeEnter(e) || isImeKey(e)) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-              // The box closes; its words stay in the draft for the next Reply.
-              if (e.key === "Escape") setComposing(false);
-            }}
-            placeholder={t("common.replyPlaceholder")}
-            rows={1}
-            className="min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
-          />
-          <VoiceTypingButton track="reply-voice-typing" />
-          <button
-            type="submit"
-            data-track="reply-send"
-            disabled={!draft.trim() || busy}
-            className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-          >
-            {t("common.reply")}
-          </button>
-        </form>
-      )}
+      {!composerFirst && composer}
       {error && <p className="text-[11px] text-red-500">{error}</p>}
     </div>
   );

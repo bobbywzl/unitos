@@ -57,6 +57,9 @@ const createSchema = z
     segments: segmentsSchema,
     color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
     comment: z.string().max(10_000).optional(),
+    // The offline queue replaying a comment (lib/offline/queue.ts replayBody):
+    // keep the words when the anchor no longer resolves.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
     video: videoSchema.optional(),
     page: pageSchema.optional(),
   })
@@ -108,8 +111,20 @@ export async function POST(req: Request) {
   const layer = data.anchor.layer ?? null;
   const passage = resolvePassage(await layerBlocks(data.documentId, layer), data.anchor, data.segments);
   const anchor = passage[0];
+  const comment = data.comment?.trim();
   if (!anchor) {
-    return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    // A comment replayed from the offline queue (onSourceLost "keep",
+    // lib/offline/queue.ts replayBody) whose words left the block meanwhile
+    // (an edit, a re-parse) saves all the same, on the block the reader
+    // commented on, with its source orphaned: the Annotations tab lists it
+    // under the document as unresolved, and the words typed offline are
+    // never dropped (rule zero 6). Online the reader gets the 400 and keeps
+    // the box. A highlight has no words of the reader's own: it answers 400
+    // on replay too.
+    if (!comment || data.onSourceLost !== "keep") {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    }
+    return createOrphanedComment(data.notebookId, data.documentId, data.anchor, layer, comment, data.color ?? null, access.user.id, t);
   }
 
   const section = await annotationsSection(data.notebookId);
@@ -118,7 +133,6 @@ export async function POST(req: Request) {
   // A highlight has a color; its content is the note when one was typed, else
   // the quote (the whole passage, one paragraph per block). A comment without
   // a color stays a plain comment.
-  const comment = data.comment?.trim();
   const content = comment ? comment : passage.map((s) => s.quotedText).join("\n\n").slice(0, 5000);
   const color = data.color ?? (comment ? null : "clay");
 
@@ -156,6 +170,59 @@ export async function POST(req: Request) {
     include: { sources: true },
   });
   await bumpNotebook(data.notebookId);
+  return NextResponse.json(note, { status: 201 });
+}
+
+// A replayed comment whose anchor no longer resolves (REV9-03): the note
+// carries the anchor as the reader made it, orphaned, so the comment lists
+// under its document and the ladder can still find the words if they come
+// back. A second replay of the same record answers the saved note.
+async function createOrphanedComment(
+  notebookId: string,
+  documentId: string,
+  anchor: z.infer<typeof anchorSchema>,
+  layer: string | null,
+  comment: string,
+  color: "clay" | "sage" | "gold" | "plum" | null,
+  createdById: string,
+  t: TFunc,
+) {
+  // The block id comes from the body unchecked (REV10-09): a block that is
+  // not this document's (gone since, or another project's) is not stored.
+  // The document's first block stands in; the words are kept either way.
+  const own = await db.block.findFirst({ where: { id: anchor.blockId, documentId }, select: { id: true } });
+  const blockId = own?.id ?? (await db.block.findFirst({ where: { documentId }, orderBy: { order: "asc" }, select: { id: true } }))?.id;
+  if (!blockId) return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
+  const section = await annotationsSection(notebookId);
+  const source = {
+    documentId,
+    blockId,
+    startOffset: anchor.startOffset,
+    endOffset: anchor.endOffset,
+    quotedText: anchor.quotedText,
+    prefix: anchor.prefix,
+    suffix: anchor.suffix,
+    layer,
+    orphaned: true,
+  };
+  const duplicate = await db.note.findFirst({
+    where: {
+      sectionId: section.id,
+      content: comment,
+      color,
+      sources: {
+        some: { blockId: source.blockId, startOffset: source.startOffset, endOffset: source.endOffset, orphaned: true, layer },
+      },
+    },
+    include: { sources: true },
+  });
+  if (duplicate) return NextResponse.json(duplicate, { status: 200 });
+  const order = await db.note.count({ where: { sectionId: section.id } });
+  const note = await db.note.create({
+    data: { sectionId: section.id, content: comment, status: "ACCEPTED", color, createdById, order, sources: { create: source } },
+    include: { sources: true },
+  });
+  await bumpNotebook(notebookId);
   return NextResponse.json(note, { status: 201 });
 }
 

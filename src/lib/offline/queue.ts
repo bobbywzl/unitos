@@ -29,9 +29,11 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // now holds back only the later writes that name the same note, section,
 // reply, or annotation; the writes after it that name other things go on.
 // A queueable write to something a queued write names queues behind it
-// (lib/api.ts): one sender per edit, in order. A note write
+// (lib/api.ts): one sender per edit, in order. A replayed write
 // is never refused for a part of it: a quote whose anchor no longer resolves
-// lands its words without the source (replayBody), and words written to a
+// lands its words without the source, a comment whose words left the block
+// lands on its block with the source orphaned, a reply on a link removed
+// meanwhile lands on the kept row (replayBody), and words written to a
 // note deleted meanwhile land in a new note (lib/notes/gone.ts). While
 // records wait and the browser says online, a write that did not reach the
 // server runs again after a growing wait (retryLater). A queued add of a
@@ -418,11 +420,23 @@ const landed: { noteId: string; content: string }[] = [];
     its words when the anchor no longer resolves (onSourceLost "keep"): the
     words land without the source, never dropped with it. Records queued
     before this rule replay the same way. */
+// A replay keeps the reader's words when what the write points at went
+// meanwhile (rule zero item 6): a note's quote whose anchor no longer
+// resolves, a gathered note's quotes or a Note on this link's link (SPEC.md
+// §13), a comment whose words left the block, a reply on a link another
+// editor removed. The routes read onSourceLost "keep" and save the words
+// without what is gone; online the same write answers 4xx, and the reader
+// fixes it.
 function replayBody(record: QueuedWrite): unknown {
   const body = record.body;
-  if (!body || typeof body !== "object" || !NOTE_WRITE.test(record.path)) return body;
-  if (record.method === "DELETE") return body;
-  if ("source" in body || "addSource" in body) return { ...body, onSourceLost: "keep" };
+  if (!body || typeof body !== "object" || record.method === "DELETE") return body;
+  if (NOTE_WRITE.test(record.path)) {
+    if ("source" in body || "addSource" in body || "quotes" in body || "fromLinkId" in body) return { ...body, onSourceLost: "keep" };
+    return body;
+  }
+  if (record.method !== "POST") return body;
+  if (record.path === "/api/annotations" && typeof (body as { comment?: unknown }).comment === "string") return { ...body, onSourceLost: "keep" };
+  if (record.path === "/api/replies" && "docLinkId" in body) return { ...body, onSourceLost: "keep" };
   return body;
 }
 

@@ -27,6 +27,7 @@ import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
+import { sourceIdsAttr } from "@/lib/source-mark";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass, type TextStyle } from "@/lib/text-style";
 
@@ -162,6 +163,10 @@ export type Highlight = {
   leaving?: boolean;
   // kind "link": what the link is about, typed after Link here.
   linkReason?: string | null;
+  // kind "link": the link's open replies; the chain icon counts them.
+  linkReplies?: number;
+  // kind "link": the notes on the link; the chain icon's tip counts them (WALK4-05).
+  linkNotes?: number;
 };
 
 export function anchorClass(anchor: Highlight): string {
@@ -376,6 +381,8 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     // The notes and annotations on these words: the one the mark paints, and
     // every one a click can open (table-marks.ts markStack).
     const { anchors, anchor, stack } = markStack(covering);
+    // Every other anchor over the words rides along, so a jump to any of them finds the words (lib/source-mark.ts).
+    const sourceIds = sourceIdsAttr(anchors);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
@@ -401,6 +408,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={linkTip || undefined}
           // A drag that starts on a link selects its words, as a drag inside
           // any mark does (SPEC.md §6): the link is not dragged away, and the
@@ -426,19 +434,38 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           {inner}
         </a>,
       );
-      // A completed link carries a closed chain at its right side.
+      // A completed link carries a closed chain at its right side. Its open
+      // replies ride on the chain as a count, and its tip counts its notes
+      // (WALK4-05): the discussion shows from the text. data-anchor-skip
+      // keeps the count's digits out of anchor offsets (SPEC.md §5).
       if (link.end === to) {
+        const replies = link.linkReplies ?? 0;
+        const linkNotes = link.linkNotes ?? 0;
+        const chainTip = [
+          link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked"),
+          replies > 0
+            ? replies === 1
+              ? t("graphNotes.replyCountOne")
+              : t("graphNotes.replyCountMany", { n: replies })
+            : null,
+          linkNotes > 0 ? (linkNotes === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: linkNotes })) : null,
+        ]
+          .filter((s): s is string => s !== null)
+          .join(" · ");
         parts.push(
           <a
             key={`chain-${from}`}
             href={link.href}
             data-anchor-skip
             data-margin-chip
-            aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
-            data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
-            className={CHAIN_BUTTON}
+            data-link-replies={replies > 0 ? replies : undefined}
+            data-link-notes={linkNotes > 0 ? linkNotes : undefined}
+            aria-label={chainTip}
+            data-tip={chainTip}
+            className={replies > 0 ? CHAIN_BUTTON.replace("size-[16px]", "h-[16px] gap-0.5 px-1") : CHAIN_BUTTON}
           >
             <LinkIcon size={10} />
+            {replies > 0 && <span className="text-[9.5px] leading-none font-semibold tabular-nums">{replies}</span>}
           </a>,
         );
       }
@@ -449,6 +476,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#reference-${citation.referenceId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={citation.referenceText}
           onClick={(e) => {
             e.preventDefault();
@@ -471,6 +499,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#block-${toc.targetBlockId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={t("panes.jumpToSection")}
           onClick={(e) => {
             e.preventDefault();
@@ -495,6 +524,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           target="_blank"
           rel="noopener noreferrer"
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           className={`weblink-mark${editedClass}`}
         >
           {inner}

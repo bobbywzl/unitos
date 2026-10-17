@@ -12,7 +12,8 @@
 // What it does, for every project the account owned in the backup:
 //   - Inserts every row that is in the backup and missing in production: the
 //     project, its sections, notes, annotations, quotes (Source), replies,
-//     note edits, history, collaborators, folders, and document attachments;
+//     note edits, history, collaborators, folders, document attachments, and
+//     the hide rows of the links removed from it (DocLinkHidden);
 //     and every document the project held or quoted that production no longer
 //     has, with its blocks, pages, figures, images, video, versions, edits,
 //     and links.
@@ -20,10 +21,19 @@
 //     whose document is gone (documentId null) gets its document, anchor,
 //     and orphaned flag back when the backup has them and the document is in
 //     production after the restore.
+//   - Puts back a restored project's links: a project delete keeps its links
+//     and their replies, with notebookId null and formerNotebookId set (the
+//     trigger in 20261007120000_doclink_former_notebook). Each such link of a
+//     project restored here gets its notebookId back and formerNotebookId
+//     cleared, so the project shows its links and their replies again.
+//   - Keeps a restored project's removed links removed: the DocLinkHidden
+//     rows of its links come back with the links.
 //   - Bumps each project's rev, so an open tab refreshes.
 //
 // What it never does: delete a row, or change a row production already has
-// (the relink above changes only rows whose documentId is null). A document
+// (the relinks above change only rows whose documentId is null, and links
+// whose notebookId is null with formerNotebookId naming a restored project,
+// back to that project). A document
 // that is still in production keeps its blocks as they are now. A row that
 // clashes with a unique key production already holds is skipped and counted.
 //
@@ -159,6 +169,20 @@ async function main() {
       Dm,
     )
   ).filter((l) => available.has(l.fromDocumentId) && available.has(l.toDocumentId));
+  // A link removed from a restored project while its row stayed (another
+  // account's reply or project): the hide row goes with the link, so the
+  // removal holds after the restore. The table exists from
+  // 20261007140000_doclink_hidden on, in both databases.
+  const hasHidden =
+    (await columns(backup, "DocLinkHidden")).size > 0 && (await columns(target, "DocLinkHidden")).size > 0;
+  const linkHides = hasHidden
+    ? await backupRows(
+        "DocLinkHidden",
+        `t."docLinkId" = ANY($1::text[]) AND t."notebookId" = ANY($2::text[])`,
+        ids(docLinks),
+        N,
+      )
+    : [];
   const readingPositions = await backupRows(
     "ReadingPosition",
     `t."documentId" = ANY($1::text[]) AND t."userId" = $2`,
@@ -220,6 +244,7 @@ async function main() {
   add("DocumentVersion", versions);
   add("BlockEdit", blockEdits);
   add("DocLink", docLinks);
+  if (hasHidden) add("DocLinkHidden", linkHides);
   add("ReadingPosition", readingPositions);
   // A conversation the account kept again since (same project, same place)
   // stays: the insert skips the unique key clash.
@@ -240,6 +265,7 @@ async function main() {
   const COMPOSITE = {
     NotebookDocument: ["notebookId", "documentId"],
     ReadingPosition: ["userId", "documentId"],
+    DocLinkHidden: ["docLinkId", "notebookId"],
   };
   for (const step of plan) {
     const composite = COMPOSITE[step.table];
@@ -275,6 +301,15 @@ async function main() {
     ? await rows(target, `SELECT "id" FROM "Note" WHERE "id" = ANY($1::text[]) AND "documentId" IS NULL`, X)
     : [];
   const noteRelinks = cutNotes.map((r) => noteById.get(r.id)).filter((n) => n && n.documentId);
+  // Links a project delete kept (notebookId null, formerNotebookId set). The
+  // column exists from 20261007120000_doclink_former_notebook on.
+  const linkRelinks = (await columns(target, "DocLink")).has("formerNotebookId")
+    ? await rows(
+        target,
+        `SELECT "id", "formerNotebookId" FROM "DocLink" WHERE "formerNotebookId" = ANY($1::text[]) AND "notebookId" IS NULL`,
+        N,
+      )
+    : [];
 
   // ── Report ───────────────────────────────────────────────────────────────
   const targetNotes = await rows(
@@ -304,6 +339,7 @@ async function main() {
   );
   console.log(`Quotes to relink to their document: ${sourceRelinks.length}`);
   console.log(`Notes to relink to their document: ${noteRelinks.length}`);
+  console.log(`Links to put back in their project: ${linkRelinks.length}`);
 
   if (!apply) {
     console.log("\nDry run: nothing was written. Run again with --apply to write the rows above.");
@@ -360,7 +396,19 @@ async function main() {
           n.documentId,
         );
       }
-      console.log(`Relinked ${sourceRelinks.length} quotes and ${noteRelinks.length} notes.`);
+      // After the inserts: the project row exists again. Only a link whose
+      // project is in production now goes back to it.
+      const relinkedLinks = linkRelinks.length
+        ? await tx.$executeRawUnsafe(
+            `UPDATE "DocLink" l SET "notebookId" = l."formerNotebookId", "formerNotebookId" = NULL
+             WHERE l."id" = ANY($1::text[]) AND l."notebookId" IS NULL
+               AND EXISTS (SELECT 1 FROM "Notebook" n WHERE n."id" = l."formerNotebookId")`,
+            ids(linkRelinks),
+          )
+        : 0;
+      console.log(
+        `Relinked ${sourceRelinks.length} quotes, ${noteRelinks.length} notes, and ${relinkedLinks} links.`,
+      );
       await tx.$executeRawUnsafe(`UPDATE "Notebook" SET "rev" = "rev" + 1 WHERE "id" = ANY($1::text[])`, N);
     },
     { maxWait: 60_000, timeout: 30 * 60_000 },

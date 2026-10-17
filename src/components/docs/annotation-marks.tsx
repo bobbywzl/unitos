@@ -65,9 +65,23 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
       symbol = <CommentIcon size={10} />;
     } else if (kind === "link-end") {
       // A completed link's chain goes to the other end; the linked words stay text to edit.
-      look(CHAIN_BUTTON, h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), "link");
+      // Its open replies ride on the chain as a count, as in the reader (block-view.tsx).
+      const replies = h.linkReplies ?? 0;
+      const linked = h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked");
+      const count = replies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: replies });
+      look(
+        replies > 0 ? CHAIN_BUTTON.replace("size-[16px]", "h-[16px] gap-0.5 px-1") : CHAIN_BUTTON,
+        replies > 0 ? `${linked} · ${count}` : linked,
+        "link",
+      );
       button.dataset.href = h.href ?? "";
-      symbol = <LinkIcon size={10} />;
+      if (replies > 0) button.dataset.linkReplies = String(replies);
+      symbol = (
+        <>
+          <LinkIcon size={10} />
+          {replies > 0 && <span className="text-[9.5px] leading-none font-semibold tabular-nums">{replies}</span>}
+        </>
+      );
     } else if (kind === "highlight") {
       // A highlight's chip opens its card, also while the reader writes,
       // where a click on the words places the caret. Its dot is the hue.
@@ -445,7 +459,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, e
             side: side++,
             ignoreSelection: true,
             stopEvent: () => true,
-            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}`,
+            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}:${h.linkReplies ?? 0}`,
             destroy: (dom) => {
               const root = (dom as HTMLElement & { __root?: Root }).__root;
               if (root) queueMicrotask(() => root.unmount());

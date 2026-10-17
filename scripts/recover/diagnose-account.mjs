@@ -38,6 +38,12 @@
 //   7. The notes the account wrote anywhere, by status.
 //   8. Each document in the account's projects: parser version, blocks, and
 //      the account's quotes in it, found and orphaned.
+//   9. Links of a deleted project (DocLink.formerNotebookId) that the account
+//      made or replied on: kept and hidden; restore-account.mjs puts them
+//      back in their project when it restores the project.
+//  10. Links removed from the account's projects while their rows stay
+//      (DocLinkHidden): another account replied on them, or another
+//      account's project shows them.
 
 import { writeFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
@@ -125,6 +131,27 @@ try {
         WHERE n."userId" = ${userId} AND src."orphaned"
         GROUP BY n."title"`;
       table("Orphaned quotes (anchor not found, or document deleted)", orphaned);
+
+      const formerLinks = await tx.$queryRaw`
+        SELECT l."id", l."formerNotebookId", (p."id" IS NOT NULL) AS "projectExists",
+          left(l."quotedText", 40) AS "quote", l."createdById" = ${userId} AS "madeByAccount",
+          (SELECT count(*)::int FROM "Reply" r WHERE r."docLinkId" = l."id") AS "replies"
+        FROM "DocLink" l
+        LEFT JOIN "Notebook" p ON p."id" = l."formerNotebookId"
+        WHERE l."notebookId" IS NULL AND l."formerNotebookId" IS NOT NULL
+          AND (l."createdById" = ${userId}
+            OR EXISTS (SELECT 1 FROM "Reply" r WHERE r."docLinkId" = l."id" AND r."userId" = ${userId})
+            OR p."userId" = ${userId})`;
+      table("Links of a deleted project (kept, shown nowhere until the project is restored)", formerLinks);
+
+      const hiddenLinks = await tx.$queryRaw`
+        SELECT h."docLinkId", n."title" AS "project", h."createdAt", coalesce(u."email", h."userId") AS "removedBy",
+          (SELECT count(*)::int FROM "Reply" r WHERE r."docLinkId" = h."docLinkId") AS "replies"
+        FROM "DocLinkHidden" h
+        JOIN "Notebook" n ON n."id" = h."notebookId" AND n."userId" = ${userId}
+        LEFT JOIN "User" u ON u."id" = h."userId"
+        ORDER BY h."createdAt"`;
+      table("Links removed from the account's projects (rows and replies kept)", hiddenLinks);
 
       const sharedDocs = await tx.$queryRaw`
         SELECT d."id", left(d."title", 50) AS "title", mine."title" AS "project",

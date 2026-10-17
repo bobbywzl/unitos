@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess, noteAccess, peopleByIds } from "@/lib/collab";
+import {
+  bumpDocument,
+  bumpNotebook,
+  crossAccountLink,
+  documentAccess,
+  linkAccess,
+  linkOfOtherAccount,
+  noteAccess,
+  peopleByIds,
+} from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -10,7 +19,14 @@ const createSchema = z
     noteId: z.string().min(1).optional(),
     blockEditId: z.string().min(1).optional(),
     docLinkId: z.string().min(1).optional(),
+    // With docLinkId: the project the reply is written in; a link of another
+    // project is not found there (SPEC.md §13).
+    notebookId: z.string().min(1).optional(),
     content: z.string().min(1).max(4000),
+    // The offline queue replaying a reply on a link (lib/offline/queue.ts
+    // replayBody): the reply lands on the kept row of a link another editor
+    // removed meanwhile.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
   })
   .refine(
     (d) => [d.noteId, d.blockEditId, d.docLinkId].filter(Boolean).length === 1,
@@ -68,11 +84,29 @@ export async function POST(req: Request) {
   if (data.docLinkId) {
     const link = await db.docLink.findUnique({
       where: { id: data.docLinkId },
-      select: { id: true, fromDocumentId: true },
+      select: {
+        id: true,
+        fromDocumentId: true,
+        toDocumentId: true,
+        notebookId: true,
+        formerNotebookId: true,
+        createdById: true,
+        createdAt: true,
+      },
     });
     if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-    const access = await documentAccess(link.fromDocumentId, "editor");
+    // A reply replayed from the offline queue (onSourceLost "keep",
+    // lib/offline/queue.ts replayBody) on a link another editor removed
+    // meanwhile saves on the kept row, which Restore brings back with its
+    // thread: a removed link does not make the words stale (REV8-01,
+    // CLAUDE.md rule zero 6). Online the reader gets the 404 and keeps the
+    // draft.
+    const replayed = data.onSourceLost === "keep";
+    const access = await linkAccess(link, "editor", data.notebookId, { removed: replayed });
     if (access instanceof NextResponse) return access;
+    // A link with no project shared across accounts: only its maker's
+    // projects reply on it (SPEC.md §13).
+    if ((await crossAccountLink(link, access.user)).outside) return linkOfOtherAccount();
     const reply = await db.reply.create({
       data: { docLinkId: link.id, userId: access.user.id, content: data.content.trim() },
     });

@@ -1,3 +1,4 @@
+import { withoutOtherProjectLinkEdits } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
 import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
@@ -88,8 +89,11 @@ export async function historyPage(
         })
       : [],
   ]);
+  // Links belong to a project (SPEC.md §13): the LINK_ADD and LINK_REMOVE
+  // edits of another project's links are left out (lib/collab.ts).
+  const ownEdits = await withoutOtherProjectLinkEdits(edits, notebookId);
   // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
-  const trivial = await trivialEdits(edits);
+  const trivial = await trivialEdits(ownEdits);
   // A removed note or section kept whole can be restored (lib/notes/removed.ts): read
   // as two flags, never the kept note itself. A removed document's row
   // reads its document's id, so the row can offer Add back.
@@ -135,6 +139,53 @@ export async function historyPage(
     const documentId = flagsOf.get(id)?.documentId;
     return documentId && stillThere.has(documentId) ? documentId : null;
   };
+  // A link's edit: its meta names the link, its other end, and what
+  // happened to it (restored by Undo or Restore; a recommended link
+  // dismissed, hidden and not deleted).
+  const linkMeta = (meta: unknown) =>
+    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as {
+      linkId?: unknown;
+      restored?: unknown;
+      dismissed?: unknown;
+      toTitle?: unknown;
+    };
+  // A removed link still hidden in this project: its newest LINK_REMOVE row
+  // carries the link, so the row offers Restore (WALK5-01, WALK5-08). The
+  // panel shows the button to editors; the route checks the role again.
+  const removedLinkIds = [
+    ...new Set(
+      ownEdits.flatMap((e) => {
+        const id = linkMeta(e.meta).linkId;
+        return e.kind === "LINK_REMOVE" && typeof id === "string" ? [id] : [];
+      }),
+    ),
+  ];
+  const stillHidden = new Set(
+    removedLinkIds.length === 0
+      ? []
+      : (
+          await db.docLinkHidden.findMany({
+            where: { notebookId, docLinkId: { in: removedLinkIds } },
+            select: { docLinkId: true },
+          })
+        ).map((h) => h.docLinkId),
+  );
+  const restoreOffered = new Set<string>();
+  const restoreLinkOf = (e: { kind: string; meta: unknown }): string | undefined => {
+    const id = linkMeta(e.meta).linkId;
+    if (e.kind !== "LINK_REMOVE" || typeof id !== "string" || !stillHidden.has(id) || restoreOffered.has(id)) {
+      return undefined;
+    }
+    restoreOffered.add(id); // ownEdits is newest first: the newest removal
+    return id;
+  };
+  // A link's row names both ends: "BOOK TWO → Extra notes".
+  const linkEnds = (e: { kind: string; meta: unknown; document: { title: string } }): string => {
+    const to = linkMeta(e.meta).toTitle;
+    return (e.kind === "LINK_ADD" || e.kind === "LINK_REMOVE") && typeof to === "string" && to !== ""
+      ? `${e.document.title} → ${to}`
+      : e.document.title;
+  };
   const all: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -151,8 +202,9 @@ export async function historyPage(
         createdAt: e.createdAt.toISOString(),
       }),
     ),
-    ...edits.map(
-      (e): HistoryEntry => ({
+    ...ownEdits.map((e): HistoryEntry => {
+      const restoreLinkId = restoreLinkOf(e);
+      return {
         id: e.id,
         userId: e.userId,
         kind: e.kind as HistoryEntry["kind"],
@@ -164,7 +216,7 @@ export async function historyPage(
               : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
                 (e.meta as { to?: string } | null)?.to ??
                 ""),
-        documentTitle: e.document.title,
+        documentTitle: linkEnds(e),
         documentId: e.documentId,
         blockId: e.blockId,
         edit: {
@@ -181,8 +233,13 @@ export async function historyPage(
         },
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
-      }),
-    ),
+        ...(restoreLinkId ? { restoreLinkId } : {}),
+        ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
+        ...(e.kind === "LINK_REMOVE" && linkMeta(e.meta).dismissed === true ? { dismissed: true } : {}),
+      };
+    }),
   ].sort(newestFirst);
-  return { entries: all.slice(0, limit), more: all.length > limit };
+  // Rows left out as another project's link edits held places in the page:
+  // older rows may remain past what shows.
+  return { entries: all.slice(0, limit), more: all.length > limit || edits.length > limit };
 }

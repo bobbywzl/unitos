@@ -17,6 +17,7 @@ import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ArrowLeftIcon } from "@/components/icons";
 import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { AnnotationsFullPage, type AnnotationGroup } from "@/components/panels/annotations-full-page";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
     include: {
       collaborators: true,
       documents: {
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         include: { document: { select: { id: true, title: true, video: { select: { id: true } } } } },
       },
       sections: {

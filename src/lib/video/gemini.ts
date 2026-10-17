@@ -95,7 +95,8 @@ export async function geminiCall<T>(
         recordUsage(
           { userId: opts.usage.userId, feature: opts.usage.feature, model },
           {
-            inputTokens: body.usageMetadata.promptTokenCount ?? 0,
+            // promptTokenCount holds the cached tokens too (COST8-02).
+            inputTokens: Math.max(0, (body.usageMetadata.promptTokenCount ?? 0) - (body.usageMetadata.cachedContentTokenCount ?? 0)),
             outputTokens: body.usageMetadata.candidatesTokenCount ?? 0,
             cacheReadTokens: body.usageMetadata.cachedContentTokenCount ?? 0,
           },

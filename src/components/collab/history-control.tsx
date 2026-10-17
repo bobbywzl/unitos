@@ -81,6 +81,15 @@ function styleLabel(t: TFunc, style: string | undefined): string {
   return key ? t(key) : style;
 }
 
+// What a row says the person did. A link's row says what happened to the
+// link: restored by Undo or Restore (LINK_ADD, meta.restored), or a
+// recommended link dismissed (LINK_REMOVE, meta.dismissed).
+function kindKey(entry: HistoryEntry): TKey {
+  if (entry.kind === "LINK_ADD" && entry.restored) return "panes.historyLinkRestore";
+  if (entry.kind === "LINK_REMOVE" && entry.dismissed) return "panes.historyLinkDismiss";
+  return KIND_KEY[entry.kind] ?? "panes.historyTextEdit";
+}
+
 type HistoryItem = { kind: "entry"; entry: HistoryEntry } | { kind: "run"; entries: HistoryEntry[] };
 
 // Consecutive small edits by one person in one document fold into one
@@ -242,6 +251,21 @@ export function HistoryPanel({
       entry,
       async () => {
         await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId: entry.addBackDocumentId });
+        router.refresh();
+      },
+      "panes.historyRestoreFailed",
+    );
+
+  // Restore on "removed a link" (SPEC.md §13, WALK5-01, WALK5-08): the link
+  // shows in the project again, with its replies and notes
+  // (/api/links/<id>/hidden). The refresh brings the LINK_ADD row that
+  // records who restored it.
+  const restoreLink = (entry: HistoryEntry) =>
+    act(
+      entry,
+      async () => {
+        const linkId = encodeURIComponent(entry.restoreLinkId ?? "");
+        await api(`/api/links/${linkId}/hidden?notebookId=${encodeURIComponent(notebookId)}`, "DELETE");
         router.refresh();
       },
       "panes.historyRestoreFailed",
@@ -420,6 +444,23 @@ export function HistoryPanel({
         </button>
       );
     }
+    if (entry.restoreLinkId) {
+      if (doneHere.has(entry.id)) return <span className={doneLabel}>{t("panes.historyRestoredLabel")}</span>;
+      if (!canEdit) return null;
+      return (
+        <button
+          type="button"
+          onClick={() => void restoreLink(entry)}
+          disabled={working !== null}
+          data-track="history-link-restore"
+          data-history-restore={entry.restoreLinkId}
+          data-tip={t("panes.historyLinkRestoreTitle")}
+          className={actionButton}
+        >
+          {busy ? t("panes.historyLinkRestoring") : t("panes.historyRestore")}
+        </button>
+      );
+    }
     if (!entry.edit || entry.documentId !== documentId || !canEdit) return null;
     const blockLive = !!entry.blockId && live.has(entry.blockId);
     if (entry.kind === "TEXT_EDIT" && entry.edit.before !== null && blockLive) {
@@ -483,7 +524,7 @@ export function HistoryPanel({
         <span className="block truncate text-[12px]">
           {/* Without sign-in every entry is the local reader's. */}
           <span className="font-semibold">{nameOf(entry.userId)}</span>{" "}
-          <span className="text-sand-600">{t(KIND_KEY[entry.kind] ?? "panes.historyTextEdit")}</span>
+          <span className="text-sand-600">{t(kindKey(entry))}</span>
         </span>
         {text && <span className="line-clamp-2 text-[11.5px] text-sand-700">{text}</span>}
         {placeLine(entry)}

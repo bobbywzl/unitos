@@ -12,7 +12,7 @@ import {
   type GatewayTagSpend,
 } from "@/lib/gateway-admin";
 import { FIXED_COSTS, MONTHS_PER_YEAR, fixedCostsPerMonth } from "@/lib/fixed-costs";
-import { providerOf } from "@/lib/usage";
+import { CACHE_COUNTED_APART_SINCE, providerOf } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
@@ -69,14 +69,31 @@ export default async function AdminUsagePage() {
     { key: "365", days: 365 },
     { key: "all", days: null },
   ];
+  // Rows since CACHE_COUNTED_APART_SINCE keep the uncached input alone in
+  // inputTokens (lib/usage.ts, COST8-02): their cached tokens are summed
+  // apart and added back, so Input tokens and Tokens count every prompt
+  // token on every row, as the rows before it do (REV9-06). No row is
+  // rewritten.
+  const cachedWhere = (since?: Date) => ({
+    createdAt: { gte: since && since > CACHE_COUNTED_APART_SINCE ? since : CACHE_COUNTED_APART_SINCE },
+  });
+  const cachedSum = { cacheReadTokens: true, cacheWriteTokens: true } as const;
+  const cachedOf = (s: { cacheReadTokens: number | null; cacheWriteTokens: number | null }) =>
+    (s.cacheReadTokens ?? 0) + (s.cacheWriteTokens ?? 0);
+  // Each group's cached tokens added into its input.
+  const addCached = <T extends { _sum: { inputTokens: number | null } }>(rows: T[], key: (r: T) => string, cached: Map<string, number>): T[] =>
+    rows.map((r) => ({ ...r, _sum: { ...r._sum, inputTokens: (r._sum.inputTokens ?? 0) + (cached.get(key(r)) ?? 0) } }));
   const horizons = await Promise.all(
     HORIZONS.map(async (h) => {
       const since = h.days === null ? undefined : new Date(now - h.days * 86_400_000);
-      const agg = await db.usageEvent.aggregate({
-        where: since ? { createdAt: { gte: since } } : {},
-        _count: true,
-        _sum: { inputTokens: true, outputTokens: true, costUsd: true },
-      });
+      const [agg, cached] = await Promise.all([
+        db.usageEvent.aggregate({
+          where: since ? { createdAt: { gte: since } } : {},
+          _count: true,
+          _sum: { inputTokens: true, outputTokens: true, costUsd: true },
+        }),
+        db.usageEvent.aggregate({ where: cachedWhere(since), _sum: cachedSum }),
+      ]);
       const days = h.days === null ? allDays : Math.min(h.days, allDays);
       const cost = agg._sum.costUsd ?? 0;
       return {
@@ -84,7 +101,7 @@ export default async function AdminUsagePage() {
         days,
         cost,
         calls: agg._count,
-        tokens: (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0),
+        tokens: (agg._sum.inputTokens ?? 0) + cachedOf(cached._sum) + (agg._sum.outputTokens ?? 0),
         perDay: cost / days,
         callsPerDay: agg._count / days,
         perCall: agg._count > 0 ? cost / agg._count : 0,
@@ -92,7 +109,24 @@ export default async function AdminUsagePage() {
     }),
   );
 
-  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users, byModel30, byFeature30, spend, tags] = await Promise.all([
+  const [
+    totals,
+    cost30,
+    byFeatureRaw,
+    byModelRaw,
+    byUserRaw,
+    byDayRaw,
+    users,
+    byModel30,
+    byFeature30Raw,
+    spend,
+    tags,
+    cachedTotals,
+    cachedByFeature,
+    cachedByModel,
+    cachedByUser,
+    cachedByFeature30,
+  ] = await Promise.all([
     // All time: the app's records are never deleted (SPEC.md §7).
     db.usageEvent.aggregate({
       _count: true,
@@ -141,7 +175,23 @@ export default async function AdminUsagePage() {
     }),
     gateway ? fetched<GatewaySpend>(() => gatewaySpend(30)) : null,
     gateway ? fetched<GatewayTagSpend>(() => gatewayTagSpend(30)) : null,
+    // The cached tokens of the rows that keep them apart (REV9-06), for
+    // the same groups.
+    db.usageEvent.aggregate({ where: cachedWhere(), _sum: cachedSum }),
+    db.usageEvent.groupBy({ by: ["feature"], where: cachedWhere(), _sum: cachedSum }),
+    db.usageEvent.groupBy({ by: ["model"], where: cachedWhere(), _sum: cachedSum }),
+    db.usageEvent.groupBy({ by: ["userId"], where: cachedWhere(), _sum: cachedSum }),
+    db.usageEvent.groupBy({ by: ["feature", "model"], where: cachedWhere(since30), _sum: cachedSum }),
   ]);
+  const totalInput = (totals._sum.inputTokens ?? 0) + cachedOf(cachedTotals._sum);
+  const byFeature = addCached(byFeatureRaw, (r) => r.feature, new Map(cachedByFeature.map((r) => [r.feature, cachedOf(r._sum)])));
+  const byModel = addCached(byModelRaw, (r) => r.model, new Map(cachedByModel.map((r) => [r.model, cachedOf(r._sum)])));
+  const byUser = addCached(byUserRaw, (r) => r.userId ?? "", new Map(cachedByUser.map((r) => [r.userId ?? "", cachedOf(r._sum)])));
+  const byFeature30 = addCached(
+    byFeature30Raw,
+    (r) => `${r.feature}\n${r.model}`,
+    new Map(cachedByFeature30.map((r) => [`${r.feature}\n${r.model}`, cachedOf(r._sum)])),
+  );
   // The app's own count over 30 days, split by whether the gateway prices
   // the model: the gateway providers' part is the cross-check tile; the
   // rest is the "outside the gateway" figure and its by-function rows.
@@ -298,7 +348,7 @@ export default async function AdminUsagePage() {
             <Tile label={t("admin.usageCostAll")} value={fmtUsd(totals._sum.costUsd ?? 0)} />
             <Tile label={t("admin.usageCost30")} value={fmtUsd(cost30._sum.costUsd ?? 0)} />
             <Tile label={t("admin.usageCalls")} value={calls.toLocaleString()} />
-            <Tile label={t("admin.usageTokensIn")} value={fmtTok(totals._sum.inputTokens ?? 0)} />
+            <Tile label={t("admin.usageTokensIn")} value={fmtTok(totalInput)} />
             <Tile label={t("admin.usageTokensOut")} value={fmtTok(totals._sum.outputTokens ?? 0)} />
             <Tile label={t("admin.usageCacheRead")} value={fmtTok(totals._sum.cacheReadTokens ?? 0)} />
           </div>

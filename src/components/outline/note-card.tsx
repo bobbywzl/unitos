@@ -10,7 +10,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { Highlight } from "@/components/highlight";
-import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon, RowIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
@@ -39,6 +39,7 @@ import { holdEditing } from "@/components/outline/editing-notes";
 import { NoteAssistant } from "@/components/outline/note-assistant";
 import { WordLine } from "@/components/outline/word-line";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
+import { GRAPH_FROM_PARAM, GRAPH_NOTE_PARAM, requestGraph } from "@/components/graph/graph-keep";
 
 /** The nearest ancestor that scrolls: the tray's panel. Null on the notes full page, where the window scrolls. */
 function scrollPane(el: HTMLElement): HTMLElement | null {
@@ -75,30 +76,11 @@ function PinIcon({ size = 12 }: { size?: number }) {
 }
 
 function TickIcon({ size = 10 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
+  return <RowIcon shape="check" size={size} bold />;
 }
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="5" r="3" />
-      <path d="M12 22V8" />
-      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
-    </svg>
-  );
+  return <RowIcon shape="anchor" size={size} />;
 }
 
 // One note. Every state shares one structure: the header row — collapse
@@ -859,6 +841,24 @@ const NoteCardBody = memo(function NoteCardBody({
           >
             {t("outline.history")}
           </button>
+          {/* Show on graph (VIEW3-04): the graph opens with the note's
+              documents lit and the Notes list on the note. The tray asks
+              the workspace; the notes full page goes to the reader's graph,
+              and closing it comes back here (WALK4-06). */}
+          {(note.documentId !== null || note.sources.some((s) => s.documentId)) && (
+            <button
+              onClick={() => {
+                if (!requestGraph({ noteId: note.id })) {
+                  router.push(`/n/${notebookId}?graph=1&${GRAPH_NOTE_PARAM}=${note.id}&${GRAPH_FROM_PARAM}=notes`);
+                }
+              }}
+              data-track="note-show-on-graph"
+              data-tip={t("graphNotes.showNoteOnGraphTitle")}
+              className={`text-[11.5px] text-sand-600 hover:text-clay-700 ${TOUCH_HIT}`}
+            >
+              {t("graphNotes.showOnGraph")}
+            </button>
+          )}
           {canEdit && (
             <button
               // No confirm: the note leaves at once, and the Undo pill offers

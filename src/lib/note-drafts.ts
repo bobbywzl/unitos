@@ -1,6 +1,7 @@
 "use client";
 
 import { readAccountCookie, tabAccount } from "@/lib/tab-account";
+import { loadCardDrafts } from "@/lib/toolbar-drafts";
 
 // Local drafts (SPEC.md §6): the text of an open note editor, written to
 // localStorage on every edit. The server save is debounced and the closing
@@ -22,6 +23,9 @@ import { readAccountCookie, tabAccount } from "@/lib/tab-account";
 // tray, on the notes full page, or in the floating card). A compose draft
 // belongs to the composer of one section: a new note being written, with the
 // id of the note the composer created on the server once it has one.
+
+// A relative path: the QA checks import this module straight, outside the
+// app's path alias (scripts/qa/reply-drafts-check.ts).
 
 const NOTE_PREFIX = "unitos-note-draft:";
 const COMPOSE_PREFIX = "unitos-note-compose:";
@@ -244,14 +248,168 @@ export function clearComposeDraft(sectionId: string) {
   remove(composeKey(sectionId, currentAccount()));
 }
 
-/** Drop drafts older than MAX_AGE_MS. Runs once per load (use-outline.ts). */
+// A Note on this link draft (LinkNoteComposer) belongs to the account that
+// typed it: the key names the account, so on a browser two accounts share,
+// one account's draft never opens in the other's box. Sign out keeps the
+// draft for its account (rule zero item 6). A reply box's draft is a card
+// draft (lib/toolbar-drafts.ts: `reply:note:<id>`, `reply:edit:<id>`,
+// `reply:link:<id>`).
+//
+// Keys from before drafts named their account (graph-link-note:<linkId>)
+// are moved to the signed-in account: on Sign out (claimLegacyDrafts), or
+// when that account opens the box first.
+const LINK_NOTE_PREFIX = "graph-link-note:";
+
+export type LinkNoteDraft = { content: string; sectionId: string | null; savedAt: number };
+
+// The account part of a key: the signed-in id, or "local" with sign-in off.
+const accountPart = (account: string) => account || "local";
+/** The storage key of a Note on this link draft: the account and the link. */
+export const linkNoteDraftKey = (account: string, linkId: string) => `${LINK_NOTE_PREFIX}${accountPart(account)}:${linkId}`;
+
+/** A key from before drafts named their account. */
+function legacyKey(key: string): boolean {
+  return key.startsWith(LINK_NOTE_PREFIX) && !key.slice(LINK_NOTE_PREFIX.length).includes(":");
+}
+
+/** Move one legacy key to the account. When the account has its own draft
+    for the same box (a tab from before the change kept writing the old
+    key), the newer of the two stays: both are the same box's words, typed
+    on this browser. A legacy link-note draft carries no savedAt: it gets
+    one now. */
+function claim(key: string, account: string) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return;
+    const to = linkNoteDraftKey(account, key.slice(LINK_NOTE_PREFIX.length));
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const savedAt = typeof value.savedAt === "number" ? value.savedAt : Date.now();
+    const own = read<{ savedAt: number }>(to);
+    if (!own || own.savedAt < savedAt) localStorage.setItem(to, JSON.stringify({ ...value, savedAt }));
+    localStorage.removeItem(key);
+  } catch {
+    // Storage blocked, or the value does not parse: it stays where it is.
+  }
+}
+
+/** Sign out (settings-form.tsx): every legacy draft goes to the account
+    signing out, which typed it, so the next account never sees it. */
+export function claimLegacyDrafts(account: string) {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && legacyKey(key)) keys.push(key);
+    }
+    for (const key of keys) claim(key, account);
+  } catch {
+    // Storage blocked: nothing to claim.
+  }
+}
+
+/** Note on this link's draft: the text and the section picked. */
+export function readLinkNoteDraft(account: string, linkId: string): { content: string; sectionId: string | null } | null {
+  claim(LINK_NOTE_PREFIX + linkId, account);
+  const draft = read<LinkNoteDraft>(linkNoteDraftKey(account, linkId));
+  if (!draft || typeof draft.content !== "string" || !draft.content) return null;
+  return { content: draft.content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null };
+}
+
+export function writeLinkNoteDraft(account: string, linkId: string, content: string, sectionId: string | null) {
+  if (content) write(linkNoteDraftKey(account, linkId), { content, sectionId, savedAt: Date.now() } satisfies LinkNoteDraft);
+  else remove(linkNoteDraftKey(account, linkId));
+}
+
+// [ui5] WALK5-13: whether this browser holds unsent words on a link: a Note
+// on this link draft for the account (legacy key too), or a reply draft in
+// the card drafts. Read only: nothing is claimed or moved.
+function hasContent(key: string): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const value = JSON.parse(raw) as { content?: unknown };
+    return typeof value.content === "string" && value.content.trim() !== "";
+  } catch {
+    return false;
+  }
+}
+export function hasLinkDraft(account: string, linkId: string): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    hasContent(linkNoteDraftKey(account, linkId)) ||
+    hasContent(LINK_NOTE_PREFIX + linkId) ||
+    (loadCardDrafts()[`reply:link:${linkId}`] ?? "").trim() !== ""
+  );
+}
+// [/ui5]
+
+// The graph's new note (note-gather.tsx, VIEW4-03): the quotes collected
+// with Add to note, the words typed, and the section picked, one per project
+// per account. Written on every change; cleared once the server (or the
+// offline queue) has the note.
+const GATHER_PREFIX = "unitos-note-gather:";
+
+export type GatherDraftQuote = {
+  documentId: string;
+  /** Absent: the quote is found across the document (a link's end). */
+  blockId?: string;
+  /** What the composer shows, and the quote the server re-finds. */
+  text: string;
+  /** No quotedText goes to the server: it quotes the block's words (a part's start). */
+  whole?: boolean;
+  /** [lists9] The link this quote is an end of (Note on this link, WALK9-10):
+      a note of a link's two ends alone sends `fromLinkId`, so the server
+      quotes the link's own anchors. */
+  linkId?: string;
+};
+export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
+
+const gatherKey = (account: string, notebookId: string) => `${GATHER_PREFIX}${accountPart(account)}:${notebookId}`;
+/** The storage key of the draft, for a storage event from another tab (REV5-03). */
+export const gatherDraftKey = gatherKey;
+
+function gatherQuote(raw: unknown): GatherDraftQuote | null {
+  if (!raw || typeof raw !== "object") return null;
+  const q = raw as Record<string, unknown>;
+  if (typeof q.documentId !== "string" || typeof q.text !== "string") return null;
+  return {
+    documentId: q.documentId,
+    text: q.text,
+    ...(typeof q.blockId === "string" ? { blockId: q.blockId } : {}),
+    ...(q.whole === true ? { whole: true } : {}),
+    ...(typeof q.linkId === "string" ? { linkId: q.linkId } : {}),
+  };
+}
+
+export function readGatherDraft(account: string, notebookId: string): GatherDraft | null {
+  const draft = read<GatherDraft>(gatherKey(account, notebookId));
+  if (!draft) return null;
+  const quotes = Array.isArray(draft.quotes) ? draft.quotes.flatMap((q) => gatherQuote(q) ?? []) : [];
+  const content = typeof draft.content === "string" ? draft.content : "";
+  if (!content && quotes.length === 0) return null;
+  return { content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null, quotes, savedAt: draft.savedAt };
+}
+
+/** An empty draft (no words, no quotes) clears the key. */
+export function writeGatherDraft(account: string, notebookId: string, draft: Omit<GatherDraft, "savedAt">) {
+  if (draft.content || draft.quotes.length > 0) write(gatherKey(account, notebookId), { ...draft, savedAt: Date.now() } satisfies GatherDraft);
+  else remove(gatherKey(account, notebookId));
+}
+
+/** Drop note and compose drafts older than MAX_AGE_MS: those are replayed on
+    every load, so one nobody replayed in that long has no note or section
+    left. Runs once per load (use-outline.ts). Reply, Note on this link, and
+    the graph's new note (Add to note) drafts are never dropped by age:
+    nothing replays them, they show only when the reader opens that box
+    again, so their words stay until a confirmed send or the reader's
+    Cancel or Discard clears them (rule zero item 6). */
 export function sweepStaleDrafts() {
   try {
     const now = Date.now();
     const stale: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || (!key.startsWith(NOTE_PREFIX) && !key.startsWith(COMPOSE_PREFIX))) continue;
+      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX].some((p) => key.startsWith(p))) continue;
       const draft = read<{ savedAt: number }>(key);
       if (!draft || now - draft.savedAt > MAX_AGE_MS) stale.push(key);
     }

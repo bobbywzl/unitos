@@ -152,7 +152,7 @@ export function RatingButtons({
       data-track={`rate:${tool}:${rating}`}
       aria-label={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
       data-tip={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
-      className={`rounded-full transition-colors pointer-coarse:p-2.5 ${
+      className={`-m-1 inline-flex size-6 items-center justify-center rounded-full transition-colors pointer-coarse:size-10 ${
         rated === rating ? "text-clay-800" : rated ? "text-sand-300 hover:text-clay-800" : "text-sand-500 hover:text-clay-800"
       } disabled:cursor-default`}
     >
@@ -161,7 +161,7 @@ export function RatingButtons({
   );
 
   return (
-    <span className={inRow ? "contents" : `flex flex-wrap items-center gap-1 ${className}`} data-rating={tool}>
+    <span className={inRow ? "contents" : `flex flex-wrap items-center gap-2 ${className}`} data-rating={tool}>
       {button("up")}
       {button("down")}
       {rated === "down" && !commentSent && (

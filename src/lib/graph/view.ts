@@ -1,5 +1,11 @@
+import type { User } from "@prisma/client";
+import { crossAccountLinks } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { projectLinks } from "@/lib/link-scope";
+import { isProvenanceLink } from "@/lib/graph/provenance";
+import type { DocumentKind } from "@/lib/document-order";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
+import { ATTACH_ORDER_NEWEST } from "@/lib/document-order";
 
 // The graph's data (SPEC.md §13, §22): the nodes, the edges, the recommended
 // links, and the generated documents Stitch wrote for the project.
@@ -9,7 +15,7 @@ import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView }
 export async function listGenerated(notebookId: string): Promise<GeneratedDocumentView[]> {
   const rows = await db.notebookDocument.findMany({
     where: { notebookId, document: { generatedCommand: { not: null } } },
-    orderBy: { document: { createdAt: "desc" } },
+    orderBy: ATTACH_ORDER_NEWEST,
     select: {
       document: {
         select: {
@@ -32,14 +38,19 @@ export async function listGenerated(notebookId: string): Promise<GeneratedDocume
 }
 
 /** The graph among a set of documents: nodes, one edge per linked pair, and
-    the recommended links awaiting Accept (SPEC.md §13). */
+    the recommended links awaiting Accept (SPEC.md §13). Only the project's
+    links, and the links with no project. `viewer` marks the links with no
+    project shared across accounts (crossAccount), so the lists hide what
+    the viewer may not change. */
 export async function documentsGraph(
-  documents: { id: string; title: string; hasVideo: boolean }[],
+  documents: { id: string; title: string; hasVideo: boolean; kind?: DocumentKind }[],
+  notebookId: string,
+  viewer: User | null = null,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] }> {
   const ids = documents.map((d) => d.id);
-  const [links, recommendedRows] = await Promise.all([
+  const [links, recommendedRows, blockCounts] = await Promise.all([
     db.docLink.findMany({
-      where: { fromDocumentId: { in: ids }, toDocumentId: { in: ids } },
+      where: { fromDocumentId: { in: ids }, toDocumentId: { in: ids }, ...projectLinks(notebookId) },
       orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -51,10 +62,17 @@ export async function documentsGraph(
         reason: true,
         quotedText: true,
         toQuotedText: true,
+        startOffset: true,
+        prefix: true,
+        suffix: true,
+        notebookId: true,
+        formerNotebookId: true,
+        createdById: true,
+        createdAt: true,
       },
     }),
     db.docLink.findMany({
-      where: { recommended: true, fromDocumentId: { in: ids }, toDocumentId: { in: ids } },
+      where: { recommended: true, fromDocumentId: { in: ids }, toDocumentId: { in: ids }, ...projectLinks(notebookId) },
       orderBy: { createdAt: "desc" },
       include: {
         fromDocument: { select: { title: true } },
@@ -62,32 +80,38 @@ export async function documentsGraph(
         replies: { orderBy: { createdAt: "asc" } },
       },
     }),
+    // Each document's length in blocks: a node's dot grows with it, and its
+    // card says it. One grouped count, read only.
+    ids.length > 0
+      ? db.block.groupBy({ by: ["documentId"], where: { documentId: { in: ids } }, _count: { _all: true } })
+      : Promise.resolve([]),
   ]);
-  // The block each end's quote sits in: the passage an expanded link shows
-  // around the quote (SPEC.md §13). A block a re-parse replaced is gone
-  // until the reader opens the document and the link heals; the end then
-  // shows its quote alone.
-  const blockIds = [
-    ...new Set(
-      [...links, ...recommendedRows].flatMap((l) => [l.fromBlockId, l.toBlockId ?? ""]).filter(Boolean),
-    ),
-  ];
-  const blockText = new Map(
-    blockIds.length > 0
-      ? (await db.block.findMany({ where: { id: { in: blockIds } }, select: { id: true, text: true } })).map(
-          (b) => [b.id, b.text] as const,
-        )
-      : [],
-  );
+  const blocksOf = new Map(blockCounts.map((row) => [row.documentId, row._count._all]));
+  const crossAccount = await crossAccountLinks([...links, ...recommendedRows], viewer);
+  const crossAccountOf = (id: string) => {
+    const rule = crossAccount.get(id);
+    return rule ? { crossAccount: { outside: rule.outside, removable: rule.removable } } : {};
+  };
   const titleOf = new Map(documents.map((d) => [d.id, d.title]));
-  const nodes: GraphNode[] = documents.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }));
+  const nodes: GraphNode[] = documents.map((d) => ({
+    id: d.id,
+    title: d.title,
+    hasVideo: d.hasVideo,
+    ...(d.kind ? { kind: d.kind } : {}),
+    blockCount: blocksOf.get(d.id) ?? 0,
+  }));
   const edgeByPair = new Map<string, GraphEdge>();
+  // A generated document's provenance links count apart from the reader's
+  // links (SPEC.md §13, §22): the graph draws them only on request.
+  const generatedIds = new Set(documents.filter((d) => d.kind === "generated").map((d) => d.id));
   // A link with both ends in one document is an edge from the node to
   // itself: a loop on that node (SPEC.md §13).
   for (const link of links) {
     const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
-    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, links: [] };
-    if (link.recommended) edge.recommended++;
+    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, provenance: 0, links: [] };
+    const provenance = isProvenanceLink(link, generatedIds.has(link.fromDocumentId));
+    if (provenance) edge.provenance = (edge.provenance ?? 0) + 1;
+    else if (link.recommended) edge.recommended++;
     else edge.accepted++;
     edge.links.push({
       id: link.id,
@@ -97,10 +121,11 @@ export async function documentsGraph(
       toTitle: titleOf.get(link.toDocumentId) ?? "",
       quotedText: link.quotedText,
       toQuotedText: link.toQuotedText,
-      fromBlockText: blockText.get(link.fromBlockId) ?? null,
-      toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
       reason: link.reason,
       recommended: link.recommended,
+      createdAt: link.createdAt.toISOString(),
+      ...(provenance ? { provenance: true } : {}),
+      ...crossAccountOf(link.id),
     });
     edgeByPair.set(`${a}|${b}`, edge);
   }
@@ -112,8 +137,6 @@ export async function documentsGraph(
     toTitle: link.toDocument.title,
     quotedText: link.quotedText,
     toQuotedText: link.toQuotedText,
-    fromBlockText: blockText.get(link.fromBlockId) ?? null,
-    toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
     reason: link.reason,
     createdById: link.createdById,
     replies: link.replies.map((r) => ({
@@ -123,6 +146,76 @@ export async function documentsGraph(
       resolvedById: r.resolvedById,
       createdAt: r.createdAt.toISOString(),
     })),
+    ...crossAccountOf(link.id),
   }));
-  return { nodes, edges: [...edgeByPair.values()], recommended };
+  return { nodes, edges: await withLinkReplies([...edgeByPair.values()]), recommended };
+}
+
+/** The edges with each link's replies, oldest first, and its author (SPEC.md
+    §13): the discussion the curve's list shows under an expanded link. One
+    query over the edges' links. */
+async function withLinkReplies(edges: GraphEdge[]): Promise<GraphEdge[]> {
+  const ids = edges.flatMap((e) => e.links.map((l) => l.id));
+  if (ids.length === 0) return edges;
+  const rows = await db.docLink.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      createdById: true,
+      replies: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, content: true, userId: true, resolvedById: true, createdAt: true },
+      },
+    },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return edges.map((e) => ({
+    ...e,
+    links: e.links.map((l) => {
+      const row = byId.get(l.id);
+      return {
+        ...l,
+        createdById: row?.createdById ?? null,
+        replies: (row?.replies ?? []).map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+      };
+    }),
+  }));
+}
+
+/** The block each end's quote sits in, whole: the passage an expanded link
+    shows around the quote (SPEC.md §13). Read when a link opens (GET .../
+    graph/passages?linkId=), not with the graph: a block that ends many
+    links ships once. Only the project's links between its documents; one
+    linkId, or every link for the offline copy. A block a re-parse replaced
+    is gone until the reader opens the document and the link heals; the end
+    then shows its quote alone. */
+export type LinkPassages = {
+  /** Per link: the from end's block id and the to end's (null: document-level). */
+  links: Record<string, [string, string | null]>;
+  /** Each block's text; a block that is gone is absent. */
+  blocks: Record<string, string>;
+};
+
+export async function linkPassages(notebookId: string, linkId?: string): Promise<LinkPassages> {
+  const ids = (await db.notebookDocument.findMany({ where: { notebookId }, select: { documentId: true } })).map(
+    (d) => d.documentId,
+  );
+  const rows = await db.docLink.findMany({
+    where: {
+      ...(linkId ? { id: linkId } : {}),
+      fromDocumentId: { in: ids },
+      toDocumentId: { in: ids },
+      ...projectLinks(notebookId),
+    },
+    select: { id: true, fromBlockId: true, toBlockId: true },
+  });
+  const blockIds = [...new Set(rows.flatMap((l) => [l.fromBlockId, l.toBlockId ?? ""]).filter(Boolean))];
+  const blocks =
+    blockIds.length > 0
+      ? await db.block.findMany({ where: { id: { in: blockIds } }, select: { id: true, text: true } })
+      : [];
+  return {
+    links: Object.fromEntries(rows.map((l) => [l.id, [l.fromBlockId, l.toBlockId] as [string, string | null]])),
+    blocks: Object.fromEntries(blocks.map((b) => [b.id, b.text])),
+  };
 }

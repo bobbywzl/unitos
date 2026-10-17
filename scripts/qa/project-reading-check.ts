@@ -48,12 +48,13 @@ const view = (letter: string, n: number, len: number): SkeletonView =>
 const views = [view("A", 300, 100), view("B", 20, 100), view("C", 900, 100)];
 const one = skeletonGroups(views, null, 1_000_000, 10_000);
 check("fits: one call, every line", one.length === 1 && one[0].shown === null);
-const groups = skeletonGroups(views, null, 50_000, 10_000);
+// Budgets in estimated tokens (lib/tokens.ts): a 100-char line costs 25 + its tag, 28.
+const groups = skeletonGroups(views, null, 10_000, 2_500);
 const seen = groups.flatMap((g) => [...(g.shown ?? [])]);
 check("grouped: every line once", seen.length === 1220 && new Set(seen).size === 1220);
-check("grouped: each group under the size", groups.every((g) => [...(g.shown ?? [])].length * 113 <= 10_000 + 113), String(groups.map((g) => g.shown?.size)));
+check("grouped: each group under the size", groups.every((g) => [...(g.shown ?? [])].length * 28 <= 2_500 + 28), String(groups.map((g) => g.shown?.size)));
 check("grouped: a long document spans groups", groups.filter((g) => g.views.some((v) => v.r.letter === "C")).length > 1);
-const cut = skeletonGroups(views, new Set(["A1", "C5"]), 50_000, 10_000);
+const cut = skeletonGroups(views, new Set(["A1", "C5"]), 10_000, 2_500);
 check("shown lines only", cut.length === 1 && cut[0].shown?.size === 2);
 
 // The target pass's names as the scope's rows.

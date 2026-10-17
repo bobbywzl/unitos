@@ -4,6 +4,7 @@ import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { ultraActive } from "@/lib/tiers";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // What a project's offline copy holds (SPEC.md §17, Unitos Ultra): the
 // title, the section count, and the documents, one reader page each. The
@@ -24,7 +25,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ notebookId: st
       title: true,
       _count: { select: { sections: { where: { hidden: false } } } },
       documents: {
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         select: { document: { select: { id: true, title: true, video: { select: { id: true } } } } },
       },
     },

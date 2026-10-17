@@ -5,15 +5,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
 import { defineKey, defineWord, definableSelection } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
   ACCOUNT_SAVE_SETTLE_MS,
+  ACCOUNT_SAVE_SHOWN_MS,
   applyReadingPosition,
   atReadingPosition,
   chooseReadingPosition,
+  firstBlockShown,
   LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
@@ -1454,6 +1457,8 @@ export function ReaderInteractions({
       href: string;
       title: string;
       reason: string | null; // what the link is about, typed after Link here
+      replies?: number; // open replies on the link: a count on its chain icon
+      notes?: number; // the notes on the link: in its chain icon's tip (WALK4-05)
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -1615,6 +1620,14 @@ export function ReaderInteractions({
   const jumpOnOpen = useRef(
     Boolean(searchParams.get("src") || searchParams.get("block") || searchParams.get("link")),
   );
+  // [lists10] WALK10-05: after a jump the address asked for (a comment's
+  // door, an annotation reference, a quote's Jump, a search hit, a link's
+  // other end) the account's copy waits for the reader's own move: the
+  // jump's scrolls save the tab's copy alone, and the first wheel, touch,
+  // pointer, or scroll key in the pane lets the account's copy save as
+  // before. Written less, never deleted: a reader who answers a comment and
+  // leaves keeps her place in the document on every other device.
+  const accountWaitsForReader = useRef(jumpOnOpen.current);
   // A transcript keeps the tab's copy alone (playback moves its pane) and
   // has no left-off mark; an embedded layer keeps no position at all.
   const isTranscript = transcript !== undefined;
@@ -1817,11 +1830,21 @@ export function ReaderInteractions({
       )
         return;
       lastMovedAt.current = Date.now();
-      if (!keepsAccountCopy) return;
+      if (!keepsAccountCopy || accountWaitsForReader.current) return; // [lists10] WALK10-05
       accountDirty = true;
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => saveAccount(false), ACCOUNT_SAVE_SETTLE_MS);
       maxTimer ??= setTimeout(() => saveAccount(false), ACCOUNT_SAVE_MAX_MS);
+    };
+    // [lists10] WALK10-05: the reader's own move ends the wait after a jump
+    // (the signals the hold above reads, and the keys that scroll a pane).
+    const readerMoved = () => {
+      accountWaitsForReader.current = false;
+    };
+    const onScrollKey = (e: KeyboardEvent) => {
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key)) readerMoved();
     };
     const onPageHide = () => {
       save();
@@ -1830,18 +1853,52 @@ export function ReaderInteractions({
     const onVisibility = () => {
       if (document.visibilityState === "hidden") saveAccount(true);
     };
+    // [lists9] Shown for ACCOUNT_SAVE_SHOWN_MS with its first block in view,
+    // the document counts as opened (WALK9-05): the account's copy saves
+    // once, where the pane stands, so the graph marks the document opened
+    // for a reader who read its first screen and never scrolled. Only while
+    // the account has no copy. A hidden tab, a page over the article, or the
+    // hold restarts the clock; a pane scrolled off the first block saves by
+    // the scroll. The tab's copy does not change, and a position at the top
+    // of a document opens it at the top, as before.
+    let shownTimer: ReturnType<typeof setTimeout> | null = null;
+    const shown = () => {
+      shownTimer = null;
+      if (
+        document.visibilityState !== "visible" ||
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current
+      ) {
+        shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
+        return;
+      }
+      if (!firstBlockShown(container)) return;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, { ...position, at: Date.now() }, false);
+    };
+    if (keepsAccountCopy && accountAtOpen === null) shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
     container.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("wheel", readerMoved, { passive: true }); // [lists10] WALK10-05
+    container.addEventListener("touchmove", readerMoved, { passive: true });
+    container.addEventListener("pointerdown", readerMoved);
+    window.addEventListener("keydown", onScrollKey);
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("wheel", readerMoved);
+      container.removeEventListener("touchmove", readerMoved);
+      container.removeEventListener("pointerdown", readerMoved);
+      window.removeEventListener("keydown", onScrollKey);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
+      if (shownTimer) clearTimeout(shownTimer);
       save();
       saveAccount(true);
     };
-  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId, accountAtOpen]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -4687,6 +4744,9 @@ export function ReaderInteractions({
   // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
   const annotationParam = searchParams.get(ANNOTATION_PARAM);
+  // [lists9] The kind rides along (lib/annotation-reference.ts): a comment
+  // opens in the Annotations tab (WALK9-04).
+  const commentParam = searchParams.get("kind") === "comment";
   // A jump in this pane flashes its mark at once (dissect:flash-source) and
   // puts ?src= in the address too: when the address lands, the pane moves
   // no more (a press made meanwhile would scroll away). A page opened with
@@ -4694,6 +4754,13 @@ export function ReaderInteractions({
   const jumpedRef = useRef(new Set<string>());
   const srcRef = useRef(src);
   srcRef.current = src;
+  // [lists10] WALK10-02: the comment's door opens the tab's card alone. The
+  // workspace answers the focus with open-annotation, which this pane would
+  // answer with the on-mark card (Delete, mic, Save) too: the same comment
+  // twice on one screen, and on a phone the on-mark card over Collapse. One
+  // shot: the door's own open only; a later press on the mark opens the
+  // on-mark card as before.
+  const doorRef = useRef<string | null>(null);
   useEffect(() => {
     if (!src || jumpedRef.current.delete(src)) return;
     flashSource(src);
@@ -4701,6 +4768,15 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
+      // A comment: the Annotations tab, its card expanded, where its replies
+      // read and Reply is one press away — the path ?link= takes
+      // (workspace.tsx onFocusAnnotation). The mark's own card shows the
+      // comment alone, so it stays shut (doorRef).
+      if (commentParam) {
+        doorRef.current = src;
+        window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail: { sourceId: src } }));
+        return;
+      }
       const el = containerRef.current ? markOfSource(containerRef.current, src) : null;
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
@@ -4709,14 +4785,19 @@ export function ReaderInteractions({
         timer = setTimeout(tryOpen, 200);
       }
     };
-    tryOpen();
+    // The first try waits a tick: on a page opened at this address the
+    // listeners that answer (this pane's open-annotation below, the
+    // workspace's focus-annotation) register in effects that run after this
+    // one, and an event sent now reaches none of them.
+    timer = setTimeout(tryOpen, 0);
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [src, annotationParam, flashSource]);
+  }, [src, annotationParam, commentParam, flashSource]);
 
-  // Arriving through a link's other end: ?link=<id> flashes the mark here;
-  // a mark in a collapsed unit reads the unit whole first.
+  // Arriving through a link's other end: ?link=<id> flashes the mark here,
+  // and the tray turns to the Annotations tab on the link's card; a mark in
+  // a collapsed unit reads the unit whole first.
   const linkParam = searchParams.get("link");
   const linksRef = useRef(linksByBlock);
   linksRef.current = linksByBlock;
@@ -4734,6 +4815,8 @@ export function ReaderInteractions({
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
+        // The tray shows the link's card, with its replies (VIEW3-02; workspace.tsx).
+        window.dispatchEvent(new CustomEvent("dissect:focus-link", { detail: { linkId: linkParam } }));
       } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
@@ -4967,6 +5050,12 @@ export function ReaderInteractions({
       const { sourceId, sources, x, y } = (
         e as CustomEvent<{ sourceId: string; sources?: string[]; x?: number; y?: number }>
       ).detail;
+      // WALK10-02: the comment's door opened the tab's card; no on-mark card
+      // for the same comment.
+      if (sourceId === doorRef.current) {
+        doorRef.current = null;
+        return;
+      }
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
       if (!container || !markOfSource(container, sourceId)) return;
@@ -7083,7 +7172,7 @@ export function ReaderInteractions({
     }
     setLinkCard({ ...card, busy: true });
     try {
-      await api(`/api/links/${card.linkId}`, "PATCH", { reason });
+      await api(linkPath(card.linkId, notebookId), "PATCH", { reason });
       setLinkReasons((prev) => ({ ...prev, [card.linkId]: reason }));
       setLinkCard(null);
       router.refresh();
@@ -7660,6 +7749,7 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(to.blockId);
       const created = await api<{ id: string }>("/api/links", "POST", {
+        notebookId,
         fromDocumentId: pending.fromDocumentId,
         toDocumentId: documentId,
         anchor: from,
@@ -9095,11 +9185,12 @@ export function ReaderInteractions({
               break;
             }
             const link = await api<{ id: string }>("/api/links", "POST", {
+              notebookId,
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
               anchor: action.anchor,
             });
-            undo.push({ description: action.description, run: () => api(`/api/links/${link.id}`, "DELETE") });
+            undo.push({ description: action.description, run: () => api(linkPath(link.id, notebookId), "DELETE") });
             break;
           }
           case "format_block": {
@@ -9756,6 +9847,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         linkTitle: l.title,
         linkId: l.linkId,
         linkReason: linkReasons[l.linkId] ?? l.reason,
+        linkReplies: l.replies ?? 0,
+        linkNotes: l.notes ?? 0,
       })),
     ];
   }

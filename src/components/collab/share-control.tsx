@@ -145,7 +145,7 @@ export function ShareControl({
         data-track="share"
         aria-expanded={open}
         data-tip={t("panes.shareTitle")}
-        className={`rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+        className={`rounded-full px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 max-sm:px-2.5 ${
           shared ? "border border-line text-sand-700" : "border border-dashed border-sand-400 text-sand-600"
         }`}
       >
