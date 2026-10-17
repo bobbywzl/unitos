@@ -7,12 +7,13 @@ import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { documentPrefix, loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
-import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { callForJson } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { notesPlanSchema, writePlannedNotes } from "@/lib/notes/write-planned";
 import { voicePrompt } from "@/lib/prompts/voice";
 import { geminiConfigured } from "@/lib/video/gemini";
+import { failureLine } from "@/app/api/assistant/failure-line";
 import { transcribe, whisperConfigured } from "@/lib/video/transcribe";
 
 export const maxDuration = 180;
@@ -42,6 +43,8 @@ const querySchema = z.object({
 const planSchema = notesPlanSchema;
 
 export type VoiceStage = "transcribe" | "plan" | "write";
+// A failure with words for the reader (no speech, no note written): sent as they are.
+class ReaderLine extends Error {}
 export type VoiceEvent = { stage: VoiceStage } | { notes: number; warnings: string[] } | { error: string };
 
 export async function POST(req: Request) {
@@ -93,7 +96,7 @@ export async function POST(req: Request) {
       try {
         send({ stage: "transcribe" } satisfies VoiceEvent);
         const command = await transcribeCommand(bytes, mimeType, access.user.id);
-        if (!command) throw new Error(t("api.voiceNoteNoSpeech"));
+        if (!command) throw new ReaderLine(t("api.voiceNoteNoSpeech"));
 
         send({ stage: "plan" } satisfies VoiceEvent);
         const [profile, sections, sectionNotes, notes, lang] = await Promise.all([
@@ -148,7 +151,7 @@ export async function POST(req: Request) {
           usage: { userId: access.user.id, feature: "voice", model: voiceCall.modelId },
           abortSignal: req.signal,
         });
-        if (!result.ok) throw new Error(t("api.voiceCommandPlanFailed", { reason: result.error }));
+        if (!result.ok) throw new ReaderLine(failureLine(t, result.error, "voice plan"));
 
         send({ stage: "write" } satisfies VoiceEvent);
         const writtenIds = await writePlannedNotes(result.data, {
@@ -162,14 +165,16 @@ export async function POST(req: Request) {
         const written = writtenIds.length;
         const warnings = result.data.warnings ?? [];
         if (written === 0) {
-          throw new Error(t("api.voiceCommandNoNotes", { reason: warnings[0] ?? "" }).trim());
+          throw new ReaderLine(t("api.voiceCommandNoNotes", { reason: warnings[0] ?? "" }).trim());
         }
         await bumpNotebook(section.notebookId);
         console.log(`[voice] ${bytes.length} bytes → ${command.length} chars → ${written} notes`);
         send({ notes: written, warnings } satisfies VoiceEvent);
       } catch (err) {
-        console.error("[voice] failed:", err);
-        send({ error: t("api.voiceNoteFailed", { reason: modelErrorMessage(err) }) } satisfies VoiceEvent);
+        // One line for the reader: its own words, or the assistant's plain
+        // line with the raw text in the log (failure-line.ts).
+        const line = err instanceof ReaderLine ? err.message : failureLine(t, err, "voice");
+        send({ error: line } satisfies VoiceEvent);
       } finally {
         stopHeartbeat();
         controller.close();

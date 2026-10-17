@@ -2,7 +2,7 @@
 
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { useEditorState, type Editor } from "@tiptap/react";
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { docsCommands, type DocsMenu } from "@/components/docs/commands";
@@ -20,8 +20,6 @@ import {
   BulletListIcon,
   ChecklistIcon,
   ClearFormattingIcon,
-  ExpandLessIcon,
-  ExpandMoreIcon,
   HighlightGlyph,
   IndentDecreaseIcon,
   IndentIncreaseIcon,
@@ -36,9 +34,11 @@ import {
   TextColorGlyph,
   UnderlineIcon,
   UndoIcon,
+  OutlineIcon,
   VoiceTypingIcon,
 } from "@/components/docs/icons";
 import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
+import { findPageStore } from "@/components/docs/page/store";
 import { emitInsert } from "@/components/docs/insert/context";
 import { FillIcon } from "@/components/docs/insert/icons";
 import { borderTarget, cellBorder, selectedCells } from "@/components/docs/insert/table";
@@ -79,15 +79,19 @@ import {
   type Align,
 } from "@/components/docs/toolbar/styles";
 import { ZoomBox, ZOOMS, type Zoom } from "@/components/docs/toolbar/zoom";
-import { DOCS_EVENT, TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { DOCS_EVENT, TYPING_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page editor's toolbar (SPEC.md §29): Google Docs' controls in Google's
-// order, then the Unitos tools, the mode switcher, and Hide the menus. In
+// order, then the status, the Unitos tools, and the mode switcher. In
 // Viewing mode, and for a reader who may not edit, the left side is Search
 // the menus, Print, Add comment, and Zoom. While a header or footer is
 // edited, the controls format its text, and those a header cannot hold are
 // off.
+
+/** Google Docs' menus, in its own order: what Search the menus lists with
+    nothing typed. */
+const MENU_ORDER: DocsMenu[] = ["file", "edit", "view", "insert", "format", "tools"];
 
 const MENU_NAMES: Record<DocsMenu, TKey> = {
   file: "docs.menuFile",
@@ -97,6 +101,10 @@ const MENU_NAMES: Record<DocsMenu, TKey> = {
   format: "docs.menuFormat",
   tools: "docs.menuTools",
 };
+
+/** Insert and Format write into the document; the other menus open, show,
+    or switch something (Search the menus ranks them first on a tie). */
+const writesMenu = (menu: DocsMenu): boolean => menu === "insert" || menu === "format";
 
 /** Google Docs' Format submenu of the lists: the list menus and List options. */
 const BULLETS = "bullets & numbering";
@@ -114,7 +122,7 @@ const MENUS: [string, TKey, string[], DocsMenu?][] = [
   ["styles", "docs.styles", ["paragraph styles"]],
   ["font", "docs.font", ["typeface", "more fonts", "get fonts"]],
   ["text-color", "docs.textColor", ["font color", "colour"]],
-  ["highlight-color", "docs.highlightColor", ["background color", "marker"]],
+  ["highlight-color", "docs.highlightColor", ["highlight color", "background color", "highlight", "marker"]],
   ["image", "docs.insertImage", ["picture", "photo", "add a photo", "add a picture", "add an image", "upload from computer", "by url"], "insert"],
   ["align", "docs.align", ["align & indent", "alignment"]],
   ["line-spacing", "docs.lineSpacing", ["line spacing", "paragraph spacing", "set line spacing", "change line spacing"]],
@@ -164,9 +172,6 @@ function readToolbar(e: Editor) {
   };
   const cell = selectedCells(state)[0];
   return {
-    // The history's depth: e.can() builds every command, on every transaction.
-    canUndo: undoDepth(state) > 0,
-    canRedo: redoDepth(state) > 0,
     bold: e.isActive("bold"),
     italic: e.isActive("italic"),
     underline: e.isActive("underline"),
@@ -190,6 +195,33 @@ function readToolbar(e: Editor) {
   };
 }
 
+/** A touch screen: no Ctrl+Z on its keyboard, so Undo and Redo stay on the
+    row as long as anything does but Search the menus. */
+const COARSE = "(pointer: coarse)";
+function subscribeCoarse(onChange: () => void): () => void {
+  const query = window.matchMedia(COARSE);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+const readCoarse = () => window.matchMedia(COARSE).matches;
+
+/** Whether Undo or Redo has a step: the history's depth (e.can() builds
+    every command, on every transaction). */
+function historyOn(e: Editor, redo: boolean): boolean {
+  return (redo ? redoDepth(e.state) : undoDepth(e.state)) > 0;
+}
+
+/** Undo or Redo. It reads the history on its own: the first key of a
+    document turns Undo on without a render of the whole row. */
+function HistoryButton({ editor, redo, label, tip, track, onClick }: { editor: Editor; redo: boolean; label: string; tip: string; track: string; onClick: () => void }) {
+  const on = useEditorState({ editor, selector: () => historyOn(editor, redo) });
+  return (
+    <Btn label={label} tip={tip} track={track} disabled={!on} onClick={onClick}>
+      {redo ? <RedoIcon /> : <UndoIcon />}
+    </Btn>
+  );
+}
+
 export function DocsToolbar({
   editor,
   header,
@@ -202,17 +234,26 @@ export function DocsToolbar({
   headerHidden,
   onToggleHeader,
   onInsertImage,
+  status,
+  narrowPane = false,
   pageless = false,
 }: {
   editor: Editor;
   /** The header or footer being edited: the controls format its text. */
   header: Editor | null;
   mode: DocsMode;
-  onMode: (mode: DocsMode) => void;
+  /** `passing`: the page passes into the mode for the reader, who did not
+      choose it (typing/events.ts ModeRequest). */
+  onMode: (mode: DocsMode, passing?: boolean, collapse?: boolean) => void;
   canEdit: boolean;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
   aiControls?: ReactNode;
+  /** The document's status and the version clock, at the row's right end. */
+  status?: ReactNode;
+  /** The pane is too narrow for the page: the outline's button is on the
+      row, not over the page's first letters (areas/page.tsx). */
+  narrowPane?: boolean;
   headerHidden: boolean;
   onToggleHeader: () => void;
   onInsertImage: (source: ImageSource) => void;
@@ -226,6 +267,7 @@ export function DocsToolbar({
   const target = header ?? editor;
   const s = useEditorState({ editor: target, selector: () => readToolbar(target) });
   const paint = usePaintFormat(editor);
+  const coarse = useSyncExternalStore(subscribeCoarse, readCoarse, () => false);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
   const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | "borders" | null>(null);
   const off = mode === "viewing" || !canEdit;
@@ -251,7 +293,7 @@ export function DocsToolbar({
     focusPage();
   };
 
-  // Search the menus (Alt+/), Hide the menus (Ctrl+Shift+F), and the modes'
+  // Search the menus (Alt+/), Hide the title row (Ctrl+Shift+F), and the modes'
   // keys: Ctrl+Alt+Shift+Z is Editing, Ctrl+Alt+Shift+X is Suggesting,
   // Ctrl+Alt+Shift+C and D are Viewing (Docs' help page and its code
   // disagree on the letter; both work).
@@ -290,9 +332,14 @@ export function DocsToolbar({
         modeRef.current.onMode("viewing");
       }
     };
-    // The right-click menu's Suggest edits.
+    // The right-click menu's Suggest edits, and the assistant's suggestions
+    // landing in Viewing.
     const onModeEvent = (e: Event) => {
-      if (modeRef.current.canEdit) modeRef.current.onMode((e as CustomEvent<DocsMode>).detail);
+      const request = (e as CustomEvent<ModeRequest>).detail;
+      if (!modeRef.current.canEdit) return;
+      if (typeof request === "string") modeRef.current.onMode(request);
+      else if ("collapse" in request) modeRef.current.onMode(request.mode, false, true);
+      else modeRef.current.onMode(request.mode, request.passing);
     };
     const dom = editor.view.dom;
     window.addEventListener("keydown", onKey, true);
@@ -310,10 +357,11 @@ export function DocsToolbar({
   };
 
   const A = {
-    undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
-    redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
+    // `on` as the history stands when Search the menus lists it; the buttons read it themselves (HistoryButton).
+    undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), get on() { return historyOn(target, false); } },
+    redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), get on() { return historyOn(target, true); } },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
-    spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
+    spelling: { id: "spelling", key: "docsTyping.showSpelling", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
     // Voice typing (SPEC.md §29, typing): opens the microphone box at the left of the page.
     voice: { id: "voice-typing", key: "docsTyping.voiceTyping", combo: "Mod+Shift+S", Icon: VoiceTypingIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.voice), on: !inHeader },
     paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press, on: !inHeader },
@@ -388,6 +436,9 @@ export function DocsToolbar({
       {a.Icon && <a.Icon />}
     </Btn>
   );
+  const historyButton = (a: Act, redo: boolean) => (
+    <HistoryButton editor={target} redo={redo} label={t(a.key)} tip={withKeys(t(a.key), a.combo)} track={a.id} onClick={a.run} />
+  );
 
   // Search the menus: the toolbar's actions, then the areas' commands (an
   // area's own command wins over a toolbar action of the same name). In
@@ -400,6 +451,7 @@ export function DocsToolbar({
         id: c.id,
         label: t(c.label),
         where: t(MENU_NAMES[c.menu]),
+        writes: writesMenu(c.menu),
         keywords: c.keywords,
         shortcut: c.shortcut ? keys(c.shortcut) : undefined,
         enabled: !(off && (c.menu === "insert" || c.menu === "format")) && (c.enabled ? c.enabled(on) : true),
@@ -416,6 +468,8 @@ export function DocsToolbar({
       id: a.id,
       label: t(a.key),
       where: t(MENU_NAMES[a.where ?? "format"]),
+      // A row that opens a submenu writes nothing yet.
+      writes: !a.id.startsWith("open-") && writesMenu(a.where ?? "format"),
       keywords: a.words,
       shortcut: a.combo ? keys(a.combo) : undefined,
       icon: a.Icon && <a.Icon />,
@@ -423,7 +477,7 @@ export function DocsToolbar({
       run: a.run,
     }));
     const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[]; note?: string } = {}) =>
-      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words, note: o.note });
+      list.push({ id, label, where: t(MENU_NAMES[where]), writes: writesMenu(where), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words, note: o.note });
     // What the lock turns off says why, as the mode menu does.
     const unlocked = lock ? { enabled: false, note: t(lock) } : { enabled: true };
     add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), { enabled: true });
@@ -474,7 +528,11 @@ export function DocsToolbar({
       });
       add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), { enabled: true, shortcut: "Mod+Alt+Shift+C", words: ["switch to viewing"] });
     }
-    add("menus", t(headerHidden ? "docs.showMenus" : "docs.hideMenus"), "view", onToggleHeader, { enabled: true, shortcut: "Ctrl+Shift+F", words: ["compact mode", "compact controls"] });
+    add("menus", t(headerHidden ? "docs.showTitleRow" : "docs.hideTitleRow"), "view", onToggleHeader, {
+      enabled: true,
+      shortcut: "Ctrl+Shift+F",
+      words: ["hide the menus", "show the menus", "compact mode", "compact controls", "title bar"],
+    });
     const taken = new Set(registered.map((c) => c.label.toLowerCase()));
     return [...list.filter((a) => !taken.has(a.label.toLowerCase())), ...registered];
   };
@@ -512,7 +570,7 @@ export function DocsToolbar({
   };
 
   const zoomBox = <ZoomBox zoom={zoom} onZoom={onZoom} onDone={focusPage} />;
-  const searchMenus = <SearchMenus actions={actions} valueActions={valueActions} onDone={focusPage} />;
+  const searchMenus = <SearchMenus actions={actions} menus={MENU_ORDER.map((m) => t(MENU_NAMES[m]))} valueActions={valueActions} onDone={focusPage} />;
   const textBar = s.color ?? (s.styleColor !== "#000000" ? s.styleColor : "var(--docs-ink)");
   const colorButton = (kind: "text" | "highlight") => {
     const text = kind === "text";
@@ -558,33 +616,39 @@ export function DocsToolbar({
   const AlignGlyph = ALIGNS.find((a) => a.align === s.align)?.Icon ?? AlignLeftIcon;
   const bodyOnly = (node: ReactNode) => <ControlsOff.Provider value={inHeader}>{node}</ControlsOff.Provider>;
 
+  // Viewing's row folds as Editing's does: Zoom and Print first, then Add
+  // comment, Search the menus last.
   const groups: ToolbarGroup[] = off
     ? [
-        {
-          key: "view",
-          sep: false,
-          content: (
-            <>
-              {searchMenus}
-              {button(A.print)}
-              {canEdit && button(A.comment)}
-              <Sep />
-              {zoomBox}
-            </>
-          ),
-        },
+        { key: "search", sep: false, fold: 100, content: <>{searchMenus}</> },
+        { key: "print", sep: false, fold: 20, content: <>{button(A.print)}</> },
+        ...(canEdit ? [{ key: "comment", sep: false, fold: 70, content: <>{button(A.comment)}</> }] : []),
+        { key: "zoom", sep: true, fold: 10, content: <>{zoomBox}</> },
       ]
     : [
         {
+          key: "search",
+          sep: false,
+          fold: 100,
+          content: <>{searchMenus}</>,
+        },
+        {
           key: "history",
           sep: false,
+          fold: coarse ? 95 : 60,
           content: (
             <>
-              {searchMenus}
-              {button(A.undo)}
-              {button(A.redo)}
-              {button(A.print)}
-              {button(A.spelling)}
+              {historyButton(A.undo, false)}
+              {historyButton(A.redo, true)}
+            </>
+          ),
+        },
+        {
+          key: "tools",
+          sep: false,
+          fold: 10,
+          content: (
+            <>
               {button(A.voice)}
               {button(A.paint, paint.active)}
               {zoomBox}
@@ -594,13 +658,15 @@ export function DocsToolbar({
         {
           key: "styles",
           sep: true,
+          fold: 40,
           menus: ["styles"],
           content: bodyOnly(<StylesSelect editor={editor} style={s.style} styles={s.styles} onBorders={() => setDialog("borders")} />),
         },
-        { key: "font", sep: true, menus: ["font"], content: <FontSelect editor={target} font={s.font} /> },
+        { key: "font", sep: true, fold: 30, menus: ["font"], content: <FontSelect editor={target} font={s.font} /> },
         {
           key: "size",
           sep: true,
+          fold: 35,
           content: (
             <div className="docs-size">
               {button(A.sizeDown)}
@@ -612,12 +678,22 @@ export function DocsToolbar({
         {
           key: "text",
           sep: true,
-          menus: ["text-color", "highlight-color"],
+          fold: 90,
           content: (
             <>
               {button(A.bold, s.bold)}
               {button(A.italic, s.italic)}
               {button(A.underline, s.underline)}
+            </>
+          ),
+        },
+        {
+          key: "colors",
+          sep: false,
+          fold: 45,
+          menus: ["text-color", "highlight-color"],
+          content: (
+            <>
               {colorButton("text")}
               {bodyOnly(colorButton("highlight"))}
             </>
@@ -626,6 +702,7 @@ export function DocsToolbar({
         {
           key: "insert",
           sep: true,
+          fold: 70,
           menus: ["image"],
           content: (
             <>
@@ -638,7 +715,8 @@ export function DocsToolbar({
         {
           key: "paragraph",
           sep: true,
-          menus: ["align", "line-spacing", "checklist", "bulleted-list", "numbered-list"],
+          fold: 65,
+          menus: ["align", "line-spacing"],
           content: (
             <>
               <DropBtn id="align" label={t("docs.align")} track="align" className="docs-tb-align" menuClassName="docs-menu-align" face={<AlignGlyph />}>
@@ -668,9 +746,19 @@ export function DocsToolbar({
                   </div>
                 )}
               </DropBtn>
+              {bodyOnly(<SpacingMenu editor={editor} para={s.para} pageless={pageless} onCustom={() => setDialog("spacing")} />)}
+            </>
+          ),
+        },
+        {
+          key: "lists",
+          sep: false,
+          fold: 75,
+          menus: ["checklist", "bulleted-list", "numbered-list"],
+          content: (
+            <>
               {bodyOnly(
                 <>
-                  <SpacingMenu editor={editor} para={s.para} pageless={pageless} onCustom={() => setDialog("spacing")} />
                   {split(A.checklist, s.lists.taskList !== undefined, "docs.checklistMenu", (close) => (
                     <ChecklistPalette editor={editor} current={s.lists.taskList} close={close} />
                   ))}
@@ -699,6 +787,7 @@ export function DocsToolbar({
           // Docs keeps a separator here that it never draws; the table's
           // buttons join this group, as in Docs.
           sep: false,
+          fold: 50,
           content: (
             <>
               {button(A.outdent)}
@@ -725,16 +814,29 @@ export function DocsToolbar({
         },
       ];
 
-  const hideLabel = t(headerHidden ? "docs.showMenus" : "docs.hideMenus");
   return (
     <ToolbarEditor.Provider value={editor}>
       <ToolbarRow
         groups={groups}
         label={t("docs.toolbar")}
-        moreLabel={t("docs.more")}
+        moreLabel={t("docs.moreTools")}
         onEscape={focusPage}
         right={
           <>
+            {narrowPane && (
+              <Btn
+                label={t("docsPage.showOutline")}
+                tip={t("docsPage.showOutline")}
+                track="outline-open"
+                onClick={() => {
+                  const page = findPageStore(editor);
+                  if (page) page.set({ outlineOpen: !page.get().outlineOpen });
+                }}
+              >
+                <OutlineIcon />
+              </Btn>
+            )}
+            {status && <div className="docs-tb-status">{status}</div>}
             {aiControls && <div className="docs-tb-unitos">{aiControls}</div>}
             {canEdit && (
               <>
@@ -742,9 +844,6 @@ export function DocsToolbar({
                 <ModeSwitcher mode={mode} onMode={onMode} />
               </>
             )}
-            <Btn label={hideLabel} tip={withKeys(hideLabel, "Ctrl+Shift+F")} track="hide-menus" onClick={onToggleHeader}>
-              {headerHidden ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-            </Btn>
           </>
         }
       />

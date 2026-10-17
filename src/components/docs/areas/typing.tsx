@@ -12,23 +12,26 @@ import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
-import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
+import { DOCKED_FIND_HEIGHT_PX, DOCKED_FIND_PX, FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
 import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
 import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
 import { copyMarkdown, pasteMarkdown, setImagePremium } from "@/components/docs/typing/paste";
 import { DictionaryDialog } from "@/components/docs/typing/dictionary-dialog";
-import { subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
+import { setTypingPrefs, subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
+import { setProofing } from "@/components/docs/typing/proofing";
+import { ProofingLayer } from "@/components/docs/typing/proofing-layer";
 import { acceptedWords, setAcceptedWords } from "@/components/docs/typing/spelling";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
-// Preferences, the keyboard shortcuts, voice typing, the spelling switch,
-// the personal dictionary and the words ignored in the document
-// (typing/spelling.ts), and images dropped anywhere on the page
+// Preferences, the keyboard shortcuts, voice typing, the spelling and
+// grammar switches and their squiggles (typing/proofing.ts), the personal
+// dictionary and the words ignored in the document (typing/spelling.ts),
+// and images dropped anywhere on the page
 // (typing/drop.ts); in Search the
 // menus also Format > Text, View > Show non-printing characters, and Edit's
 // clipboard items. Their keys answer when the page
@@ -116,6 +119,13 @@ registerDocsCommands([
     enabled: (editor) => typingPrefs().markdown && !editor.state.selection.empty,
   },
   {
+    id: "typing:grammar",
+    label: "docsTyping.showGrammar",
+    menu: "tools",
+    keywords: ["grammar", "spelling and grammar", "grammar check", "show grammar suggestions", "语法", "语法建议"],
+    run: (editor) => fireDocs(editor, TYPING_EVENT.grammar),
+  },
+  {
     id: "typing:personal-dictionary",
     label: "docsTyping.personalDictionary",
     menu: "tools",
@@ -182,6 +192,16 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
   const t = useT();
   const { premium } = useCollab();
   const [findMode, setFindMode] = useState<FindMode>(null);
+  // A phone, upright or sideways: Find and replace is the find bar docked
+  // under the toolbar.
+  const [phoneFind, setPhoneFind] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(`(max-width: ${DOCKED_FIND_PX - 1}px), (max-height: ${DOCKED_FIND_HEIGHT_PX - 1}px)`);
+    const read = () => setPhoneFind(query.matches);
+    read();
+    query.addEventListener("change", read);
+    return () => query.removeEventListener("change", read);
+  }, []);
 
   // Images dropped on the page, and the images' tier rule (typing/paste.ts).
   const dropState = useRef<DropState>({ canEdit, projectEditor, editing, t });
@@ -204,6 +224,17 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
     return subscribeTypingPrefs(send);
   }, [editor, documentId]);
 
+  // The squiggles: in Editing and Suggesting, as the preferences say; the
+  // grammar check on Unitos Premium and Ultra.
+  useEffect(() => {
+    const send = () => {
+      const prefs = typingPrefs();
+      setProofing(editor, { spelling: editing && prefs.showSpelling, grammar: editing && premium && prefs.showGrammar });
+    };
+    send();
+    return subscribeTypingPrefs(send);
+  }, [editor, editing, premium]);
+
   // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
   // A layout effect: the chords' listener is the window's first, so the key
   // after a chord's first key never reaches the modes' keys (toolbar.tsx) or
@@ -221,10 +252,17 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       setFindMode(mode);
       setFocusToken((n) => n + 1);
     };
-    // Spelling and grammar check: the browser's underlines on or off.
+    // Show spelling suggestions and Show grammar suggestions: the red and
+    // the blue squiggles on or off, kept in this browser.
     const toggleSpelling = () => {
-      view.dom.spellcheck = !view.dom.spellcheck;
-      toast(t(view.dom.spellcheck ? "docsTyping.spellingOn" : "docsTyping.spellingOff"), editor);
+      const on = !typingPrefs().showSpelling;
+      setTypingPrefs({ showSpelling: on });
+      toast(t(on ? "docsTyping.spellingOn" : "docsTyping.spellingOff"), editor);
+    };
+    const toggleGrammar = () => {
+      const on = !typingPrefs().showGrammar;
+      setTypingPrefs({ showGrammar: on });
+      toast(t(on ? "docsTyping.grammarOn" : "docsTyping.grammarOff"), editor);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || !docsActive(editor)) return;
@@ -238,7 +276,9 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
         if (!findState(view.state).open) openFind("bar");
         else stepResult(view, e.shiftKey ? -1 : 1);
       } else if (mod && !e.altKey && !e.shiftKey && (key === "/" || code === "Slash")) setShortcutsOpen(true);
-      else if (mod && e.shiftKey && !e.altKey && code === "KeyS") setVoiceOpen(true);
+      // The key and the toolbar's microphone both toggle: open and
+      // listening, or closed (typing/voice-typing.tsx).
+      else if (mod && e.shiftKey && !e.altKey && code === "KeyS") setVoiceOpen((o) => !o);
       // The word count in Viewing too, where the page takes no focus.
       else if (mod && e.shiftKey && !e.altKey && code === "KeyC") fireDocs(editor, TYPING_EVENT.wordCount);
       else if ((mod && e.altKey && !e.shiftKey && code === "KeyX") || (e.key === "F7" && !mod && !e.altKey)) toggleSpelling();
@@ -254,8 +294,9 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       [TYPING_EVENT.findReplace, () => openFind("dialog")],
       [TYPING_EVENT.preferences, () => setPrefsOpen(true)],
       [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
-      [TYPING_EVENT.voice, () => setVoiceOpen(true)],
+      [TYPING_EVENT.voice, () => setVoiceOpen((o) => !o)],
       [TYPING_EVENT.spelling, toggleSpelling],
+      [TYPING_EVENT.grammar, toggleGrammar],
       [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],
     ];
     window.addEventListener("keydown", onKey);
@@ -277,12 +318,14 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
     <>
       <FindBar
         editor={editor}
-        open={findMode === "bar"}
+        open={findMode === "bar" || (phoneFind && findMode === "dialog")}
         focusToken={focusToken}
         onClose={closeFind}
         onMore={() => setFindMode("dialog")}
+        docked={phoneFind}
+        replacing={findMode === "dialog"}
       />
-      <FindReplaceDialog editor={editor} open={findMode === "dialog"} onClose={closeFind} />
+      <FindReplaceDialog editor={editor} open={!phoneFind && findMode === "dialog"} focusToken={focusToken} onClose={closeFind} />
       {prefsOpen && (
         <PreferencesDialog
           onClose={() => {
@@ -309,6 +352,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       )}
       <VoiceTyping editor={editor} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
       <AutocorrectBubble editor={editor} />
+      <ProofingLayer editor={editor} documentId={documentId} />
     </>
   );
 }

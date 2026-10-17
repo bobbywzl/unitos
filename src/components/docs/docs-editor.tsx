@@ -4,10 +4,13 @@ import "./docs.css";
 // After the page's styles, where Tiptap put its own sheet: its rules win a tie.
 import "./css/prosemirror.css";
 import type { JSONContent } from "@tiptap/core";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
+import { importLineParts } from "@/components/docs/import-line";
+import { usePageStatusCarries } from "@/components/save-indicator";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
@@ -25,19 +28,27 @@ import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
+import { showLeftOff } from "@/components/docs/layer/left-off";
+import { registerDocumentFlush } from "@/components/docs/layer/flush";
+import { useKeepPlace } from "@/components/docs/page/keep-place";
+import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
-import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
+import { scrollParent } from "@/components/docs/page/geometry";
+import { PAGE_EVENT, drawnSetup, pageStore, useOutlineRoom, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
+import { keepingKeysFor, takeEarlyKeys } from "@/lib/docs/early-keys";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
+import type { PageRange } from "@/lib/pdf-pages";
+import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
+import { readSaveState, readSaveTouched, readUnconfirmed, subscribeSaveState } from "@/lib/save-state";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -49,6 +60,12 @@ import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
 // in step by each save (use-docs-save.ts).
 
 const FONTS_LINK_ID = "unitos-docs-fonts";
+
+/** A pane narrower than this starts with the title row hidden. */
+const NARROW_PANE = 600;
+/** A pane shorter than this (a phone held sideways) hides the title row
+    too, and reads pageless with no ruler, as a narrow one does. */
+const SHORT_PANE = 500;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
@@ -77,16 +94,29 @@ export type DocsMedia = {
   pageLabels: string[] | null;
 };
 
-// An import opens in Viewing; the mode the reader picks is kept per
-// document in this browser.
+/** A step of the transaction replaced the whole document: a version restored,
+    or its undo. */
+function replacesWholeDoc(tr: Transaction): boolean {
+  if (!tr.docChanged) return false;
+  return tr.mapping.maps.some((map, i) => {
+    let whole = false;
+    map.forEach((from, to) => {
+      if (from === 0 && to === tr.docs[i].content.size) whole = true;
+    });
+    return whole;
+  });
+}
+
+// An import opens in Viewing and a blank document in Editing; the mode the
+// reader picks is kept per document in this browser, for both.
 const modeKey = (documentId: string) => `unitos-docs-mode:${documentId}`;
 
-function storedMode(documentId: string): DocsMode {
+function storedMode(documentId: string, fallback: DocsMode): DocsMode {
   try {
     const mode = localStorage.getItem(modeKey(documentId));
-    return mode === "editing" || mode === "suggesting" ? mode : "viewing";
+    return mode === "editing" || mode === "suggesting" || mode === "viewing" ? mode : fallback;
   } catch {
-    return "viewing";
+    return fallback;
   }
 }
 
@@ -98,62 +128,27 @@ function storeMode(documentId: string, mode: DocsMode): void {
   }
 }
 
-/** The site of an address, without "www.". */
-function siteOf(address: string): string {
-  try {
-    return new URL(address).hostname.replace(/^www\./, "");
-  } catch {
-    return address;
-  }
-}
-
-/** Where an import came from, after its title: "Imported from" the site, a
-    link to the page; a PDF and its page count, or the pages the reader
-    chose of it ("PDF · pages 45–60 of 409"); a text file; or a Word file.
-    Muted, the accent on hover. */
+/** The import line, after an import's title (importLineParts). Muted, the
+    accent on hover. */
 function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
-  const parts: ReactNode[] = [];
-  if (imported.origin) {
-    const from = t("docsPage.importedFrom", { site: siteOf(imported.origin) });
-    parts.push(
-      /^https?:\/\//i.test(imported.origin) ? (
-        <a
-          key="site"
-          href={imported.origin}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-tip={imported.origin}
-          data-track="docs:import-origin"
-          className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
-        >
-          {from}
-        </a>
-      ) : (
-        <span key="site">{from}</span>
-      ),
-    );
-  }
-  if (imported.kind === "pdf") {
-    const n = imported.pages;
-    const chosen = imported.pdfPages;
-    parts.push(
-      <span key="pdf">
-        {n && chosen
-          ? t(chosen.length === 1 && chosen[0][0] === chosen[0][1] ? "docsPage.importPdfPage" : "docsPage.importPdfPages", {
-              pages: pageRangesLabel(chosen),
-              n,
-            })
-          : n
-            ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" })
-            : "PDF"}
-      </span>,
-    );
-  } else if (imported.kind === "markdown" && !imported.origin) {
-    parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
-  } else if (imported.kind === "docx" && !imported.origin) {
-    parts.push(<span key="file">{t("docsPage.importWordFile")}</span>);
-  }
+  const parts: ReactNode[] = importLineParts(imported, t).map((part) =>
+    part.href ? (
+      <a
+        key="site"
+        href={part.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-tip={part.href}
+        data-track="docs:import-origin"
+        className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+      >
+        {part.text}
+      </a>
+    ) : (
+      <span key={part.text}>{part.text}</span>
+    ),
+  );
   // A narrow title row (a phone, a split pane, the tray beside a small
   // window) keeps its room for the title.
   return (
@@ -179,34 +174,77 @@ function useDocsFonts() {
   }, []);
 }
 
-/** The document's status beside the title, as Google Docs shows it: the
-    arrows and "Saving…" while a change waits or saves, then the cloud with a
-    check and "Saved to Unitos" for 3 s, then the cloud alone. A lost
-    connection or a failed save reads in words until it clears. */
-function SaveStatus({ state }: { state: SaveState }) {
+/** A value the toolbar's row shows that changes apart from the row: the
+    save state, the Unitos tools. The row is built once for it; the value's
+    own small part redraws when it changes (a save, the reader's toolbox
+    opening above the page) — on a long row a rebuild costs more than a
+    frame. */
+type Live<T> = { get: () => T; set: (value: T) => void; subscribe: (onChange: () => void) => () => void };
+
+function useLive<T>(value: T): Live<T> {
+  const [live] = useState<Live<T>>(() => {
+    let current = value;
+    const listeners = new Set<() => void>();
+    return {
+      get: () => current,
+      set: (next) => {
+        if (Object.is(next, current)) return;
+        current = next;
+        for (const listener of listeners) listener();
+      },
+      subscribe: (onChange) => {
+        listeners.add(onChange);
+        return () => {
+          listeners.delete(onChange);
+        };
+      },
+    };
+  });
+  useLayoutEffect(() => live.set(value), [live, value]);
+  return live;
+}
+
+function useLiveValue<T>(live: Live<T>): T {
+  return useSyncExternalStore(live.subscribe, live.get, live.get);
+}
+
+function LiveSlot({ live }: { live: Live<ReactNode> }) {
+  return <>{useLiveValue(live)}</>;
+}
+
+/** The document's status at the toolbar row's right end, as Google Docs
+    shows it: the arrows and "Saving…" while a change waits or saves, then
+    the cloud with a check and "Saved to Unitos" for 3 s, then the cloud
+    alone. A lost connection or a failed save reads in words until it
+    clears. It carries the app's failed writes too (notes, annotations), so
+    the app's own line in the top bar hides while this one is on screen: a
+    write that did not land always shows, in one place. The app's writes in
+    flight are not drawn here — a note's draft waiting for its save would
+    leave this cloud spinning over a document that is saved. */
+function SaveStatus({ live }: { live: Live<SaveState> }) {
   const t = useT();
-  const [last, setLast] = useState(state);
-  // Each finished save shows the saved words for 3 s.
-  const [justSaved, setJustSaved] = useState(false);
-  if (last !== state) {
-    setLast(state);
-    setJustSaved(state === "saved");
-  }
-  useEffect(() => {
-    if (!justSaved) return;
-    const id = setTimeout(() => setJustSaved(false), 3000);
-    return () => clearTimeout(id);
-  }, [justSaved]);
+  const textState = useLiveValue(live);
+  usePageStatusCarries();
+  const appState = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
+  const appTouched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
+  const appUnconfirmed = useSyncExternalStore(subscribeSaveState, readUnconfirmed, () => false);
+  // A note or an annotation that did not save: Not saved, in the app's
+  // words, until its retry lands; the document's own failure reads as the
+  // document's.
+  const app = textState === "saved" && ((appTouched && appState === "failed") || appUnconfirmed);
+  const state: SaveState = app ? "error" : textState;
+  // The words only while a save is in trouble: on the toolbar's row a
+  // caption that came and went with every save would move the controls
+  // beside it. The symbol says saving and saved, and a press tells the
+  // state in words.
   const caption =
-    state === "saving" || state === "unsaved"
-      ? t("docs.saving")
-      : state === "offline"
-        ? t("docs.offlineSaving")
-        : state === "error"
-          ? t("docs.saveFailed")
-          : justSaved
-            ? t("docsPage.savedCaption")
-            : "";
+    state === "offline" ? t("docs.offlineSaving") : app ? t("outline.saveFailed") : state === "error" ? t("docs.saveFailed") : "";
+  const spoken =
+    state === "saved"
+      ? t("docs.saved")
+      : state === "saving" || state === "unsaved"
+        ? t("docs.saving")
+        : caption;
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const Icon = state === "saved" ? CloudDoneIcon : state === "offline" || state === "error" ? CloudOffIcon : CloudSyncIcon;
@@ -217,7 +255,7 @@ function SaveStatus({ state }: { state: SaveState }) {
         type="button"
         className={`docs-status docs-status-${state}`}
         data-tip={open ? undefined : t("docsPage.documentStatus")}
-        aria-label={`${t("docsPage.documentStatus")}: ${state === "saved" ? t("docs.saved") : caption}`}
+        aria-label={`${t("docsPage.documentStatus")}: ${spoken}`}
         aria-expanded={open}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setOpen((o) => !o)}
@@ -229,9 +267,113 @@ function SaveStatus({ state }: { state: SaveState }) {
           </span>
         )}
       </button>
-      {open && <StatusPopup state={state} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
+      {open && <StatusPopup state={state} app={app} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
     </>
   );
+}
+
+/** Where the caret goes when the page opens scrolled, or leaves Viewing
+    with the caret out of view: the start of the block at the reading line
+    (READING_LINE_PX under the pane's top), or, when that start is under the
+    title row and the toolbar, the start of the block's first line in view,
+    or of the next block when no line of it is in view whole. Null at the
+    top of the document. */
+function readingCaret(editor: Editor, pane: HTMLElement): number | null {
+  if (pane.scrollTop < 1) return null;
+  const view = editor.view;
+  const paneTop = pane.getBoundingClientRect().top;
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-header");
+  const shown = Math.max(paneTop, header?.getBoundingClientRect().bottom ?? paneTop);
+  const box = view.dom.getBoundingClientRect();
+  const at = (top: number) => view.posAtCoords({ left: box.left + 1, top })?.pos ?? null;
+  const hit = at(Math.max(paneTop + READING_LINE_PX, shown) + 2);
+  if (hit === null) return null;
+  const $hit = view.state.doc.resolve(hit);
+  if (!$hit.parent.isTextblock) return null;
+  const start = $hit.start();
+  if (view.coordsAtPos(start).top >= shown - 1) return start;
+  // The block began above the view: its first line in view, whole. Half a
+  // line under the text's box is the next line (the line's box runs lower).
+  const line = view.coordsAtPos(hit);
+  const next = line.top >= shown - 1 ? hit : at(line.bottom + (line.bottom - line.top) / 2);
+  if (next !== null && view.state.doc.resolve(next).parent === $hit.parent && view.coordsAtPos(next).top >= shown - 1) return next;
+  // The block's line under the header was its last: the next block's start.
+  let after: number | null = null;
+  view.state.doc.nodesBetween($hit.after(), view.state.doc.content.size, (node, pos) => {
+    if (after !== null) return false;
+    if (node.isTextblock) after = pos + 1;
+    return !node.isTextblock;
+  });
+  return after !== null && view.coordsAtPos(after).top >= shown - 1 ? after : hit;
+}
+
+/** The caret, or the selection's head, shows in the pane under the header. */
+function caretInView(editor: Editor, pane: HTMLElement): boolean {
+  const paneRect = pane.getBoundingClientRect();
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-header");
+  const top = Math.max(paneRect.top, header?.getBoundingClientRect().bottom ?? paneRect.top);
+  try {
+    const caret = editor.view.coordsAtPos(editor.state.selection.head);
+    return caret.bottom > top && caret.top < paneRect.bottom;
+  } catch {
+    return false;
+  }
+}
+
+/** While the reading position holds the pane (the pages still settling
+    under it, POSITION_HOLD_MS at most), the caret follows it; the reader's
+    first press, key, wheel, or touch, or a selection the reader made, ends
+    that. Returns the cleanup. */
+function caretAtReadingPosition(editor: Editor): () => void {
+  const pane = scrollParent(editor.view.dom);
+  if (!pane) return () => {};
+  let own = false;
+  const place = () => {
+    if (editor.isDestroyed) return;
+    const pos = readingCaret(editor, pane);
+    const sel = editor.state.selection;
+    if (pos === null || (sel.empty && sel.from === pos)) return;
+    own = true;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)).setMeta("addToHistory", false));
+    own = false;
+  };
+  let frame = 0;
+  const onScroll = () => {
+    if (!frame) frame = requestAnimationFrame(() => ((frame = 0), place()));
+  };
+  const onSelection = () => {
+    if (!own) stop();
+  };
+  // A key types at the caret placed for the pane as it stands now.
+  const onKey = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    place();
+    stop();
+  };
+  const stop = () => {
+    cancelAnimationFrame(frame);
+    clearTimeout(timer);
+    pane.removeEventListener("scroll", onScroll);
+    pane.removeEventListener("pointerdown", stop, true);
+    pane.removeEventListener("wheel", stop);
+    pane.removeEventListener("touchmove", stop);
+    editor.view.dom.removeEventListener("keydown", onKey, true);
+    editor.off("selectionUpdate", onSelection);
+    editor.off("blur", stop);
+  };
+  // Now, and once the page has the focus (the focus command waits a frame).
+  place();
+  frame = requestAnimationFrame(() => ((frame = 0), place()));
+  pane.addEventListener("scroll", onScroll, { passive: true });
+  pane.addEventListener("pointerdown", stop, true);
+  pane.addEventListener("wheel", stop, { passive: true });
+  pane.addEventListener("touchmove", stop, { passive: true });
+  editor.view.dom.addEventListener("keydown", onKey, true);
+  editor.on("selectionUpdate", onSelection);
+  editor.on("blur", stop);
+  const timer = setTimeout(stop, POSITION_HOLD_MS);
+  return stop;
 }
 
 /** The first line's words once a line follows it, else "". */
@@ -344,6 +486,8 @@ export function DocsEditor({
   banner,
   translations = null,
   collapse = null,
+  leftOffBlockId = null,
+  split = false,
 }: {
   documentId: string;
   notebookId: string;
@@ -373,6 +517,12 @@ export function DocsEditor({
   /** Collapse (SPEC.md §28): the cores, in Viewing (layer/collapse.tsx);
       null while the document has none. */
   collapse?: PageCollapse | null;
+  /** The block of the reading position the document opened with: the
+      left-off mark stands above it (layer/left-off.ts). */
+  leftOffBlockId?: string | null;
+  /** A pane of a split view, whose pane header names the document
+      (reader-interactions.tsx draws the header when this is true). */
+  split?: boolean;
 }) {
   const t = useT();
   useDocsFonts();
@@ -381,15 +531,34 @@ export function DocsEditor({
   // change their import too, so Editing and Suggesting are off.
   const locked = imported?.shared === true;
   const writable = canEdit && !locked;
-  // A blank document opens in Editing; an import in Viewing, or in the mode
-  // the reader last chose for it here.
-  const [openedIn] = useState<DocsMode>(() => (!imported ? "editing" : writable ? storedMode(documentId) : "viewing"));
+  // A blank document opens in Editing, an import in Viewing; either opens
+  // in the mode the reader last chose for it here.
+  const [openedIn] = useState<DocsMode>(() =>
+    !writable ? (imported ? "viewing" : "editing") : storedMode(documentId, imported ? "viewing" : "editing"),
+  );
   const [chosenMode, setModeState] = useState<DocsMode>(openedIn);
   // An import that another account's project takes in while it is open
   // leaves Editing and Suggesting at once.
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
+  // A pane too narrow for the page (a phone, a narrow split), too short
+  // (a phone held sideways), or one of a split view (whose pane header
+  // names the document) starts with the title row hidden: 44 px of the
+  // screen above the first line go to the words, and the title, the status
+  // and the version clock stay reachable (the title in the document pill,
+  // the pane header and File > Rename, the status and the clock in the
+  // toolbar's row).
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  // Narrow or short, as measured; a split pane is tight from its first frame.
+  const [measuredTight, setMeasuredTight] = useState(false);
+  const tight = measuredTight || split;
+  const [tightWas, setTightWas] = useState(false);
+  if (tight !== tightWas) {
+    setTightWas(tight);
+    setHeaderHidden(tight);
+  }
   // View > Full screen: the title row, the toolbar, and the rulers hide,
   // as in Google Docs; Esc brings them back.
   const [fullScreen, setFullScreen] = useState(false);
@@ -429,7 +598,10 @@ export function DocsEditor({
       editorProps: {
         attributes: {
           class: "docs-prose",
-          spellcheck: "true",
+          // Unitos draws the spelling squiggles (typing/proofing.ts); a
+          // paragraph that does not read as English turns the browser's
+          // check back on for itself.
+          spellcheck: "false",
           "aria-label": t("docs.documentBody"),
           "data-docs-body": "",
         },
@@ -438,29 +610,111 @@ export function DocsEditor({
     [documentId],
   );
 
-  // A document opens with the caret at the page's start, as in Google Docs,
-  // unless something else already has the focus. In Viewing the page takes
-  // no focus: the pending queue's keys reach the notes tray.
+  // The pane's width, measured once the shell stands (the shell is drawn
+  // after the editor is built, so this waits for it).
   useEffect(() => {
-    if (editor && writable && openedIn !== "viewing" && document.activeElement === document.body) {
-      editor.commands.focus("start", { scrollIntoView: false });
+    const shell = shellRef.current;
+    if (!shell) return;
+    const pane = scrollParent(shell);
+    const measure = () => {
+      const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
+      const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
+      // A short pane (a phone held sideways) reads as a narrow one does:
+      // pageless, with no ruler; the page's margins and the ruler would
+      // leave the words a third of the screen.
+      setNarrow(isNarrow || short);
+      setMeasuredTight(isNarrow || short);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(shell);
+    if (pane) observer.observe(pane);
+    return () => observer.disconnect();
+  }, [editor]);
+
+  // A document opens with the caret at the page's start, as in Google Docs,
+  // unless something else already has the focus. A document that opens at
+  // the reading position (reader-interactions.tsx holds it while the pages
+  // settle) has the caret there: at the start of the block at the reading
+  // line, so the first key types where the reader looks and the pane stays.
+  // In Viewing the page takes no focus: the pending queue's keys reach the
+  // notes tray. A new blank document puts the keys typed while it was being
+  // made at its start (lib/docs/early-keys.ts), as typing.
+  useEffect(() => {
+    if (!editor || !writable || openedIn === "viewing") return;
+    if (!keepingKeysFor(documentId) && document.activeElement !== document.body) return;
+    const early = takeEarlyKeys(documentId);
+    if (early) {
+      editor.chain().focus("start", { scrollIntoView: false }).insertContent({ type: "text", text: early }).run();
+      return;
     }
-  }, [editor, writable, openedIn]);
+    editor.commands.focus("start", { scrollIntoView: false });
+    return caretAtReadingPosition(editor);
+  }, [editor, writable, openedIn, documentId]);
 
   // The mode: an import keeps the reader's choice. On a locked import only
   // Viewing is left, and a key or a command that asks for another mode says
-  // why.
+  // why. A mode the page passes into for the reader (`passing`: the
+  // assistant's suggestions landing in Viewing) is not kept, and the keys
+  // stay where they are.
+  const passingRef = useRef(false);
+  // The mode Collapse pressed in Editing or Suggesting left for Viewing:
+  // Collapse off goes back to it, unless the reader chose a mode since.
+  const collapseLeftRef = useRef<DocsMode | null>(null);
+  const chosenModeRef = useRef(chosenMode);
+  useEffect(() => {
+    chosenModeRef.current = chosenMode;
+  }, [chosenMode]);
   const setMode = useCallback(
-    (next: DocsMode) => {
+    (next: DocsMode, passing = false, collapse = false) => {
       if (locked && next !== "viewing") {
         if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
+      if (collapse) {
+        if (chosenModeRef.current !== "viewing") collapseLeftRef.current = chosenModeRef.current;
+      } else if (!passing) collapseLeftRef.current = null;
+      passingRef.current = passing;
       setModeState(next);
-      if (isImport) storeMode(documentId, next);
+      if (!passing) storeMode(documentId, next);
     },
-    [locked, editor, t, isImport, documentId],
+    [locked, editor, t, documentId],
   );
+  // Collapse off: back to the mode Collapse left, the caret where it was.
+  const collapseOn = collapse?.on ?? false;
+  const collapseOnRef = useRef(collapseOn);
+  useEffect(() => {
+    const was = collapseOnRef.current;
+    collapseOnRef.current = collapseOn;
+    const back = collapseLeftRef.current;
+    if (!was || collapseOn || !back) return;
+    collapseLeftRef.current = null;
+    if (chosenModeRef.current === "viewing") setMode(back);
+  }, [collapseOn, setMode]);
+
+  // A document in pages may be read pageless (page/reflow.tsx): a view of
+  // this browser; the document's page setup stays as it is (the page store
+  // keeps the saved setup apart from the drawn page). A PDF import offers it
+  // in Viewing with its bar, and Editing and Suggesting draw its pages; a
+  // pane too narrow for the page (a phone) or too short for it (a phone
+  // held sideways) reads pageless at once in every mode, with no bar — the
+  // pages there are drawn at 42%, or leave six lines of words, where no one
+  // reads or writes them — and Search the menus > View keeps Show pages.
+  const paged = !pageSetup.pageless;
+  const pdfPages = imported?.kind === "pdf" && paged;
+  const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages || (paged && narrow));
+  const reflowing = (pdfPages && mode === "viewing") || (paged && narrow);
+  const reflowed = reflowing && (reflowChoice === "pageless" || (narrow && reflowChoice === null));
+  // The drawn setup: what the page, the frame, and the toolbar draw. It is
+  // never handed to what saves.
+  const shownSetup = useMemo(() => drawnSetup(pageSetup, reflowed), [reflowed, pageSetup]);
+  useLayoutEffect(() => {
+    if (!editor) return;
+    const store = pageStore(editor, documentId, pageSetup);
+    if (store.get().reflowed !== reflowed) store.set({ reflowed });
+  }, [editor, documentId, pageSetup, reflowed]);
+  // Pages to pageless and back keep the block at the reading line in view.
+  useKeepPlace(editor, shownSetup.pageless ? "pageless" : "pages");
 
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
@@ -477,13 +731,34 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
+  // The save state and the Unitos tools reach the toolbar's row on their
+  // own (useLive): a save, or a render of the reader around the page (its
+  // toolbox opening), redraws them, not the whole row.
+  const saveLive = useLive(shownSaveState);
+  const aiLive = useLive<ReactNode>(aiControls ?? null);
+  const hasAi = Boolean(aiControls);
+  // The outline button stands beside the text column when the margin has
+  // the room for it; else the toolbar's row carries it (areas/page.tsx).
+  const outlineRoom = useOutlineRoom(editor, documentId, pageSetup);
 
   useEffect(() => {
-    flushRef.current = flush;
+    const settle = async () => {
+      await flush();
+    };
+    flushRef.current = settle;
     return () => {
-      if (flushRef.current === flush) flushRef.current = null;
+      if (flushRef.current === settle) flushRef.current = null;
     };
   }, [flush, flushRef]);
+  // Version history and the voice command save this page's typing first
+  // (layer/flush.ts), and learn whether the save went through.
+  useEffect(() => (writable ? registerDocumentFlush(documentId, flush) : undefined), [writable, documentId, flush]);
+
+  // The left-off mark above the block the reader left off at.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !leftOffBlockId) return;
+    return showLeftOff(editor, leftOffBlockId, t("reader.leftOffHere"));
+  }, [editor, leftOffBlockId, t]);
 
   // The document's translations, each under its paragraph while the page is
   // read (layer/reading.ts).
@@ -500,13 +775,20 @@ export function DocsEditor({
   // repaint waits until the screen holds that copy (typing saved, the page's
   // revision caught up); meanwhile the painted marks move with the typing.
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
-  const paintedRef = useRef<{ editor: Editor | null; signature: string; rev: number }>({ editor: null, signature: "", rev: -1 });
+  const paintedRef = useRef<{ editor: Editor | null; signature: string; rev: number; editing: boolean }>({
+    editor: null,
+    signature: "",
+    rev: -1,
+    editing: false,
+  });
+  // The marks' tips say how a mark opens in the mode the page is in.
+  const marksEditing = writable && mode !== "viewing";
   // The marks made on this screen and painted ahead of the stored copy.
   const aheadRef = useRef(new Set<string>());
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const painted = paintedRef.current;
-    if (painted.editor === editor && painted.signature === marksSignature && painted.rev === rev) return;
+    if (painted.editor === editor && painted.signature === marksSignature && painted.rev === rev && painted.editing === marksEditing) return;
     if (!matches(rev)) {
       // A mark made on this screen and not stored yet (a new comment or
       // highlight) paints at once from its anchor, which reads the screen.
@@ -520,7 +802,7 @@ export function DocsEditor({
         }
       }
       if (Object.keys(ahead).length > 0) {
-        const meta: MarksMeta = { highlights: ahead, t, add: true };
+        const meta: MarksMeta = { highlights: ahead, t, add: true, editing: marksEditing };
         editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
       }
       // Saved, but the page's revision is behind (its own saves need no
@@ -529,20 +811,72 @@ export function DocsEditor({
       return;
     }
     aheadRef.current.clear();
-    paintedRef.current = { editor, signature: marksSignature, rev };
-    const meta: MarksMeta = { highlights: highlightsByBlock, t };
+    paintedRef.current = { editor, signature: marksSignature, rev, editing: marksEditing };
+    const meta: MarksMeta = { highlights: highlightsByBlock, t, editing: marksEditing };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
-  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState]);
+  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
 
+  // A whole-document replace (a version restored, or its undo) takes every
+  // mark with the old text: paint them again on the new text at once from
+  // the highlights held, and once more when the stored copy catches up.
+  const marksNowRef = useRef({ highlights: highlightsByBlock, editing: marksEditing });
+  useEffect(() => {
+    marksNowRef.current = { highlights: highlightsByBlock, editing: marksEditing };
+  });
+  useEffect(() => {
+    if (!editor) return;
+    let frame = 0;
+    const onTransaction = ({ transaction: tr }: { transaction: Transaction }) => {
+      if (!replacesWholeDoc(tr) || frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (editor.isDestroyed) return;
+        paintedRef.current = { ...paintedRef.current, signature: "" };
+        const { highlights, editing } = marksNowRef.current;
+        const meta: MarksMeta = { highlights, t, editing };
+        editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
+      });
+    };
+    editor.on("transaction", onTransaction);
+    return () => {
+      editor.off("transaction", onTransaction);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [editor, t]);
+
+  // A switch to Editing or Suggesting gives the page the keys at its caret,
+  // the selection kept and the pane where it is. A caret out of view (an
+  // import read in Viewing keeps it at the start) goes to the start of the
+  // block at the reading line first, so the first key types where the
+  // reader looks.
+  const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.setEditable(writable && mode !== "viewing");
+    // A change only: setEditable draws the whole page again, and on a long
+    // import's first frame that is a second of nothing (EDGE14-08).
+    const editable = writable && mode !== "viewing";
+    if (editor.isEditable !== editable) editor.setEditable(editable);
+    const switched = modeRef.current !== mode;
+    modeRef.current = mode;
+    const passing = passingRef.current;
+    passingRef.current = false;
+    if (!switched || !writable || mode === "viewing" || passing) return;
+    const pane = scrollParent(editor.view.dom);
+    if (pane && !caretInView(editor, pane)) {
+      const pos = readingCaret(editor, pane);
+      if (pos !== null) {
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)).setMeta("addToHistory", false));
+      }
+    }
+    editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
   // focus in this pane's page editor or card column, or in one of the
-  // editor's menus and dialogs. A press or the focus anywhere else (the notes
-  // tray, the app's top bar, the Extract page) fades it away (css/layer.css).
+  // editor's menus and dialogs. A press or the focus in the other pane, or
+  // in this pane outside the page (the Extract page), fades it away
+  // (css/layer.css). The notes tray and the app's top bar work on the open
+  // document: a press there leaves the header as it is.
   const [away, setAway] = useState(false);
   useEffect(() => {
     const pane = editor?.view.dom.closest("[data-reader-root]");
@@ -550,11 +884,12 @@ export function DocsEditor({
     const onEnter = (e: Event) => {
       if (!(e.target instanceof Element)) return;
       const own = e.target.closest("[data-reader-root]");
-      setAway(
-        own
-          ? own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]"))
-          : !e.target.closest("[data-edit-control]"),
-      );
+      if (!own) {
+        // One of the page editor's menus or dialogs, drawn over the app.
+        if (e.target.closest("[data-edit-control]")) setAway(false);
+        return;
+      }
+      setAway(own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]")));
     };
     document.addEventListener("pointerdown", onEnter, true);
     document.addEventListener("focusin", onEnter);
@@ -595,21 +930,24 @@ export function DocsEditor({
     [editor],
   );
 
-  // A press on a mark or a chip opens what it opens in the reader; a drag
-  // over a mark is a selection like any other. A click inside the selection
-  // is a plain click (a drag ends at its edge): the page, taking the focus,
-  // put its old selection back. The mark opens and the caret goes there.
+  // A press on a chip opens what it opens in the reader; so does a press on
+  // a mark in Viewing (while the reader writes, a click on marked words
+  // places the caret: annotation-marks.tsx). A drag over a mark is a
+  // selection like any other. A click inside the selection is a plain click
+  // (a drag ends at its edge): the page, taking the focus, put its old
+  // selection back. The mark opens and the caret goes there.
   const onPageClick = useCallback(
     (e: React.MouseEvent) => {
       if (!editor) return;
       const target = e.target as Element;
       if (target.closest("[data-anchor-skip]")) {
-        openMarkAt(target);
+        openMarkAt(target, { x: e.clientX, y: e.clientY });
         return;
       }
+      if (editor.isEditable) return;
       const { from, to, empty } = editor.state.selection;
       const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? -1;
-      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target) && !empty) {
+      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target, { x: e.clientX, y: e.clientY }) && !empty) {
         editor.commands.setTextSelection(at);
       }
     },
@@ -617,16 +955,18 @@ export function DocsEditor({
   );
 
   // The areas take a locked import as a page they may not edit: no
-  // suggestions to settle, no version to restore.
+  // suggestions to settle, no version to restore. They get the saved setup
+  // and whether its pages are drawn pageless, never a drawn setup to save.
   const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, documents } : null),
-    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, reflowed, documents } : null),
+    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, reflowed, documents],
   );
 
-  // Every save changes the save state, which redraws the title row alone:
-  // the toolbar and the pages are built again only when their own inputs
-  // change (on a long document one rebuild costs more than a frame).
+  // Every save changes the save state, which redraws the title row and the
+  // status alone: the toolbar and the pages are built again only when their
+  // own inputs change (on a long document one rebuild costs more than a
+  // frame).
   // The toolbar keeps the reader's own role: on a locked import it still
   // offers Add comment, and the mode menu says why the other modes are off.
   const chrome = useMemo(
@@ -641,16 +981,23 @@ export function DocsEditor({
             canEdit={canEdit}
             zoom={zoom}
             onZoom={setZoom}
-            pageless={pageSetup.pageless}
-            aiControls={aiControls}
+            pageless={shownSetup.pageless}
+            aiControls={hasAi ? <LiveSlot live={aiLive} /> : undefined}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
+            narrowPane={!outlineRoom}
+            status={
+              <>
+                {writable && <SaveStatus live={saveLive} />}
+                <VersionHistoryButton editor={area.editor} />
+              </>
+            }
             onInsertImage={insertImage}
           />
-          <PageRuler {...area} />
+          {!narrow && <PageRuler {...area} />}
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, hasAi, aiLive, headerHidden, insertImage, writable, saveLive, outlineRoom, narrow],
   );
   const pages = useMemo(
     () =>
@@ -678,7 +1025,7 @@ export function DocsEditor({
   if (!editor || outdated) {
     return (
       <>
-        <DocsFrame title={title} pageSetup={pageSetup} />
+        <DocsFrame title={title} pageSetup={shownSetup} split={split} />
         {outdated === "stale" && (
           <p
             role="alert"
@@ -692,8 +1039,20 @@ export function DocsEditor({
   }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind} data-full-screen={fullScreen || undefined}>
+    <div
+      ref={shellRef}
+      className="docs-shell"
+      data-docs-editor
+      data-docs-mode={mode}
+      data-import={imported?.kind}
+      data-reflow={reflowing ? (reflowed ? "pageless" : "pages") : undefined}
+      data-full-screen={fullScreen || undefined}
+    >
       <div className="docs-header" data-edit-control data-away={away || undefined}>
+        {/* A pane of a split view: the pane header (reader-interactions.tsx)
+            stands over this slot, in the title row's place and height, so a
+            view switch moves neither the pane nor the toolbar. */}
+        {split && <div className="docs-title-row" data-pane-header-slot aria-hidden="true" />}
         {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
             <DocIcon size={26} className="docs-title-icon" />
@@ -708,14 +1067,32 @@ export function DocsEditor({
               }}
             />
             {imported && <ImportLine imported={imported} />}
-            {writable && <SaveStatus state={shownSaveState} />}
-            <VersionHistoryButton editor={editor} />
           </div>
         )}
         {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
         <div style={{ display: fullScreen ? "none" : "contents" }}>{chrome}</div>
       </div>
-      <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
+      <PageBanner.Provider
+        value={
+          reflowing && !narrow ? (
+            <>
+              <ReflowBar
+                editor={editor}
+                documentId={documentId}
+                setup={pageSetup}
+                choice={reflowChoice}
+                reflowed={reflowed}
+                onChoose={chooseReflow}
+              />
+              {banner}
+            </>
+          ) : (
+            banner
+          )
+        }
+      >
+        {pages}
+      </PageBanner.Provider>
       <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />
       {footer}
     </div>

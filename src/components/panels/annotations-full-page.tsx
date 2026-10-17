@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, SectionView } from "@/lib/types";
-import { api } from "@/lib/api";
+import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
@@ -24,6 +25,7 @@ import {
 } from "@/components/panels/annotation-card";
 import { ToolSymbol } from "@/components/reader/block-view";
 import { ConversationView } from "@/components/reader/conversation-view";
+import { PostedUndoPill } from "@/components/outline/merge-undo";
 import { useCollapsedView } from "@/components/use-collapsed-view";
 import { inLayer, LayerSwitch, type AnnotationLayer } from "@/components/panels/layer-switch";
 
@@ -49,7 +51,7 @@ export type AnnotationGroup = {
 
 export function AnnotationsFullPage({
   notebookId,
-  groups,
+  groups: listed,
   sections,
 }: {
   notebookId: string;
@@ -65,6 +67,9 @@ export function AnnotationsFullPage({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // The whole text and the collapsed view keep their own annotations (SPEC.md §28).
   const [layer, setLayer] = useState<AnnotationLayer>("whole");
+  // A deleted annotation's row goes at once; Undo brings it back.
+  const removed = useRemovedNotes();
+  const groups = removed.size > 0 ? listed.map((g) => ({ ...g, items: g.items.filter((a) => !removed.has(a.id)) })) : listed;
   const every = groups.flatMap((g) => g.items);
   const counts = {
     whole: every.filter((a) => inLayer(a, "whole")).length,
@@ -78,8 +83,11 @@ export function AnnotationsFullPage({
   async function deleteAnnotation(id: string) {
     setErrorText(null);
     try {
-      await api(`/api/notes/${id}`, "DELETE");
-      router.refresh();
+      // The pill below offers Undo (lib/notes/undo-pill.ts).
+      const kind = every.find((a) => a.id === id)?.kind ?? "";
+      await deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh());
+      // Offline the delete is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     }
@@ -106,9 +114,6 @@ export function AnnotationsFullPage({
       <AnnotationBody annotation={a} />
       <AnnotationActions
         annotation={a}
-        notebookId={notebookId}
-        documentId={documentId}
-        onDelete={deleteAnnotation}
         onExpand={setExpandedId}
       />
     </AnnotationCard>
@@ -181,6 +186,8 @@ export function AnnotationsFullPage({
         ))}
         {all.length === 0 && <p className="text-sm text-sand-600">{t("panels.annotationsPageEmpty")}</p>}
       </div>
+      {/* The notes' Undo pill: a delete here offers Undo for 12 seconds. */}
+      <PostedUndoPill />
     </div>
   );
 }

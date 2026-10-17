@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
+import { captureOpener, returnFocus, useEscapeLayer } from "@/lib/escape-layers";
+import { readAccountCookie } from "@/lib/tab-account";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
@@ -12,6 +14,50 @@ const MAX_PHOTOS = 6;
 const MAX_LINKS = 10;
 
 type Photo = { id: string; url: string; name: string };
+type Category = "bug" | "idea" | "other";
+
+// Typed words survive (CLAUDE.md rule zero 6): the form's words, photos and
+// links stay in the browser until the server confirms the send, one draft
+// per account. A failed send, a reload or a closed tab keeps them for the
+// next open.
+type FeedbackDraft = { category: Category; message: string; links: string[]; linkDraft: string; photos: Photo[] };
+
+const feedbackDraftKey = () => `unitos:draft:feedback:${readAccountCookie() ?? "reader"}`;
+
+function readFeedbackDraft(): FeedbackDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(feedbackDraftKey()) ?? "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    const d = parsed as Record<string, unknown>;
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+    const photos = Array.isArray(d.photos)
+      ? d.photos.filter(
+          (x): x is Photo =>
+            Boolean(x) && typeof x === "object" && ["id", "url", "name"].every((k) => typeof (x as Record<string, unknown>)[k] === "string"),
+        )
+      : [];
+    return {
+      category: d.category === "idea" || d.category === "other" ? d.category : "bug",
+      message: typeof d.message === "string" ? d.message : "",
+      links: strings(d.links),
+      linkDraft: typeof d.linkDraft === "string" ? d.linkDraft : "",
+      photos,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeFeedbackDraft(draft: FeedbackDraft) {
+  try {
+    const empty = !draft.message.trim() && !draft.linkDraft.trim() && draft.links.length === 0 && draft.photos.length === 0;
+    if (empty) localStorage.removeItem(feedbackDraftKey());
+    else localStorage.setItem(feedbackDraftKey(), JSON.stringify(draft));
+  } catch {
+    // Storage blocked or full: the words stay in the form for this visit.
+  }
+}
 
 /** A link as the user typed it, or null when it is not an absolute http(s) URL. */
 function parseLink(raw: string): string | null {
@@ -24,23 +70,107 @@ function parseLink(raw: string): string | null {
   }
 }
 
+/** Opens the feedback form from elsewhere: the reader has no floating
+    Feedback pill; the guide's head (guide-dialog.tsx) and the phone's More
+    menu (workspace.tsx) carry Feedback. */
+export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
+
+/** Feedback in the header of the dashboard, the notes and annotations full
+    pages, and Settings, on a phone only: there the floating pill would lie
+    on a card's ⋯, a row's controls, or the plan's words (FeedbackButton
+    hides it). */
+export function FeedbackHeaderButton() {
+  const t = useT();
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT))}
+      aria-label={t("works.feedback")}
+      data-tip={t("works.feedback")}
+      className="flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 sm:hidden"
+    >
+      <FeedbackIcon />
+    </button>
+  );
+}
+
+function FeedbackIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      className={className}
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M12 7v4" />
+      <path d="M12 14h.01" />
+    </svg>
+  );
+}
+
 // Floating feedback button, mounted app-wide (release-edu pattern).
 export function FeedbackButton() {
   const pathname = usePathname();
   const t = useT();
+  // The reader (/n/<project>): its tray and rail fill the right edge.
+  const inReader = /^\/n\/[^/]+\/?$/.test(pathname ?? "");
+  // The dashboard on a phone: the pill would lie on the first card's ⋯;
+  // Feedback is a button in the header there (FeedbackHeaderButton).
+  const onDashboard = pathname === "/";
+  // The notes and annotations full pages on a phone: the pill lay on a
+  // pending note's Accept and the rows' pencils (EDGE13-02); there Feedback
+  // is a button in the page's header (FeedbackHeaderButton).
+  const onFullPage = /^\/n\/[^/]+\/(notes|annotations)\/?$/.test(pathname ?? "");
+  // Settings on a phone: the pill lay on the plan's words; Feedback is a
+  // button in its header.
+  const onSettings = pathname === "/settings";
+  // The offline page: Feedback cannot send without a network, and the pill
+  // lay on a card's row.
+  const onOffline = pathname === "/offline";
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
-  const [message, setMessage] = useState("");
+  // The draft kept from an earlier visit. The form is not drawn on the
+  // server, so reading the browser's storage here changes no first paint.
+  const [kept] = useState(readFeedbackDraft);
+  const [category, setCategory] = useState<Category>(kept?.category ?? "bug");
+  const [message, setMessage] = useState(kept?.message ?? "");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
   // Photos already uploaded (POST /api/images), links added, the link being
   // typed, and the one note under the form about either.
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [links, setLinks] = useState<string[]>([]);
-  const [linkDraft, setLinkDraft] = useState("");
+  const [photos, setPhotos] = useState<Photo[]>(kept?.photos ?? []);
+  const [links, setLinks] = useState<string[]>(kept?.links ?? []);
+  const [linkDraft, setLinkDraft] = useState(kept?.linkDraft ?? "");
   const [linkOpen, setLinkOpen] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Each change goes to the draft at once.
+  useEffect(() => {
+    writeFeedbackDraft({ category, message, links, linkDraft, photos });
+  }, [category, message, links, linkDraft, photos]);
+  // The control that opened the form: Escape and ✕ give the focus back to
+  // it. The guide's Feedback goes with the guide; then ? (or More) takes it.
+  const opener = useRef<HTMLElement | null>(null);
+  const close = () => {
+    setOpen(false);
+    const back = opener.current?.isConnected
+      ? opener.current
+      : document.querySelector<HTMLElement>('[data-track="guide"], nav [data-track="more"]');
+    returnFocus(back);
+  };
+  useEffect(() => {
+    const onOpen = () => {
+      opener.current = captureOpener();
+      setOpen(true);
+    };
+    window.addEventListener(FEEDBACK_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(FEEDBACK_OPEN_EVENT, onOpen);
+  }, []);
 
   async function addPhotos(files: File[]) {
     setNote(null);
@@ -92,15 +222,9 @@ export function FeedbackButton() {
     setNote(null);
   }
 
-  // Escape closes the dialog, like every popover.
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  // Escape closes the dialog as one layer (lib/escape-layers.ts): a card
+  // under it stays open for the next Escape.
+  useEscapeLayer(open, close);
 
   if (pathname.startsWith("/admin")) return null;
 
@@ -146,12 +270,22 @@ export function FeedbackButton() {
   return (
     <>
       {/* Above the mobile bottom bar; on md+ above the rail's More button,
-          which sits in the bottom-right corner. */}
+          which sits in the bottom-right corner. The reader has no floating
+          Feedback: it lay on the tray's last row, on the article's last
+          lines, and on a short screen on the rail's Extract. There it is in
+          the guide's head at md and up and a row of the bar's More menu
+          below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard, full
+          pages, and Settings it is a button in the header. */}
       <button
-        onClick={() => setOpen(!open)}
-        aria-label={t("works.sendFeedback")}
-        data-tip={t("works.sendFeedback")}
-        className="fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden"
+        onClick={(e) => {
+          if (open) return close();
+          opener.current = e.currentTarget;
+          setOpen(true);
+        }}
+        data-feedback-button=""
+        className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
+          inReader || onOffline ? "hidden" : ""
+        } ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
       >
         {t("works.feedback")}
       </button>
@@ -159,7 +293,7 @@ export function FeedbackButton() {
       {open && (
         <div className="pop-in fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
           <form onSubmit={submit} className="space-y-2">
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               {(["bug", "idea", "other"] as const).map((c) => (
                 <button
                   key={c}
@@ -174,8 +308,23 @@ export function FeedbackButton() {
                   {categoryLabel[c]}
                 </button>
               ))}
+              {/* ✕ is the panel's one close, as every box's (NAV13-15).
+                  The typed words stay for the next open. */}
+              <button
+                type="button"
+                onClick={close}
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
+                data-track="feedback-close"
+                className="-mr-1.5 ml-auto flex size-7 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+              >
+                ✕
+              </button>
             </div>
+            {/* The form opens with the caret in the message, by keys or by
+                a press, so the first letters typed land there. */}
             <textarea
+              autoFocus
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               // A pasted image goes in as a photo.
@@ -285,9 +434,6 @@ export function FeedbackButton() {
               <p className="text-xs text-red-600">{t("works.feedbackFailed")}</p>
             )}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} className="rounded-full px-3 py-1 text-xs text-sand-600 hover:text-clay-700">
-                {t("common.close")}
-              </button>
               <button
                 type="submit"
                 disabled={state === "busy" || uploading > 0 || !message.trim()}

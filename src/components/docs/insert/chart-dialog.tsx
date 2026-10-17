@@ -217,6 +217,7 @@ function ChartDialog({ editor, open, onClose }: { editor: Editor; open: Open; on
       title={t(editing ? "docsInsert.editChart" : "docsInsert.insertChart")}
       onClose={onClose}
       className="docs-chart-dialog"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

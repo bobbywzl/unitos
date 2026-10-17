@@ -5,6 +5,8 @@ import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import type { TFunc } from "@/lib/i18n/dictionaries";
+import { shownSectionTitle } from "@/lib/section-title";
 import { NoteCard } from "@/components/outline/note-card";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { filterSections, type OutlineActions } from "@/components/outline/use-outline";
@@ -51,10 +53,11 @@ function cardsDrawn(cells: number[][], budget: number): number[][] {
 
 /** Every section as a row, in outline order: a child section under its
     parent, labelled "Parent / Child". */
-function rowsOf(sections: SectionView[], parent?: string): Row[] {
+function rowsOf(sections: SectionView[], t: TFunc, parent?: string): Row[] {
   return sections.flatMap((section) => {
-    const label = parent ? `${parent} / ${section.title}` : section.title;
-    return [{ section, label, nested: parent !== undefined }, ...rowsOf(section.children, label)];
+    const title = shownSectionTitle(section.title, t);
+    const label = parent ? `${parent} / ${title}` : title;
+    return [{ section, label, nested: parent !== undefined }, ...rowsOf(section.children, t, label)];
   });
 }
 
@@ -84,7 +87,7 @@ export function DocumentColumns({
     return id && attached.has(id) ? id : null;
   };
   const shown = search.trim() ? filterSections(tree, search) : tree;
-  const rows = rowsOf(shown).filter((row) => row.section.notes.length > 0);
+  const rows = rowsOf(shown, t).filter((row) => row.section.notes.length > 0);
   const used = new Set(rows.flatMap((row) => row.section.notes.map(columnOf)));
   const columns: { id: string | null; title: string }[] = [
     ...documents.filter((d) => used.has(d.id)),
@@ -130,7 +133,7 @@ export function DocumentColumns({
           <ChevronLeftIcon size={14} />
           {t("outline.notesLabel")}
         </button>
-        <span className="font-display text-[18px]">{t("outline.byDocument")}</span>
+        <span className="font-display text-[18px]">{t("outline.documentColumns")}</span>
         {columns.length > 0 && (
           <span className="text-[12px] text-sand-500">{t("outline.byDocumentCount", { n: documents.filter((d) => used.has(d.id)).length })}</span>
         )}
@@ -171,7 +174,7 @@ export function DocumentColumns({
                       className="flex min-w-0 flex-col gap-2.5 border-b border-l border-line px-3 py-3"
                     >
                       {notes.map((note) => (
-                        <NoteCard key={note.id} note={note} actions={actions} variant="page" search={search} />
+                        <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="page" search={search} />
                       ))}
                     </div>
                   );

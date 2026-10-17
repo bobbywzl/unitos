@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -145,7 +148,7 @@ function LinkAbout({
 export function AnnotationsPanel({
   notebookId,
   documentId,
-  annotations: every,
+  annotations: listed,
   linksOut,
   linksIn,
   sections,
@@ -161,6 +164,9 @@ export function AnnotationsPanel({
   const router = useRouter();
   const t = useT();
   const { canEdit } = useCollab();
+  // A deleted annotation's row goes at once, with its mark; Undo brings it back.
+  const removed = useRemovedNotes();
+  const every = removed.size > 0 ? listed.filter((a) => !removed.has(a.id)) : listed;
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   // The New glow (SPEC.md §18) on the four arrows until they are pressed.
   const fullPageNew = useNewFeature("annotationsFullPage");
@@ -194,7 +200,8 @@ export function AnnotationsPanel({
     setErrorText(null);
     try {
       await run();
-      router.refresh();
+      // Offline the write is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -204,16 +211,10 @@ export function AnnotationsPanel({
 
   async function deleteAnnotation(id: string) {
     // The reader fades the annotation's mark at once (reader-interactions.tsx),
-    // and puts it back if the delete fails.
-    window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
-    await mutate(id, async () => {
-      try {
-        await api(`/api/notes/${id}`, "DELETE");
-      } catch (err) {
-        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
-        throw err;
-      }
-    });
+    // and puts it back if the delete fails. The notes' pill offers Undo
+    // (lib/notes/undo-pill.ts).
+    const kind = every.find((a) => a.id === id)?.kind ?? "";
+    await mutate(id, () => deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh()));
   }
 
   async function removeLink(id: string) {
@@ -244,9 +245,6 @@ export function AnnotationsPanel({
   const actionsFor = (a: AnnotationItem) => (
     <AnnotationActions
       annotation={a}
-      notebookId={notebookId}
-      documentId={documentId}
-      onDelete={deleteAnnotation}
       onExpand={setExpandedId}
     />
   );
@@ -314,7 +312,9 @@ export function AnnotationsPanel({
 
   return (
     <div className="flex flex-col gap-3.5">
-      {conversationOverlay}
+      {/* On the body: inside the tray a transformed ancestor (the sheet
+          rising in) would hold the page-wide overlay to the tray's box. */}
+      {conversationOverlay && typeof document !== "undefined" && createPortal(conversationOverlay, document.body)}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       <div className="flex items-center justify-end gap-1.5">
         {(counts.core > 0 || layer === "core") && (
@@ -342,6 +342,7 @@ export function AnnotationsPanel({
                   view={view}
                   menu={menuFor(a)}
                   summary={annotationSummary(a)}
+                  jumpNotebookId={notebookId}
                 >
                   <AnnotationBody annotation={a} />
                   {actionsFor(a)}

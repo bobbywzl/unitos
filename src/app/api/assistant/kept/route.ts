@@ -14,7 +14,7 @@ import { parseBody } from "@/lib/validate";
 // when it changed since — another tab, another device — so the browser merges
 // instead of writing over turns it never saw (lib/kept-chat.ts). DELETE
 // removes the row — the one way a kept conversation goes (Clear
-// conversation). Viewer access: a conversation is the account's own, not the
+// conversation, sent when its Undo pill goes). Viewer access: a conversation is the account's own, not the
 // project's, so a viewer keeps theirs too; no rev moves, nothing lands in the
 // history, and no other account ever reads the row.
 
@@ -28,6 +28,9 @@ const turnSchema = z.object({
   // What the surface draws under the turn (a Stitch result, a proposed
   // change to a note, the range an answer read); the surface reads it back.
   data: z.record(z.string(), z.json()).optional(),
+  // The turn's own id: two copies of a conversation merge without doubling
+  // a turn (lib/kept-chat.ts). Turns kept before ids existed have none.
+  id: z.string().min(1).max(64).optional(),
 });
 
 const putSchema = z.object({

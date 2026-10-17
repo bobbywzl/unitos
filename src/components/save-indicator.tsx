@@ -1,8 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
+import { queuedCount, subscribeQueue } from "@/lib/offline/queue";
 import { readSaveState, readSaveTouched, subscribeSaveState } from "@/lib/save-state";
 
 function subscribeOnline(listener: () => void) {
@@ -14,19 +15,62 @@ function subscribeOnline(listener: () => void) {
   };
 }
 
+// A page editor's own status carries the app's writes too while it shows
+// (SPEC.md §29), so the header's line hides: one save state on screen.
+let statusShown = 0;
+const statusListeners = new Set<() => void>();
+const fireStatus = () => {
+  for (const listener of statusListeners) listener();
+};
+
+/** A page editor's status shows this state as well: hides the header's
+    line while it is mounted. */
+export function usePageStatusCarries(): void {
+  useEffect(() => {
+    statusShown += 1;
+    fireStatus();
+    return () => {
+      statusShown -= 1;
+      fireStatus();
+    };
+  }, []);
+}
+
+function subscribeStatusShown(listener: () => void) {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
 // The save indicator (SPEC.md §6): one small dim line in the header of the
 // reader and of the notes full page, left of Share. "Saving…" while a write
 // is in flight or a draft waits for its save, "Saved" once every write
 // landed, "Not saved" when the last write failed. Offline with Unitos Premium,
 // a landed write is saved on this device and syncs later, and the line says
-// so. Nothing shows until the first write of the tab.
+// so. Nothing shows until the first write of the tab. While a page editor's
+// status carries this state, this line hides. While the offline queue holds
+// writes, the header's offline pill says it ("Syncing 2 changes…", or
+// Offline and the count): Saved and Not saved hide, so the header says one
+// thing; Saving… still shows while a save is on its way.
 export function SaveIndicator() {
   const t = useT();
   const { premium } = useCollab();
   const state = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
   const touched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
-  if (!touched) return null;
+  const inPage = useSyncExternalStore(subscribeStatusShown, () => statusShown > 0, () => false);
+  const [queued, setQueued] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const read = () => void queuedCount().then((n) => alive && setQueued(n));
+    read();
+    const stop = subscribeQueue(read);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
+  if (!touched || inPage) return null;
+  if (queued > 0 && state !== "saving") return null;
   const key =
     state === "saving"
       ? "outline.saving"

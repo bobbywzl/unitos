@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
 import { StopPill } from "@/components/thinking";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 
 // The transcript under the player (SPEC.md §11), in article form. The lines
@@ -56,7 +57,8 @@ export function ViewBar({
 // Transcribe again. Detect speakers reads the recording again and says who
 // speaks each line; a transcription finds them on its own, so this is for a
 // transcript that landed before, or one that was pasted. While it runs its
-// label is Stop: a press ends the run, and nothing is saved.
+// label is Stop: a press ends the run, and nothing is saved. Both write to
+// the document, so a viewer sees neither.
 export function TranscriptActions({
   audio,
   busy,
@@ -76,11 +78,14 @@ export function TranscriptActions({
   onStopSpeakers: () => void;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const action =
     "rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+  const line = note && <span className="px-1 text-[11px] text-sand-500">{note}</span>;
+  if (!canEdit) return line || null;
   return (
     <>
-      {note && <span className="px-1 text-[11px] text-sand-500">{note}</span>}
+      {line}
       {busy ? (
         <button
           onClick={onStopSpeakers}
@@ -138,6 +143,7 @@ export function TranscriptEmpty({
   pasteHelp: string;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [savingPaste, setSavingPaste] = useState(false);
@@ -175,26 +181,29 @@ export function TranscriptEmpty({
             {t("video.transcriptFailedBody")}
           </p>
           {failedMessage && <p className="text-xs text-red-500">{failedMessage}</p>}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={onTranscribe}
-              data-track="video-transcribe-retry"
-              className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-            >
-              {t("common.retry")}
-            </button>
-            {!pasting && (
+          {/* Retry and Paste transcript write to the document: not for a viewer. */}
+          {canEdit && (
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setPasting(true)}
-                data-track="video-transcript-paste"
-                data-tip={t("video.pasteTranscriptTitle")}
-                className="rounded-full px-4 py-1.5 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                onClick={onTranscribe}
+                data-track="video-transcribe-retry"
+                className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600"
               >
-                {t("video.pasteTranscript")}
+                {t("common.retry")}
               </button>
-            )}
-          </div>
-          {pasting && (
+              {!pasting && (
+                <button
+                  onClick={() => setPasting(true)}
+                  data-track="video-transcript-paste"
+                  data-tip={t("video.pasteTranscriptTitle")}
+                  className="rounded-full px-4 py-1.5 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t("video.pasteTranscript")}
+                </button>
+              )}
+            </div>
+          )}
+          {canEdit && pasting && (
             <div className="flex flex-col gap-2">
               <p className="text-xs leading-relaxed text-sand-600">{pasteHelp}</p>
               <textarea

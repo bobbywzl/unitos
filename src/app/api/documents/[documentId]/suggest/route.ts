@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { SUGGEST_DEADLINE_MS, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGEST_PARALLEL } from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
 import { modelErrorMessage } from "@/lib/derive/json-call";
+import { failureLine } from "@/app/api/assistant/failure-line";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
@@ -221,7 +222,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             send({ window: i + 1, ...result });
           } catch (err) {
             if (deadline.aborted) late = true;
-            else send({ window: i + 1, error: modelErrorMessage(err) });
+            else send({ window: i + 1, error: failureLine(t, err, "suggest window") });
           }
         });
         if (late) warnings.push(t("api.suggestOutOfTime"));
@@ -242,11 +243,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ done: true, summary, warnings });
       } catch (err) {
         console.error("[suggest] failed:", err);
-        // The one pass already says the suggestions could not be written.
-        // A pass the deadline stopped says time ran out, not a raw abort.
-        const reason = deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : modelErrorMessage(err);
-        const said = t("api.suggestFailed", { reason: "" }).trim();
-        send({ error: reason.startsWith(said) ? reason : t("api.suggestFailed", { reason }) });
+        // A pass the deadline stopped says time ran out, in the reader's
+        // words; any other failure is the one failure line (the raw text
+        // goes to the server log).
+        send({
+          error:
+            deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : failureLine(t, err, "suggest"),
+        });
       } finally {
         stopHeartbeat();
         if (!cancelled) controller.close();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SparkleIcon } from "@/components/icons";
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
 import { useT } from "@/components/lang-provider";
@@ -15,11 +15,6 @@ import type { AssistantAction } from "@/lib/types";
 // own runner (reader-interactions.tsx), with its Undo. The reader that holds
 // the plan publishes the suggestion here by the figure's block id; the
 // figure's row in the article reads it.
-
-/** The image toolbar's Assistant (components/docs/insert/image-controls.tsx):
-    the reader opens the assistant's bar on the image. Detail: the figure's
-    block id, the image's bottom edge on screen, and the page editor's DOM. */
-export const FIGURE_ASSISTANT_EVENT = "dissect:figure-assistant";
 
 type InsertAction = Extract<AssistantAction, { type: "insert_paragraph" }>;
 
@@ -74,6 +69,12 @@ export function FigureSuggestionCard({ documentId, blockId }: { documentId: stri
   const key = keyOf(documentId, blockId);
   const suggestion = useSyncExternalStore(subscribe, () => suggestions.get(key), () => undefined);
   const [busy, setBusy] = useState(false);
+  // A new suggestion comes into view: the card that answered says it is
+  // here (TOOL13-04).
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (suggestion) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [suggestion]);
   if (!suggestion) return null;
   const color = annotationKindColor("assistant", null);
   const settle = async (accept: boolean) => {
@@ -91,6 +92,7 @@ export function FigureSuggestionCard({ documentId, blockId }: { documentId: stri
     "flex size-7 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:text-clay-800 disabled:opacity-40";
   return (
     <div
+      ref={ref}
       data-figure-suggestion={blockId}
       role="group"
       aria-label={t("docsSuggest.suggestion")}

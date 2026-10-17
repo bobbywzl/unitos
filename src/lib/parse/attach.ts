@@ -1,4 +1,6 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { keptAttachment } from "@/lib/documents/detach";
 import { samePdfPages, storedPdfPages } from "@/lib/pdf-pages";
 
 // Attach is db-only. It lives apart from the parse chain so routes that only attach
@@ -8,14 +10,36 @@ import { samePdfPages, storedPdfPages } from "@/lib/pdf-pages";
 // §6: the + of a folder's list adds a file there). A folder of another
 // project, or one deleted meanwhile, lands it at the project itself. A
 // document already in the project keeps the place the reader gave it.
+//
+// A document added back to a project it was removed from gets back the
+// project's work on it that the removal kept (lib/documents/detach.ts): its
+// extractions, matches, summaries, salience, formalized article, and folder.
 export async function attachDocument(notebookId: string, documentId: string, folderId?: string | null) {
-  const folder = folderId
-    ? await db.documentFolder.findFirst({ where: { id: folderId, notebookId }, select: { id: true } })
+  const existing = await db.notebookDocument.findUnique({
+    where: { notebookId_documentId: { notebookId, documentId } },
+    select: { documentId: true },
+  });
+  if (existing) return;
+  const kept = await keptAttachment(notebookId, documentId);
+  const wanted = folderId ?? (typeof kept?.folderId === "string" ? kept.folderId : null);
+  const folder = wanted
+    ? await db.documentFolder.findFirst({ where: { id: wanted, notebookId }, select: { id: true } })
     : null;
+  const json = (value: Prisma.JsonValue | undefined) =>
+    value === null || value === undefined ? undefined : (value as Prisma.InputJsonValue);
   await db.notebookDocument.upsert({
     where: { notebookId_documentId: { notebookId, documentId } },
     update: {},
-    create: { notebookId, documentId, folderId: folder?.id ?? null },
+    create: {
+      notebookId,
+      documentId,
+      folderId: folder?.id ?? null,
+      salience: json(kept?.salience),
+      summaries: json(kept?.summaries),
+      distillations: json(kept?.distillations),
+      extractions: json(kept?.extractions),
+      formalized: json(kept?.formalized),
+    },
   });
 }
 
@@ -27,8 +51,9 @@ type AddedDocument = { id: string; title: string; fileHash: string | null; sourc
 
 /** The document of this project from the same file (the same pages of a
     PDF) or the same web address as the one an add just made, edited since
-    its import. Dedupe hands out only an unedited document (SPEC.md §30), so
-    the add made a new copy, and the reader is told. Reads only, and only
+    its import. Every add makes its own document (a repeat add asks first,
+    lib/documents/duplicates.ts), so the add made a new copy, and the reader
+    is told. Reads only, and only
     this project: the caller can edit it. Null when the add handed out a
     document, or the project holds no such one; the oldest when it holds
     several. */

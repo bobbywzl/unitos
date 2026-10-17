@@ -14,15 +14,21 @@ import { ThinkingIndicator } from "@/components/thinking";
 import { formatTime, parseTimeInput } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
-import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
+import { failureLine, modelFetch } from "@/components/assistant/failure";
+import { isOffline } from "@/lib/offline/queue";
+import { readChatDraft, useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
 // Ask about a range (SPEC.md §11): the reader names a start and an end time
 // and asks a question; the model answers from the transcript inside that
 // range and streams the answer here. The question and its answer are kept
 // for the account per document (lib/kept-chat.ts), so closing the card,
 // leaving the page, or a reload keeps them; Clear conversation removes them.
-// "Add to notes" lands the answer as a PENDING note with a time source for
-// the range.
+// A new ask replaces the kept exchange only once its answer has words: a
+// failure, Stop before the first words, or no network leaves the last answer
+// as it was, with the one failure line under the box. The words typed in
+// the box are kept in this browser until the answer lands; after that the
+// box shows the kept question. "Add to notes" lands the answer as a PENDING
+// note with a time source for the range.
 type Range = { startTime: number; endTime: number };
 type AskTurn = KeptTurn & { data?: { range?: Range; saved?: boolean } };
 type Answer = { text: string; range: Range; question: string; saved: boolean };
@@ -62,10 +68,20 @@ export function AskRange({
   const { canEdit } = useCollab();
   const [startTime, setStartTime] = useState(formatTime(defaultStart));
   const [endTime, setEndTime] = useState(formatTime(defaultEnd));
-  const [question, setQuestion] = useState("");
+  // null: nothing typed here yet, and the box shows the kept question.
+  const [typed, setQuestionState] = useState<string | null>(null);
+  const draftKey = `ask:${notebookId}:${documentId}`;
+  useChatDraft(draftKey, setQuestionState);
+  function setQuestion(text: string) {
+    setQuestionState(text);
+    writeChatDraft(draftKey, text);
+  }
   const kept = useKeptChat<AskTurn>(notebookId, `ask:${documentId}`, "replace");
   const busy = kept.busy;
   const answer = answerOf(kept.turns);
+  // Opened again (a reload, the card closed): the box shows the kept
+  // question until a key is typed, so the answer reads with what it answers.
+  const question = typed ?? answer?.question ?? "";
   const saved = answer?.saved === true;
   const { setTurns } = kept;
   /** The answer on screen: a new one, a change to it, or none. */
@@ -81,6 +97,9 @@ export function AskRange({
   }
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The ask on its way, drawn in the answer's place until its first words.
+  const [pending, setPending] = useState<{ range: Range; question: string } | null>(null);
+  const shown: Answer | null = pending ? { text: "", ...pending, saved: false } : answer;
   const stop = kept.stop;
 
   async function ask() {
@@ -99,18 +118,33 @@ export function AskRange({
   async function run(q: string, range: { startTime: number; endTime: number }) {
     if (busy || !hasTranscript) return;
     setError(null);
-    setAnswer(() => ({ text: "", range, question: q, saved: false }));
+    // The kept exchange stands until the new answer has words.
+    const before = kept.turns;
+    let started = false;
+    const show = (text: string) => {
+      if (started) setAnswer((a) => (a ? { ...a, text } : a));
+      else if (text.trim()) {
+        started = true;
+        setPending(null);
+        setAnswer(() => ({ text, range, question: q, saved: false }));
+      }
+    };
+    setPending({ range, question: q });
     const controller = kept.begin();
     try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({ type: "ASK", documentId, notebookId, question: q, video: range, web }),
-      });
+      const res = await modelFetch(
+        "/api/derive",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ type: "ASK", documentId, notebookId, question: q, video: range, web }),
+        },
+        t,
+      );
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("video.requestFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? t("assistant.failedServer"));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -119,23 +153,24 @@ export function AskRange({
         const { done, value } = await reader.read();
         if (done) break;
         raw += decoder.decode(value, { stream: true });
-        const { text } = splitStreamError(raw);
-        setAnswer((a) => (a ? { ...a, text } : a));
+        show(splitStreamError(raw).text);
       }
       const { text, error: streamError } = splitStreamError(raw);
-      if (streamError || !text.trim()) {
-        setAnswer(() => null);
-        throw new Error(streamError ?? t("video.assistantNoReply"));
-      }
-      setAnswer((a) => (a ? { ...a, text } : a));
+      if (streamError || !text.trim()) throw new Error(streamError ?? t("assistant.failedServer"));
+      show(text);
+      // Asked: the box shows the kept question from now on (words typed
+      // since stay kept).
+      if (readChatDraft(draftKey).trim() === q) writeChatDraft(draftKey, "");
     } catch (err) {
-      // Stopped, not failed: what streamed in stays; an empty card closes.
-      if (controller.signal.aborted) {
-        setAnswer((a) => (a && a.text.trim() ? a : null));
-        return;
-      }
-      setError(err instanceof Error ? err.message : t("video.askFailed"));
+      // Stopped, not failed: what streamed in stays; with no words yet the
+      // last answer stays.
+      if (controller.signal.aborted) return;
+      // Failed: nothing is stored; the last answer comes back if words of
+      // the new one had replaced it, and the question stays in the box.
+      if (started) setTurns(() => before);
+      setError(isOffline() ? t("common.offlineAi") : failureLine(err, t));
     } finally {
+      setPending(null);
       kept.end(controller);
     }
   }
@@ -241,28 +276,28 @@ export function AskRange({
         </button>
       </form>
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-      {answer && (
+      {shown && (
         <div className="mt-3">
           <div className="mb-1.5 flex items-center gap-2">
             <button
-              onClick={() => onSeek(answer.range.startTime)}
+              onClick={() => onSeek(shown.range.startTime)}
               data-track="video-ask-seek"
               className="rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-clay-800 hover:bg-clay-200"
               data-tip={t("video.jumpToPart")}
             >
-              {formatTime(answer.range.startTime)}–{formatTime(answer.range.endTime)}
+              {formatTime(shown.range.startTime)}–{formatTime(shown.range.endTime)}
             </button>
             {busy && <ThinkingIndicator className="text-xs" onStop={stop} />}
           </div>
-          {answer.text && (
+          {shown.text && (
             <div className="text-[13px] leading-relaxed text-sand-800">
-              <Markdown>{answer.text}</Markdown>
+              <Markdown>{shown.text}</Markdown>
             </div>
           )}
-          {!busy && answer.text.trim() && (
+          {!busy && shown.text.trim() && (
             <div className="mt-2.5 flex items-center gap-2">
               <button
-                onClick={() => void run(answer.question, answer.range)}
+                onClick={() => void run(shown.question, shown.range)}
                 data-track="video-ask-regenerate"
                 data-tip={t("video.regenerateAnswerTitle")}
                 className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"

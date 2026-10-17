@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { annotationKind } from "@/lib/annotations/kind";
+import { passageQuote } from "@/lib/annotations/passage";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { billingLinks } from "@/lib/billing/switch";
 import { peopleByIds, roleOf } from "@/lib/collab";
@@ -14,6 +15,7 @@ import { ActiveTimeClock } from "@/components/active-time-clock";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ArrowLeftIcon } from "@/components/icons";
+import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { AnnotationsFullPage, type AnnotationGroup } from "@/components/panels/annotations-full-page";
 
 export const dynamic = "force-dynamic";
@@ -173,7 +175,13 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
           gist: n.gist,
           color: n.color,
           sourceId: source.id,
-          quotedText: source.quotedText,
+          // A passage across blocks: its whole quote (lib/annotations/passage.ts).
+          quotedText:
+            passageQuote(
+              n.content,
+              n.sources.filter((src) => src.documentId === source.documentId),
+              (id) => blockOrder.get(id),
+            ) ?? source.quotedText,
           orphaned: source.orphaned,
           figureLabel: null,
           layer: source.layer === "core" ? "core" : null,
@@ -246,6 +254,7 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
           >
             {t("outline.reader")}
           </Link>
+          <FeedbackHeaderButton />
         </div>
       </header>
       <CollabProvider value={collab}>

@@ -22,8 +22,9 @@
 // Env: DATABASE_URL (default postgresql://postgres:postgres@127.0.0.1:5432/dissect),
 //      IMPORT_COMPARE_CHROMIUM (default /opt/pw-browsers/chromium when present,
 //      else the installed Chrome), HTTPS_PROXY (used for the original side).
-// --fresh deletes the stored document for the source first, so the ingest is a
-// real re-parse (dedupe would return the old blocks).
+// Every add is its own document (SPEC.md §15): each run adds the source
+// again with confirmDuplicate, so the ingest is a real parse. --fresh also
+// deletes the documents earlier runs stored for the source.
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -142,12 +143,13 @@ async function ingest(opts, source) {
     form.set("file", new Blob([bytes], { type: "application/pdf" }), path.basename(source));
     form.set("notebookId", opts.notebook);
     form.set("instructions", "");
+    form.set("confirmDuplicate", "1");
     res = await fetch(`${opts.app}/api/documents`, { method: "POST", body: form });
   } else {
     res = await fetch(`${opts.app}/api/documents`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: source, notebookId: opts.notebook }),
+      body: JSON.stringify({ url: source, notebookId: opts.notebook, confirmDuplicate: true }),
     });
   }
   if (!res.ok) {

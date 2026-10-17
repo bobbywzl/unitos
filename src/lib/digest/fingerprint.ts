@@ -10,8 +10,9 @@ export const DIGEST_VERSION = "v2";
 // block text itself. Any content change moves at least one aggregate, so equal
 // fingerprints mean the stored digest is current. A false rebuild is harmless;
 // a missed change is not, so every mutation path is covered: notes carry
-// updatedAt, block edits write BlockEdit rows, re-parses and transcripts change
-// the block id set, layers hash their Json, renames hash titles.
+// updatedAt and their place and color, block edits write BlockEdit rows,
+// re-parses and transcripts change the block id set, layers hash their Json,
+// renames hash titles.
 export async function contentFingerprints(notebookIds?: string[]): Promise<Map<string, string>> {
   const ids = notebookIds && notebookIds.length > 0 ? notebookIds : null;
 
@@ -27,8 +28,11 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
         FROM "Section"
         ${ids ? Prisma.sql`WHERE "notebookId" IN (${Prisma.join(ids)})` : Prisma.empty}
         GROUP BY 1`),
-      db.$queryRaw<{ nid: string; c: number; m: Date | null }[]>(Prisma.sql`
-        SELECT s."notebookId" AS nid, count(*)::int AS c, max(n."updatedAt") AS m
+      // A note's place and color change with its time kept (lib/notes/order-writes.ts):
+      // they count here on their own.
+      db.$queryRaw<{ nid: string; c: number; m: Date | null; p: string }[]>(Prisma.sql`
+        SELECT s."notebookId" AS nid, count(*)::int AS c, max(n."updatedAt") AS m,
+               md5(string_agg(n.id || ':' || n."sectionId" || ':' || n."order"::text || ':' || coalesce(n.color, ''), '|' ORDER BY n.id)) AS p
         FROM "Note" n JOIN "Section" s ON n."sectionId" = s.id
         ${ids ? Prisma.sql`WHERE s."notebookId" IN (${Prisma.join(ids)})` : Prisma.empty}
         GROUP BY 1`),
@@ -78,7 +82,7 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
     ]);
 
   const sectionAgg = new Map(sections.map((r) => [r.nid, r.agg]));
-  const noteAgg = new Map(notes.map((r) => [r.nid, `${r.c}:${r.m?.toISOString() ?? ""}`]));
+  const noteAgg = new Map(notes.map((r) => [r.nid, `${r.c}:${r.m?.toISOString() ?? ""}:${r.p}`]));
   const sourceAgg = new Map(sources.map((r) => [r.nid, `${r.c}:${r.o}`]));
   const layerAgg = new Map(layers.map((r) => [r.nid, r.agg]));
   const docMeta = new Map(docs.map((r) => [r.id, r.meta]));

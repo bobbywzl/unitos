@@ -166,14 +166,14 @@ class TocView implements NodeView {
   /** Each entry's page: the page its heading stands on. */
   private numberPages() {
     const pages = this.view.dom.closest<HTMLElement>("[data-docs-page]");
-    const setup = insertContext(this.editor)?.pageSetup;
-    if (!pages || !setup) return;
-    const { pitch } = pageFrame(setup);
+    const ctx = insertContext(this.editor);
+    if (!pages || !ctx) return;
+    const { pitch } = pageFrame(ctx.pageSetup);
     for (const cell of this.list.querySelectorAll<HTMLElement>(".docs-toc-page")) {
       const id = cell.dataset.headingId;
       const heading = id ? this.view.dom.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`) : null;
       if (!heading) continue;
-      cell.textContent = setup.pageless ? "" : String(pageAt(pages, pitch, heading.getBoundingClientRect().top).page + 1);
+      cell.textContent = ctx.drawnPageless ? "" : String(pageAt(pages, pitch, heading.getBoundingClientRect().top).page + 1);
     }
   }
 

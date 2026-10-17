@@ -48,9 +48,9 @@ function chipPos(editor: Editor, chip: HTMLElement): number | null {
 }
 
 export function ChipCardsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
-  useEditorTick(editor);
   const [hover, setHover] = useState<Target | null>(null);
   const [menu, setMenu] = useState<{ pos: number; chip: HTMLElement } | null>(null);
+  useEditorTick(editor, () => hover === null && menu === null && !(editor.state.selection instanceof NodeSelection));
   const hideTimer = useRef<number | null>(null);
   const showTimer = useRef<number | null>(null);
   const editing = useRef(ctx.editing);

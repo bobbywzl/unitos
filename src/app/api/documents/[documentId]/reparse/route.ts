@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { reparseLosses } from "@/lib/docs/reparse-losses";
 import { importShared } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { runConversion } from "@/lib/handwritten/convert";
@@ -27,6 +28,16 @@ const bodySchema = z.object({
   as: z.enum(["article", "handwritten"]).optional(),
   replaceEdits: z.boolean().optional(),
 });
+
+// What Replace the edits would cost, for the ask (SPEC.md §29): the notes
+// and annotations whose quotes stand on words added since the import. Null:
+// the import is not edited, or its imported text is not kept.
+export async function GET(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  const { documentId } = await ctx.params;
+  const access = await documentAccess(documentId, "editor");
+  if (access instanceof NextResponse) return access;
+  return NextResponse.json({ losing: await reparseLosses(documentId, access.user) });
+}
 
 // Forced re-parse with the current parser. Block ids change; anchors must
 // survive via quote fallback (SPEC.md §5); an import's rows keep their ids

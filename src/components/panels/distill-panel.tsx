@@ -39,10 +39,6 @@ export function DistillPanel({
     );
   }
 
-  const heading = (text: string) => (
-    <span className="block text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{text}</span>
-  );
-
   const button = "flex w-full items-center justify-center rounded-full bg-card px-4 py-2.5 text-[13px] font-semibold text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800";
   const row = "rounded-2xl bg-card px-4 py-2.5 text-left shadow-soft hover:bg-clay-100";
 
@@ -89,7 +85,6 @@ export function DistillPanel({
   if (!documentId) {
     return (
       <div className="space-y-3">
-        {heading(t("panes.distill"))}
         {corpusSection}
         <p className="text-sm text-sand-600">{t("panels.distillNoDoc")}</p>
       </div>
@@ -98,8 +93,8 @@ export function DistillPanel({
 
   return (
     <div className="space-y-6">
+      {/* The tray's head names the tab (Extract): no second label here. */}
       <div className="space-y-3">
-        {heading(t("panes.distill"))}
         {corpusSection}
         {canEdit && (
           <button

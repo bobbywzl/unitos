@@ -111,13 +111,15 @@ function gate(request: NextRequest): NextResponse {
   // A stale tab's API call: the page was rendered for one account (the header
   // api() sends) but the browser has since signed into another (the account
   // cookie). Refuse instead of writing as the wrong account; the tab's account
-  // guard shows the notice.
+  // guard shows the notice. The code tells this refusal from a stale write's
+  // 409: the offline queue keeps the write for its own account
+  // (lib/offline/queue.ts).
   if (pathname.startsWith("/api/")) {
     const rendered = request.headers.get(ACCOUNT_HEADER);
     const account = request.cookies.get(ACCOUNT_COOKIE)?.value;
     if (rendered && account && rendered !== account) {
       return NextResponse.json(
-        { error: translate(requestLang(request), "common.accountChanged") },
+        { error: translate(requestLang(request), "common.accountChanged"), code: "accountChanged" },
         { status: 409 },
       );
     }

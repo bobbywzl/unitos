@@ -6,27 +6,28 @@ import { useEffect, useMemo, useState } from "react";
 import { useCollab } from "@/components/collab/collab-context";
 import { SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { DocIcon, OutlineIcon } from "@/components/docs/icons";
+import { OutlineIcon } from "@/components/docs/icons";
 import { importedOf } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { coreSlotOf } from "@/components/docs/layer/core-slot";
 import { flashInPage } from "@/components/docs/layer/events";
 import { scrollParent } from "@/components/docs/page/geometry";
 import { usePageRect } from "@/components/docs/page/ruler";
-import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
+import { OUTLINE_MAX, OUTLINE_MIN, useDrawnSetup, usePageState, type PageStore } from "@/components/docs/page/store";
 import { useContents } from "@/components/reader/contents-menu";
 import { StopPill } from "@/components/thinking";
 import type { ContentsEntry } from "@/lib/contents";
 
-// The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
+// The outline panel (SPEC.md §29), Google Docs' left panel: the
 // document's one tab ("Tab 1") and under it the document's headings — the
 // Title and Heading 1–6, never the Subtitle — each nested under the heading
 // above it. The heading that owns the top of the view is marked blue as the
 // page scrolls; a press on an item scrolls to its heading and puts the caret
 // there. On an import, the contents (SPEC.md §26) stand under the headings:
 // the stored parts, each a jump that flashes where the part starts, or the
-// ask to generate them. While the panel is closed, a small button at the
-// canvas's top left opens it.
+// ask to generate them; parts that are the headings again are not listed. While the panel is closed, a small button at the
+// canvas's top left opens it. In a pane under 600 px (a phone) the panel
+// lies over the page, and a jump closes it.
 
 type OutlineItem = { pos: number; level: number; depth: number; text: string };
 
@@ -183,17 +184,25 @@ function OutlineList({
 
 /** An import's contents under the headings: the stored parts, each a jump
     that flashes where the part starts; with none stored, the ask and
-    Generate contents (an editor), as the Contents menu has them. */
+    Generate contents (an editor), as the Contents menu has them. Parts that
+    each start at one of the headings list nothing the headings do not: the
+    panel shows the headings alone. */
 function OutlineContents({
   editor,
   doc,
   documentId,
   viewTop,
+  headings,
+  onJumped,
 }: {
   editor: Editor;
   doc: PMNode;
   documentId: string;
   viewTop: number;
+  /** Where the headings listed above stand. */
+  headings: ReadonlySet<number>;
+  /** A jump landed (a narrow pane closes the panel). */
+  onJumped?: () => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -201,9 +210,11 @@ function OutlineContents({
   const parts = state?.generated ? state.parts : null;
   const items = useMemo(() => (parts ? partsOf(doc, parts) : []), [doc, parts]);
   const current = useCurrent(editor, items, viewTop);
+  if (items.length > 0 && items.every((item) => headings.has(item.pos))) return null;
   return (
-    <section aria-label={t("reader.contents")}>
-      <div className="docs-outline-header">{t("reader.contents")}</div>
+    // The panel is Contents: its parts follow the headings under a line,
+    // with no second "Contents" over them.
+    <section className="docs-outline-parts">
       {reading && <p className="docs-outline-note">{t("common.loading")}</p>}
       {readError && <p className="docs-outline-note docs-outline-error">{readError}</p>}
       {parts &&
@@ -218,6 +229,7 @@ function OutlineContents({
               onPick={(item) => {
                 const dom = goTo(editor, item, viewTop);
                 if (dom) flashInPage(dom);
+                onJumped?.();
               }}
             />
           </>
@@ -252,14 +264,14 @@ function OutlineContents({
   );
 }
 
-/** Show tabs & outlines, at Google Docs' place at the canvas's top left
+/** Show the outline, at Google Docs' place at the canvas's top left
     (32 px in beside the vertical ruler, else 50), always there. While the
     page would come under it (the cards move the page left), it moves left
     with the page, down to the canvas's edge, and then stands over the page's
     margin. */
 export function OutlineButton({ editor, store, ruler }: { editor: Editor; store: PageStore; ruler: boolean }) {
   const t = useT();
-  const setup = usePageState(store, (s) => s.setup);
+  const setup = useDrawnSetup(store);
   const scale = usePageState(store, (s) => s.scale);
   const page = usePageRect(editor, [setup, scale]);
   const home = ruler ? 32 : 50;
@@ -286,6 +298,7 @@ export function OutlinePanel({
   left,
   height,
   viewTop,
+  over = false,
 }: {
   editor: Editor;
   store: PageStore;
@@ -293,11 +306,14 @@ export function OutlinePanel({
   height: number;
   /** The view's top below the header, client px. */
   viewTop: number;
+  /** A narrow pane: the panel lies over the page, and a jump closes it. */
+  over?: boolean;
 }) {
   const t = useT();
   const width = usePageState(store, (s) => s.outlineWidth);
   const doc = useDoc(editor);
   const items = useMemo(() => outlineOf(doc), [doc]);
+  const headingPlaces = useMemo(() => new Set(items.map((item) => item.pos)), [items]);
   const current = useCurrent(editor, items, viewTop);
   const imported = importedOf(editor);
   const [draftWidth, setDraftWidth] = useState<number | null>(null);
@@ -329,6 +345,7 @@ export function OutlinePanel({
   return (
     <nav
       className="docs-outline"
+      data-over={over || undefined}
       style={{ left, width: shown, height }}
       aria-label={t("docsPage.tabsOutlines")}
       data-edit-control
@@ -346,18 +363,31 @@ export function OutlinePanel({
           <ArrowBackIcon size={24} />
         </button>
       </div>
+      {/* A document has one tab, so the panel names no tabs: the headings
+          start under the back arrow (PAGE12-07). */}
       <div className="docs-outline-scroll">
-        <div className="docs-outline-header">{t("docsPage.documentTabs")}</div>
-        <div className="docs-outline-tab" aria-current="page">
-          <DocIcon size={20} />
-          <span className="docs-outline-tab-name">{t("docsPage.firstTab")}</span>
-        </div>
         {items.length === 0 ? (
           <p className="docs-outline-empty">{t("docsPage.outlineEmpty")}</p>
         ) : (
-          <OutlineList items={items} current={current} onPick={(item) => void goTo(editor, item, viewTop)} />
+          <OutlineList
+            items={items}
+            current={current}
+            onPick={(item) => {
+              goTo(editor, item, viewTop);
+              if (over) store.set({ outlineOpen: false });
+            }}
+          />
         )}
-        {imported && <OutlineContents editor={editor} doc={doc} documentId={imported.documentId} viewTop={viewTop} />}
+        {imported && (
+          <OutlineContents
+            editor={editor}
+            doc={doc}
+            documentId={imported.documentId}
+            viewTop={viewTop}
+            headings={headingPlaces}
+            onJumped={over ? () => store.set({ outlineOpen: false }) : undefined}
+          />
+        )}
       </div>
       <div
         className="docs-outline-resize"

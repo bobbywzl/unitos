@@ -29,6 +29,7 @@ const en = {
   // every document when none is picked.
   stitchScopeAll: "Every document ({n})",
   stitchScopePicked: "{n} documents picked",
+  stitchScopePickedOne: "1 document picked",
   stitchPick: "Pick documents",
   stitchPickTitle: "Click nodes in the graph to pick the documents Stitch reads. ⇧-click picks without this.",
   stitchPickDone: "Done",
@@ -65,9 +66,9 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  generated: "生成内容",
+  generated: "生成文档",
   generatedDesc: "缝合为项目写的每个页面，最新在前。点击一行在阅读器中打开。",
-  generatedEmpty: "尚未生成内容。在下方让缝合根据文档写一个页面。",
+  generatedEmpty: "尚未生成文档。在下方让缝合根据文档写一个页面。",
   generatedFrom: "来自指令：{command}",
   generatedToggleTitle: "显示缝合为项目写的页面",
   openGenerated: "打开此生成文档",
@@ -80,7 +81,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchTitle: "缝合：助手在项目的文档之间工作——汇集片段、绘制链接、找出矛盾、写新页面",
   stitchPlaceholder: "助手应在这些文档之间做什么？",
   stitchHint:
-    "助手完整阅读每篇文档；视频或音频文档读其逐字稿。它在片段之间绘制链接，或根据片段写一个新页面，或两者都做。链接在推荐链接中等待接受；页面放在生成内容下。每条回复都说明从每篇文档读了什么。",
+    "助手完整阅读每篇文档；视频或音频文档读其逐字稿。它在片段之间绘制链接，或根据片段写一个新页面，或两者都做。链接在推荐链接中等待接受；页面放在生成文档下。每条回复都说明从每篇文档读了什么。",
   stitchSend: "发送",
   stitchRunning: "正在阅读文档…",
   stitchStop: "停止",
@@ -88,6 +89,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchCollapse: "收起缝合",
   stitchScopeAll: "全部文档（{n}）",
   stitchScopePicked: "已选取 {n} 篇文档",
+  stitchScopePickedOne: "已选取 1 篇文档",
   stitchPick: "选取文档",
   stitchPickTitle: "点击图谱中的节点，选取缝合要读的文档。按住 ⇧ 点击可直接选取。",
   stitchPickDone: "完成",

@@ -32,7 +32,7 @@ import {
   type VideoSource,
 } from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
-import type { FormalizedArticle } from "@/lib/types";
+import type { FormalizedArticle, SectionView } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
   activeLineAt,
@@ -65,6 +65,7 @@ export type ReaderTextProps = Omit<
   | "documentId"
   | "notebookId"
   | "sectionChoices"
+  | "sections"
   | "title"
   | "blocks"
   | "translationAvailable"
@@ -115,6 +116,7 @@ export function VideoPane({
   annotations,
   seekBySource,
   sectionChoices,
+  sections,
   translationAvailable,
   split,
   paneHeader,
@@ -142,6 +144,8 @@ export function VideoPane({
       chips and annotation cards jump through ?src=. */
   seekBySource: Record<string, number>;
   sectionChoices: { id: string; label: string }[];
+  /** The project's sections with their notes, for Add to a note… (reader-interactions.tsx). */
+  sections?: SectionView[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -620,10 +624,12 @@ export function VideoPane({
   const annotatedLineIds = useMemo(() => new Set(annotationByLine.keys()), [annotationByLine]);
 
   const lineAction =
-    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+    "inline-flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
   // The one tool on a hovered transcript line: an annotated line opens its
   // annotation. Comments and explanations on a line start from the selection
   // toolbar or the tool bar above the lines, never from a pill over the text.
+  // An icon with its tip, so it stands in the margin beside the line
+  // (reader.tsx) and covers no word.
   const lineTools = (line: TranscriptLine) => {
     const annotated = annotationByLine.get(line.id);
     if (!annotated) return null;
@@ -632,10 +638,10 @@ export function VideoPane({
         onClick={() => openAnnotation(annotated)}
         data-track="video-line-open-note"
         className={lineAction}
+        aria-label={t("video.openNote")}
         data-tip={t("video.openNoteTitle")}
       >
-        <LocateIcon size={11} />
-        {t("video.openNote")}
+        <LocateIcon size={13} />
       </button>
     );
   };
@@ -1055,6 +1061,7 @@ export function VideoPane({
       documentId={documentId}
       notebookId={notebookId}
       sectionChoices={sectionChoices}
+      sections={sections}
       title={title}
       translationAvailable={translationAvailable}
       blocks={transcript.map((l) => ({ id: l.id, type: "TRANSCRIPT" as const, text: l.text, html: null }))}

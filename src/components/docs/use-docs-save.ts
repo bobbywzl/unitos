@@ -15,8 +15,9 @@ import { tabAccount } from "@/lib/tab-account";
 // MAX_WAIT_MS of steady typing, sends the whole rich text with the revision
 // it started from. One save runs at a time. A save that meets a newer
 // revision merges the editor's changes over the stored copy
-// (lib/docs/merge.ts) and saves again; a lost connection retries with a
-// growing wait, and at once when the browser is back online. A stored copy
+// (lib/docs/merge.ts) and saves again; a lost connection or a refused save
+// retries with a growing wait, and at once when the browser is back online
+// or the tab is shown again. A failed save reads failed until a save lands. A stored copy
 // goes on screen as one change outside the undo history, so Ctrl+Z takes
 // back only this person's own steps. Leaving the page with unsaved changes
 // tries one last save and asks the browser to warn.
@@ -307,7 +308,8 @@ export function useDocsSave({
       dropDraft();
       return;
     }
-    setState("saving");
+    // A failed save reads failed until a save lands, through every retry.
+    setState((s) => (s === "error" || s === "offline" ? s : "saving"));
     // Typing from here on starts its own wait: steady typing saves once per MAX_WAIT_MS.
     firstDirtyAtRef.current = null;
     const run = (async () => {
@@ -354,7 +356,8 @@ export function useDocsSave({
           return;
         }
         if (!res.ok) {
-          setState(res.status >= 500 ? "offline" : "error");
+          // The server answered: the save failed, not the connection.
+          setState("error");
           retryRef.current = Math.min(retryRef.current + 1, 5);
           return;
         }
@@ -401,7 +404,7 @@ export function useDocsSave({
       dirtyRef.current = true;
       versionRef.current += 1;
       firstDirtyAtRef.current ??= Date.now();
-      setState((s) => (s === "saving" || s === "offline" ? s : "unsaved"));
+      setState((s) => (s === "saving" || s === "offline" || s === "error" ? s : "unsaved"));
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       draftTimerRef.current = setTimeout(writeDraft, DRAFT_DELAY_MS);
       // After a failure the retry's wait stands: typing does not fire more saves.
@@ -416,9 +419,15 @@ export function useDocsSave({
       if (dirtyRef.current) void save();
     };
     window.addEventListener("online", onOnline);
+    // The tab shown again: a save that waits tries now, as a note's does.
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && dirtyRef.current && !inFlightRef.current) void save();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       editor.off("transaction", onUpdate);
       window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [editor, live, save, writeDraft]);
 
@@ -513,12 +522,15 @@ export function useDocsSave({
       waits to be saved and no save runs. */
   const matches = useCallback((rev: number) => !dirtyRef.current && !inFlightRef.current && revRef.current === rev, []);
 
-  /** Save now and resolve once the stored copy matches the screen. */
-  const flush = useCallback(async () => {
+  /** Save now and resolve once the stored copy matches the screen: true
+      when it does, false when the save failed (offline, refused) and the
+      words wait on screen and in the draft. */
+  const flush = useCallback(async (): Promise<boolean> => {
     for (let i = 0; i < 4 && (dirtyRef.current || inFlightRef.current); i++) {
       if (inFlightRef.current) await inFlightRef.current;
       if (dirtyRef.current) await save();
     }
+    return !dirtyRef.current && !inFlightRef.current;
   }, [save]);
 
   return { state, flush, matches, outdated };

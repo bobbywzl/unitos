@@ -43,6 +43,13 @@ export type NoteView = {
   documentId: string | null;
   sources: SourceChip[];
   replies: ReplyView[];
+  // Saved on this device and waiting for the offline queue to sync (SPEC.md
+  // §17, lib/offline/queued-notes.ts): drawn from the queue, not the server.
+  queued?: boolean;
+  // Words a local draft keeps that the server never confirmed (a failed
+  // save, then a reload): drawn on the card, marked Not saved, until a save
+  // lands (SPEC.md §6, use-outline.ts).
+  unsaved?: boolean;
 };
 
 export type SectionView = {
@@ -295,6 +302,26 @@ export type HistoryEntry = {
   // document title, the linked quote.
   content: string;
   documentTitle: string | null; // BlockEdit entries: the document it happened in
+  // BlockEdit entries: where the edit is, for the row's jump (the block may
+  // be gone: then the row opens the document).
+  documentId?: string;
+  blockId?: string | null;
+  // NOTE_REMOVE entries: the note was kept whole, so Restore can put it back
+  // (lib/notes/removed.ts); restored once it is back.
+  restorable?: boolean;
+  restored?: boolean;
+  // DOCUMENT_DETACH entries: the removed document, while it is out of the
+  // project and still exists, so the row can offer Add back.
+  addBackDocumentId?: string;
+  // BlockEdit entries: what the edit changed, for the row's words and its
+  // Revert or Restore, and the discussion under the edit (the Edits tab's
+  // card, folded into History).
+  edit?: {
+    before: string | null;
+    after: string | null;
+    meta: EditItem["meta"];
+    replies: ReplyView[];
+  };
   createdAt: string; // ISO
 };
 

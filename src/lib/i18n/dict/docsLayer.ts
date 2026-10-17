@@ -7,6 +7,8 @@ const en = {
   selectWordsFirst: "Select the words first",
   // A comment's card, as Google Docs draws it.
   resolveTitle: "Close this comment; it moves under Resolved",
+  // The Undo pill after Resolve.
+  commentResolved: "Comment resolved",
   moreOptions: "More options",
   getLink: "Get link to this comment",
   // View > Comments, in Search the menus.
@@ -17,12 +19,17 @@ const en = {
   nextComment: "Next comment",
   previousComment: "Previous comment",
   backToText: "Back to the text",
+  // A mark's tooltip while the reader writes (Editing, Suggesting): a click
+  // places the caret, so the mark opens with the modifier.
+  modClickAnnotation: "{keys}+click to view the annotation",
+  modClickNote: "{keys}+click to view the note",
 };
 
 const zh: Record<keyof typeof en, string> = {
   leftOut: "选中内容中的图片、插图和公式不计入",
   selectWordsFirst: "先选中文字",
   resolveTitle: "关闭此评论；它会移到“已解决”下",
+  commentResolved: "评论已解决",
   moreOptions: "更多选项",
   getLink: "获取此评论的链接",
   showAllComments: "显示所有评论",
@@ -31,6 +38,8 @@ const zh: Record<keyof typeof en, string> = {
   nextComment: "下一条评论",
   previousComment: "上一条评论",
   backToText: "返回正文",
+  modClickAnnotation: "{keys}+点击查看批注",
+  modClickNote: "{keys}+点击查看笔记",
 };
 
 export const docsLayer = { en, zh } as const;

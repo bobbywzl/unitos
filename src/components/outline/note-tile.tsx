@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { NoteView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { CommentIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { useMergeTarget, type HandleProps } from "@/components/sortable";
-import { splitNote } from "@/lib/note-title";
+import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
+import { bodyLineOffset, splitNote } from "@/lib/note-title";
+import { setTaskChecked } from "@/lib/note-markup";
 import { NoteId } from "@/components/outline/note-id";
+import { sourcesTip } from "@/components/outline/sources-tip";
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
@@ -30,6 +33,20 @@ function TickIcon({ size = 10 }: { size?: number }) {
   );
 }
 
+/** A finger is the pointer: a tile's tip would show on the long press that
+    lifts it and cover the board while the finger carries it. */
+function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia("(pointer: coarse)");
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(pointer: coarse)").matches,
+    () => false,
+  );
+}
+
 // One tile of a section's board (SPEC.md §6): the note as a tile — its id,
 // its title, and its body, whole when the board has the room for it (the
 // board sets the tile's height limits, section-board.tsx), else as much as
@@ -42,6 +59,7 @@ export function NoteTile({
   actions,
   handle,
   onOpen,
+  lifted = false,
 }: {
   note: NoteView;
   actions: OutlineActions;
@@ -49,16 +67,20 @@ export function NoteTile({
   handle?: HandleProps;
   /** A click: the note opens whole over the board. */
   onOpen: (id: string) => void;
+  /** The tile lifted by a hold, riding the pointer: drawn opaque, so the
+      tile under it never shows through and the two tiles' words never mix. */
+  lifted?: boolean;
 }) {
   const t = useT();
   const { canEdit, shared, people } = useCollab();
   const parts = splitNote(note.content);
   const pending = note.status === "PENDING";
-  const isMergeTarget = useMergeTarget() === note.id && note.status === "ACCEPTED";
+  const isMergeTarget = useIsMergeTarget(note.id) && note.status === "ACCEPTED";
   const selectable = note.status === "ACCEPTED" && canEdit;
   const isSelected = actions.selected.has(note.id);
   const author = shared && note.createdById ? people[note.createdById] : undefined;
   const draggable = Boolean(handle) && canEdit;
+  const coarse = useCoarsePointer();
 
   // The body is cut: more of it than the tile shows. Only a cut body fades
   // out at the bottom; a body shown whole reads to its last line.
@@ -91,7 +113,7 @@ export function NoteTile({
 
   const surface = [
     "note-tile group/tile relative flex flex-col overflow-hidden rounded-2xl bg-card p-3.5 text-left shadow-soft",
-    pending ? "opacity-85" : "",
+    pending && !lifted ? "opacity-85" : "",
     isMergeTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
     absorbed ? "note-absorb note-merged" : "",
   ]
@@ -117,11 +139,36 @@ export function NoteTile({
       onDragStart={(e) => e.preventDefault()}
       style={{ touchAction: "pan-y" }}
       className={surface}
-      data-tip={isMergeTarget ? t("outline.holdToMerge") : draggable ? t("outline.holdToDragTile") : t("outline.openNoteTitle")}
+      data-tip={
+        coarse
+          ? undefined
+          : isMergeTarget
+            ? t("outline.holdToMerge")
+            : draggable
+              ? t("outline.holdToDragTile")
+              : t("outline.openNoteTitle")
+      }
     >
       <div className="flex shrink-0 items-center gap-1.5">
         <NoteId id={note.id} />
-        {pending && (
+        {/* A pending tile takes its Accept in one press, as the tray's card
+            does; the opened note keeps Accept and Reject. A viewer sees the
+            label. */}
+        {pending && canEdit && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              void actions.acceptNote(note.id);
+            }}
+            data-track="note-accept"
+            data-no-drag
+            data-tip={t("outline.acceptTitle")}
+            className={`rounded-full bg-sage-600 px-2 py-0.5 text-[10px] font-semibold text-sage-fg hover:bg-sage-700 ${TOUCH_HIT}`}
+          >
+            {t("common.accept")}
+          </button>
+        )}
+        {pending && !canEdit && (
           <span className="rounded-full bg-clay-200 px-2 py-0.5 text-[10px] font-semibold text-clay-800">
             {t("outline.pendingLabel")}
           </span>
@@ -154,7 +201,21 @@ export function NoteTile({
       {parts.title && <h3 className="note-title mt-2 shrink-0">{parts.title}</h3>}
       <div ref={bodyRef} className={`note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden${cut ? " note-tile-cut" : ""}`}>
         {parts.body.trim() !== "" && (
-          <Markdown breaks sources={note.sources} notebookId={actions.notebookId}>
+          <Markdown
+            breaks
+            sources={note.sources}
+            notebookId={actions.notebookId}
+            // A checklist box ticks in one press, as on the note's card.
+            onToggleTask={
+              canEdit
+                ? (line, checked) =>
+                    void actions.saveNote(
+                      note.id,
+                      setTaskChecked(note.content, line + bodyLineOffset(note.content), checked),
+                    )
+                : undefined
+            }
+          >
             {parts.body}
           </Markdown>
         )}
@@ -162,7 +223,7 @@ export function NoteTile({
       {(note.sources.length > 0 || note.replies.length > 0 || author) && (
         <div className="mt-2 flex shrink-0 items-center gap-2.5 text-[11px] text-sand-500">
           {note.sources.length > 0 && (
-            <span className="flex items-center gap-1" data-tip={note.sources.map((s) => s.documentTitle).join(", ")}>
+            <span className="flex items-center gap-1" data-tip={sourcesTip(note.sources, t)}>
               <AnchorIcon />
               {note.sources.length}
             </span>

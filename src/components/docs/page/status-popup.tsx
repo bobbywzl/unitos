@@ -18,12 +18,17 @@ const TEXT: Record<SaveState, [title: TKey, body: TKey]> = {
   error: ["docs.saveFailed", "docsPage.statusFailed"],
 };
 
+const APP_FAILED: [title: TKey, body: TKey] = ["outline.saveFailed", "docsPage.statusAppFailed"];
+
 export function StatusPopup({
   state,
+  app = false,
   anchorRef,
   onClose,
 }: {
   state: SaveState;
+  /** The failure is a note's or an annotation's, not the document's. */
+  app?: boolean;
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
@@ -52,7 +57,8 @@ export function StatusPopup({
     };
   }, [anchorRef, onClose]);
   const failed = state === "error" || state === "offline";
-  const title = t(TEXT[state][0]);
+  const [titleKey, bodyKey] = app ? APP_FAILED : TEXT[state];
+  const title = t(titleKey);
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
@@ -64,7 +70,7 @@ export function StatusPopup({
       data-edit-control
     >
       <div className="docs-status-popup-head">{title}</div>
-      <p className="docs-status-popup-body">{t(TEXT[state][1])}</p>
+      <p className="docs-status-popup-body">{t(bodyKey)}</p>
     </div>,
     document.body,
   );

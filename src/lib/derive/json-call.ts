@@ -21,6 +21,13 @@ async function outputBudgetSpent(): Promise<string> {
   return (await serverT())("api.outputBudgetSpent");
 }
 
+// An answer that did not parse, in the reader's words; the parser's detail
+// goes to the server log.
+async function answerUnreadable(): Promise<string> {
+  return (await serverT())("api.answerUnreadable");
+}
+
+// The model declined: said plainly, so the reader knows why nothing landed.
 async function modelRefused(): Promise<string> {
   return (await serverT())("api.modelRefused");
 }
@@ -230,5 +237,6 @@ export async function callForJson<S extends z.ZodType>(params: {
   // Neither answer parsed whole. What the second one did write still counts.
   const salvaged = parseJson(params.schema, second.text);
   if (salvaged !== null) return { ok: true, data: salvaged };
-  return { ok: false, error };
+  console.warn(`[derive] ${params.label} unreadable answer: ${error}`);
+  return { ok: false, error: await answerUnreadable() };
 }

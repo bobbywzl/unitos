@@ -47,6 +47,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (error) return error;
   const version = await keepCurrentVersion(documentId, data.name ?? null);
   if (!version) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 400 });
-  if (version === "empty") return NextResponse.json({ error: t("api.versionEmpty") }, { status: 400 });
+  if (version === "empty") return NextResponse.json({ error: t("api.versionEmpty"), reason: "empty" }, { status: 400 });
   return NextResponse.json(version);
 }

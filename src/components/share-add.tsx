@@ -5,6 +5,8 @@ import { useState } from "react";
 import { readNdjson } from "@/lib/ndjson";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { useT } from "@/components/lang-provider";
+import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate-ask";
+import { DuplicateDocumentError } from "@/lib/documents/duplicate-answer";
 import {
   advanceIngestSteps,
   completeIngestSteps,
@@ -13,15 +15,28 @@ import {
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 
+// The add's failure line: the route's words for a refusal it words (a 4xx),
+// "Upload too large for the server." for a 413, else "Not added. Try again."
+// The status and the server's text go to the console.
+function failedLine(t: ReturnType<typeof useT>, status: number, said: string | undefined): string {
+  console.warn("Not added:", status, said ?? "");
+  if (status === 413) return t("panes.uploadTooLarge");
+  if (said && status >= 400 && status < 500) return said;
+  return t("works.shareAddFailed");
+}
+
 export type SharePayload =
   | { kind: "url"; url: string }
   | { kind: "file"; uploadId: string; filename: string; fileKind: "pdf" | "video" };
 
-type IngestEvent = { stage: string; detail?: string } | { id: string } | { error: string };
+type IngestEvent = { stage: string; detail?: string } | { id: string } | { error: string; duplicate?: unknown };
 
 // The share landing form: what arrived, which project it goes to, Add. Runs
 // the same ingestion as the reader's header (URL → /api/documents; staged
-// file → /api/uploads/complete) and opens the document when it lands.
+// file → /api/uploads/complete) and opens the document when it lands. A
+// file or a link the account already has asks first (SPEC.md §15): Add
+// again adds it once more, confirmed (the staged file is still there);
+// Open the one I have opens it.
 export function ShareAdd({
   projects,
   payload,
@@ -34,10 +49,11 @@ export function ShareAdd({
   const [notebookId, setNotebookId] = useState(projects[0].id);
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { ask, dialog } = useDuplicateAsk();
 
   const label = payload.kind === "url" ? payload.url : payload.filename;
 
-  async function add() {
+  async function add(confirmDuplicate = false) {
     setError(null);
     const stepKind =
       payload.kind === "url"
@@ -52,7 +68,7 @@ export function ShareAdd({
           ? await fetch("/api/documents", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: payload.url, notebookId }),
+              body: JSON.stringify({ url: payload.url, notebookId, ...(confirmDuplicate ? { confirmDuplicate } : {}) }),
             })
           : await fetch("/api/uploads/complete", {
               method: "POST",
@@ -62,11 +78,13 @@ export function ShareAdd({
                 filename: payload.filename,
                 notebookId,
                 kind: payload.fileKind,
+                ...(confirmDuplicate ? { confirmDuplicate } : {}),
               }),
             });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throwIfDuplicate(detail, t("panes.duplicateTitle"));
+        throw new Error(failedLine(t, res.status, detail?.error));
       }
       let result: IngestEvent | null = null;
       for await (const event of readNdjson<IngestEvent>(res)) {
@@ -76,6 +94,7 @@ export function ShareAdd({
           result = event;
         }
       }
+      if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
       if (!result || "error" in result) {
         throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
       }
@@ -84,7 +103,32 @@ export function ShareAdd({
       router.refresh();
     } catch (err) {
       setSteps(null);
-      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+      if (!(err instanceof DuplicateDocumentError)) {
+        // No answer at all (the network): the one line, never "Failed to fetch".
+        if (err instanceof TypeError) console.warn("Not added:", err.message);
+        setError(err instanceof Error && !(err instanceof TypeError) ? err.message : t("works.shareAddFailed"));
+        return;
+      }
+      const choice = await ask(err.documents);
+      if (choice === "again") return add(true);
+      if (choice !== "open") return;
+      const match = err.documents[0];
+      // In no project (the Library): it goes into the chosen project first.
+      const target = match.notebookId ?? notebookId;
+      if (match.notebookId === null) {
+        const res = await fetch(`/api/notebooks/${notebookId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId: match.id }),
+        });
+        if (!res.ok) {
+          const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+          setError(failedLine(t, res.status, detail?.error));
+          return;
+        }
+      }
+      router.push(`/n/${target}?doc=${match.id}`);
+      router.refresh();
     }
   }
 
@@ -115,6 +159,7 @@ export function ShareAdd({
         <IngestProgress fileLabel={label} steps={steps} />
       )}
       {error && <p className="text-sm text-red-500">{error}</p>}
+      {dialog}
     </div>
   );
 }

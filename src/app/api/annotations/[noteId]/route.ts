@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { ReferencedAnnotation } from "@/lib/annotation-reference";
 import { annotationKind } from "@/lib/annotations/kind";
+import { passageQuote } from "@/lib/annotations/passage";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { conversationTurns } from "@/lib/conversation";
 import { db } from "@/lib/db";
@@ -28,6 +29,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ noteId: string 
     return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
   }
   const source = note.sources.find((s) => s.documentId === doc) ?? note.sources[0] ?? null;
+  // A passage across blocks: its whole quote (lib/annotations/passage.ts).
+  const here = source ? note.sources.filter((s) => s.documentId === source.documentId) : [];
+  const order =
+    here.length > 1
+      ? new Map(
+          (
+            await db.block.findMany({ where: { id: { in: here.map((s) => s.blockId) } }, select: { id: true, order: true } })
+          ).map((b) => [b.id, b.order]),
+        )
+      : null;
   const view: ReferencedAnnotation = {
     id: note.id,
     kind: annotationKind(note),
@@ -35,7 +46,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ noteId: string 
     gist: note.gist,
     color: note.color,
     sourceId: source?.id ?? null,
-    quotedText: source?.quotedText ?? null,
+    quotedText: (order && passageQuote(note.content, here, (id) => order.get(id))) ?? source?.quotedText ?? null,
     orphaned: source?.orphaned ?? false,
     documentId: source?.documentId ?? null,
     documentTitle: source?.document?.title ?? null,

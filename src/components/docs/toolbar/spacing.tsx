@@ -75,7 +75,7 @@ export function SpacingMenu({
   editor: Editor;
   para: ParagraphState;
   pageless: boolean;
-  /** Custom spacing: the toolbar keeps the dialog, so it outlives the ⋮ bubble. */
+  /** Custom spacing: the toolbar keeps the dialog, so it outlives the ⋯ bubble. */
   onCustom: () => void;
 }) {
   const t = useT();

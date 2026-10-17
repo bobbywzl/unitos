@@ -94,6 +94,13 @@ export function useNotebookSync({
       try {
         const doc = documentId ? `?doc=${encodeURIComponent(documentId)}` : "";
         const res = await fetch(`/api/notebooks/${notebookId}/sync${doc}`);
+        // The project is gone for this account: the owner removed them, or
+        // it was deleted. The page renders again (Page not found) once no
+        // typing would be cut short; the words typed stay in their drafts.
+        if (res.status === 404) {
+          if (refreshSafe()) router.refresh();
+          return;
+        }
         if (!res.ok) return;
         const data = (await res.json()) as { rev: number; people: SyncPresence[] };
         // A new list only when someone comes, goes, or opens another
