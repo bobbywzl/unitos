@@ -95,7 +95,7 @@ try {
   check("the save failed (blocked), so the words are unsaved", !psql(`SELECT content FROM "Note" WHERE id = '${NOTE}'`).includes(WORDS));
 
   // 2. Open the graph from the rail (the focus leaves the editor; the editor stays open under the overlay).
-  await page.locator('[data-track="graph"]').first().click();
+  await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
   await page.waitForSelector(".graph-overlay-in", { timeout: 120000 });
   await until(() => apiSince(0, "/graph").some((e) => e.url.endsWith("/graph") || e.url.includes("/graph?")), 60000);
   await sleep(1500);

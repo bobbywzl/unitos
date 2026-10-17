@@ -41,7 +41,7 @@ async function newPage(width, height, lang, touch = false) {
 async function openGraph(page, nb) {
   await page.goto(`${B}/n/${nb}`, { waitUntil: "networkidle", timeout: 300000 });
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     await page.waitForTimeout(1500);
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
@@ -167,7 +167,7 @@ async function gather(lang) {
   await page.locator("[data-graph-note-gather-words]").fill(`Pity across the project (${lang})`);
   await page.reload({ waitUntil: "networkidle" });
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     await page.waitForTimeout(1500);
   }
   await page.locator("[data-graph-note-gather-words]").waitFor({ timeout: 20000 });

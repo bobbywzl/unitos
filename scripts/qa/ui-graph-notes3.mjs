@@ -54,7 +54,7 @@ async function hydrated(page) {
 }
 async function railGraph(page) {
   for (let i = 0; i < 5 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click({ force: true }).catch(() => {});
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch(() => {});
     await settle(page);
   }
   await settle(page);

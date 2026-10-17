@@ -82,7 +82,7 @@ async function openGraph({ load = true } = {}) {
   // A reload with graph=1 opens the graph by itself after hydration.
   await overlay().waitFor({ timeout: 2500 }).catch(() => {});
   for (let i = 0; i < 5 && (await overlay().count()) === 0; i++) {
-    await page.click('[data-track="graph"]', { timeout: 3000 }).catch(() => {});
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch(() => {});
     await page.waitForTimeout(1500);
   }
   // The graph's data loads after the open (GET .../graph): wait for the canvas.

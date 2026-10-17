@@ -40,7 +40,7 @@ async function newPage(width, height, lang, touch = false) {
 async function openGraph(page, nb) {
   await page.goto(`${B}/n/${nb}`, { waitUntil: "load", timeout: 300000 });
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click().catch(() => {});
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch(() => {});
     await page.waitForTimeout(1500);
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 }).catch(async (e) => {

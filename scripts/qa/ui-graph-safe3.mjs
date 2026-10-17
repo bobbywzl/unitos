@@ -72,7 +72,7 @@ async function openGraph() {
   await page.goto(`${BASE}/n/${NB}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   for (let i = 0; i < 5 && (await overlay().count()) === 0; i++) {
-    await page.click('[data-track="graph"]', { timeout: 3000 }).catch(() => {});
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch(() => {});
     await page.waitForTimeout(1500);
   }
   // The graph's data loads after the open; a dev server may compile the route first.

@@ -70,7 +70,7 @@ async function openGraph(page) {
   await page.waitForTimeout(1200);
   // A click before hydration does nothing: try again until the graph is up.
   for (let i = 0; i < 4 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.click('[data-track="graph"]');
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     await page.waitForTimeout(1500);
   }
   await page.waitForTimeout(1500);

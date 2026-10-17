@@ -29,7 +29,7 @@ async function openGraph() {
   let t0 = Date.now();
   for (let i = 0; i < 6; i++) {
     t0 = Date.now();
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     if (await page.locator(".graph-overlay-in").first().waitFor({ timeout: 1500 }).then(() => true, () => false)) break;
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
@@ -118,7 +118,7 @@ if (tabs === 0) {
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 const pp = await phone.newPage();
 await pp.goto(`${B}/n/${NB}`, { waitUntil: "networkidle", timeout: 300000 });
-await pp.locator('[data-track="graph"]').first().click().catch(() => {});
+await ((await pp.locator('[data-track="graph"]').first().isVisible()) ? pp.locator('[data-track="graph"]').first().click() : pp.locator('[data-track="more"]').click().then(() => pp.locator('[data-track="more:graph"]').click())).catch(() => {});
 await pp.locator(".react-flow__node").first().waitFor({ timeout: 60000 }).catch(() => {});
 await pp.waitForTimeout(2500);
 await pp.screenshot({ path: `${SHOT}/REV2-09-390-${label}.png` });

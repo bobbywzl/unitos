@@ -20,7 +20,7 @@ await t1.goto(`${BASE}/n/rev3-p`, { waitUntil: "networkidle", timeout: 300000 })
 await t1.evaluate((k) => localStorage.removeItem(k), KEY);
 async function openGraph(page) {
   for (let i = 0; i < 5 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.click('[data-track="graph"]', { timeout: 3000 }).catch(() => {});
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch(() => {});
     await page.waitForTimeout(1500);
   }
   await page.locator(".react-flow__edge").first().waitFor({ timeout: 60000 }).catch(() => {});

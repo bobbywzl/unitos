@@ -42,7 +42,7 @@ try {
   });
   await page.goto(`${B}/n/rev3-p`, { waitUntil: "networkidle", timeout: 300000 });
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     await page.waitForTimeout(1500);
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });

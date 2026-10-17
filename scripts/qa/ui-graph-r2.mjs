@@ -27,7 +27,7 @@ async function openGraph(page) {
   await page.goto(`${B}/n/${NB}`, { waitUntil: "networkidle", timeout: 300000 });
   // A click before hydration does nothing: click again until the graph is up.
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     await page.waitForTimeout(1500);
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
@@ -184,7 +184,7 @@ const active = (page) =>
   // ✕ drops the kept view.
   await page.locator('[data-track="graph-close"]').click();
   await page.waitForTimeout(500);
-  await page.locator('[data-track="graph"]').first().click();
+  await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
   await page.locator(".react-flow__node").first().waitFor({ timeout: 30000 });
   await page.waitForTimeout(1500);
   res.afterCloseReopenListOpen = await page.locator('[data-track-surface="graph-notes-list"]').count();

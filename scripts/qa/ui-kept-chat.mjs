@@ -144,7 +144,7 @@ async function askRange() {
 
 async function stitch() {
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
-  await page.locator('button[data-track="graph"]').click();
+  await ((await page.locator('button[data-track="graph"]').isVisible()) ? page.locator('button[data-track="graph"]').click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
   const box = page.locator('textarea[aria-label="Stitch"]');
   await box.waitFor({ timeout: 20000 });
   await box.fill("Find the contradictions between these documents");
@@ -155,7 +155,7 @@ async function stitch() {
   await page.screenshot({ path: `${SHOT}/stitch-1-answered.png` });
   await page.locator('button[data-track="graph-close"]').click();
   await page.reload({ waitUntil: "networkidle" });
-  await page.locator('button[data-track="graph"]').click();
+  await ((await page.locator('button[data-track="graph"]').isVisible()) ? page.locator('button[data-track="graph"]').click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
   await region.waitFor({ timeout: 20000 });
   await settle();
   const text = await region.innerText();

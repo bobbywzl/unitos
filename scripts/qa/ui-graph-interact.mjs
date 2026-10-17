@@ -19,7 +19,7 @@ async function openGraph(page, nb = SEVEN, w = 1440, h = 900) {
   await page.setViewportSize({ width: w, height: h });
   await page.goto(`${B}/n/${nb}`, { waitUntil: "networkidle", timeout: 180000 });
   for (let i = 0; i < 6; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     if (await page.locator(".graph-overlay-in").first().waitFor({ timeout: 8000 }).then(() => true, () => false)) break;
   }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 });
@@ -199,7 +199,7 @@ const LIST = '[data-track-surface="graph-links"]';
   await page.locator('[data-track="graph-close"]').click();
   await page.waitForTimeout(800);
   for (let i = 0; i < 4; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     if (await page.locator(".graph-overlay-in").first().waitFor({ timeout: 5000 }).then(() => true, () => false)) break;
   }
   await page.waitForTimeout(2200);
@@ -228,7 +228,7 @@ const LIST = '[data-track-surface="graph-links"]';
   log(!(await overlayOpen(page)) ? "PASS" : "FAIL", "Back again closes the graph", page.url());
   // The dialog: role, focus inside.
   for (let i = 0; i < 4; i++) {
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     if (await page.locator(".graph-overlay-in").first().waitFor({ timeout: 5000 }).then(() => true, () => false)) break;
   }
   await page.waitForTimeout(800);

@@ -39,7 +39,7 @@ for (const name of which) {
     const t0 = Date.now();
     // A click before hydration does nothing: click again until the overlay opens.
     for (let i = 0; i < 6; i++) {
-      await page.locator('[data-track="graph"]').first().click();
+      await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
       const opened = await page.locator(".graph-overlay-in").first().waitFor({ timeout: 8000 }).then(() => true, () => false);
       if (opened) break;
     }

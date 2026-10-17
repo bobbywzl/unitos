@@ -101,7 +101,7 @@ await context.setOffline(true);
 out.offlineFailed = [];
 if ((await page.locator(".react-flow__node").count()) === 0) {
   // Not open from the URL: the rail's Graph button.
-  await page.locator('[data-track="graph"]').first().click().catch((e) => out.offlineFailed.push(String(e).slice(0, 120)));
+  await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click())).catch((e) => out.offlineFailed.push(String(e).slice(0, 120)));
   await page.waitForSelector(".react-flow__node", { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
 }

@@ -19,7 +19,7 @@ for (let r = 0; r < 5; r++) {
   let t0 = 0;
   for (let i = 0; i < 6; i++) {
     t0 = Date.now();
-    await page.locator('[data-track="graph"]').first().click();
+    await ((await page.locator('[data-track="graph"]').first().isVisible()) ? page.locator('[data-track="graph"]').first().click() : page.locator('[data-track="more"]').click().then(() => page.locator('[data-track="more:graph"]').click()));
     if (await page.locator(".react-flow__node").first().waitFor({ timeout: 8000 }).then(() => true, () => false)) break;
   }
   const mount = Date.now() - t0;

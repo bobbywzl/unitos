@@ -71,11 +71,12 @@ check(
   !!note && note.content.includes("my own thoughts, typed offline") && note.content.includes("> Suffering is the ground of compassion.") && note.content.includes("> words a collaborator removed"),
   note?.content,
 );
+// The id is taken by the first create: the route answers 200 with that note.
 const again = await post({ onSourceLost: "keep", id });
-const againNote = again.status === 201 ? await again.json() : null;
+const againNote = again.status === 200 || again.status === 201 ? await again.json() : null;
 check(
-  "the same record replayed again (at-least-once): 201 with the saved note, no second note",
-  again.status === 201 && againNote?.id === note?.id && sql(`SELECT count(*) FROM "Note" WHERE content LIKE '${TAG} api: my own%'`) === "1",
+  "the same record replayed again (at-least-once): the saved note answers, no second note",
+  (again.status === 200 || again.status === 201) && againNote?.id === note?.id && sql(`SELECT count(*) FROM "Note" WHERE content LIKE '${TAG} api: my own%'`) === "1",
   `${again.status} ${againNote?.id} ${note?.id}`,
 );
 check("replay: one source, for the quote that resolves", note?.sources?.length === 1 && note.sources[0].blockId === "rev4-b3", JSON.stringify(note?.sources?.map((s) => s.blockId)));
