@@ -336,6 +336,10 @@ export type ListLevel = { bullet: string } | { counter: ListCounter; format: str
     list without markers: a bibliography, an algorithm's steps). */
 const MARKER_TEXT = /^(?:(?!["\\%])[\p{L}\p{N}\p{P}]){0,6}$/u;
 const BULLET_TEXT = /^[^\s"\\%\p{C}]{0,3}$/u;
+/** The words before a legal number's own, printed: the numbers of the
+    levels above it, each with its dot ("3.2.2.5.1." before "%0.", a list
+    that starts deep in a Word file's legal numbering). Up to eight. */
+const LEGAL_PREFIX = /^(?:\d{1,3}\.){1,8}$/;
 
 /** A level's glyph format as the page can draw it: the text before the
     numbers, between them, and after. One number is the level's own (%k);
@@ -347,7 +351,7 @@ export function formatParts(format: string, level: number): { before: string; se
   const texts = parts.filter((_, i) => i % 2 === 0);
   const before = texts[0];
   const after = texts[texts.length - 1];
-  if (!MARKER_TEXT.test(before) || !MARKER_TEXT.test(after)) return null;
+  if (!(MARKER_TEXT.test(before) || LEGAL_PREFIX.test(before)) || !MARKER_TEXT.test(after)) return null;
   if (holders.length === 1) return holders[0] === level ? { before, sep: null, after } : null;
   const sep = texts[1];
   const legal =

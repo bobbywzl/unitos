@@ -179,7 +179,7 @@ export async function detectSpeakers(
 }
 
 /** Names for lines that already carry their voice ids (a Deepgram
-    transcript). Reads the text only; the roster is the ids in order of first
+    transcript, a caption file with voice spans). Reads the text only; the roster is the ids in order of first
     speaking, named where the conversation names them. Answers an empty
     roster when one voice speaks throughout, and unnamed voices without a
     key or when the pass fails. */
@@ -188,10 +188,12 @@ export async function nameSpeakers(
   userId: string | null = null,
 ): Promise<SpeakerLines> {
   const byLine = lines.map((line) => line.speaker ?? null);
+  // A name the source gives (a caption file's voice span) stands; the
+  // pass names only the voices left unnamed.
   const roster = new Map<string, Speaker>();
-  for (const id of byLine) {
-    if (id !== null && !roster.has(id)) roster.set(id, { id, name: "" });
-  }
+  byLine.forEach((id, i) => {
+    if (id !== null && !roster.has(id)) roster.set(id, { id, name: lines[i].speakerName ?? "" });
+  });
   if (roster.size <= 1) return EMPTY;
   if (geminiConfigured()) {
     try {

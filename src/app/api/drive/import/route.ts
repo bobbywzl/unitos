@@ -21,7 +21,7 @@ import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE, WORD_MIME_TYPE } from "@/lib/office
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
-import { attachDocument } from "@/lib/parse/attach";
+import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
             }
             after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
           }
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(data.notebookId, document, deduped);
         }
         const bytes =
           kind === "sheets"
@@ -180,7 +180,7 @@ export async function POST(req: Request) {
         await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Drive slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -217,7 +217,7 @@ export async function POST(req: Request) {
         await bumpNotebook(data.notebookId);
         // The skeleton builds after the response (SPEC.md §22).
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       }
     }
     // A PDF, a Google Drawing, or a Google Doc read from its PDF export:
@@ -262,7 +262,7 @@ export async function POST(req: Request) {
       // reader said not to convert; nothing starts.
       after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
     }
-    return { id: document.id, title: document.title, deduped };
+    return await addedResult(data.notebookId, document, deduped);
   });
 }
 

@@ -6,6 +6,7 @@ import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, closesParen, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import {
+  columnEdges,
   isCentered,
   isFirstLineIndent,
   isIndented,
@@ -101,6 +102,48 @@ export function joinMarkerCells(lines: Line[]): Line[] {
     if (!marker || marker.length !== shift) return line;
     return { ...line, cells: [{ x: mark.x, text, runs }], text, runs };
   });
+}
+
+// A number set half again as large as its item's words, or larger, stands
+// beside the item's first lines, its top at the first line's top: the line
+// builder reads it on the line its baseline is nearest, the item's second.
+// The line above at the item's words, within the number's height, is the
+// item's first line, and the number moves to it (parse loop finding: the
+// Raspberry Pi handbook's steps "01", "02", "03" set 15.8 pt over 8 pt
+// words read "A good knowledge of Python is useful" as a paragraph above
+// the item "02 for coding your own pinball machine.").
+export function liftTallMarkers(lines: Line[]): Line[] {
+  const out = [...lines];
+  for (let k = 1; k < out.length; k++) {
+    const [above, line] = [out[k - 1], out[k]];
+    if (line.cells.length !== 1 || above.cells.length !== 1 || line.page !== above.page) continue;
+    const marker = readMarker(line);
+    const tall = line.items[0];
+    if (!marker || marker.family === "bullet" || marker.family === "box" || !tall || tall.str.trim() !== marker.text) continue;
+    const words = line.items.slice(1).filter((i) => i.str.trim() !== "");
+    if (words.length === 0) continue;
+    const size = median(words.map((i) => i.size));
+    const rise = above.y - line.y;
+    if (
+      tall.size < size * 1.5 ||
+      Math.abs(above.size - size) > 1 ||
+      Math.abs(above.x - words[0].x) > size * 0.5 ||
+      rise < size * 0.5 ||
+      rise > tall.size * 0.85 ||
+      readMarker(above) !== null
+    )
+      continue;
+    const shift = marker.length + (/^\s*/.exec(line.text.slice(marker.length))?.[0].length ?? 0);
+    const text = line.text.slice(shift);
+    const runs = line.runs.filter((r) => r.end > shift).map((r) => ({ ...r, start: Math.max(0, r.start - shift), end: r.end - shift }));
+    const lead = `${marker.text} `;
+    const markerRuns = line.runs.filter((r) => r.start < marker.text.length).map((r) => ({ ...r, start: r.start, end: Math.min(r.end, marker.text.length) }));
+    const aboveText = lead + above.text;
+    const aboveRuns = [...markerRuns, ...above.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length }))];
+    out[k - 1] = { ...above, text: aboveText, runs: aboveRuns, cells: [{ x: tall.x, text: aboveText, runs: aboveRuns }], items: [tall, ...above.items], x: tall.x, size: Math.max(above.size, tall.size) };
+    out[k] = { ...line, text, runs, cells: [{ x: words[0].x, text, runs }], items: line.items.slice(1), x: words[0].x, size, firstWordWidth: words[0].w };
+  }
+  return out;
 }
 
 // ── Marked items ────────────────────────────────────────────────────────────
@@ -203,12 +246,20 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     const next = lines[j];
     const prev = lines[j - 1];
     const gap = prev.y - next.y;
+    // Sizes by the words: a slide sets its bullets larger than their words.
+    // A nested item set smaller than the list's first, and the lines of an
+    // item at its own size, stay in the list (parse loop finding: a Keynote
+    // deck sets its items in 34 pt and their sub-items in 30 pt behind a
+    // 37 pt bullet; each sub-item read as a paragraph with its bullet, and
+    // a sub-item's wrapped line as a heading).
+    const [words, first, own] = [wordsSize(next), wordsSize(line), wordsSize(items[items.length - 1].lines[0])];
+    const nested = words < first && next.x > line.x + words * 0.5 && words >= first * 0.7;
     if (
       runOf[j] !== -1 ||
       next.cells.length !== 1 ||
       gap < 0 ||
-      next.size > Math.max(ctx.bodySize * 1.15, line.size + 0.5) ||
-      Math.abs(next.size - line.size) > 1.2
+      (next.size > Math.max(ctx.bodySize * 1.15, line.size + 0.5) && words > Math.max(ctx.bodySize * 1.15, first + 0.5)) ||
+      (Math.abs(words - first) > 1.2 && !nested && Math.abs(words - own) > 1.2)
     )
       break;
     const item = items[items.length - 1];
@@ -220,17 +271,51 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // edge mid-sentence and at no level the list has, is the item's next
     // line ("… are either" over "(1) in the public domain or (2) …": a
     // nested item "(1)", real-gslides-oer-5rs p3), and so is a number that
-    // closes a parenthesis the line above left open.
+    // closes a parenthesis the line above left open. A bullet glyph never
+    // opens a wrapped line: at the item's words it opens a sub-item (parse
+    // loop finding: a Keynote deck sets each sub-item's bullet where its
+    // item's words start, and under an item that ran to the slide's edge
+    // "• Few-shot prompts" read as the item's last words).
     const here = { markerX: drawn ?? next.x, bodyX: mark ? bodyXOf(next, mark) : next.x };
     const wrap =
       mark !== null &&
+      !isGlyphMarker(mark) &&
       (closesParen(prev, next) ||
         (Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
           !/[.:;!?]$/.test(prev.text.trim()) &&
           fillsMargin(prev, next, edge) &&
           !items.some((it) => sameLevel(it, here, next.size))));
-    // Marked items sit farther apart than wrapped lines (itemsep).
-    const spaced = gap <= next.size * ctx.leading * 2.2 || (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2);
+    // Marked items sit farther apart than wrapped lines (itemsep). The next
+    // number or letter of the item's sequence, at the item's marker, opens
+    // the next item from further down (parse loop finding: the Official
+    // Journal sets the points of an article two and a half lines apart, and
+    // its one-line points "(a) …; (b) …" ran together as one paragraph).
+    // An item whose lines come back under its marker is a numbered paragraph
+    // ("1. The purpose of this Regulation …"), which the wider gap leaves
+    // apart.
+    const hangs = item.lines.slice(1).every((l) => l.x > item.markerX + next.size * 0.5);
+    const inSequence =
+      mark !== null && mark.family !== "bullet" && mark.family !== "box" && hangs && follows(item.marker, mark) && Math.abs(next.x - item.markerX) <= next.size * 0.3;
+    // A numbered item whose wrapped lines come back under its marker is a
+    // numbered paragraph: under a one-line item, the next item's second
+    // line tells, and items set apart wider than their lines are such
+    // paragraphs, never a list (parse loop finding: the Official Journal's
+    // "7. Testing procedures …", one line, and "8. The testing of …", its
+    // lines back at the "8.", read as a list between paragraphs "6." and
+    // "1.").
+    const after = lines[j + 1];
+    const comesBack = (l: Line, under: Line) => readMarker(under) === null && under.cells.length === 1 && Math.abs(under.x - l.x) <= l.size * 0.3 && l.y - under.y <= l.size * ctx.leading * 1.3;
+    const paragraphs =
+      mark !== null &&
+      mark.family !== "bullet" &&
+      mark.family !== "box" &&
+      gap > next.size * ctx.leading * 1.5 &&
+      (item.lines.length === 1 ? after !== undefined && runOf[j + 1] === -1 && comesBack(next, after) : !hangs);
+    const spaced =
+      !paragraphs &&
+      (gap <= next.size * ctx.leading * 2.2 ||
+      (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2) ||
+      (spacing.length === 0 && inSequence && gap <= next.size * ctx.leading * 3.5));
     if (mark && !wrap && spaced && joinsList(items, next, mark, drawn ?? next.x)) {
       spacing.push(gap);
       items.push(itemOf(next, mark, drawn ?? next.x));
@@ -248,8 +333,40 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // each line as an item of its own, and "Note that this allows us to
     // move scalar values around." under its item's formula too).
     // A display the math reader joined stays its own block.
+    // A lowercase line at the item's words goes on with it, too, under a line
+    // that stopped mid-sentence where the line's first word would not have
+    // fit: the line above wrapped, whatever the page's other lines say of
+    // its edge (parse loop finding: a PowerPoint deck's slide read as set
+    // justified, and "▪ The attribute values … on each corresponding" over
+    // "coordinate axis and the points …" read as an item and a paragraph).
+    // A capital goes on too after a line that ends in a word, one line's
+    // pitch under it: a name wraps there (the same deck's "▪ Can be
+    // obtained from the UCI" over "Machine Learning Repository" read as an
+    // item and a paragraph).
+    // Under a number set half again as large as its words (liftTallMarkers),
+    // a line comes back under the number once it clears it: a lowercase
+    // line there, one line's pitch under a line that stopped mid-sentence,
+    // is the item's next line, however short the line above stopped (the
+    // Raspberry Pi handbook's step "03 At the ‘heart’ of the vending machine
+    // …", set ragged, its third line "alongside an Arduino …" back at the
+    // "03" and read as a paragraph of its own).
+    const tall = item.lines[0].items[0] !== undefined && item.lines[0].items[0].size >= wordsSize(item.lines[0]) * 1.5;
+    const under =
+      tall &&
+      !next.display &&
+      Math.abs(next.x - item.markerX) <= next.size * 0.5 &&
+      /^\p{Ll}/u.test(next.text) &&
+      !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
+      prev.y - next.y <= next.size * ctx.leading * 1.3;
+    const wrapped =
+      !next.display &&
+      Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
+      (/^\p{Ll}/u.test(next.text) ||
+        (/^\p{Lu}/u.test(next.text) && /\p{L}$/u.test(prev.text.trim()) && prev.y - next.y <= next.size * ctx.leading * 1.1)) &&
+      !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
+      fillsMargin(prev, next, columnEdges(lines, j - 1, ctx).right);
     const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
-    if ((atWords || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
+    if (under || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
       item.lines.push(next);
       j++;
       continue;
@@ -521,12 +638,20 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     wideBlock && alignedRight * 10 >= run.length * 6 ? runMax : Math.max(runMax, proseEdge(lines, i, j));
   const shortLines = run.filter((l) => l.xEnd < edge - l.size * 3).length;
   const ragged = shortLines * 2 >= run.length;
+  // A bullet drawn as a path opens an item as a typed one does (parse loop
+  // finding: the MML book's two items on p. 135, at the text's leading,
+  // read as one paragraph with the second item inside). Where two lines or
+  // more open so, the bullets alone mark the items: a line under an inline
+  // matrix stands a gap apart and opens none ("A1 = [1 0; 0 2]. The
+  // direction … correspond to the" | "canonical basis vectors …", p. 114).
+  const drawn = run.map((l) => drawnMarkerAt(l, ctx) !== null);
+  const drawnBand = drawn.filter(Boolean).length >= 2;
   for (let k = 1; k < run.length; k++) {
     const marked = BULLET_RE.test(run[k].text) && !closesParen(run[k - 1], run[k]);
     const spaced = gaps[k - 1] > gapThreshold && !pushedApart(run[k - 1], run[k]);
     const outdented = run[k].x < run[k - 1].x - line.size * 0.5;
     const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);
-    if (marked || spaced || outdented || ended) starts.push(k);
+    if (marked || drawn[k] || outdented || (!drawnBand && (spaced || ended))) starts.push(k);
   }
   // Each item keeps the geometry of its own lines: with the run's box on
   // every item, an integral sign split off an equation read as starting
@@ -540,8 +665,13 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const segments: Segment[] = [];
   // At the top of a page, an unmarked first group before marked items is
   // the tail of the previous page's last item, not an item: emit it as a
-  // paragraph so the cross-page merge can finish that item.
-  if (i === 0 && items.length >= 2 && !BULLET_RE.test(items[0].text) && BULLET_RE.test(items[1].text)) {
+  // paragraph so the cross-page merge can finish that item. So is one
+  // under a display that opens lowercase, the tail of the sentence the
+  // display cut (the MML book's "i.e., the image is the span …" under
+  // (2.124), p. 65). A drawn bullet marks an item as a typed one does.
+  const opens = (item: (typeof items)[number]) => BULLET_RE.test(item.text) || drawn[run.indexOf(item.lines[0])];
+  const under = i > 0 && lines[i - 1].display && /^\p{Ll}/u.test(items[0].text);
+  if ((i === 0 || under) && items.length >= 2 && !opens(items[0]) && opens(items[1])) {
     const tail = items.shift()!;
     segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
   }
@@ -647,12 +777,27 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   const above = lines[i - 2];
   const apart = above === undefined || above.page !== caption.page || lineColumn(above) !== lineColumn(caption) || above.y - caption.y > caption.size * ctx.leading * 1.5;
   if (!apart && !caption.runs.some((r) => r.bold && r.start <= label - 1 && r.end >= label)) return null;
+  // A numbered line (algorithmic's "15:"): its number stands in a column
+  // of its own at the left, and its words start where its depth sets them.
+  // A line set three steps in holds a tab after its number, and read as
+  // two cells it ended the run; the depth is the words', not the number's
+  // (a number of two digits starts a digit left of one: lines 1–9 read a
+  // step deeper than 10–21). PDF benchmark finding: ieee-elixpo-caching's
+  // Algorithm 1 broke at its line 15 into paragraphs, and Algorithm 2 at
+  // its line 9.
+  const NUMBER_RE = /^\d{1,3}:$/;
+  const numbered = (l: Line) => l.cells.length === 2 && NUMBER_RE.test(l.cells[0].text.trim());
+  const wordsX = (l: Line) => {
+    const items = [...l.items].filter((it) => it.str.trim() !== "").sort((a, b) => a.x - b.x);
+    const first = items.findIndex((it) => !NUMBER_RE.test(it.str.trim()));
+    return first > 0 ? items[first].x : l.x;
+  };
   const run: Line[] = [line];
   for (let j = i + 1; j < lines.length; j++) {
     const next = lines[j];
     const prev = run[run.length - 1];
     const gap = prev.y - next.y;
-    if (runOf[j] !== -1 || next.cells.length !== 1 || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
+    if (runOf[j] !== -1 || (next.cells.length !== 1 && !numbered(next)) || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
     if (gap <= 0 || gap > size * ctx.leading * 1.6) break;
     run.push(next);
   }
@@ -661,14 +806,15 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   if (right > 0 && run.slice(0, -1).filter((l) => l.xEnd >= right - size * 1.5).length * 3 > run.length - 1) return null;
   const head = (l: Line) => ALGORITHM_HEAD_RE.test(l.text.trim());
   const levels: number[] = [];
-  for (const x of run.filter((l) => !head(l)).map((l) => l.x).sort((a, b) => a - b)) {
+  for (const x of run.filter((l) => !head(l)).map(wordsX).sort((a, b) => a - b)) {
     if (!levels.some((v) => Math.abs(v - x) <= size * 0.3)) levels.push(x);
   }
-  const depths = run.map((l) => (head(l) ? 0 : Math.max(0, levels.findIndex((v) => Math.abs(v - l.x) <= size * 0.3))));
+  const depths = run.map((l) => (head(l) ? 0 : Math.max(0, levels.findIndex((v) => Math.abs(v - wordsX(l)) <= size * 0.3))));
   const builder = new TextBuilder();
   run.forEach((l, k) => {
     const lead = "  ".repeat(depths[k]);
-    builder.append({ text: lead + l.text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
+    const text = numbered(l) ? l.text.replace(/\t/, " ") : l.text;
+    builder.append({ text: lead + text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
   });
   const edge = leftEdge(line, ctx);
   const list: Segment = {

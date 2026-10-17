@@ -1,0 +1,1876 @@
+{
+ "total": {
+  "score": 1,
+  "sheets": 1,
+  "text": 1,
+  "cells": 1,
+  "formats": 0.999,
+  "merges": 1,
+  "frozen": 1,
+  "lost": 31,
+  "dom": 0,
+  "errors": 0
+ },
+ "files": {
+  "poi-SampleSS": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-Formatting": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithVariousData": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithMoreVariousData": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-GeneralFormatTests": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-NumberFormatTests": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-DateFormatTests": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-ElapsedFormatTests": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-FormatConditionTests": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-FormatKM": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WidthsAndHeights": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-GroupTest": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-55640": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-AverageTaxRates": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-ExcelTables": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithTable": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-ExcelPivotTableSample": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-InlineStrings": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-59746_NoRowNums": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-1_NoIden": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-NewlineInFormulas": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-shared_formulas": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-sample": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-sample.strict": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithChart": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithThreeCharts": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-chart_sheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-60255_extra_drawingparts": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithDrawing": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-picture": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-49156": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-57171_57163_57165": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-WithTextBox": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-TwoSheetsOneHidden": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-56278": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-56702": {
+   "score": 0.998,
+   "text": 0.997,
+   "cells": 0.994,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 25,
+   "dom": 0
+  },
+  "poi-57523": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-58896": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-bug66675": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-CVLKRA-KYC_Download_File_Structure_V3.1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-FormulaEvalTestData_Copy": {
+   "score": 0.999,
+   "text": 1,
+   "cells": 1,
+   "formats": 0.994,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 1,
+   "dom": 0
+  },
+  "poi-bug62181": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-51585": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-64508": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-59106": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-54034": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "poi-invalid_cell_reference": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-cell-value": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-check-boolean": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-escape-unicode": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 1,
+   "dom": 0
+  },
+  "lo-freezePaneStartCell": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-hidden_sheets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-hyperlinks": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-sheet-names": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf105840_allRowsHidden": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf120301_xmlSpaceParsing": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf165180_date1904": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf169072_illegalDates": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf81939": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-too-many-cols-rows": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-universal-content": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-universal-content-strict": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-cell-multi-line": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-strike-through": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf82984_zip64XLSXImport": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf100154": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf123026_optimalRowHeight": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-Spill": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-threadedComment": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-external-refs": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-data-table_one-variable": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-empty": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-xf_default_values": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf76115": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf131575": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf129985": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf162963_TableWithTotalsEnabled": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf113271": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-test1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-test_multisheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-testmultiindex": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-times_1900": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-times_1904": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-blank": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-blank_with_header": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-chartsheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-trailing_blanks": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-test_types": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-testdateoverflow": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-test_decimal": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-df_header_oob": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-test_none_type": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-datetime": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-empty_row": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-formatted_inline_string": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-input-weird": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-junk-small": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-namespace": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-no_cell_ids": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-percentage": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-sheets_order": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-timeformat": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-twolettercolumns": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-utf8": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-variousdelim": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-xlsx2csv-test-file": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "x2c-sheets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "tablib-bad_dimensions": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "tablib-ragged": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-sheets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-ne_1033_data": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-latin1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-utf16-big": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-utf16-little": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-utf8-bom": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-utf8": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-dummy-tsv": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-mac-newlines": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 1,
+   "dom": 0
+  },
+  "csvkit-test-header-newline": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 1,
+   "dom": 0
+  },
+  "csvkit-null-byte": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-bad": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-empty": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-test-locale": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-ks-1033-data": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "csvkit-FY09-EDU-Recipients-by-State": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-sauron-shift-jis": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-utf16-ex": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-unicode-series": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-salaries": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-banklist": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-titanic": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "pd-air-quality-long": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-fdo48621-broken-quotes": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-numberformat": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf150452": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "lo-tdf48731": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "spectrum-comma-in-quotes": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "spectrum-escaped-quotes": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "spectrum-newlines-crlf": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "spectrum-quotes-and-newlines": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "spectrum-utf8": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "winequality-red": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "cleverscv-imdb": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "covid-countries-aggregated": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "unitos-book": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "unitos-charts": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "unitos-data": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "derived-imdb-excel-de": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "derived-imdb-excel-fr-utf8": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "derived-sauron-gb18030": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "derived-titanic-utf16le-tsv": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "derived-unicode-series-cp1252-tsv": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": null,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-long": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-wide": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-frozen-merged": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_216": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_188_3": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_194_2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_206": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_281": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_233": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-aaa": {
+   "score": 0.986,
+   "text": 0.987,
+   "cells": 0.99,
+   "formats": 0.941,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 2,
+   "dom": 0
+  },
+  "umya-google": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-libre": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_232": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-wps_comment": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_288": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_188_2": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "umya-issue_268": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-Ekaterinburg_IP_9": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-iris-google-doc": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-dates-1900-LibreOffice": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-deaths": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-datasets": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-geometry": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "readxl-types": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-Bibelbund": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-numbers1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "roo-simple_spreadsheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "excelize-Book1": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "excelize-MergeCell": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "agate-covid_19-iss": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "pyexcel-complex-merged-cells-sheet": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-merged-hidden-words": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": null,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-time-rounding": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
+  }
+ }
+}

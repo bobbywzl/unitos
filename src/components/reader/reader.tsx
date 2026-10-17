@@ -42,7 +42,7 @@ import { ConversionStrip, type ConversionInfo } from "@/components/reader/conver
 import { PageBlock, type PageMark } from "@/components/reader/page-block";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { DocumentTitle } from "@/components/reader/document-title";
-import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
+import { formatTime, transcriptParagraphs, type Speaker, type TranscriptLine } from "@/lib/video/types";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { DocsFrame } from "@/components/docs/frame";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
@@ -95,37 +95,6 @@ export type TranscriptVariant = {
   // The column's width: the player's, not the article's 720px.
   columnStyle?: React.CSSProperties;
 };
-
-// A paragraph closes when the speaker changes, at a clear speech gap, or once
-// it is long enough and the line before it finished a sentence. The hard cap
-// keeps a gapless monologue from becoming one wall.
-const PARAGRAPH_GAP_SECONDS = 2.5;
-const PARAGRAPH_BREAK_CHARS = 700;
-const PARAGRAPH_MAX_CHARS = 1400;
-
-export function transcriptParagraphs(transcript: TranscriptLine[]): TranscriptLine[][] {
-  const paragraphs: TranscriptLine[][] = [];
-  let open: TranscriptLine[] = [];
-  let chars = 0;
-  for (const line of transcript) {
-    const last = open[open.length - 1];
-    const breaks =
-      last !== undefined &&
-      (line.speaker !== last.speaker ||
-        line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
-        chars > PARAGRAPH_MAX_CHARS ||
-        (chars > PARAGRAPH_BREAK_CHARS && /[.!?。！？…”"]$/.test(last.text)));
-    if (breaks) {
-      paragraphs.push(open);
-      open = [];
-      chars = 0;
-    }
-    open.push(line);
-    chars += line.text.length;
-  }
-  if (open.length > 0) paragraphs.push(open);
-  return paragraphs;
-}
 
 // The transcript's lines under the player, in article form (SPEC.md §11):
 // no box and no inner scroll — the lines read as an article's paragraphs, at

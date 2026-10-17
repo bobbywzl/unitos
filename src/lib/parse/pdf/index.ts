@@ -1,9 +1,10 @@
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import { pageLines } from "@/lib/parse/pdf/columns";
-import { fitOcrItems } from "@/lib/parse/pdf/lines";
+import { fitOcrItems, placeMarks } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
+import { nameShape } from "@/lib/parse/pdf/faces";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
 import { ABSTRACT_RE, cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
@@ -22,10 +23,11 @@ import { assignHeadingLevels, centerLikeOthers } from "@/lib/parse/pdf/headings"
 import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
-import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
+import { firstPageOf, joinOnPage, mergeAcrossPages, notesAfterDisplays, shiftSpansInto } from "@/lib/parse/pdf/merge";
 import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
+import { embeddedGlyphNames } from "@/lib/parse/pdf/programs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
-import { segmentPage } from "@/lib/parse/pdf/segment";
+import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
 import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
@@ -95,6 +97,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const graphics: Graphic[][] = [];
   const flagsByFont = new Map<string, FontFlags>();
   const unnamedFonts = new Set<string>();
+  const realNames = new Map<string, string>();
+  let layerChars = 0;
 
   for (const pageNumber of read) {
     const keep = kept.has(pageNumber);
@@ -108,8 +112,19 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {
         try {
-          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
-          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
+          const font = page.commonObjs.get(id) as {
+            name?: string;
+            fontMatrix?: number[];
+            vertical?: boolean;
+            differences?: (string | null)[];
+            composite?: boolean;
+            isMonospace?: boolean;
+          } | null;
+          if (!font) return null;
+          // A coding font's glyph names (its ligatures, programs.ts): a
+          // fixed-pitch font whose codes are its glyph ids.
+          const glyphNames = font.composite && font.isMonospace && font.name ? (embeddedGlyphNames(data, font.name) ?? undefined) : undefined;
+          return { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences, glyphNames };
         } catch {
           return null;
         }
@@ -144,6 +159,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       (raw): raw is typeof raw & { str: string; fontName: string; transform: number[]; width: number } =>
         "str" in raw && typeof raw.str === "string" && raw.str.trim() !== "",
     );
+    if (keep) layerChars += textItems.reduce((n, raw) => n + raw.str.trim().length, 0);
     const glyphRuns = itemGlyphs(
       textItems.map((raw) => ({
         font: String(raw.fontName ?? ""),
@@ -155,6 +171,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       drawing.glyphs,
     );
     const runOf = new Map(textItems.map((raw, i) => [raw, glyphRuns[i]]));
+    // A space item stands where the page draws a space, unless TeX set the
+    // page: TeX draws none (columns.ts markSpaces).
+    const drawsSpaces = !isTexPage(drawing.glyphs);
     const glyphText = glyphTexts(drawing.glyphs);
     const flagsOf = (fontName: string): FontFlags => {
       let flags = flagsByFont.get(fontName);
@@ -168,6 +187,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         }
         flags = fontFlags(realName);
         flagsByFont.set(fontName, flags);
+        if (realName !== null) realNames.set(fontName, realName);
         if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
       }
       return flags;
@@ -178,6 +198,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       return uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2)?.href ?? null;
     };
     const items: Item[] = [];
+    const rotated: Item[] = [];
     // Text set in a vertical font on a page of horizontal text (a
     // chapter's tab at the page's edge, in a Japanese white paper) is no
     // line of the text: read as horizontal, its characters joined the body's
@@ -194,6 +215,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const key = `${Math.round(g.x)} ${Math.round(g.y)}`;
       untaken.set(key, [...(untaken.get(key) ?? []), k]);
     });
+    // An OCR layer stretches each word across to the scan's word: a word
+    // stretched a third wider than it is tall takes its height as its size.
+    // Taken across, a short word stretched wide read as large type (parse
+    // loop finding: NACA Report 515 sets "It" 15.3 pt across and 10 pt tall
+    // in a 10.3 pt line, and five lines of its body read as headings:
+    // "conditions. It is thought that the accurate determi-").
+    const scanned = isOcrLayer(drawing.glyphs);
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
       if (verticalShare < 0.25 && vertical(raw)) continue;
@@ -206,14 +234,27 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const drawn = runOf.get(raw) === undefined ? drawnRunAt(raw.str, t[4], t[5], drawing.glyphs, taken, untaken) : undefined;
       const fontName = drawn ? drawn[0].font : String(raw.fontName ?? "");
       const flags = flagsOf(fontName);
-      const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
+      const across = Math.hypot(t[0], t[1]);
+      const tall = Math.hypot(t[2], t[3]);
+      const size = (scanned && tall > 0 && across > tall * 1.3 ? tall : across || tall) || 10;
       // Text under a point both ways is not on the page for a reader: LaTeXiT
       // stores a formula's source as text at 3e-7 pt, and its glyph advance
       // made a code line's indent hundreds of millions of spaces (arXiv
       // 2006.11239 failed). An OCR layer squeezes words to fit (0.9 wide, 6
       // tall): those stay.
       if (Math.max(size, Math.hypot(t[2], t[3])) < 1) continue;
-      if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
+      // Rotated text (a margin watermark, an axis label) is no line of the
+      // page. A ruled table's head set aslant is its column heads: the item
+      // is kept aside, upright at its drawn box (uprightItem), and joins
+      // the table whose rules hold it (ruledTables). PDF parse loop finding:
+      // an IEEE paper's Table I lost its five heads rotated 60°, and its
+      // rows of ✓ and ✗ read under no column name.
+      if (Math.abs(t[1]) > size * 0.3) {
+        const fontName = String(raw.fontName ?? "");
+        const str = normalizeGlyphs(raw.str.replace(CONTROL_CHARS_RE, ""));
+        if (str.trim() !== "") rotated.push(uprightItem(str, t, raw.width, size, { ...flagsOf(fontName), href: null, font: fontName }));
+        continue;
+      }
       // A math glyph reads as its code names it, and so does a text glyph a
       // composite or an accent takes part in (≠ is a slash over "=").
       const glyphs = drawn ?? runOf.get(raw);
@@ -228,7 +269,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (!read) continue;
       // Control characters are not text: a chart glyph mapped to NUL broke the
       // save (Postgres rejects 0x00 in text).
-      const str = normalizeGlyphs(read.str.replace(CONTROL_CHARS_RE, ""));
+      const str = normalizeGlyphs(read.str.replace(CONTROL_CHARS_RE, ""), glyphs);
       if (str.length === 0) continue;
       // Word and Google Docs draw a font with no bold face in bold by
       // stroking its outline as well as filling it (text render mode 2):
@@ -254,6 +295,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
           href: hrefAt(part.x, y, part.w, size),
           font: fontName,
           glyphs: part.glyphs,
+          ...(drawsSpaces && part.str.trim() === "" ? { space: true as const } : {}),
         });
       }
     }
@@ -274,7 +316,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (!text || first.x < viewX1 || first.x > viewX2 || y < viewY1 || y > viewY2) continue;
       const flags = flagsOf(first.font);
       items.push({
-        str: normalizeGlyphs(text.str),
+        str: normalizeGlyphs(text.str, run),
         x: text.x,
         y,
         w: text.w,
@@ -303,6 +345,34 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         for (const it of items) if (it.font === font) it.mono = true;
       }
     }
+    // A named font whose name says no shape, and whose glyphs all advance
+    // the same, a narrow letter or mark (i, l, t, r, a stop) and a wide
+    // letter (n, e, m) alike, is monospace too: txfonts' and newtx's
+    // typewriter fonts are named txtt and t1xtt (parse loop finding: a
+    // statistics book's every R listing read as paragraphs, and its tables
+    // of fitted values as prose). Eight characters at least, so a subset
+    // of a few glyphs says nothing; a text font sets its digits at one
+    // width, so digits alone say nothing; a CJK face sets its Latin
+    // letters at one width too, and its name says its shape (faces.ts).
+    const widthsByFont = new Map<string, Map<string, number>>();
+    for (const it of items) {
+      if (!it.font || it.mono || unnamedFonts.has(it.font) || !it.glyphs || nameShape(realNames.get(it.font) ?? "") !== null) continue;
+      const widths = widthsByFont.get(it.font) ?? new Map<string, number>();
+      for (const g of it.glyphs) {
+        const ch = g.unicode.normalize("NFKC");
+        if (ch.trim().length !== 1 || g.w <= 0 || widths.has(ch)) continue;
+        widths.set(ch, g.w / g.size);
+      }
+      widthsByFont.set(it.font, widths);
+    }
+    for (const [font, widths] of widthsByFont) {
+      const chars = [...widths.keys()];
+      if (chars.length < 8 || !chars.some((c) => /[ijlftrsIJ.,;:'|!()[\]]/.test(c)) || !chars.some((c) => /[abdeghknopquvxyzmwABDEGHKNOPQUVXYZMW]/.test(c))) continue;
+      const m = median([...widths.values()]);
+      if ([...widths.values()].every((w) => Math.abs(w - m) <= m * 0.05)) {
+        for (const it of items) if (it.font === font) it.mono = true;
+      }
+    }
     // Each item's face and size and what the drawing marks on it: its
     // color, a highlight, an underline, a strikethrough (look.ts). An item
     // that looks two ways is cut where its look changes.
@@ -311,19 +381,55 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // whose advances need not span the word: a scanned book's words run a
     // third wider than their text, and the gaps between them read as a
     // table's cells (its prose read as tables, a quotation as rows).
-    const ocr = isOcrLayer(drawing.glyphs);
-    if (ocr) fitOcrItems(items);
+    const ocr = scanned;
+    if (ocr) fitOcrItems(items, drawing.glyphs);
+    // A scan's lone mark set three times the size of its words is a stroke
+    // of a drawing the OCR read as a character: NACA Report 515 p. 10 reads
+    // a contour plot's curve as a 30 pt "(" between two columns, and its
+    // size made the captions under the plots one row across the gutter.
+    if (ocr) {
+      const size = median(items.filter((i) => /\p{L}{2}/u.test(i.str)).map((i) => i.size));
+      for (let k = items.length - 1; k >= 0; k--) if (/^[^\p{L}\p{N}]$/u.test(items[k].str.trim()) && items[k].size >= size * 3) items.splice(k, 1);
+    }
+    // The same words drawn twice at one place and size read once, whatever
+    // font each copy names: InDesign draws a running head set over a photo
+    // a second time over itself, in a second copy of its font (parse loop
+    // finding: The MagPi's "Project showcase" and "Odyssey Lights" read
+    // "Project showcaseProject showcase", and the doubled head never
+    // matched the other pages' heads, so it stayed in the text as a
+    // heading).
+    // The copy drawn last reads, in its look: it stands over the other. The
+    // MagPi's p. 44 draws its head twice, the second copy in white over its
+    // photo; read in the first copy's color, the head made the photo hold
+    // the page's text, a background with no figure.
+    const drawnAt = new Map<string, Item[]>();
+    for (let k = 0; k < items.length; k++) {
+      const it = items[k];
+      if (it.str.trim() === "") continue;
+      const key = `${it.str}\u0000${it.size.toFixed(2)}`;
+      const same = drawnAt.get(key) ?? [];
+      const under = same.findIndex((o) => Math.abs(o.x - it.x) <= it.size * 0.05 && Math.abs(o.y - it.y) <= it.size * 0.05);
+      if (under >= 0) {
+        items.splice(items.indexOf(same[under]), 1);
+        same[under] = it;
+        k--;
+        continue;
+      }
+      same.push(it);
+      drawnAt.set(key, same);
+    }
+    placeMarks(items);
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
     // own coordinates, every crop sat 4.4% too high and 6.2% too far right,
     // and 19 lines at figures' feet were in neither the text nor a crop.
-    if (viewX1 !== 0 || viewY1 !== 0) toPageBox(items, drawing, viewX1, viewY1);
+    if (viewX1 !== 0 || viewY1 !== 0) toPageBox([...items, ...rotated], drawing, viewX1, viewY1);
     // The tables the page's rules draw leave the text flow before the column
     // split, and before the graphics: a table's shaded cells never read as a
     // drawing, its words never as a drawing's labels. Each table comes back
     // as one line at its place in the reading order.
-    const tables = ruledTables(items, drawing, viewport.width, viewport.height);
+    const tables = ruledTables(items, drawing, viewport.width, viewport.height, rotated);
     const tableItems = new Set(tables.flatMap((t) => t.items));
     const text = items.filter((i) => !tableItems.has(i));
     const inTable = (b: Box) => tables.some((t) => b.x1 >= t.box.x1 - 2 && b.x2 <= t.box.x2 + 2 && b.y1 >= t.box.y1 - 2 && b.y2 <= t.box.y2 + 2);
@@ -332,7 +438,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const inGraphics = new Set(found.flatMap((graphic) => [...graphic.labels, ...graphic.caption]));
     // A kept page's lines count their page among the kept pages; a page read
     // for the furniture's evidence alone counts none.
-    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r))));
+    // The frames the page draws (a listing's box): a third of the page wide
+    // and a line tall at the least.
+    const frames = drawing.paths.filter((b) => !b.clip && !inTable(b) && b.x2 - b.x1 >= viewport.width * 0.3 && b.y2 - b.y1 >= 10);
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r)), frames, drawing.rules.filter((r) => r.dir === "v" && !inTable(r)), drawing.fills.filter((f) => !inTable(f))));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
     resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
@@ -446,8 +555,17 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (isWrappedRowLine(l, lines)) continue;
       labelXs.push(bodyX);
     }
+    // A list of terms (a glossary, a list of symbols): term lines (a short
+    // first cell at the left edge, its meaning beside it) one right under
+    // another, most entries one line. It is a table of two columns, as the
+    // same list is on a page whose edge a page number moved (DTIC
+    // ADA033425's list of symbols, pp. 13 and 14). A timeline's entries
+    // carry a body under each label.
+    const term = (l: Line | undefined) => l !== undefined && l.cells.length === 2 && l.x <= pageMinX + 12 && l.cells[0].text.length <= 12;
+    const terms = lines.filter(term).length;
+    const listed = terms >= 6 && lines.filter((l, k) => term(l) && term(lines[k + 1])).length * 2 >= terms;
     let labelColumn: number | null = null;
-    if (labelXs.length >= 2) {
+    if (labelXs.length >= 2 && !listed) {
       labelColumn = median(labelXs);
       columnLeft = labelColumn;
     }
@@ -484,17 +602,35 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
   segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
+  markPullQuoteHeadings(segments);
+  // A slide deck: every page wider than tall, two or more of them (a slide
+  // program's 960 × 540, beamer's 364 × 272).
+  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
+  // A deck's frame printed on several pages reads once (collapseOverlaySteps).
+  if (slides) segments = collapseOverlaySteps(segments, graphics, pageDrawings);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
   // Inline-math debris: a sum limit or exponent too far from its base line
-  // to join it reads as a paragraph of one or two math glyphs.
+  // to join it reads as a paragraph of one or two math glyphs. The numbers
+  // right after a listing, on its page, are the output it typesets, no
+  // ticks (columns.ts listingPair). A number of three parts or more
+  // ("1.3.150") is a section's or a sheet's, no tick (parse loop finding:
+  // DTIC's Helicopter Design Datcom lost the 56 sheet numbers of its
+  // contents, each on a line of its own).
+  const output = new Set<Segment>();
+  segments.forEach((s, k) => {
+    const prev = segments[k - 1];
+    if (prev && prev.page === s.page && (prev.type === "CODE" || output.has(prev)) && s.type === "PARAGRAPH" && /^[\d\s.,%()/−–-]+$/.test(s.text)) output.add(s);
+  });
   segments = segments.filter(
     (s) =>
       !(
         s.type === "PARAGRAPH" &&
+        !output.has(s) &&
         !holdsFill(s) &&
         s.text.length <= 14 &&
         /^[\d\s.,%−–-]+$/.test(s.text) &&
-        !/\d\.$/.test(s.text.trim())
+        !/\d\.$/.test(s.text.trim()) &&
+        !/^\d+(?:\.\d+){2,}$/.test(s.text.trim())
       ) &&
       !(
         s.type === "PARAGRAPH" &&
@@ -505,7 +641,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
 
   // A paragraph's halves join, on its page (a column break, a float
   // between) and across pages, but never across pages the choice left out.
-  segments = runsOfPages(joinOnPage(segments), chosen).flatMap(mergeAcrossPages);
+  segments = runsOfPages(notesAfterDisplays(joinOnPage(segments)), chosen).flatMap(mergeAcrossPages);
   // A table's caption is the table's, once its rows joined across pages.
   segments = attachTableCaptions(segments);
 
@@ -531,10 +667,6 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (segments[0].box && segments[1].box) segments[0].box = unionBox(segments[0].box, segments[1].box);
     segments.splice(1, 1);
   }
-
-  // A slide deck: every page wider than tall, two or more of them (a slide
-  // program's 960 × 540, beamer's 364 × 272).
-  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
 
   // The title, on the first page with words that is no library's notice
   // (a scan's archive notice gave its title), read on a scan's page only in
@@ -622,6 +754,19 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   segments = placeFootnotes(segments, footnotes, front);
   resolveContentsLinks(segments);
 
+  // A scan's heading holds no tab: the typist's spaces between a number and
+  // its title read as a gap between two cells, and the gap as a tab stop
+  // (parse loop finding: the DTIC Datcom's "2.\tANGLE-OF-ATTACK"). A
+  // typeset heading keeps its tab: Word sets a number and its title so.
+  for (const s of segments) {
+    if (s.type !== "HEADING" || !pageFlags[firstPageOf(s)]?.ocr || !s.text.includes("\t")) continue;
+    s.text = s.text.replace(/\t/g, " ");
+    s.runs = s.runs?.map((run) => {
+      const copy = { ...run };
+      delete copy.tab;
+      return copy;
+    });
+  }
   const blocks: ParsedBlock[] = segments.map((s) => {
     const { styles, links, font } = spansFromRuns(s.text, s.runs, {
       skipBold: s.type === "HEADING",
@@ -668,6 +813,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   if (pageWidths.length > 0) parsed.pageSize = { width: points(pageWidths[0]), height: points(pageHeights[0]) };
   const labels = pageLabelsOf(await pdf.getPageLabels().catch(() => null), pdf.numPages);
   if (labels) parsed.pageLabels = labels;
+  parsed.layerChars = layerChars;
   // The page's look: the body's (Normal text) and the title's.
   const bodyFont = takeBodyFont(blocks);
   if (bodyFont) parsed.bodyFont = bodyFont;
@@ -682,7 +828,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "layerChars" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
 
 // The drawn glyphs no item took that start at a text item's origin, in one
 // font on its baseline, while they spell the item's letters (spaces aside);
@@ -767,6 +913,19 @@ function toPageBox(items: Item[], drawing: PageDrawing, cornerX: number, cornerY
   }
 }
 
+// A rotated text item set upright: at the box its glyphs draw on the page
+// (the string run along the item's direction, the glyphs' ascent and
+// descent across it), its baseline the origin's. A head rotated 90° stands
+// in a box its size wide; one rotated 60° leans across half its length.
+function uprightItem(str: string, t: number[], width: number, size: number, flags: Omit<Item, "str" | "x" | "y" | "w" | "size" | "math">): Item {
+  const [a, b, c, d, x, y] = t;
+  const across = Math.hypot(c, d) || size;
+  const corners = [0, 1].flatMap((along) => [-0.2, 0.8].map((up) => [x + (a / size) * along * width + (c / across) * up * size, y + (b / size) * along * width + (d / across) * up * size]));
+  const x1 = Math.min(...corners.map((p) => p[0]));
+  const x2 = Math.max(...corners.map((p) => p[0]));
+  return { ...flags, str, x: x1, y, w: x2 - x1, size, math: false };
+}
+
 // The pages the blocks come from: the chosen pages the PDF holds, in order,
 // else every page.
 function chosenPages(pageCount: number, pages: number[] | undefined): number[] {
@@ -785,6 +944,62 @@ function pagesToRead(chosen: number[], pageCount: number): number[] {
     .filter((p) => !kept.has(p))
     .sort((a, b) => distance(a) - distance(b) || a - b);
   return [...chosen, ...others.slice(0, FURNITURE_PAGES - chosen.length)].sort((a, b) => a - b);
+}
+
+// A slide deck's frame printed on several pages, read once. Beamer prints
+// a frame once per overlay step, each page showing what the page before it
+// shows and more (a list item per click, an alert's color per click), and
+// a frame that continues sets its title again over the next page. A reader
+// wants the frame once, whole:
+// - a page whose segments open the next page's, in order, each the same
+//   kind with the same words (a figure the same region, the page's drawn
+//   labels and images the same), is an overlay step of that page, and
+//   drops: the next page holds all of it (parse loop finding: a beamer
+//   deck's alerts frame, printed three times, read as three frames, and
+//   the bench counted its lines as furniture leaking seven times);
+// - a page that opens with the heading the last kept page opened with
+//   continues that page's frame ("one figure per click", a frame that
+//   breaks), and drops the heading.
+// The pages the kept segments stand on stay their own: a figure's region
+// crops its own page.
+function collapseOverlaySteps(segments: Segment[], graphics: Graphic[][], drawings: PageDrawing[]): Segment[] {
+  const byPage = new Map<number, Segment[]>();
+  for (const s of segments) byPage.set(s.page, [...(byPage.get(s.page) ?? []), s]);
+  const pages = [...byPage.keys()].sort((a, b) => a - b);
+  const squash = (t: string) => t.replace(/\s+/g, " ").trim();
+  // What the page draws beyond its words: its graphics' labels and
+  // captions, and its images' boxes. A figure that changes under one title
+  // changes these (a chart's axis labels), and the pages are two frames.
+  const drawnOf = (p: number) => {
+    const labels = (graphics[p] ?? []).flatMap((g) => [...g.labels, ...g.caption].map((i) => i.str.trim())).filter(Boolean);
+    const images = (drawings[p]?.images ?? []).map((b) => [b.x1, b.y1, b.x2, b.y2].map((v) => Math.round(v)).join(","));
+    return `${labels.join(" ")}|${images.join(";")}`;
+  };
+  const keyOf = (s: Segment) => {
+    // The region's points in percent of the page, to half a percent.
+    const region = s.region ? JSON.stringify(s.region, (_, v: unknown) => (typeof v === "number" ? Math.round(v * 2) / 2 : v)) : "";
+    return `${s.type}|${squash(s.text)}|${region}`;
+  };
+  const keys = new Map<number, string[]>();
+  for (const p of pages) keys.set(p, [drawnOf(p), ...(byPage.get(p) ?? []).map(keyOf)]);
+  const dropped = new Set<Segment>();
+  const stepPages = new Set<number>();
+  for (let k = 0; k + 1 < pages.length; k++) {
+    const [p, q] = [pages[k], pages[k + 1]];
+    if (q !== p + 1) continue;
+    const [a, b] = [keys.get(p)!, keys.get(q)!];
+    if (a.length < 2 || a.length > b.length || !a.every((key, i) => key === b[i])) continue;
+    stepPages.add(p);
+    for (const s of byPage.get(p) ?? []) dropped.add(s);
+  }
+  let last: Segment | undefined;
+  for (const p of pages) {
+    if (stepPages.has(p)) continue;
+    const first = byPage.get(p)![0];
+    if (first.type === "HEADING" && last?.type === "HEADING" && squash(first.text) === squash(last.text) && Math.abs((first.rawSize ?? 0) - (last.rawSize ?? 0)) < 0.5) dropped.add(first);
+    last = first;
+  }
+  return dropped.size > 0 ? segments.filter((s) => !dropped.has(s)) : segments;
 }
 
 // The segments in runs of pages that follow one another in the PDF: a

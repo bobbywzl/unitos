@@ -2,8 +2,10 @@
 // returns and every consumer reads. One definition here, so the rungs, the
 // browser reader, and the job import it without importing each other.
 // speaker: the voice's id ("S1") when the rung told the voices apart
-// (Deepgram does); unset when it did not, and the speakers pass runs after.
-export type TranscriptSegment = { start: number; end: number; text: string; speaker?: string };
+// (Deepgram does, and a pasted WebVTT file's voice spans do); unset when it
+// did not, and the speakers pass runs after. speakerName: the voice's name
+// when the source itself gives it (<v Name>).
+export type TranscriptSegment = { start: number; end: number; text: string; speaker?: string; speakerName?: string };
 
 /** The segments inside the imported part of the recording (SPEC.md §15):
     a segment that overlaps the range is kept and cut to it; the rest are
@@ -60,9 +62,10 @@ export function groupSegments(segments: TranscriptSegment[]): TranscriptSegment[
       lines.push(open);
       open = null;
     }
-    open = open
-      ? { start: open.start, end: segment.end, text: `${open.text} ${segment.text}`, speaker: open.speaker }
+    const merged: TranscriptSegment = open
+      ? { ...open, end: segment.end, text: `${open.text} ${segment.text}` }
       : { ...segment };
+    open = merged;
   }
   if (open) lines.push(open);
   return lines;

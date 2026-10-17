@@ -238,6 +238,38 @@ export function activeLineAt<T extends { startTime: number; endTime: number }>(
   return line;
 }
 
+// The transcript pane's paragraphs (SPEC.md §11, reader.tsx TranscriptBody).
+// A paragraph closes when the speaker changes, at a clear speech gap, or once
+// it is long enough and the line before it finished a sentence. The hard cap
+// keeps a gapless monologue from becoming one wall.
+const PARAGRAPH_GAP_SECONDS = 2.5;
+const PARAGRAPH_BREAK_CHARS = 700;
+const PARAGRAPH_MAX_CHARS = 1400;
+
+export function transcriptParagraphs(transcript: TranscriptLine[]): TranscriptLine[][] {
+  const paragraphs: TranscriptLine[][] = [];
+  let open: TranscriptLine[] = [];
+  let chars = 0;
+  for (const line of transcript) {
+    const last = open[open.length - 1];
+    const breaks =
+      last !== undefined &&
+      (line.speaker !== last.speaker ||
+        line.startTime - last.endTime > PARAGRAPH_GAP_SECONDS ||
+        chars > PARAGRAPH_MAX_CHARS ||
+        (chars > PARAGRAPH_BREAK_CHARS && /[.!?。！？…”"]$/.test(last.text)));
+    if (breaks) {
+      paragraphs.push(open);
+      open = [];
+      chars = 0;
+    }
+    open.push(line);
+    chars += line.text.length;
+  }
+  if (open.length > 0) paragraphs.push(open);
+  return paragraphs;
+}
+
 /** One FIND match, resolved server-side from the model's block ids. */
 export type VideoFindMatch = {
   startTime: number;

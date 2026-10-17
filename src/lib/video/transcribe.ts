@@ -246,6 +246,14 @@ const whisperResponseSchema = z.object({
     .min(1),
 });
 
+/** The segments of a Whisper answer (verbose_json). Throws when the answer
+    holds no timed segments. */
+export function whisperSegments(body: unknown): TranscriptSegment[] {
+  const parsed = whisperResponseSchema.safeParse(body);
+  if (!parsed.success) throw new Error("no timed segments returned");
+  return normalizeSegments(parsed.data.segments);
+}
+
 const EXTENSION: Record<string, string> = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
@@ -332,9 +340,7 @@ async function whisperCall(
     const detail = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
     throw new Error(detail?.error?.message ?? `request failed (${res.status})`);
   }
-  const parsed = whisperResponseSchema.safeParse(await res.json());
-  if (!parsed.success) throw new Error("no timed segments returned");
-  const segments = normalizeSegments(parsed.data.segments);
+  const segments = whisperSegments(await res.json());
   // Whisper bills per minute; tokens do not apply.
   const minutes = (segments.at(-1)?.end ?? 0) / 60;
   recordUsage(

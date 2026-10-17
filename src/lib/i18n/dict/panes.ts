@@ -472,6 +472,10 @@ const en = {
   uploadBlockDocumentPdf: "Too long for the page editor, so it opens in the reader instead. Add it again and choose its pages.",
   // The pages of a single add did not convert to text (SPEC.md §16).
   uploadConvertFailed: "The pages did not convert to text. {reason} Retry under the pages tries again.",
+  // The add made a new copy beside an edited import of the same file or
+  // page (SPEC.md §30); {title} opens that import.
+  uploadSameFile: "This project already has this file as {title}, with edits. This is a new copy.",
+  uploadSamePage: "This project already has this page as {title}, with edits. This is a new copy.",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
   reparseMediaLost: "Not loaded from the page after the re-parse: {names}.",
@@ -903,6 +907,8 @@ const zh: Record<keyof typeof en, string> = {
   uploadBlockDocument: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。",
   uploadBlockDocumentPdf: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。重新添加，并在页码中选择要导入的页。",
   uploadConvertFailed: "页面没有转换为文本。{reason} 点页面下方的重试再试一次。",
+  uploadSameFile: "这个项目已有这个文件：{title}，包含编辑。这是一个新副本。",
+  uploadSamePage: "这个项目已有这个页面：{title}，包含编辑。这是一个新副本。",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
   reparseMediaLost: "重新解析后，页面上没有加载：{names}。",
   reparseRenderFailed: "浏览器渲染失败：{reason}",
