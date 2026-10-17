@@ -18,9 +18,6 @@ const en = {
   copyFailed: "Could not copy. Your browser blocked it.",
   define: "Define",
   assistant: "Assistant",
-  // The Assistant row while the reader edits a blank document or an import:
-  // it opens the bar that changes the words (SPEC.md §29).
-  editWithAssistant: "Edit with the assistant",
   explain: "Explain",
   simplify: "Simplify",
   visualize: "Visualize",
@@ -90,7 +87,7 @@ const en = {
   commandBulleted: "Turn into a bulleted list",
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
-  barPlaceholder: "Tell the assistant what to do with the selected words…",
+  barPlaceholder: "Ask about the selected words, or tell the assistant how to change them…",
   // Words from a figure (SPEC.md §7): the bar on an image.
   figureBarPlaceholder: "Ask about the image, or say what to put under it…",
   figureText: "The text",
@@ -342,7 +339,6 @@ const zh: Record<keyof typeof en, string> = {
   copyFailed: "无法复制。浏览器阻止了此操作。",
   define: "定义",
   assistant: "助手",
-  editWithAssistant: "用助手修改",
   explain: "解释",
   simplify: "简化",
   visualize: "可视化",
@@ -401,7 +397,7 @@ const zh: Record<keyof typeof en, string> = {
   commandBulleted: "转为项目符号列表",
   commandFix: "修正拼写和语法",
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
-  barPlaceholder: "告诉助手要对选中内容做什么…",
+  barPlaceholder: "询问选中内容，或告诉助手如何修改它…",
   figureBarPlaceholder: "询问这张图片，或说明要在它下方放什么…",
   figureText: "文字",
   figureKeyPoints: "要点",

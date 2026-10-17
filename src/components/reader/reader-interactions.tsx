@@ -5424,7 +5424,8 @@ export function ReaderInteractions({
   }, [pageHeld, docsShift]);
   // The page editor's words changed: the toolbar closes. A switch of mode
   // changes no word: the toolbar stays on the selection, with the new
-  // mode's rows (Edit with the assistant in Editing, Assistant in Viewing).
+  // mode's rows (Assistant opens the box at the words in Editing, the
+  // selection chat in Viewing).
   const toolboxDocRef = useRef<unknown>(null);
   useEffect(() => {
     toolboxDocRef.current = popover ? (pageEditorIn(containerRef.current)?.state.doc ?? null) : null;
@@ -10055,8 +10056,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const cardIcon = coarse ? "size-9" : "size-6";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
   // a blank document or an import, for a reader who can edit it, out of
-  // Viewing mode. A figure has no words to change: its Assistant keeps the
-  // selection chat.
+  // Viewing mode. It answers a question and changes the words, so its row
+  // still reads Assistant. A figure has no words to change: its Assistant
+  // keeps the selection chat.
   const barOffered =
     popover !== null && !popover.figure && blankDocument && pageEditorIn(containerRef.current)?.isEditable === true;
   // The open popover's content kind and its toolbar (SPEC.md §6).
@@ -11840,7 +11842,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             }${aiDim}`}
           >
             <SparkleIcon size={coarse ? 14 : 12} />
-            {t(barOffered ? "reader.editWithAssistant" : "reader.assistant")}
+            {t("reader.assistant")}
           </button>
           )}
           <Collapse open={submenu === "ai"}>
