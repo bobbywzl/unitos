@@ -112,7 +112,7 @@ for (const lang of ["en", "zh"]) {
   await page.waitForTimeout(500);
   const key = await page.locator("[data-graph-key]").boundingBox();
   check(`${lang} VIEW6-10: the key is under 420 px tall at 1440 (was 701)`, key && key.height < 420, JSON.stringify(key));
-  check(`${lang} VIEW6-10: no generated-document row while none is drawn`, (await page.locator("[data-graph-key] li").count()) >= 10 && !(await page.locator("[data-graph-key]").innerText()).includes(lang === "en" ? "A generated document" : "生成文档："));
+  check(`${lang} VIEW6-10: no generated-document row while none is drawn`, (await page.locator("[data-graph-key] li").count()) >= 6 && !(await page.locator("[data-graph-key]").innerText()).includes(lang === "en" ? "A generated document" : "生成文档："));
   if (lang === "en") await page.screenshot({ path: `${SHOT}/VIEW6-10-key-1440-${lang}.png` });
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);

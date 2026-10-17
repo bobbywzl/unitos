@@ -152,8 +152,8 @@ if ((!ONLY || ONLY === "02") && after) {
   check(sql(`SELECT count(*) FROM "DocLink" WHERE id='rev3-l2'`) === "1", "REV3-02 the link row stays");
   check(sql(`SELECT count(*) FROM "Reply" WHERE "docLinkId"='rev3-l2'`) === "2", "REV3-02 B's and C's replies stay");
   check(
-    sql(`SELECT string_agg("notebookId", ',' ORDER BY "notebookId") FROM "DocLinkHidden" WHERE "docLinkId"='rev3-l2'`) === "rev3-p,rev3-q",
-    "REV3-02 hidden in A's P and Q only",
+    sql(`SELECT string_agg("notebookId", ',' ORDER BY "notebookId") FROM "DocLinkHidden" WHERE "docLinkId"='rev3-l2'`) === "rev3-p",
+    "REV3-02 hidden in P only, the project Remove was pressed in (SPEC.md §13)",
   );
   check((await page.locator("text=B: my reply, written in my project X").count()) === 0, "REV3-02 the link left A's Annotations tab");
   await shot(page, "REV3-02-removed");

@@ -2,7 +2,7 @@
 
 import { SECTION_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
-import { graphNavigate } from "@/components/graph/graph-history";
+import { graphNavigate, graphNavigateSamePage } from "@/components/graph/graph-history";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Edge as FlowEdge, EdgeProps } from "reactflow";
@@ -209,14 +209,14 @@ export function GraphNotesProvider({
       if (first) graphNavigate(router, `/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
       else if (note?.documentId && titleOf.has(note.documentId)) graphNavigate(router, `/n/${notebookId}?doc=${note.documentId}`);
       else {
-        // A note with no document (WALK3-05): the page stays, a new entry
-        // without the graph is pushed, and Back opens the graph again, as
-        // after a note with a source.
+        // A note with no document (WALK3-05): the page stays, the address
+        // without the graph takes the graph's entry's place, and Back opens
+        // the graph again, as after a note with a source.
         const url = withoutGraphParams(new URL(window.location.href));
         url.searchParams.delete("graph");
         // [ui5] WALK5-05: only the graph's parameters leave the URL, so the
-        // URL moves now, with no server round trip (Next syncs a native push).
-        window.history.pushState(null, "", `${url.pathname}${url.search}`);
+        // URL moves now, with no server round trip.
+        graphNavigateSamePage(`${url.pathname}${url.search}`);
       }
       (onNavigate ?? onClose)();
       // The tray sits under the graph: it opens on the note once the graph is gone.

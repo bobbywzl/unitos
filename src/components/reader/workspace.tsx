@@ -196,6 +196,8 @@ export function Workspace({
   // The graph lives in the URL (`graph=1`, SPEC.md §13); its state is here,
   // above the sync, which waits while it is open (COST10-04).
   const [graphOpen, setGraphOpen] = useState(false);
+  // graphOpen for the popstate listener below, which is registered once.
+  const graphOpenRef = useRef(false);
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing). [cost10]
   // While the graph is open the poll reads the notes alone and the refresh
@@ -442,6 +444,7 @@ export function Workspace({
   // A graph opened from the URL or Back: the chunk in the same tick as the
   // loader's data fetch.
   useEffect(() => {
+    graphOpenRef.current = graphOpen;
     if (graphOpen) preloadGraphView();
   }, [graphOpen]);
   // M (map) opens the graph from anywhere in the workspace (WALK3-06): the
@@ -493,6 +496,11 @@ export function Workspace({
       setGraphOpen(true);
     }
     const onPop = () => {
+      // The graph's own entry popped (graph-history.ts: Back, the close
+      // button, Escape) with graph=1 still in the address: the overlay closes
+      // the graph through closeGraph, which reads graphFromNotes and
+      // graphPushed to find the entry before the graph (WALK4-06).
+      if (graphInUrl() && graphOpenRef.current) return;
       graphPushed.current = false;
       graphFromNotes.current = false;
       setGraphFocus(null);
@@ -1321,7 +1329,9 @@ export function Workspace({
               className={`${moreOpen ? "menu-in flex" : "hidden"} absolute right-0 bottom-full z-40 mb-2.5 w-52 flex-col rounded-2xl bg-card p-1.5 shadow-float`}
             >
               <div data-reader-view-slot className="mb-1 flex flex-col border-b border-line pb-1 empty:hidden" />
-              <button data-more-row onClick={() => setGraphOpen(true)} data-track="more:graph" className={MORE_ROW}>
+              {/* openGraph, as the header's button: the graph opens on the link the reader
+                  arrived through (?link=, VIEW3-09) and gets its graph=1 entry. */}
+              <button data-more-row onClick={() => openGraph()} data-track="more:graph" className={MORE_ROW}>
                 <GraphIcon size={15} />
                 {t("panes.graph")}
               </button>

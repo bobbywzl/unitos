@@ -54,3 +54,15 @@ export function graphNavigate(router: Router, href: string): void {
     router.replace(href);
   } else router.push(href);
 }
+
+/** Open an address of the same page from the graph (the graph's parameters
+    taken off the URL): it takes the graph's entry's place with no server
+    round trip (Next syncs a native replace), so Back opens the graph again.
+    A page that was never pushed onto the graph's entry would be popped by
+    the cleanup above instead. */
+export function graphNavigateSamePage(href: string): void {
+  if (graphEntry) {
+    graphEntry = false;
+    window.history.replaceState(window.history.state, "", href);
+  } else window.history.pushState(window.history.state, "", href);
+}

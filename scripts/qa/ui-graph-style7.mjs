@@ -274,10 +274,9 @@ await graph();
     const sb = await box(save);
     check("WALK7-10: Save as note meets the floor", !!sb && sb.height >= floor, `${sb?.width}x${sb?.height}`);
     // The thumbs are the reader's rating buttons (rating-buttons.tsx, pointer-coarse:p-2.5): about 33 px on a touch screen.
-    const thumbFloor = touch ? 32 : 24;
     const up = await box(page.locator('[data-track="rate:stitch:up"]'));
     const down = await box(page.locator('[data-track="rate:stitch:down"]'));
-    check("WALK7-10: the rating thumbs meet the floor", !!up && !!down && up.height >= thumbFloor && down.height >= thumbFloor && up.x + up.width <= down.x + 0.5, `${up?.width}x${up?.height} / ${down?.width}x${down?.height}`);
+    check("WALK7-10: the rating thumbs meet the floor", !!up && !!down && up.height >= floor && down.height >= floor && up.x + up.width <= down.x + 0.5, `${up?.width}x${up?.height} / ${down?.width}x${down?.height}`);
     await shot("WALK7-10-stitch");
   }
 }

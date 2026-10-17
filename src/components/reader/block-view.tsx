@@ -27,6 +27,7 @@ import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
+import { sourceIdsAttr } from "@/lib/source-mark";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass, type TextStyle } from "@/lib/text-style";
 
@@ -380,6 +381,8 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     // The notes and annotations on these words: the one the mark paints, and
     // every one a click can open (table-marks.ts markStack).
     const { anchors, anchor, stack } = markStack(covering);
+    // Every other anchor over the words rides along, so a jump to any of them finds the words (lib/source-mark.ts).
+    const sourceIds = sourceIdsAttr(anchors);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
@@ -405,6 +408,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={linkTip || undefined}
           // A drag that starts on a link selects its words, as a drag inside
           // any mark does (SPEC.md §6): the link is not dragged away, and the
@@ -472,6 +476,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#reference-${citation.referenceId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={citation.referenceText}
           onClick={(e) => {
             e.preventDefault();
@@ -494,6 +499,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#block-${toc.targetBlockId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={t("panes.jumpToSection")}
           onClick={(e) => {
             e.preventDefault();
@@ -518,6 +524,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           target="_blank"
           rel="noopener noreferrer"
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           className={`weblink-mark${editedClass}`}
         >
           {inner}

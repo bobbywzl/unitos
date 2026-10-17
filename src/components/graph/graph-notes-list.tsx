@@ -2,8 +2,10 @@
 
 import { ACTION, ACTION_ACCEPT, CLOSE, LIST_HEAD, SECTION_HEAD, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { GraphEdge } from "@/lib/types";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { useCollab } from "@/components/collab/collab-context";
 import { NotesIcon } from "@/components/icons";
@@ -100,6 +102,7 @@ export function GraphNotesList({
 }) {
   const t = useT();
   const ctx = useGraphNotes();
+  const router = useRouter();
   const { pinnedPair } = useGraphNotesLit();
   // The open note survives a trip to a document and Back (WALK2-07); the
   // note Show on graph opened the list on opens read.
@@ -388,6 +391,14 @@ export function GraphNotesList({
             <span aria-hidden>·</span>
             <Link
               href={`/n/${ctx.notebookId}/notes`}
+              // The page takes the graph's entry's place (graph-history.ts): the Link's own
+              // push would leave the entry under the page, and the graph's cleanup would pop
+              // the page off again.
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                graphNavigate(router, `/n/${ctx.notebookId}/notes`);
+              }}
               data-track="graph-notes-full-page"
               className={`${TEXT_HIT} font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline`}
             >
