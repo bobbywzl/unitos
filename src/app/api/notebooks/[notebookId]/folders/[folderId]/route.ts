@@ -74,21 +74,76 @@ export async function PATCH(
 }
 
 // Delete a folder. What it holds — documents and folders — moves up one
-// level, into the folder's parent or the project itself, and lists first
-// there under Custom order; nothing leaves the project.
+// level, into the folder's parent or the project itself; nothing leaves the
+// project. The body may name `order`: the parent's list as the reader saw it
+// under Custom order, with the folder's rows in the folder's place, in their
+// own order (SPEC.md §6). Each named row of the parent's list or the
+// folder's list takes its index as its position; a row not named, or every
+// row when no order comes, lists first there under Custom order. Only rows
+// of this project change.
+const deleteSchema = z.object({
+  order: z
+    .array(z.object({ kind: z.enum(["document", "folder"]), id: z.string().min(1) }))
+    .max(2000)
+    .optional(),
+});
+
 export async function DELETE(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ notebookId: string; folderId: string }> },
 ) {
   const t = await serverT();
   const { notebookId, folderId } = await ctx.params;
   const access = await notebookAccess(notebookId, "editor");
   if (access instanceof NextResponse) return access;
+  // An empty body is the delete with no order (before 2026-10-09 the client
+  // sent none).
+  const text = await req.text().catch(() => "");
+  let order: { kind: "document" | "folder"; id: string }[] = [];
+  if (text.trim()) {
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ error: t("api.bodyNotJson") }, { status: 400 });
+    }
+    const parsed = deleteSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({ error: t("api.validationFailed"), issues: parsed.error.issues }, { status: 400 });
+    }
+    order = parsed.data.order ?? [];
+  }
   const folder = await db.documentFolder.findFirst({
     where: { id: folderId, notebookId },
     select: { id: true, parentId: true },
   });
   if (!folder) return NextResponse.json({ error: t("api.folderNotFound") }, { status: 404 });
+  // The rows the order may place: those of the parent's list and the
+  // folder's list. A named row that has moved elsewhere since is skipped.
+  const lists = [folder.parentId, folderId];
+  const [documentRows, folderRows] = await Promise.all([
+    order.length
+      ? db.notebookDocument.findMany({
+          where: { notebookId, OR: lists.map((id) => ({ folderId: id })) },
+          select: { documentId: true },
+        })
+      : [],
+    order.length
+      ? db.documentFolder.findMany({
+          where: { notebookId, id: { not: folderId }, OR: lists.map((id) => ({ parentId: id })) },
+          select: { id: true },
+        })
+      : [],
+  ]);
+  const documentIds = new Set(documentRows.map((r) => r.documentId));
+  const folderIds = new Set(folderRows.map((r) => r.id));
+  const seen = new Set<string>();
+  const placed = order.filter((item) => {
+    const key = `${item.kind}:${item.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return item.kind === "document" ? documentIds.has(item.id) : folderIds.has(item.id);
+  });
   await db.$transaction([
     db.documentFolder.updateMany({
       where: { parentId: folderId },
@@ -99,6 +154,14 @@ export async function DELETE(
       data: { folderId: folder.parentId, position: null },
     }),
     db.documentFolder.delete({ where: { id: folderId } }),
+    ...placed.map((item, position) =>
+      item.kind === "document"
+        ? db.notebookDocument.update({
+            where: { notebookId_documentId: { notebookId, documentId: item.id } },
+            data: { position },
+          })
+        : db.documentFolder.update({ where: { id: item.id }, data: { position } }),
+    ),
   ]);
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });

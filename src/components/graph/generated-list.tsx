@@ -10,6 +10,7 @@ import { replyTime } from "@/components/collab/reply-thread";
 import type { GeneratedDocumentView } from "@/lib/types";
 import { useGraphContent } from "@/components/graph/graph-content";
 import { ListName } from "@/components/graph/list-name"; // [lists7]
+import { graphNavigate } from "@/components/graph/graph-history";
 
 // Generated content (SPEC.md §22): every document Stitch wrote for the
 // project, newest first, each with the command that made it. The list
@@ -52,7 +53,7 @@ export function GeneratedList({
   }
 
   function open(id: string) {
-    router.push(`/n/${notebookId}?doc=${id}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${id}`);
     onOpenDocument();
   }
 

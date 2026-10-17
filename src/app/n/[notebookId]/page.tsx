@@ -1,11 +1,12 @@
 import { Logo } from "@/components/logo";
 import { notFound, redirect } from "next/navigation";
 import { annotationKind } from "@/lib/annotations/kind";
+import { passageQuote } from "@/lib/annotations/passage";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { crossAccountLinks, peopleByIds, roleOf, withoutOtherProjectLinkEdits } from "@/lib/collab";
+import { crossAccountLinks, peopleByIds, roleOf } from "@/lib/collab";
 import { projectLinks } from "@/lib/link-scope";
 import { matchInText } from "@/lib/anchors/match";
 import { conversationTurns } from "@/lib/conversation";
@@ -18,7 +19,7 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { trivialEdits } from "@/lib/history/trivial";
+import { historyPage } from "@/lib/history/list";
 import { isProvenanceLink } from "@/lib/graph/provenance";
 import { withReaderLinkNotes } from "@/lib/graph/reader-link-notes";
 import { sectionView, sectionsInclude } from "@/lib/notes-view";
@@ -30,7 +31,6 @@ import {
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
-  type EditItem,
   type ExtractionView,
   type HistoryEntry,
   type LinkIn,
@@ -46,7 +46,6 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { DistillPanel } from "@/components/panels/distill-panel";
-import { EditsPanel } from "@/components/panels/edits-panel";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
@@ -74,9 +73,13 @@ import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
+import { currentCores, readCollapse } from "@/lib/collapse";
+import { COLLAPSE_COOKIE, collapsedDocuments } from "@/lib/collapse-memory";
+import { cookies } from "next/headers";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
 import { ATTACH_ORDER, documentEditedAt, type DocumentKind } from "@/lib/document-order";
+import { EmptyProjectAdd } from "@/components/reader/empty-project-add";
 
 export const dynamic = "force-dynamic";
 
@@ -222,6 +225,22 @@ export default async function NotebookPage(props: {
     ]),
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
+  // The address named a document this project does not hold (a note's jump
+  // or a History row after Remove from this project, an old link): the
+  // first document opens, and the reader says so (reader-panes.tsx). A
+  // document the project held once, by its DOCUMENT_DETACH event, is named
+  // and offers Add back; any other id is not named.
+  const missingDoc =
+    doc && doc !== activeId
+      ? await (async () => {
+          const held = await db.notebookEvent.findFirst({
+            where: { notebookId, kind: "DOCUMENT_DETACH", meta: { path: ["documentId"], equals: doc } },
+            select: { id: true },
+          });
+          const row = held ? await db.document.findUnique({ where: { id: doc }, select: { title: true } }) : null;
+          return { documentId: doc, title: row?.title ?? null, held: row !== null };
+        })()
+      : null;
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
   const readerView: ReaderViewKind =
     viewParam === "side" || viewParam === "stack" ? viewParam : "normal";
@@ -318,6 +337,7 @@ export default async function NotebookPage(props: {
       }
     }
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
+    const blockOrderOf = (blockId: string) => blockById.get(blockId)?.order;
     // Video anchors are time ranges, not text spans: they skip the text
     // highlight painting and render on the player overlay (SPEC.md §11).
     const sourceById = new Map(
@@ -529,7 +549,10 @@ export default async function NotebookPage(props: {
           gist: n.gist,
           color: n.color,
           sourceId: source.id,
-          quotedText: source.quotedText,
+          // A passage across blocks: its whole quote (lib/annotations/passage.ts).
+          quotedText:
+            passageQuote(n.content, n.sources.filter((src) => src.documentId === document.id), blockOrderOf) ??
+            source.quotedText,
           orphaned: resolutionById.get(source.id)?.orphaned ?? source.orphaned,
           figureLabel: figureLabelBySource.get(source.id) ?? null,
           layer: source.layer === "core" ? "core" : null,
@@ -546,10 +569,15 @@ export default async function NotebookPage(props: {
     // here carries the same card, so each block of the passage paints in
     // the kind's color and a click on any of them opens the card. Only the
     // first carries the tool's symbol (chipless).
+    // The passage's quote (lib/annotations/passage.ts): a highlight whose
+    // content is that quote holds no comment (SPEC.md §6).
     const otherSourcesByNote = new Map<string, string[]>();
+    const passageQuoteByNote = new Map<string, string>();
     for (const n of notebook!.sections.filter((s) => s.hidden).flatMap((s) => s.notes)) {
-      const here = n.sources.filter((src) => src.documentId === document.id).map((src) => src.id);
-      if (here.length > 1) otherSourcesByNote.set(n.id, here.slice(1));
+      const here = n.sources.filter((src) => src.documentId === document.id);
+      if (here.length < 2) continue;
+      otherSourcesByNote.set(n.id, here.slice(1).map((src) => src.id));
+      passageQuoteByNote.set(n.id, passageQuote(n.content, here, blockOrderOf) ?? n.content);
     }
     const everySource = <T,>(a: AnnotationItem, value: T): [string, T][] => [
       [a.sourceId as string, value],
@@ -601,7 +629,8 @@ export default async function NotebookPage(props: {
           kind: a.kind,
           color: a.color,
           content: a.content,
-          quotedText: a.quotedText,
+          // The whole passage's quote: the card compares the content with it.
+          quotedText: passageQuoteByNote.get(a.id) ?? a.quotedText,
           createdById: a.createdById,
         };
         for (const [id] of everySource(a, value)) annotationsBySource[id] = value;
@@ -1108,24 +1137,16 @@ export default async function NotebookPage(props: {
 
   // The rest of the page's reads depend on nothing below: they start together.
   const [
-    editRows,
+    documentHistoryFirst,
     corpusQuoteDocs,
-    events,
-    allEdits,
+    historyFirst,
     positionRows,
   ] =
     await Promise.all([
-      // Edit history for the open document, newest first.
-      paneOne
-        ? db.blockEdit
-            .findMany({
-              where: { documentId: paneOne.document.id },
-              orderBy: { createdAt: "desc" },
-              take: 100,
-              include: { replies: { orderBy: { createdAt: "asc" } } },
-            })
-            .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId))
-        : [],
+      // History's This document (SPEC.md §12): the open document's rows,
+      // newest first: its edits, each with its replies, and the notes and
+      // annotations removed from it. Show older reads the rest.
+      paneOne ? historyPage(notebookId, [paneOne.document.id], null, undefined, { documentId: paneOne.document.id }) : null,
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
             where: { id: { in: corpusQuoteDocIds } },
@@ -1136,19 +1157,9 @@ export default async function NotebookPage(props: {
             },
           })
         : [],
-      db.notebookEvent.findMany({
-        where: { notebookId },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-      }),
-      db.blockEdit
-        .findMany({
-          where: { documentId: { in: attachedIdList } },
-          orderBy: { createdAt: "desc" },
-          take: 80,
-          include: { document: { select: { title: true } } },
-        })
-        .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId)),
+      // The History panel (SPEC.md §12): its newest page; Show older reads
+      // the rest (lib/history/list.ts).
+      historyPage(notebookId, attachedIdList),
       // The account's copy of each open article's reading position. A preview
       // build reads the production database before its migration runs: with
       // no table, nothing resumes.
@@ -1165,17 +1176,7 @@ export default async function NotebookPage(props: {
       : null;
   };
 
-  const edits: EditItem[] = editRows.map((e) => ({
-        id: e.id,
-        kind: e.kind as EditItem["kind"],
-        blockId: e.blockId,
-        before: e.before,
-        after: e.after,
-        meta: e.meta as EditItem["meta"],
-        userId: e.userId,
-        replies: toReplyViews(e.replies),
-        createdAt: e.createdAt.toISOString(),
-      }));
+  const documentHistory: HistoryEntry[] = documentHistoryFirst?.entries ?? [];
 
 
   // Corpus distillations (SPEC.md §13): quotes heal against the current blocks
@@ -1213,82 +1214,7 @@ export default async function NotebookPage(props: {
   // The graph's data (SPEC.md §13) is not on the page: the graph reads it
   // when it opens, from GET /api/notebooks/<id>/graph (GR-18).
 
-  // The History panel (SPEC.md §12): corpus events (deletions, detachments)
-  // merged with every attached document's edits, newest first, attributed.
-  // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
-  const trivial = await trivialEdits(allEdits);
-  // A removed link still hidden in this project: its newest LINK_REMOVE
-  // entry gets Restore, for an editor or the owner (WALK5-01, WALK5-08).
-  const linkMeta = (meta: unknown) =>
-    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown; dismissed?: unknown };
-  const removedLinkIds = [
-    ...new Set(
-      allEdits.flatMap((e) => {
-        const id = linkMeta(e.meta).linkId;
-        return e.kind === "LINK_REMOVE" && typeof id === "string" ? [id] : [];
-      }),
-    ),
-  ];
-  const stillHidden = new Set(
-    myRole !== "viewer" && removedLinkIds.length > 0
-      ? (
-          await db.docLinkHidden.findMany({
-            where: { notebookId, docLinkId: { in: removedLinkIds } },
-            select: { docLinkId: true },
-          })
-        ).map((h) => h.docLinkId)
-      : [],
-  );
-  const restoreOffered = new Set<string>();
-  const restoreLinkOf = (e: (typeof allEdits)[number]): string | undefined => {
-    const id = linkMeta(e.meta).linkId;
-    if (e.kind !== "LINK_REMOVE" || typeof id !== "string" || !stillHidden.has(id) || restoreOffered.has(id)) return undefined;
-    restoreOffered.add(id); // allEdits is newest first: the newest removal
-    return id;
-  };
-  const linkEnds = (e: (typeof allEdits)[number]): string => {
-    const to = (e.meta as { toTitle?: unknown } | null)?.toTitle;
-    return (e.kind === "LINK_ADD" || e.kind === "LINK_REMOVE") && typeof to === "string" && to !== ""
-      ? `${e.document.title} → ${to}`
-      : e.document.title;
-  };
-  const history: HistoryEntry[] = [
-    ...events.map(
-      (e): HistoryEntry => ({
-        id: e.id,
-        userId: e.userId,
-        kind: e.kind as HistoryEntry["kind"],
-        content: e.content,
-        documentTitle: null,
-        createdAt: e.createdAt.toISOString(),
-      }),
-    ),
-    ...allEdits.map((e): HistoryEntry => {
-      const restoreLinkId = restoreLinkOf(e);
-      return {
-        id: e.id,
-        userId: e.userId,
-        kind: e.kind as HistoryEntry["kind"],
-        content:
-          e.kind === "TEXT_EDIT" || e.kind === "BLOCK_ADD"
-            ? (e.after ?? e.before ?? "")
-            : e.kind === "BLOCK_REMOVE"
-              ? (e.before ?? "")
-              : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
-                (e.meta as { to?: string } | null)?.to ??
-                ""),
-        // [panel6] A link's row names both ends (WALK6-11): "BOOK TWO → Extra notes".
-        documentTitle: linkEnds(e),
-        createdAt: e.createdAt.toISOString(),
-        trivial: trivial.get(e.id) ?? false,
-        ...(restoreLinkId ? { restoreLinkId } : {}),
-        ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
-        ...(e.kind === "LINK_REMOVE" && linkMeta(e.meta).dismissed === true ? { dismissed: true } : {}),
-      };
-    }),
-  ]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 100);
+  const history: HistoryEntry[] = historyFirst.entries;
 
   // Everyone whose work is on this page: owner, collaborators, and every
   // author referenced by a note, edit, link, reply, distillation, extraction,
@@ -1300,11 +1226,10 @@ export default async function NotebookPage(props: {
       for (const r of n.replies) authorIds.add(r.userId);
     }
   }
-  for (const e of edits) {
-    if (e.userId) authorIds.add(e.userId);
-    for (const r of e.replies) authorIds.add(r.userId);
+  for (const entry of [...history, ...documentHistory]) {
+    if (entry.userId) authorIds.add(entry.userId);
+    for (const r of entry.edit?.replies ?? []) authorIds.add(r.userId);
   }
-  for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
   for (const d of corpusDistillations) if (d.createdById) authorIds.add(d.createdById);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
@@ -1370,6 +1295,14 @@ export default async function NotebookPage(props: {
       browser: browserConfigured(),
     },
   });
+  // A document this browser reads collapsed (SPEC.md §28) comes with its
+  // cores, so the article is drawn collapsed on the first paint.
+  const collapsedIds = collapsedDocuments((await cookies()).get(COLLAPSE_COOKIE)?.value);
+  const collapsedCoresOf = (document: NonNullable<typeof paneOne>["document"]): Record<string, string> | null => {
+    if (!collapsedIds.has(document.id)) return null;
+    const { cores } = currentCores(readCollapse(document.collapse), document.blocks, document.richText);
+    return Object.keys(cores).length > 0 ? cores : null;
+  };
   // A split view (SPEC.md §6): each pane's header carries the pane's
   // document, and the pane's tool cards stay collapsed to their symbols until
   // the reader clicks one.
@@ -1383,7 +1316,8 @@ export default async function NotebookPage(props: {
         pane={role}
         paneOneId={paneOne?.document.id ?? pane.document.id}
         paneTwoId={paneTwo?.document.id ?? null}
-        documents={attached}
+        documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+        imported={pane.imported}
       />
     ) : null;
     const articlePane = role === "one" ? articleOne : articleTwo;
@@ -1415,6 +1349,7 @@ export default async function NotebookPage(props: {
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
+          sections={top}
           translationAvailable={deeplConfigured()}
           split={split}
           paneHeader={paneHeader}
@@ -1436,6 +1371,7 @@ export default async function NotebookPage(props: {
           }
           notebookId={notebook.id}
           sectionChoices={sectionChoices}
+          sections={top}
           title={pane.document.title}
           split={split}
           paneHeader={paneHeader}
@@ -1447,6 +1383,7 @@ export default async function NotebookPage(props: {
           }))}
           translationAvailable={deeplConfigured()}
           accountPosition={accountPositionOf(pane.document.id)}
+          collapsedCores={collapsedCoresOf(pane.document)}
           {...textLayer(pane)}
         />
       )}
@@ -1473,6 +1410,8 @@ export default async function NotebookPage(props: {
       collab={collab}
       rev={notebook.rev}
       history={history}
+      documentHistory={documentHistory}
+      liveBlockIds={paneOne?.document.blocks.map((b) => b.id) ?? []}
       corpusDistillations={corpusDistillations}
       assistant={
         <AssistantPanel
@@ -1506,13 +1445,6 @@ export default async function NotebookPage(props: {
           sections={view.sections}
         />
       }
-      editsPanel={
-        <EditsPanel
-          key="edits"
-          edits={edits}
-          liveBlockIds={paneOne?.document.blocks.map((b) => b.id) ?? []}
-        />
-      }
       annotationCount={
         (paneOne?.annotations.length ?? 0) +
         // [cover4] Provenance links are the generated document's, not the reader's (WALK4-03).
@@ -1536,6 +1468,15 @@ export default async function NotebookPage(props: {
             documents={attached}
             paneOne={paneNode(paneOne, `one:${paneOne.document.id}`, "one")}
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
+            missing={
+              missingDoc
+                ? {
+                    documentId: missingDoc.documentId,
+                    title: missingDoc.title,
+                    canAddBack: missingDoc.held && myRole !== "viewer",
+                  }
+                : null
+            }
           />
         ) : (
           <div key="empty" className="content-in flex h-full flex-col items-center justify-center gap-5">
@@ -1543,6 +1484,8 @@ export default async function NotebookPage(props: {
             <p className="max-w-sm text-center text-sm text-sand-600">
               {(await serverT())("panes.noDocumentOpen")}
             </p>
+            {/* The one thing to do here; a viewer cannot add. */}
+            {myRole !== "viewer" && <EmptyProjectAdd />}
           </div>
         )
       }

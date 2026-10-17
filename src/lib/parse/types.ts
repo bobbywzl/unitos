@@ -220,14 +220,19 @@ export type ParsedDocument = {
   // leaves unnamed among named ones has the number its neighbors imply, or
   // none (""). Stored on Document.pageLabels.
   pageLabels?: string[];
+  // PDF parses: the characters the chosen pages' text layer holds, every
+  // word the parse kept or set aside (inside a figure, as page furniture).
+  // Read by the judgment alone (classify.ts textLayerVerdict); never stored.
+  layerChars?: number;
   // PDF parses: the body's look (the import's Normal text), and the title's
   // look and alignment when the title came from the page (the import's
   // Title).
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
-  // PDF parses: the title's plain styles (italic, sub, sup, small caps) over
-  // the title's characters; the import's Title keeps them.
+  // PDF and Word parses: the title's plain styles (italic, sub, sup, small
+  // caps; a Word title's underline) over the title's characters; the
+  // import's Title keeps them.
   titleStyles?: StyleSpan[];
   // PDF parses: the title's lines where the writer broke it (a title set as
   // two centered lines), when it has more than one. `title` stays one line:

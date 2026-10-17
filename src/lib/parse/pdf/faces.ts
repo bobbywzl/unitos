@@ -58,7 +58,7 @@ const SERIF =
   /Serif|Times|Garamond|Georgia|Palatino|Palladio|Pagella|Century|Schoolbook|Baskerville|Caslon|Bodoni|Didot|Minion|Utopia|Charter|Charis|Gentium|Libertin|Cambria|Bookman|Bonum|Antiqua|Constantia|Crimson|Sabon|Bembo|Janson|Plantin|Perpetua|Goudy|Warnock|^tx(?:mi|sy|ex)|^NewTX(?!TT)/i;
 
 /** A font's shape by its name alone; null where the name says none. */
-function nameShape(name: string): Shape | null {
+export function nameShape(name: string): Shape | null {
   if (CJK_SANS.test(name)) return "sans";
   if (CJK_SERIF.test(name)) return "serif";
   if (MONO.test(name)) return "mono";

@@ -113,13 +113,17 @@ export function planOrder(
   if (placed.size === 0 && !sequence.some((item) => "markdown" in item)) return null;
   const dropped = new Set(answer.removeHeadings.map((id) => unitOfRow.get(id)).filter((u): u is number => u !== undefined && inScope.has(u) && !placed.has(u) && canRemove(units[u])));
   // The units left out, in document order: each right after the unit it
-  // followed (the last one before it that is placed), else at the start.
+  // followed (the last one before it that is placed), else at the start —
+  // and after the new blocks the answer put right after that unit, which
+  // belong to it ("expand on this paragraph" lists the paragraph and its new
+  // block alone; the blocks after them stay after them).
   let missing = 0;
   let previous: number | null = null;
   for (const u of scope) {
     if (!inScope.has(u)) continue;
     if (!placed.has(u) && !dropped.has(u)) {
-      const at = previous === null ? 0 : sequence.findIndex((item) => "unit" in item && item.unit === previous) + 1;
+      let at = previous === null ? 0 : sequence.findIndex((item) => "unit" in item && item.unit === previous) + 1;
+      if (previous !== null) while (at < sequence.length && "markdown" in sequence[at]) at++;
       sequence.splice(at, 0, { unit: u });
       placed.add(u);
       missing++;

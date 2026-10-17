@@ -179,10 +179,10 @@ until the owner makes one.
 - Translation (SPEC.md §19): DeepL bills per character — $25 per million on the Pro API, 500k a month free on the Free API — and a document translates once per language. A characters-per-month cap, or the feature itself, is a natural Premium line; nobody has drawn it
 - The assistant's web access (SPEC.md §7): each answer with Web on can run up to five searches at $0.005 each on top of the tokens
 - Figure and table analysis (SPEC.md §4): runs at the model's highest reasoning effort, the most expensive call per use in the app
-- Voice command (SPEC.md §6): transcription minutes, like video, plus one Claude Sonnet 5 call per command over the open document
+- Voice command (SPEC.md §6): transcription minutes, like video, plus one Claude Sonnet 5.5 call per command over the open document
 - Collapse (SPEC.md §28): one Claude Opus 5.5 call per window of 30,000 characters of the article, the whole document as the cached prefix; a document collapses once, its cores stored for every reader
 - Compare two documents and Ask about a range: tokens like every derivation
-- The assistant's suggestions (SPEC.md §29): one Claude Sonnet 5 call per command on selected words; up to twelve, one per window, for a whole document
+- The assistant's suggestions (SPEC.md §29): one Claude Sonnet 5.5 call per command on selected words; up to twelve, one per window, for a whole document
 - What an expired account keeps: today only offline work and large images close. Whether AI, documents, or sharing close too when the trial ends is undecided
 
 ## Open questions

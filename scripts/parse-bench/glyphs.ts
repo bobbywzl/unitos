@@ -7,6 +7,7 @@ import katex from "katex";
 import { getDocumentProxy } from "unpdf";
 import { readDrawing, type FontLookup, type Glyph } from "@/lib/parse/pdf/drawing";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import type { Box } from "@/lib/parse/pdf/types";
 import { regionBounds, type Region } from "@/lib/video/types";
 import type { Doc } from "./adapt";
 import { ROOT } from "./load";
@@ -22,8 +23,14 @@ import { mathLeaves } from "./math";
 // (math-fonts.ts); the LaTeX's symbols from KaTeX.
 
 /** A glyph as the checks read it. */
-export type PageGlyph = Pick<Glyph, "family" | "code" | "unicode" | "x" | "y" | "w" | "size">;
-export type PageGlyphs = { width: number; height: number; glyphs: PageGlyph[] };
+export type PageGlyph = Pick<Glyph, "family" | "code" | "unicode" | "symbol" | "x" | "y" | "w" | "size">;
+/** A drawn shape: a painted path more than 2 pt tall and wide (a box, a
+    curve, an arrowhead, a cross; a fraction bar or a rule is thinner), an
+    image, or a shading. A formula draws none; a diagram draws them. */
+export type PageShape = Box;
+export type PageGlyphs = { width: number; height: number; glyphs: PageGlyph[]; shapes: PageShape[] };
+/** The thickness a rule reaches: a painted path thicker than it both ways is a shape. */
+const RULE_THICKNESS = 2;
 
 /** A family of TeX's math fonts, whose codes the tables name. */
 const MATH = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
@@ -36,7 +43,7 @@ const cache = new Map<string, Promise<PageGlyphs[] | null>>();
     PDF keeps only its latest (a walk of a long PDF is 12 MB, and the walk's
     code changed often in round 1). */
 const DISK = join(ROOT, ".bench", "cache", "glyphs");
-const WALK_CODE = ["drawing.ts", "glyphs.ts"].map((f) => join(ROOT, "src", "lib", "parse", "pdf", f));
+const WALK_CODE = [...["drawing.ts", "glyphs.ts"].map((f) => join(ROOT, "src", "lib", "parse", "pdf", f)), join(import.meta.dirname, "glyphs.ts")];
 
 /** Let a file's glyphs go once no document still to score reads them. */
 export function forgetGlyphs(path: string) {
@@ -63,7 +70,10 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
       // word in a display) were not walked, and a display that read them
       // in \text failed the check on words the page draws (parse loop
       // finding).
-      const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
+      // The fonts' glyph names too (fontExtraProperties): a glyph the PDF's
+      // encoding names otherwise than TeX's table at its code is what the
+      // name says (lib/parse/pdf/glyphs.ts symbolNames).
+      const pdf = await getDocumentProxy(new Uint8Array(bytes), { ...PDF_CMAPS, fontExtraProperties: true });
       const pages: PageGlyphs[] = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
@@ -71,14 +81,20 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
         const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
         const lookup: FontLookup = (id) => {
           try {
-            const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean } | null;
-            return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical } : null;
+            const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
+            return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
           } catch {
             return null;
           }
         };
-        const glyphs = readDrawing(ops, lookup, viewport.width, viewport.height).glyphs.map(({ family, code, unicode, x, y, w, size }) => ({ family, code, unicode, x, y, w, size }));
-        pages.push({ width: viewport.width, height: viewport.height, glyphs });
+        const drawing = readDrawing(ops, lookup, viewport.width, viewport.height);
+        const glyphs = drawing.glyphs.map(({ family, code, unicode, symbol, x, y, w, size }) => ({ family, code, unicode, ...(symbol !== undefined ? { symbol } : {}), x, y, w, size }));
+        const shapes: PageShape[] = [
+          ...drawing.paths.filter((p) => !p.clip && p.x2 - p.x1 > RULE_THICKNESS && p.y2 - p.y1 > RULE_THICKNESS),
+          ...drawing.images,
+          ...drawing.shades,
+        ].map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }));
+        pages.push({ width: viewport.width, height: viewport.height, glyphs, shapes });
       }
       await pdf.loadingTask.destroy();
       mkdirSync(DISK, { recursive: true });
@@ -424,6 +440,21 @@ function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
   });
 }
 
+/** The drawn shapes inside a region (to 1% of the page past its edges): a
+    diagram's boxes, curves, arrowheads, and pictures. A shape that reaches
+    past the region is the page's (a column's white ground), not the figure's. */
+function shapesIn(page: PageGlyphs, region: Region): PageShape[] {
+  const b = regionBounds(region);
+  const slack = 1;
+  return page.shapes.filter((s) => {
+    const x1 = (s.x1 / page.width) * 100;
+    const x2 = (s.x2 / page.width) * 100;
+    const y1 = ((page.height - s.y2) / page.height) * 100;
+    const y2 = ((page.height - s.y1) / page.height) * 100;
+    return x1 >= b.x1 - slack && x2 <= b.x2 + slack && y1 >= b.y1 - slack && y2 <= b.y2 + slack;
+  });
+}
+
 /** An equation's printed number among a display region's glyphs: a run in a
     text font on one baseline at the region's right or left end that reads
     "(3)", "(2.1)", "(A.3)", set an em or more apart from the formula
@@ -490,15 +521,21 @@ export type GlyphScores = {
 const NEGATED = "(negated relation)";
 const MAPSTO = "↦";
 
-/** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture. */
+/** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture: its label opens
+    it, or a panel's label does ("(a) …"): a panel's caption, or panels' captions the parse sets before the
+    float's caption ("(a) Original image A. … Figure 4.12 Image reconstruction …"). Read as its picture's words,
+    such a caption's symbols counted from the figure's region alone, which leaves out a caption beside it: the MML
+    book's p. 137, "Â(k) = ∑ki=1 σiAi" in Figure 4.12's margin caption, counted as a ∑ the candidate never
+    printed, though its caption prints it. */
 const OWN_CAPTION_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|abbildung|abb\.|tabelle)\s*[\dIVXLivxl]+/i;
+const ownCaption = (text: string) => OWN_CAPTION_RE.test(text.trim()) || /^\s*\([a-z]\)\s+\S/.test(text);
 
 /** The words a figure's caption holds that are its picture's own labels (a
     diagram read with its labels as its caption, no "Figure N"): the region
     shows them, so they count once, with the region's glyphs. */
 function pictureWords(block: Extract<Doc["blocks"][number], { kind: "figure" }>): string {
   const caption = (block.caption ?? []).map((s) => s.text).join("");
-  return block.mathImage ?? (OWN_CAPTION_RE.test(caption.trim()) ? "" : caption);
+  return block.mathImage ?? (ownCaption(caption) ? "" : caption);
 }
 
 /** Every character a candidate prints: its words, its list markers, its
@@ -530,7 +567,7 @@ function printedText(doc: Doc): string {
         // A crop's glyphs are counted from its region (glyphScores), and so
         // are a figure's whose caption is its picture's own words.
         if (b.mathImage && !b.at) parts.push(b.mathImage);
-        if (!b.at || b.mathImage !== undefined || OWN_CAPTION_RE.test((b.caption ?? []).map((s) => s.text).join("").trim())) spans(b.caption);
+        if (!b.at || b.mathImage !== undefined || ownCaption((b.caption ?? []).map((s) => s.text).join(""))) spans(b.caption);
         break;
       case "code":
         parts.push(b.text);
@@ -625,6 +662,13 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   const symbolOf = (g: PageGlyph) => {
     const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
     if (!entry || entry.cls === "accent") return null;
+    // A glyph the PDF's encoding names otherwise than the table at its code
+    // (Springer's "MSAM10" sets ⪅ at ⊠'s code): the page draws the named
+    // symbol, and the text layer is wrong where it reads another.
+    if (g.symbol !== undefined && !entry.piece && entry.unicode.normalize("NFC") !== g.symbol.normalize("NFC")) {
+      const symbol = classOf(g.symbol.normalize("NFC"));
+      return symbol ? { symbol, wrong: g.unicode.normalize("NFC") !== g.symbol.normalize("NFC") } : null;
+    }
     const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
     return symbol ? { symbol, wrong: entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC") } : null;
   };
@@ -679,8 +723,18 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
       // A figure with its own caption ("Fig. 11") is a figure, whatever
       // fonts its labels are set in: Springer's Fig. 11 sets a chart's
       // axes and legend in TeX's math fonts, and counted as an equation.
-      const captioned = OWN_CAPTION_RE.test((block.caption ?? []).map((s) => s.text).join("").trim());
-      if (!captioned && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
+      // So is a figure whose region draws a shape (shapesIn): a formula
+      // draws glyphs and thin rules only; a chart's axes and curves, a
+      // diagram's boxes, a timeline's arrowhead and crosses are shapes. PDF
+      // benchmark finding: a chart with no caption (geotopo p12), a
+      // three-column diagram under braces (probability-cheatsheet p2) and
+      // the label pieces of a drawn diagram (geotopo p20) counted as
+      // equations shown as pictures, as their labels are set in TeX's math
+      // fonts; the count penalized the right reading of a diagram as a
+      // figure, and would have rewarded cutting one into an equation.
+      const captioned = ownCaption((block.caption ?? []).map((s) => s.text).join(""));
+      const drawnDiagram = shapesIn(page, block.at.region).length > 0;
+      if (!captioned && !drawnDiagram && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
       continue;
     }
     if (block.kind !== "equation") continue;

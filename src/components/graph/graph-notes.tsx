@@ -2,6 +2,7 @@
 
 import { SECTION_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Edge as FlowEdge, EdgeProps } from "reactflow";
@@ -194,7 +195,7 @@ export function GraphNotesProvider({
 
   const openSource = useCallback(
     (documentId: string, sourceId: string) => {
-      router.push(`/n/${notebookId}?doc=${documentId}&src=${sourceId}`);
+      graphNavigate(router, `/n/${notebookId}?doc=${documentId}&src=${sourceId}`);
       (onNavigate ?? onClose)();
     },
     [router, notebookId, onClose, onNavigate],
@@ -205,8 +206,8 @@ export function GraphNotesProvider({
       const first = note?.sources.find((s) => s.documentId && !s.orphaned && titleOf.has(s.documentId));
       // A document needs the server's render: the router's push (a native
       // push here leaves Back on a URL the reader does not draw).
-      if (first) router.push(`/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
-      else if (note?.documentId && titleOf.has(note.documentId)) router.push(`/n/${notebookId}?doc=${note.documentId}`);
+      if (first) graphNavigate(router, `/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
+      else if (note?.documentId && titleOf.has(note.documentId)) graphNavigate(router, `/n/${notebookId}?doc=${note.documentId}`);
       else {
         // A note with no document (WALK3-05): the page stays, a new entry
         // without the graph is pushed, and Back opens the graph again, as

@@ -115,6 +115,10 @@ function cellSelectionHas(editor: Editor, pos: number): boolean {
   return hit;
 }
 
+/** Shorter than any long press (Android's is 500 ms): a contextmenu this
+    soon after a finger came down came from a tap. */
+const TAP_MS = 400;
+
 export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const [place, setPlace] = useState<Place | null>(null);
 
@@ -122,9 +126,17 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
   // caret moves there first; an image or a table of contents is selected.
   useEffect(() => {
     const dom = editor.view.dom;
+    // A finger opens the menu by a long press. A tap on selected words can
+    // fire contextmenu too, at once: it opens nothing, so the toolbox stays
+    // the words' tools and the next tap lands where it is aimed.
+    let touchAt = -Infinity;
+    const onDown = (e: PointerEvent) => {
+      touchAt = e.pointerType === "touch" ? e.timeStamp : -Infinity;
+    };
     const onContext = (e: MouseEvent) => {
       if (e.shiftKey) return;
       e.preventDefault();
+      if (e.timeStamp - touchAt < TAP_MS) return;
       const view = editor.view;
       const atom = (e.target as Element | null)?.closest<HTMLElement>("figure.docs-img, [data-toc]");
       let spelling: Promise<Misspelling | null> | null = null;
@@ -165,23 +177,57 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
       if (!byKeys) return;
       e.preventDefault();
       e.stopPropagation();
-      const c = editor.view.coordsAtPos(editor.state.selection.head);
-      setPlace({ x: c.left, y: c.bottom, byKeys: true });
+      const view = editor.view;
+      const sel = view.state.selection;
+      const c = view.coordsAtPos(sel.head);
+      const opened: Place = { x: c.left, y: c.bottom, byKeys: true };
+      setPlace(opened);
+      // The word at the caret: its spelling suggestions head the menu, as
+      // they do for a right-click.
+      const before = view.state;
+      const spelling = sel instanceof TextSelection ? misspellingAt(editor, sel.empty ? sel.head : sel.from) : null;
+      void spelling?.then((found) => {
+        if (!found || view.state.doc !== before.doc || !view.state.selection.eq(before.selection)) return;
+        setPlace((p) => (p === opened ? { ...p, spelling: found } : p));
+      });
     };
+    dom.addEventListener("pointerdown", onDown, true);
     dom.addEventListener("contextmenu", onContext);
     dom.addEventListener("mouseup", onUp);
     dom.addEventListener("keydown", onKey, true);
     return () => {
+      dom.removeEventListener("pointerdown", onDown, true);
       dom.removeEventListener("contextmenu", onContext);
       dom.removeEventListener("mouseup", onUp);
       dom.removeEventListener("keydown", onKey, true);
     };
   }, [editor]);
 
+  // Tab closes the menu and types nothing, as a menu's Tab does. Heard on
+  // the document from the start, so before the menu's own keys, which close
+  // it as well.
+  const openRef = useRef(false);
+  useEffect(() => {
+    openRef.current = place !== null;
+  }, [place]);
+  useEffect(() => {
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !openRef.current || !editor.view.dom.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPlace(null);
+      editor.view.focus();
+    };
+    document.addEventListener("keydown", onTab, true);
+    return () => document.removeEventListener("keydown", onTab, true);
+  }, [editor]);
+
   if (!place) return null;
   return (
     <ContextMenu
-      key={`${place.x},${place.y}`}
+      // Opened by keys, the menu opens again when the spelling suggestions
+      // join it, so the first suggestion takes the highlight.
+      key={`${place.x},${place.y}${place.byKeys && place.spelling ? ",spelling" : ""}`}
       editor={editor}
       ctx={ctx}
       place={place}

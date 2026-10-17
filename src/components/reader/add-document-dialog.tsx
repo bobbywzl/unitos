@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
-import { BlankDocumentIcon, DriveLogo, LibraryIcon } from "@/components/icons";
+import { BlankDocumentIcon, DriveLogo, LibraryIcon, MoreIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
+import { useModalFocus } from "@/lib/escape-layers";
 import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
+import { DocumentDeleteConfirm, useDocumentReach } from "@/components/reader/document-delete";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
 import {
   uploadItemTitle,
@@ -100,6 +102,7 @@ export function AddDocumentDialog({
   onAttach,
   onRemoveFromLibrary,
   folderPath,
+  returned,
 }: {
   open: boolean;
   onClose: () => void;
@@ -136,12 +139,26 @@ export function AddDocumentDialog({
   // The folder the documents land in (SPEC.md §6), as its path of titles;
   // null = the project itself.
   folderPath?: string[] | null;
+  // What an add could not take, back from the upload box (CLAUDE.md rule
+  // zero 6): one link goes into the field, more into the queue. seq tells
+  // one return from the next.
+  returned?: { items: UploadItem[]; seq: number } | null;
 }) {
   const t = useT();
   const ime = useImeGuard();
   const [url, setUrl] = useState("");
   const [over, setOver] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // The library row whose delete confirm is open, and where that document is.
+  const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
+  // The Library's search, and the row whose ⋯ is open.
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryMenu, setLibraryMenu] = useState<string | null>(null);
+  const libraryNeedle = libraryQuery.trim().toLowerCase();
+  const libraryRows = (library ?? []).filter(
+    (d) => !attachedIds.has(d.id) && d.title.toLowerCase().includes(libraryNeedle),
+  );
+  const { reach: deleteReach, loading: deleteReachLoading } = useDocumentReach(deleteAsk);
   // The queue: what Continue hands to the box, in the order it was added.
   const [items, setItems] = useState<UploadItem[]>([]);
   // Each queued PDF's Pages field, and each queued PDF file's page count
@@ -152,6 +169,7 @@ export function AddDocumentDialog({
   const pagesOf = (item: UploadItem) => readPageRanges(pageText.get(item) ?? "", countOf(item));
   const pagesInvalid = items.some((item) => isPdfItem(item) && "error" in pagesOf(item));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
   // The project title field: empty while the project carries the default
   // title, which stands as the placeholder.
   const titleOf = (p: { title: string; untitled: string } | null) =>
@@ -159,11 +177,16 @@ export function AddDocumentDialog({
   const [titleDraft, setTitleDraft] = useState(titleOf(projectTitle));
   const [titleSaving, setTitleSaving] = useState(false);
 
+  // Blank document, Continue, and a Library pick open something: the focus
+  // goes there, not back to + (a new blank document takes the caret).
+  // ✕, Escape, and a click outside open nothing: the focus goes back.
+  const handedOff = useRef(false);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !isImeKey(e)) {
         e.stopPropagation();
+        handedOff.current = false;
         onClose();
       }
     };
@@ -171,20 +194,41 @@ export function AddDocumentDialog({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  // A fresh open starts clean: no stale URL text, an empty queue, the
-  // library list collapsed.
+  // An open shows the library list collapsed. The queue and the URL box
+  // stay as the reader left them: Escape, ✕, or a closed dialog never throw
+  // away a queued file or link (CLAUDE.md rule 6). Continue empties the
+  // queue, and each item's ✕ takes it out.
+  // A failed add's links and files come back: a lone link into the field
+  // (when the field is empty), the rest into the queue.
+  const [prevReturned, setPrevReturned] = useState(returned?.seq ?? 0);
+  if (returned && returned.seq !== prevReturned) {
+    setPrevReturned(returned.seq);
+    const back = returned.items;
+    const lone = back.length === 1 && (back[0].kind === "url" || back[0].kind === "video-url") ? back[0] : null;
+    if (lone && !url.trim()) setUrl(lone.url);
+    else setItems((current) => [...current, ...back]);
+  }
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (open) {
-      setUrl("");
-      setItems([]);
-      setPageText(new Map());
-      setPageCounts(new Map());
       setLibraryOpen(false);
+      setDeleteAsk(null);
       setTitleDraft(titleOf(projectTitle));
     }
   }
+  // The focus goes into the dialog on open and back to + on close; Tab
+  // stays in it (lib/escape-layers.ts). An open on a project that has its
+  // title puts the caret in the link field, so a link is paste and
+  // Continue; a new project's in its title field, which comes first. Not
+  // with a touch screen, where the keyboard would cover the dialog.
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, open, handedOff);
+  const dismiss = () => {
+    handedOff.current = false;
+    onClose();
+  };
+  const caret = open && typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
 
   // Save the title field when it changed: on blur, Enter, and Continue. An
   // empty field keeps the title as it is.
@@ -222,8 +266,20 @@ export function AddDocumentDialog({
     }
   }
 
-  // Enter after a link queues it (several links at once queue each). A
-  // Google Drive link imports on its own. A video link queues as a video.
+  // The links in the field, as queue items: a video link as a video.
+  const linkItems = (links: string[]): UploadItem[] =>
+    links.map((link) =>
+      parseYouTubeId(link) || isMediaUrl(link)
+        ? { kind: "video-url" as const, url: link }
+        : { kind: "url" as const, url: link },
+    );
+  // What Continue sends: the queue and the links still in the field.
+  const typedLinks = parseLinks(url);
+  const typedDrive = typedLinks.length === 1 && parseDriveFileId(typedLinks[0]) !== null;
+  const sendCount = items.length + (typedDrive ? 0 : typedLinks.length);
+
+  // Enter after a link queues it (several links at once queue each), for a
+  // list of more. A Google Drive link imports on its own.
   async function addUrl(e: React.FormEvent) {
     e.preventDefault();
     const links = parseLinks(url);
@@ -235,23 +291,31 @@ export function AddDocumentDialog({
       if (await onDriveLink(links[0])) setUrl("");
       return;
     }
-    queue(
-      links.map((link) =>
-        parseYouTubeId(link) || isMediaUrl(link)
-          ? { kind: "video-url" as const, url: link }
-          : { kind: "url" as const, url: link },
-      ),
-    );
+    queue(linkItems(links));
     setUrl("");
   }
 
+  // Continue: the queue and a link still in the field go together, so one
+  // link is paste and Continue. Words in the field that are not a link stay
+  // there with the message, and nothing goes.
   async function submit() {
-    if (items.length === 0 || pagesInvalid) return;
+    if (pagesInvalid) return;
+    if (url.trim() && typedLinks.length === 0) {
+      onError(t("panes.notLink"));
+      return;
+    }
+    if (typedDrive) {
+      if (await onDriveLink(typedLinks[0])) setUrl("");
+      if (items.length === 0) return;
+    }
+    const all = [...items, ...(typedDrive ? [] : linkItems(typedLinks))];
+    if (all.length === 0) return;
     await saveTitle();
+    handedOff.current = true;
     // A PDF goes with its chosen pages; every page needs none.
     onSubmit(
       requestFor(
-        items.map((item) => {
+        all.map((item) => {
           if (!isPdfItem(item)) return item;
           const read = pagesOf(item);
           return "ranges" in read && read.ranges ? { ...item, pdfPages: read.ranges } : item;
@@ -289,13 +353,14 @@ export function AddDocumentDialog({
     {open && (
     <div
       className="dialog-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={onClose}
+      onClick={dismiss}
       role="dialog"
       aria-modal
       aria-label={t("panes.addDocument")}
       data-nudge-pause
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[600px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
@@ -307,7 +372,7 @@ export function AddDocumentDialog({
             </span>
           )}
           <button
-            onClick={onClose}
+            onClick={dismiss}
             data-track="add-dialog-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
@@ -339,6 +404,7 @@ export function AddDocumentDialog({
                     }
                   }}
                   placeholder={projectTitle.untitled}
+                  data-autofocus={caret ? "" : undefined}
                   disabled={titleSaving}
                   maxLength={200}
                   data-track="add-project-title"
@@ -379,25 +445,20 @@ export function AddDocumentDialog({
               <span className="text-xs font-normal text-sand-500">{t("panes.dropZoneHint")}</span>
             </button>
 
-            <form className="flex flex-col gap-1.5" onSubmit={(e) => void addUrl(e)}>
-              <div className="flex items-center gap-2">
-                <input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://…"
-                  aria-label={t("panes.documentUrl")}
-                  className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
-                />
-                <button
-                  type="submit"
-                  data-track="add-url"
-                  disabled={busy || !url.trim()}
-                  className={submitButton}
-                >
-                  {t("panes.queueLink")}
-                </button>
-              </div>
-              <span className="text-[11px] text-sand-500">{t("panes.urlHint")}</span>
+            {/* A link: Continue takes it from the field; Enter queues it
+                for a list of more. What a link becomes is the tooltip. */}
+            <form className="flex" onSubmit={(e) => void addUrl(e)}>
+              <input
+                ref={urlRef}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://…"
+                data-autofocus={caret && !projectTitle ? "" : undefined}
+                aria-label={t("panes.documentUrl")}
+                data-track="add-url"
+                data-tip={t("panes.urlHint")}
+                className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+              />
             </form>
 
             {/* The queue (SPEC.md §22): every link and file waiting for Continue. */}
@@ -465,7 +526,10 @@ export function AddDocumentDialog({
                 its end. */}
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <button
-                onClick={onCreateBlank}
+                onClick={() => {
+                  handedOff.current = true;
+                  onCreateBlank();
+                }}
                 data-track="add-blank"
                 data-tip={t("panes.blankDocumentTitle")}
                 disabled={busy}
@@ -501,10 +565,10 @@ export function AddDocumentDialog({
               <button
                 onClick={() => void submit()}
                 data-track="add-continue"
-                disabled={busy || items.length === 0 || pagesInvalid}
+                disabled={busy || (items.length === 0 && !url.trim()) || pagesInvalid}
                 className={`ml-auto ${submitButton}`}
               >
-                {items.length > 1 ? t("panes.continueWithCount", { n: items.length }) : t("panes.continue")}
+                {sendCount > 1 ? t("panes.continueWithCount", { n: sendCount }) : t("panes.continue")}
               </button>
             </div>
             {onImportDrive && driveLink && (driveLink.linked || driveLink.canLink) && (
@@ -522,42 +586,90 @@ export function AddDocumentDialog({
             )}
 
             {libraryOpen && (
-              <ul className="max-h-40 flex-1 overflow-y-auto rounded-2xl bg-sand-100 p-1">
-                {library === null && (
-                  <li className="px-3 py-2 text-sm text-sand-500">{t("common.loading")}</li>
-                )}
-                {library !== null &&
-                  library.filter((d) => !attachedIds.has(d.id)).length === 0 && (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                {/* A search over the titles: a library runs to dozens of documents. */}
+                <input
+                  type="search"
+                  value={libraryQuery}
+                  onChange={(e) => setLibraryQuery(e.target.value)}
+                  placeholder={t("panes.librarySearch")}
+                  aria-label={t("panes.librarySearch")}
+                  data-track="add-library-search"
+                  className="rounded-full border border-line bg-card px-3.5 py-1.5 text-sm outline-none placeholder:text-sand-500 focus:border-clay"
+                />
+                <ul className="max-h-[min(18rem,40dvh)] flex-1 overflow-y-auto rounded-2xl bg-sand-100 p-1">
+                  {library === null && (
+                    <li className="px-3 py-2 text-sm text-sand-500">{t("common.loading")}</li>
+                  )}
+                  {library !== null && libraryRows.length === 0 && (
                     <li className="px-3 py-2 text-sm text-sand-500">
-                      {t("panes.noOtherDocuments")}
+                      {libraryQuery.trim() ? t("panes.librarySearchNone") : t("panes.libraryEmpty")}
                     </li>
                   )}
-                {library
-                  ?.filter((d) => !attachedIds.has(d.id))
-                  .map((d) => (
-                    <li key={d.id} className="flex items-center gap-1">
-                      <button
-                        onClick={() => onAttach(d.id)}
-                        data-track="add-library-attach"
-                        data-tip={t("panes.attachTitle")}
-                        className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                      >
-                        {d.title}{" "}
-                        <span className="text-xs text-sand-500">
-                          {t("panes.blockCount", { n: d._count.blocks })}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => onRemoveFromLibrary(d.id)}
-                        data-track="add-library-delete"
-                        className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
-                        data-tip={t("panes.deleteFromLibrary")}
-                      >
-                        ✕
-                      </button>
+                  {libraryRows.map((d) => (
+                    <li key={d.id} className="flex flex-col">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            handedOff.current = true;
+                            onAttach(d.id);
+                          }}
+                          data-track="add-library-attach"
+                          data-tip={t("panes.attachTitle")}
+                          className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                        >
+                          {d.title}{" "}
+                          <span className="text-xs text-sand-500">
+                            {t(d._count.blocks === 1 ? "panes.blockCountOne" : "panes.blockCount", { n: d._count.blocks })}
+                          </span>
+                        </button>
+                        {/* Delete sits behind the row's ⋯, not on every row. */}
+                        <button
+                          onClick={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(libraryMenu === d.id ? null : d.id);
+                          }}
+                          data-track="add-library-actions"
+                          aria-expanded={libraryMenu === d.id}
+                          aria-label={t("panes.libraryActionsFor", { title: d.title })}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+                        >
+                          <MoreIcon size={14} />
+                        </button>
+                      </div>
+                      {libraryMenu === d.id && deleteAsk !== d.id && (
+                        <div className="mx-2 mb-1 flex flex-col rounded-xl bg-card py-1">
+                          <button
+                            onClick={() => setDeleteAsk(d.id)}
+                            data-track="add-library-delete"
+                            className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                            data-tip={t("panes.deleteFromLibrary")}
+                          >
+                            {t("panes.deleteFromLibrary")}
+                          </button>
+                        </div>
+                      )}
+                      {deleteAsk === d.id && (
+                        <DocumentDeleteConfirm
+                          reach={deleteReach}
+                          loading={deleteReachLoading}
+                          notebookId={null}
+                          busy={false}
+                          onDelete={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(null);
+                            onRemoveFromLibrary(d.id);
+                          }}
+                          onCancel={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(null);
+                          }}
+                        />
+                      )}
                     </li>
                   ))}
-              </ul>
+                </ul>
+              </div>
             )}
           </>
         )}

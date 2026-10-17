@@ -53,8 +53,8 @@ export function TocStyles({ current, onPick }: { current?: TocStyle; onPick: (st
 /** Table of contents options: its style, and which heading levels it lists. */
 export function TocOptionsHost({ editor }: { editor: Editor }) {
   const t = useT();
-  useEditorTick(editor);
   const [pos, setPos] = useDocPos(editor);
+  useEditorTick(editor, () => pos === null);
   useEffect(() => onInsert(editor, (e) => e.type === "toc-options" && setPos(e.pos)), [editor, setPos]);
   if (pos === null) return null;
   const node = editor.state.doc.nodeAt(pos);

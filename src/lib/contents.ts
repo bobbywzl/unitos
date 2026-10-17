@@ -37,7 +37,7 @@ const contentsSchema = z.object({
     .max(MAX_PARTS * 2),
 });
 
-type ContentsBlock = { id: string; type: string; text: string; order: number };
+type ContentsBlock = { id: string; type: string; text: string; order: number; html?: string | null };
 
 /** The stored contents as entries. A row without a title or block is skipped. */
 export function contentsEntries(value: unknown): ContentsEntry[] {
@@ -52,14 +52,34 @@ export function contentsEntries(value: unknown): ContentsEntry[] {
   return entries;
 }
 
-/** The title block: the first block when it is a heading, else the first
-    heading when it repeats the document's title (an import's Title stands
-    under its kicker, a PDF's under its permission line). */
-function titleBlockId(blocks: { id: string; type: string; text: string }[], title?: string): string | undefined {
-  if (blocks[0]?.type === "HEADING") return blocks[0].id;
-  const heading = blocks.find((b) => b.type === "HEADING");
+/** A heading block's level from its html (h1 → 1); null when the html
+    does not say. */
+function headingDepth(block: { html?: string | null }): number | null {
+  const depth = /<h([1-6])/i.exec(block.html ?? "")?.[1];
+  return depth ? Number(depth) : null;
+}
+
+/** The title block: the first heading when it repeats the document's title
+    (an import's Title stands under its kicker, a PDF's under its permission
+    line), or the first block when it is a heading above every other heading
+    of the document (one h1 over h2 parts). A first heading at the level of
+    the others is the first part, not a title: "Part 1" over "Part 2" to
+    "Part 10" is listed with them. */
+function titleBlockId(
+  blocks: { id: string; type: string; text: string; html?: string | null }[],
+  title?: string,
+): string | undefined {
   const key = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-  return heading && title !== undefined && key(heading.text) === key(title) ? heading.id : undefined;
+  const headings = blocks.filter((b) => b.type === "HEADING");
+  const heading = headings[0];
+  if (heading && title !== undefined && key(heading.text) === key(title)) return heading.id;
+  if (blocks[0]?.type !== "HEADING") return undefined;
+  const top = headingDepth(blocks[0]);
+  const rest = headings.slice(1).map(headingDepth);
+  // No other heading: the first block is the title.
+  if (rest.length === 0) return blocks[0].id;
+  if (top === null || rest.some((d) => d === null || d <= top)) return undefined;
+  return blocks[0].id;
 }
 
 // The blocks a part can start at: content, never the title block, a page
@@ -135,7 +155,7 @@ export async function buildContents(
     include: {
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, order: true, startTime: true, endTime: true, cell: true, page: true },
+        select: { id: true, type: true, text: true, order: true, html: true, startTime: true, endTime: true, cell: true, page: true },
       },
     },
   });

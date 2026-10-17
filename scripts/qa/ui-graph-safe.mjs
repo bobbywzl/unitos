@@ -157,7 +157,14 @@ if (after) {
   await thread(LINK_AB).locator('[data-track="reply-send"]').click();
   await thread(LINK_AB).filter({ hasText: DRAFT }).locator("p", { hasText: DRAFT }).waitFor({ timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(800);
-  const kept = await page.evaluate((k) => localStorage.getItem(k), `unitos-reply-draft:link:${LINK_AB}`);
+  // The reply box's draft is a card draft (lib/toolbar-drafts.ts, one JSON map).
+  const kept = await page.evaluate((k) => {
+    try {
+      return JSON.parse(localStorage.getItem("unitos-card-drafts") ?? "{}")[k] ?? null;
+    } catch {
+      return null;
+    }
+  }, `reply:link:${LINK_AB}`);
   check(kept === null, "draft cleared once the server has the reply", String(kept));
   // The thread shows the reply at once (done: false) and the POST lands after: wait for the row, up to 15 s.
   for (let i = 0; i < 30 && sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${DRAFT}'`) !== "1"; i++) await page.waitForTimeout(500);

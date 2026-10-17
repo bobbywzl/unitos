@@ -6,17 +6,17 @@ import katex from "katex";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuthor } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
-import { MoreVertIcon } from "@/components/docs/icons";
+import { MoreHorizIcon } from "@/components/docs/icons";
 import { importedOf, type FigureMediaView } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
-import { pageStore, usePageState } from "@/components/docs/page/store";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { pageStore, useDrawnSetup, usePageState } from "@/components/docs/page/store";
+import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { setVersionsOpen } from "@/lib/assistant/side-chat-open";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { KATEX_MACROS } from "@/lib/katex";
@@ -31,6 +31,8 @@ type History = { current: Omit<Version, "id" | "name">; versions: Version[]; peo
 type Entry = Version & { current: boolean };
 
 const SCOPE = 'html .docs-prose[data-docs-styles="version"]';
+/** A pane narrower than this stacks the list under the page. */
+const NARROW_BELOW = 600;
 
 function entriesOf(history: History): Entry[] {
   const kept = history.versions.map((v, i) => ({ ...v, current: i === 0 && v.rev === history.current.rev }));
@@ -78,7 +80,8 @@ export function VersionView({
   const lang = useLang();
   const authorOf = useAuthor();
   const store = pageStore(editor, documentId, pageSetup);
-  const setup = usePageState(store, (s) => s.setup);
+  // A version draws as the page does.
+  const setup = useDrawnSetup(store);
   const textWidth = usePageState(store, (s) => s.textWidth);
   const rect = usePaneRect(editor);
   // The notes tray folds while the view is open, so the page has the room.
@@ -95,7 +98,9 @@ export function VersionView({
   const [showChanges, setShowChanges] = useState(true);
   const [naming, setNaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  // The version ⋯ › Restore this version picked: it restores once that
+  // version's text is in. Another pick clears the wish.
+  const restoreWanted = useRef<string | null>(null);
   const menuAnchor = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const proseRef = useRef<HTMLDivElement>(null);
@@ -129,6 +134,23 @@ export function VersionView({
   useEffect(() => {
     if (placed) rootRef.current?.focus();
   }, [placed]);
+  // Escape closes the view as Back does. An open menu or dialog takes its
+  // own Escape first, and a version's name field puts its old name back.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+      if (document.querySelector("[data-docs-menu], [role='dialog']")) return;
+      if (e.target instanceof HTMLInputElement && rootRef.current?.contains(e.target)) return;
+      e.preventDefault();
+      closeRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const entries = history ? entriesOf(history) : [];
   const index = Math.max(0, entries.findIndex((e) => e.id === selected));
@@ -173,7 +195,8 @@ export function VersionView({
     const schema = editor.schema;
     try {
       const node = schema.nodeFromJSON(doc);
-      const shown = showChanges ? markChanges(schema, node, before && schema.nodeFromJSON(before), color) : node;
+      // The oldest version has nothing before it to show changes against.
+      const shown = showChanges && before ? markChanges(schema, node, schema.nodeFromJSON(before), color) : node;
       const html = DOMSerializer.fromSchema(schema).serializeFragment(shown.content);
       html.querySelectorAll("[data-block-id]").forEach((n) => n.removeAttribute("data-block-id"));
       html.querySelectorAll<HTMLElement>("[data-latex]").forEach((n) =>
@@ -212,7 +235,7 @@ export function VersionView({
     try {
       if (e.id) await api(`/api/documents/${documentId}/versions/${e.id}`, "PATCH", { name: name || null });
       else if (name) {
-        await flushDocument(documentId);
+        if (!(await flushDocument(documentId))) throw new Error(t("docsVersions.notSaved"));
         await api(`/api/documents/${documentId}/versions`, "POST", { name });
       }
       await load();
@@ -221,13 +244,31 @@ export function VersionView({
     }
   };
 
-  // Restore this version: the text on screen is kept as a version first,
-  // then the version's text becomes the document's, one change to undo.
+  // Restore this version, at once: the text on screen is saved and kept as
+  // a version first, then the version's text becomes the document's, one
+  // change to undo (Ctrl+Z), and the replaced text is the newest version in
+  // the list. When the text cannot be kept (offline, a refused save),
+  // nothing is restored: the page keeps its text and the panel says why.
+  const [restoring, setRestoring] = useState(false);
   const restore = async () => {
-    if (!doc) return;
-    setConfirming(false);
-    await flushDocument(documentId);
-    if (!editor.isEmpty) await api(`/api/documents/${documentId}/versions`, "POST", {}).catch(() => {});
+    if (!doc || restoring) return;
+    setRestoring(true);
+    setError(null);
+    try {
+      if (!(await flushDocument(documentId))) throw new Error("not saved");
+      if (!editor.isEmpty) {
+        await api(`/api/documents/${documentId}/versions`, "POST", {}).catch((err: unknown) => {
+          // A text with no words has nothing to keep.
+          const empty = err instanceof ApiError && (err.detail as { reason?: string } | null)?.reason === "empty";
+          if (!empty) throw err;
+        });
+      }
+    } catch {
+      setError(t("docsVersions.restoreNotKept"));
+      setRestoring(false);
+      return;
+    }
+    if (editor.isDestroyed) return;
     const node = editor.schema.nodeFromJSON(doc);
     const tr = editor.state.tr.replaceWith(0, editor.state.doc.content.size, node.content);
     for (const [name, value] of Object.entries(node.attrs)) tr.setDocAttribute(name, value);
@@ -235,13 +276,32 @@ export function VersionView({
     onClose();
     editor.commands.focus("start");
   };
+  const restoreRef = useRef(restore);
+  useEffect(() => {
+    restoreRef.current = restore;
+  });
+  const shownId = entry?.id;
+  useEffect(() => {
+    if (!restoreWanted.current || !doc || shownId !== restoreWanted.current) return;
+    restoreWanted.current = null;
+    void restoreRef.current();
+  }, [shownId, doc]);
+  const pick = (id: string) => {
+    restoreWanted.current = null;
+    setSelected(id);
+  };
 
   if (!rect) return null;
   const frame = pageFrame(setup);
-  const panelWidth = Math.min(320, rect.width / 2);
-  const canvasWidth = rect.width - panelWidth;
-  // The page fits the canvas, down to half its size; a narrower canvas scrolls.
-  const scale = Math.max(0.5, Math.min(1, (canvasWidth - 64) / frame.width));
+  // A narrow pane (a phone) stacks the list under the page, each the pane's
+  // width; a wider one has the panel at the right.
+  const narrow = rect.width < NARROW_BELOW;
+  const panelWidth = narrow ? undefined : Math.min(320, rect.width / 2);
+  const canvasWidth = rect.width - (panelWidth ?? 0);
+  // The page fits the canvas, down to half its size (on a narrow pane, down
+  // to the pane's width); a narrower canvas scrolls.
+  const fit = (canvasWidth - (narrow ? 24 : 64)) / frame.width;
+  const scale = Math.min(1, narrow ? fit : Math.max(0.5, fit));
   const white = setup.pageless || /^#f{3}(f{3})?$/i.test(setup.color);
   const pageStyle: React.CSSProperties = setup.pageless
     ? { width: pagelessWidth(canvasWidth, 1, textWidth) }
@@ -261,6 +321,7 @@ export function VersionView({
       ref={rootRef}
       tabIndex={-1}
       className="docs-versions"
+      data-narrow={narrow || undefined}
       data-edit-control
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
     >
@@ -282,7 +343,7 @@ export function VersionView({
             </div>
           )}
           {restorable && (
-            <DialogButton primary onClick={() => setConfirming(true)}>
+            <DialogButton primary disabled={restoring} onClick={() => void restore()}>
               {t("docsVersions.restore")}
             </DialogButton>
           )}
@@ -330,7 +391,7 @@ export function VersionView({
                       }}
                     />
                   ) : (
-                    <button type="button" className="docs-versions-pick" onClick={() => setSelected(e.id)}>
+                    <button type="button" className="docs-versions-pick" onClick={() => pick(e.id)}>
                       {e.name ?? timeOf(e.savedAt)}
                     </button>
                   )}
@@ -354,7 +415,7 @@ export function VersionView({
                         setMenu(menu === e.id ? null : e.id);
                       }}
                     >
-                      <MoreVertIcon size={20} />
+                      <MoreHorizIcon size={20} />
                     </button>
                   )}
                 </div>
@@ -373,7 +434,7 @@ export function VersionView({
             onSelect={() => {
               setSelected(menuEntry.id);
               setMenu(null);
-              setConfirming(true);
+              restoreWanted.current = menuEntry.id;
             }}
           >
             {t("docsVersions.restore")}
@@ -388,16 +449,6 @@ export function VersionView({
           {t("docsVersions.nameThis")}
         </MenuItem>
       </DropdownPanel>
-      {confirming && entry && (
-        <ToolbarDialog
-          title={t("docsVersions.restoreQuestion")}
-          onClose={() => setConfirming(false)}
-          closeButton={false}
-          submit={{ label: t("docsVersions.restoreButton"), disabled: !doc, run: () => void restore() }}
-        >
-          {t("docsVersions.restoreBody", { time: timeOf(entry.savedAt) })}
-        </ToolbarDialog>
-      )}
     </div>
   );
 }

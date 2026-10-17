@@ -7,11 +7,10 @@ import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
 import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
-import { QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
+import { sectionAfterRemoval } from "@/lib/notes/gone";
 import { normalizeNoteOrders } from "@/lib/order";
-import { replayTime } from "@/lib/replay";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
@@ -19,6 +18,14 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z
   .object({
     sectionId: z.string().min(1),
+    // The note's id, chosen by the client before the create leaves
+    // (lib/notes/client-id.ts): a create sent again — a reload while the
+    // first one was on its way, the offline queue replaying — answers with
+    // the note the first one made instead of a second copy.
+    id: z
+      .string()
+      .regex(/^c[a-z0-9]{20,40}$/)
+      .optional(),
     content: z.string().min(1).max(50_000).optional(),
     // A note made of an annotation (SPEC.md §6): the annotation's text and
     // anchors are copied into the new note, and the annotation stays where
@@ -60,6 +67,14 @@ const createSchema = z
     // sent by the tray's composer. A note with a source, a video range, or
     // an annotation takes that document; the notes full page sends none.
     documentId: z.string().min(1).optional(),
+    // "keep": a source whose anchor no longer resolves leaves the note
+    // without it, and the answer carries sourceDropped: the words land (the
+    // offline queue replaying Add to notes, a quote dropped on a section).
+    // The same for a gathered note's quote that no longer resolves (its
+    // words stay as quoted text) and for a note on a link that is gone or
+    // removed (its quotes stay as quoted text). Unset, the create is
+    // refused whole.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => (d.quotes ? !d.fromAnnotationId : Boolean(d.content) !== Boolean(d.fromAnnotationId)), {
@@ -78,16 +93,29 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
-  const section = await db.section.findUnique({ where: { id: data.sectionId } });
+  // A section deleted elsewhere while its composer was writing (lib/notes/gone.ts):
+  // the note goes to the section that takes the deleted one's notes' words.
+  const section =
+    (await db.section.findUnique({ where: { id: data.sectionId } })) ?? (await sectionAfterRemoval(data.sectionId));
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
-  const access = await sectionAccess(data.sectionId, "editor");
+  const sectionId = section.id;
+  const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
+
+  // The same create again: the note it made, as it is now.
+  if (data.id) {
+    const made = await madeBefore(data.id, section.notebookId, access.user.id);
+    if (made === "taken") return NextResponse.json({ error: t("api.noteIdTaken") }, { status: 409 });
+    if (made) return NextResponse.json(made, { status: 200 });
+  }
+  const keepWords = data.onSourceLost === "keep";
 
   // The source resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document — a
   // re-parse gives every block a new id while an open reader still sends the
   // old ones.
   let sources: (ResolvedAnchor & { documentId: string; layer: string | null })[] = [];
+  let sourceDropped = false;
   if (data.source) {
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
@@ -95,10 +123,11 @@ export async function POST(req: Request) {
     // A core anchor (SPEC.md §28) resolves against the cores.
     const layer = data.source.layer ?? null;
     const passage = resolvePassage(await layerBlocks(data.source.documentId, layer), data.source, data.segments);
-    if (passage.length === 0) {
-      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    if (passage.length > 0) sources = passageSources(data.source.documentId, passage, layer);
+    else if (keepWords) sourceDropped = true;
+    else {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument"), code: "sourceLost" }, { status: 400 });
     }
-    sources = passageSources(data.source.documentId, passage, layer);
   }
 
   let videoSource: {
@@ -183,8 +212,6 @@ export async function POST(req: Request) {
           ],
     );
   }
-  let quotesKept = 0;
-  const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
   if (data.fromLinkId) {
     const link = await db.docLink.findUnique({
       where: { id: data.fromLinkId },
@@ -204,18 +231,18 @@ export async function POST(req: Request) {
       !(link.notebookId === null && link.formerNotebookId !== null) &&
       attachedEnds >= new Set([link.fromDocumentId, link.toDocumentId]).size;
     const removed = !!link && link.hiddenIn.length > 0;
-    if ((!shown || removed) && replayedAt === null) {
+    if ((!shown || removed) && !keepWords) {
       return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
     }
-    // A note on a link replayed from the offline queue, where another
-    // editor removed the link meanwhile (REV8-01): a 4xx would drop the
-    // queued words. A removed link keeps its row, so the note keeps the
-    // link's two quotes as sources. A link of this project whose documents
-    // left it keeps its quotes as plain quoted text (as REV5-06); a link
-    // that is gone or of another project saves the words alone.
+    // onSourceLost "keep" (the offline queue replaying a note on a link
+    // another editor removed meanwhile): the words land. A removed link
+    // keeps its row, so the note keeps the link's two quotes as sources. A
+    // link of this project whose documents left it keeps its quotes as
+    // plain quoted text; a link that is gone or of another project saves
+    // the words alone. The answer says a source was dropped.
+    if (!shown) sourceDropped = true;
     if (link && !shown && (link.notebookId === section.notebookId || removed)) {
       const quotes = [link.quotedText, ...(link.toQuotedText !== null ? [link.toQuotedText] : [])];
-      quotesKept = quotes.length;
       content = [content.trim(), ...quotes.map(quoteLines)].filter(Boolean).join("\n\n");
     }
     const end = { layer: null, startTime: null, endTime: null };
@@ -251,21 +278,14 @@ export async function POST(req: Request) {
         : []),
     ];
   }
-  // A gathered note replayed from the offline queue (REV5-06): the reader
-  // is not there to remove a quote that no longer resolves, and a 4xx drops
-  // the queued write with the reader's words. Such a quote keeps its words
-  // as plain quoted text with no source, the note saves, and the answer says
-  // how many were kept so (QUOTES_KEPT_HEADER). Online the reader still gets
-  // the error and fixes the quote. The header carries the time the record
-  // was queued: any whole number of ms takes this path, however old or
-  // however fast the clock that wrote it (REV7-02: a window only dropped
-  // real records; a forged header saves only the caller's own words), and
-  // a note this account saved in the section since then (a minute earlier
-  // for a fast clock) with the same words is that record's earlier send,
-  // answered as saved (REV6-06).
-  if (data.quotes && replayedAt !== null) {
+  if (data.quotes && keepWords) {
+    // A gathered note with onSourceLost "keep" (the offline queue replaying
+    // it): the reader is not there to remove a quote that no longer
+    // resolves, and a refusal would drop the queued write with the reader's
+    // words. Such a quote keeps its words as plain quoted text with no
+    // source, the note saves, and the answer says a source was dropped.
     const gathered = await resolveNoteQuotesKeeping(section.notebookId, data.quotes);
-    quotesKept = gathered.kept;
+    if (gathered.kept > 0) sourceDropped = true;
     sources = gathered.items.flatMap((item) => ("source" in item ? [item.source] : []));
     content = [
       content.trim(),
@@ -273,12 +293,8 @@ export async function POST(req: Request) {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const saved = await db.note.findFirst({
-      where: { sectionId: data.sectionId, createdById: access.user.id, content, createdAt: { gte: replayedAt } },
-      include: { sources: true },
-    });
-    if (saved) return NextResponse.json(saved, { status: 201 });
   } else if (data.quotes) {
+    // Online the reader gets the error and fixes the quote.
     const gathered = await resolveNoteQuotes(section.notebookId, data.quotes);
     if ("notInProject" in gathered) return NextResponse.json({ error: t("api.quoteNotInProject") }, { status: 400 });
     if ("unresolved" in gathered) {
@@ -295,11 +311,18 @@ export async function POST(req: Request) {
   // The document the note belongs to (SPEC.md §6): the passage's, the video's,
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
-  // A note on a link belongs to the project: it quotes two documents.
-  // A gathered note over several documents belongs to the project, as one on a link.
-  let documentId: string | null = data.fromLinkId || (data.quotes && new Set(sources.map((s) => s.documentId)).size > 1)
-    ? null
-    : (sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null);
+  // A note on a link belongs to the project: it quotes two documents. A
+  // gathered note over several documents belongs to the project, as one on
+  // a link does.
+  let documentId: string | null =
+    data.fromLinkId || (data.quotes && new Set(sources.map((s) => s.documentId)).size > 1)
+      ? null
+      : (sources[0]?.documentId ??
+        videoSource?.documentId ??
+        copiedSources[0]?.documentId ??
+        (sourceDropped ? data.source?.documentId : undefined) ??
+        data.documentId ??
+        null);
   if (documentId) {
     const attached = await db.notebookDocument.findUnique({
       where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
@@ -308,10 +331,11 @@ export async function POST(req: Request) {
     if (!attached) documentId = null;
   }
 
-  const count = await db.note.count({ where: { sectionId: data.sectionId } });
+  const count = await db.note.count({ where: { sectionId } });
   const note = await db.note.create({
     data: {
-      sectionId: data.sectionId,
+      ...(data.id ? { id: data.id } : {}),
+      sectionId,
       content,
       // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
@@ -341,13 +365,27 @@ export async function POST(req: Request) {
         : {}),
     },
     include: { sources: true },
+  }).catch(async (err: unknown) => {
+    // Two copies of one create at once: the other one made the note.
+    if (data.id && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const made = await madeBefore(data.id, section.notebookId, access.user.id);
+      if (made && made !== "taken") return made;
+    }
+    throw err;
   });
-  if (data.top) await normalizeNoteOrders(data.sectionId);
+  if (data.top) await normalizeNoteOrders(sectionId);
   await bumpNotebook(section.notebookId);
-  return NextResponse.json(note, {
-    status: 201,
-    ...(quotesKept > 0 ? { headers: { [QUOTES_KEPT_HEADER]: String(quotesKept) } } : {}),
-  });
+  return NextResponse.json(sourceDropped ? { ...note, sourceDropped: true } : note, { status: 201 });
+}
+
+/** The note an earlier copy of this create made: null when there is none,
+    "taken" when the id is another person's note or in another project. */
+async function madeBefore(id: string, notebookId: string, userId: string) {
+  const note = await db.note.findUnique({ where: { id }, include: { sources: true } });
+  if (!note) return null;
+  const section = await db.section.findUnique({ where: { id: note.sectionId }, select: { notebookId: true } });
+  if (section?.notebookId !== notebookId || note.createdById !== userId) return "taken" as const;
+  return note;
 }
 
 // A quote as the note's text shows it: blockquote lines, the boxed

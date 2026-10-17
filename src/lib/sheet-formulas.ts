@@ -427,6 +427,30 @@ export function computeFormula(formula: string, get: (r: number, c: number) => C
   }
 }
 
+/** A shared formula as a cell below or beside its first cell reads it
+    (ECMA-376 Part 1, §18.3.1.40): every reference not fixed with "$" moves
+    by the cell's distance from the first cell, as a formula filled down or
+    across does. The formula is given and returned without "=". Null when
+    the reading does not cover it (another sheet's cells, an error) or a
+    reference would move off the sheet. */
+export function sharedFormula(formula: string, dr: number, dc: number): string | null {
+  let list: Token[];
+  try {
+    list = tokens(formula);
+  } catch {
+    return null;
+  }
+  let out = formula;
+  for (const t of [...list].reverse()) {
+    if (t.t !== "ref") continue;
+    const r = t.rowFixed ? t.r : t.r + dr;
+    const c = t.colFixed ? t.c : t.c + dc;
+    if (r < 0 || c < 0) return null;
+    out = `${out.slice(0, t.start)}${t.colFixed ? "$" : ""}${letters(c)}${t.rowFixed ? "$" : ""}${r + 1}${out.slice(t.end)}`;
+  }
+  return out;
+}
+
 /** The formula with its references moved with their cells: `row` and `col`
     give an old row's or column's new index, or null for one that went. A
     range keeps the cells that stay (its ends move in to the nearest kept

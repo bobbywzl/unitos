@@ -8,7 +8,6 @@ import { annotationsSection } from "@/lib/derive/context";
 import { pageBlockText } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { replayedAt } from "@/lib/replay";
 import { regionSchema, timeRangeSchema } from "@/lib/video/types";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { parseBody } from "@/lib/validate";
@@ -58,6 +57,9 @@ const createSchema = z
     segments: segmentsSchema,
     color: z.enum(["clay", "sage", "gold", "plum"]).optional(),
     comment: z.string().max(10_000).optional(),
+    // The offline queue replaying a comment (lib/offline/queue.ts replayBody):
+    // keep the words when the anchor no longer resolves.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
     video: videoSchema.optional(),
     page: pageSchema.optional(),
   })
@@ -111,14 +113,15 @@ export async function POST(req: Request) {
   const anchor = passage[0];
   const comment = data.comment?.trim();
   if (!anchor) {
-    // A comment replayed from the offline queue whose words left the block
-    // meanwhile (an edit, a re-parse) saves all the same, on the block the
-    // reader commented on, with its source orphaned: the Annotations tab
-    // lists it under the document as unresolved, and the words typed
-    // offline are never dropped (REV9-03, rule zero 6). Online the reader
-    // gets the 400 and keeps the box. A highlight has no words of the
-    // reader's own: it answers 400 on replay too.
-    if (!comment || replayedAt(req) === null) {
+    // A comment replayed from the offline queue (onSourceLost "keep",
+    // lib/offline/queue.ts replayBody) whose words left the block meanwhile
+    // (an edit, a re-parse) saves all the same, on the block the reader
+    // commented on, with its source orphaned: the Annotations tab lists it
+    // under the document as unresolved, and the words typed offline are
+    // never dropped (rule zero 6). Online the reader gets the 400 and keeps
+    // the box. A highlight has no words of the reader's own: it answers 400
+    // on replay too.
+    if (!comment || data.onSourceLost !== "keep") {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
     return createOrphanedComment(data.notebookId, data.documentId, data.anchor, layer, comment, data.color ?? null, access.user.id, t);

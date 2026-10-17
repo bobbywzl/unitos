@@ -11,6 +11,7 @@
 
 import { CLOSE, DOC_CHIP, LEAD, LEAD_PRIMARY, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GraphNode } from "@/lib/types";
 import type { FindDocument, FindPassage } from "@/lib/graph/find";
@@ -174,7 +175,7 @@ function FindGroup({
             p={p}
             documentId={doc.id}
             onOpen={() => {
-              router.push(`/n/${notebookId}?doc=${doc.id}&block=${p.blockId}`);
+              graphNavigate(router, `/n/${notebookId}?doc=${doc.id}&block=${p.blockId}`);
               onOpenDocument();
             }}
           />

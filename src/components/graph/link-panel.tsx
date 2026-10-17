@@ -2,6 +2,7 @@
 
 import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, ACTION_NOTE_IN, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { useEffect, useRef, useState } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
 import { api } from "@/lib/api";
@@ -338,7 +339,7 @@ export function LinkPanel({
             link={link}
             showReason={false}
             onOpen={(documentId) => {
-              router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
+              graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${link.id}`);
               onOpenDocument();
             }}
           />

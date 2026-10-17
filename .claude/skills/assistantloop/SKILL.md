@@ -7,7 +7,7 @@ description: The assistant quality loop (SPEC.md §7, §25). Subagents stand in 
 
 What the loop improves: the sidebar assistant at This page scope and the selection chat — the answer prompt (`src/lib/prompts/synthesis.ts`), the action lines and the plan's validation (`src/lib/assistant/plan.ts`), the edit passes (`src/lib/assistant/revise.ts`, `one-pass.ts`, `reorder-run.ts`, `target.ts`, `src/lib/derive/suggest.ts`, their prompts under `src/lib/prompts/`), and what the reader sees of a plan (the plan card in `components/reader/reader-interactions.tsx`, the suggestions row). The families: answer (from the source), edit (an article's blocks), suggest (a document with rich text), section (notes, sections, documents), annotate (marks on the passages), transcript (a recording's lines and voices), confirm (a change carried through a conversation), scope (where a change runs).
 
-No API key is needed: agents answer the prompt files. The assistant runs on Gemini 3.8 Flash in production and the edit passes on Claude Sonnet 5; an Opus agent stands in for both, at the agent's own effort, and Opus agents judge (from round 6 on; rounds 0 to 5 used a Sonnet stand-in, and round 6's record says which cases each answered). Launch every agent with model opus. Each case's directory is the whole world of one turn.
+No API key is needed: agents answer the prompt files. The assistant runs on Gemini 3.8 Flash in production and the edit passes on Claude Sonnet 5.5; an Opus agent stands in for both, at the agent's own effort, and Opus agents judge (from round 6 on; rounds 0 to 5 used a Sonnet stand-in, and round 6's record says which cases each answered). Launch every agent with model opus. Each case's directory is the whole world of one turn.
 
 ## One round
 

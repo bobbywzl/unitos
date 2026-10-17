@@ -95,11 +95,29 @@ export function pageFrame(setup: PageSetup): PageFrame {
   };
 }
 
+/** Pageless: the least width of the text column, while the pane has the
+    room for it. */
+const PAGELESS_MIN = 600;
+/** Pageless: the room the text column leaves at each side, and on a pane
+    too narrow for PAGELESS_MIN (a phone, the notes tray beside a small
+    window), the least it leaves: the canvas's gutter. */
+const PAGELESS_SIDE = 40;
+const PAGELESS_GUTTER = 24;
+
 /** Pageless: the text column's width at 100% for a canvas `available` px
-    wide at `scale`: the room there is less 40 px each side, at least 600 px,
-    at most the Text width's cap. */
-export function pagelessWidth(available: number, scale: number, width: TextWidth): number {
-  return Math.max(600, Math.min(available / scale - 80, TEXT_WIDTHS[width]));
+    wide at `scale`: the room there is less 40 px each side, at most the Text
+    width's cap, and at least 600 px; a canvas too narrow for 600 px takes
+    the column to its 24 px gutters, so no line runs past the pane. `margin`
+    is the room the toolbar and the cards take beside the text (the page
+    moves left for them, layer/margin.ts): a column narrower than its cap
+    leaves it while the column keeps 600 px; Full is the whole pane. */
+export function pagelessWidth(available: number, scale: number, width: TextWidth, margin = 0): number {
+  const room = available / scale;
+  const least = Math.min(PAGELESS_MIN, room - 2 * PAGELESS_GUTTER);
+  let column = Math.min(room - 2 * PAGELESS_SIDE, TEXT_WIDTHS[width]);
+  const beside = (available - margin) / scale;
+  if (margin > 0 && width !== "full" && beside >= PAGELESS_MIN) column = Math.min(column, beside);
+  return Math.max(least, column);
 }
 
 /** The page (0-based, unclamped) at a client y over the page stack `el`,
@@ -116,7 +134,8 @@ export function pageAt(el: HTMLElement, pitch: number, clientY: number): { page:
 export function scrollParent(el: Element | null): HTMLElement | null {
   for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
     const oy = getComputedStyle(node).overflowY;
-    if (oy === "auto" || oy === "scroll") return node;
+    // A pane holding the browser's scroll off during a drag (margin-select.ts) still scrolls.
+    if (oy === "auto" || oy === "scroll" || node.hasAttribute("data-edge-drag")) return node;
   }
   return null;
 }

@@ -27,6 +27,8 @@ export function suggestCheckPrompt(ctx: {
   lang: Lang;
   command: string;
   instruction: string | null;
+  // The panel's answer the command may ask to use: its words count as stated.
+  material?: string | null;
   ops: CheckedOp[];
 }): string {
   return [
@@ -34,6 +36,7 @@ export function suggestCheckPrompt(ctx: {
     "",
     `The reader's command: ${ctx.command}`,
     ...(ctx.instruction ? [`The assistant's instruction: ${ctx.instruction}`] : []),
+    ...(ctx.material ? [`The assistant's answer (what it states counts as stated): ${JSON.stringify(clip(ctx.material, 8000))}`] : []),
     "",
     "Edits:",
     ...ctx.ops.flatMap((op) => [
@@ -46,7 +49,7 @@ export function suggestCheckPrompt(ctx: {
     "Rules:",
     "1. Drop an edit that changes or removes words the command says to keep, or words of a kind it says to keep (quotes, names, numbers, citations, a part it names).",
     "2. Drop an edit that changes or removes what the command did not ask to change. An edit of the kind the command asks for, on a block the command covers, stays.",
-    "3. Drop an edit whose new words state a fact, a number, a name, or a claim the document does not state, or change what a passage means beyond what the command asks.",
+    "3. Drop an edit whose new words state a fact, a number, a name, or a claim that neither the document nor the assistant's answer states, or change what a passage means beyond what the command asks. A command that asks to expand, explain, elaborate, define, or add an example asks for new words: an explanation in general terms stays; only a number, a name, or a quotation that neither the document nor the assistant's answer states is dropped.",
     "4. Drop an edit that removes a block the command does not call for removing: read the block in the document, not only the edit.",
     "5. Keep every other edit. Never drop an edit for its style or its wording alone.",
     `6. why: one sentence on the rule the edit breaks, in ${languageName(ctx.lang)}.`,

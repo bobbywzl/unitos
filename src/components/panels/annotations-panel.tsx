@@ -4,8 +4,11 @@ import { ACTION, ACTION_DANGER } from "@/components/graph/graph-ui"; // [style7]
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { linkPath } from "@/lib/link-scope";
 import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
 import { requestGraph } from "@/components/graph/graph-keep";
@@ -155,7 +158,7 @@ function LinkAbout({
 export function AnnotationsPanel({
   notebookId,
   documentId,
-  annotations: every,
+  annotations: listed,
   linksOut,
   linksIn,
   sections,
@@ -171,6 +174,9 @@ export function AnnotationsPanel({
   const router = useRouter();
   const t = useT();
   const { canEdit, myId, people } = useCollab();
+  // A deleted annotation's row goes at once, with its mark; Undo brings it back.
+  const removed = useRemovedNotes();
+  const every = removed.size > 0 ? listed.filter((a) => !removed.has(a.id)) : listed;
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   // The New glow (SPEC.md §18) on the four arrows until they are pressed.
   const fullPageNew = useNewFeature("annotationsFullPage");
@@ -206,7 +212,8 @@ export function AnnotationsPanel({
     setErrorText(null);
     try {
       await run();
-      router.refresh();
+      // Offline the write is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -216,29 +223,23 @@ export function AnnotationsPanel({
 
   async function deleteAnnotation(id: string) {
     // The reader fades the annotation's mark at once (reader-interactions.tsx),
-    // and puts it back if the delete fails.
-    window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
-    await mutate(id, async () => {
-      try {
-        await api(`/api/notes/${id}`, "DELETE");
-      } catch (err) {
-        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
-        throw err;
-      }
-    });
+    // and puts it back if the delete fails. The notes' pill offers Undo
+    // (lib/notes/undo-pill.ts).
+    const kind = every.find((a) => a.id === id)?.kind ?? "";
+    await mutate(id, () => deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh()));
   }
 
   // Remove asks only when the link is not the reader's alone (SPEC.md §13):
   // another person replied on it, or made it, named (WALK5-08, WALK6-08).
   // Remove hides the link and keeps its row (WALK5-01): Link removed · Undo
   // shows for 10 seconds, and History's Restore does the same later.
-  const [removed, setRemoved] = useState<string | null>(null);
+  const [removedLink, setRemovedLink] = useState<string | null>(null);
   const removeEdit = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!removed) return;
-    const timer = setTimeout(() => setRemoved(null), 10_000);
+    if (!removedLink) return;
+    const timer = setTimeout(() => setRemovedLink(null), 10_000);
     return () => clearTimeout(timer);
-  }, [removed]);
+  }, [removedLink]);
   async function removeLink(id: string, replies: { userId: string }[], createdById: string | null) {
     const madeBy = createdById && createdById !== myId ? people[createdById]?.name : undefined;
     // No confirm for the reader's own link with only their own replies: Undo is there (WALK6-08).
@@ -252,14 +253,14 @@ export function AnnotationsPanel({
       removeEdit.current = result.editId;
       done = !result.queued;
     });
-    if (done) setRemoved(id);
+    if (done) setRemovedLink(id);
   }
   async function undoRemove(id: string) {
     await mutate(id, async () => {
       // Undo names its Remove: another editor's later removal stays (REV7-06).
       const edit = removeEdit.current ? `&edit=${encodeURIComponent(removeEdit.current)}` : "";
       await api(`/api/links/${encodeURIComponent(id)}/hidden?notebookId=${encodeURIComponent(notebookId)}${edit}`, "DELETE");
-      setRemoved(null);
+      setRemovedLink(null);
     });
   }
 
@@ -300,9 +301,6 @@ export function AnnotationsPanel({
   const actionsFor = (a: AnnotationItem) => (
     <AnnotationActions
       annotation={a}
-      notebookId={notebookId}
-      documentId={documentId}
-      onDelete={deleteAnnotation}
       onExpand={setExpandedId}
     />
   );
@@ -370,13 +368,15 @@ export function AnnotationsPanel({
 
   return (
     <div className="flex flex-col gap-3.5">
-      {conversationOverlay}
+      {/* On the body: inside the tray a transformed ancestor (the sheet
+          rising in) would hold the page-wide overlay to the tray's box. */}
+      {conversationOverlay && typeof document !== "undefined" && createPortal(conversationOverlay, document.body)}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
-      {removed && !errorText && (
-        <p role="status" data-link-removed={removed} className="text-[13px] text-sand-700">
+      {removedLink && !errorText && (
+        <p role="status" data-link-removed={removedLink} className="text-[13px] text-sand-700">
           {t("panels.linkRemoved")}{" "}
           <button
-            onClick={() => void undoRemove(removed)}
+            onClick={() => void undoRemove(removedLink)}
             disabled={busyId !== null}
             data-track="link-remove-undo"
             className={`${ACTION} align-middle`}
@@ -411,6 +411,7 @@ export function AnnotationsPanel({
                   view={view}
                   menu={menuFor(a)}
                   summary={annotationSummary(a)}
+                  jumpNotebookId={notebookId}
                 >
                   <AnnotationBody annotation={a} />
                   {actionsFor(a)}

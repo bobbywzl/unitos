@@ -1,5 +1,5 @@
-import { unzipSync } from "fflate";
-import { JSDOM } from "jsdom";
+import { inflateSync, strFromU8, unzipSync } from "fflate";
+import { SaxesParser } from "saxes";
 import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
 // Office Open XML files (SPEC.md §27): the zip and XML reading the slides
@@ -12,6 +12,40 @@ export type OfficeKind = "pptx" | "xlsx" | "docx";
 
 /** A zip's entries by path, every entry decompressed. */
 export type OfficeZip = Map<string, Uint8Array>;
+
+/** A zip entry's name as a part path: some writers store the Windows
+    separator ("xl\\workbook.xml"). */
+function partName(name: string): string {
+  return name.replace(/\\/g, "/");
+}
+
+/** The parts by path, found whatever the case of the name: part names
+    compare case-insensitively (ECMA-376 Part 2, §9.1.1.1), and some writers
+    store "xl/sharedstrings.xml" for the "sharedStrings.xml" the
+    relationships name. An exact name wins. Sheets benchmark finding: two
+    LibreOffice test workbooks of 7,579 and 9,364 cells, stored with these
+    names, read as nothing. */
+class OfficeParts extends Map<string, Uint8Array> {
+  private readonly folded = new Map<string, string>();
+
+  override set(name: string, data: Uint8Array): this {
+    super.set(name, data);
+    const key = name.toLowerCase();
+    if (!this.folded.has(key)) this.folded.set(key, name);
+    return this;
+  }
+
+  override get(name: string): Uint8Array | undefined {
+    const exact = super.get(name);
+    if (exact !== undefined) return exact;
+    const folded = this.folded.get(name.toLowerCase());
+    return folded === undefined ? undefined : super.get(folded);
+  }
+
+  override has(name: string): boolean {
+    return this.get(name) !== undefined;
+  }
+}
 
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 
@@ -31,7 +65,7 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   try {
     unzipSync(bytes, {
       filter: (file) => {
-        names.add(file.name);
+        names.add(partName(file.name).toLowerCase());
         return false;
       },
     });
@@ -44,11 +78,81 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   return null;
 }
 
+/** A zip's mark for a size or an offset stored in its zip64 extra field. */
+const ZIP64_MARK = 0xffffffff;
+
+/** The entries whose sizes sit in a zip64 extra field, read from the
+    central directory. fflate reads that field only when the zip also has
+    a zip64 end record; without one it took the mark for the size and set
+    aside 4 GB for each entry. Sheets benchmark finding: a 4 KB workbook
+    (LibreOffice tdf82984) took half a second alone and up to a minute
+    beside other files. */
+function zip64Entries(bytes: Uint8Array, names: Set<string>): Record<string, Uint8Array> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u16 = (at: number) => view.getUint16(at, true);
+  const u32 = (at: number) => view.getUint32(at, true);
+  const u64 = (at: number) => u32(at) + u32(at + 4) * 2 ** 32;
+  let end = bytes.length - 22;
+  while (end > 0 && u32(end) !== 0x06054b50) end--;
+  let count = u16(end + 10);
+  let at = u32(end + 16);
+  // A zip64 end record, when the file has one, holds the true count and offset.
+  if (end >= 20 && u32(end - 20) === 0x07064b50) {
+    const record = u64(end - 12);
+    if (u32(record) === 0x06064b50) {
+      count = u64(record + 32);
+      at = u64(record + 48);
+    }
+  }
+  const out: Record<string, Uint8Array> = {};
+  for (let i = 0; i < count && u32(at) === 0x02014b50; i++) {
+    const method = u16(at + 10);
+    let packed = u32(at + 20);
+    let size = u32(at + 24);
+    const nameLength = u16(at + 28);
+    const extraLength = u16(at + 30);
+    let offset = u32(at + 42);
+    const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLength), !(u16(at + 8) & 0x800));
+    // The zip64 field (tag 1) holds, in order, each of the size, the packed
+    // size, and the offset that is marked.
+    for (let x = at + 46 + nameLength; x + 4 <= at + 46 + nameLength + extraLength; x += 4 + u16(x + 2)) {
+      if (u16(x) !== 1) continue;
+      let y = x + 4;
+      if (size === ZIP64_MARK) {
+        size = u64(y);
+        y += 8;
+      }
+      if (packed === ZIP64_MARK) {
+        packed = u64(y);
+        y += 8;
+      }
+      if (offset === ZIP64_MARK) offset = u64(y);
+      break;
+    }
+    at += 46 + nameLength + extraLength + u16(at + 32);
+    if (!names.has(name)) continue;
+    const start = offset + 30 + u16(offset + 26) + u16(offset + 28);
+    const data = bytes.subarray(start, start + packed);
+    if (method === 0) out[name] = data.slice();
+    else if (method === 8) out[name] = inflateSync(data, size > 0 && size < ZIP64_MARK ? { out: new Uint8Array(size) } : undefined);
+  }
+  return out;
+}
+
 /** Every entry of the zip, decompressed. Throws on a broken zip. */
 export function unzipOffice(bytes: Uint8Array): OfficeZip {
-  const entries = unzipSync(bytes);
-  const zip: OfficeZip = new Map();
-  for (const [name, data] of Object.entries(entries)) {
+  const marked = new Set<string>();
+  const entries = unzipSync(bytes, {
+    filter: (file) => {
+      if (file.size !== ZIP64_MARK && file.originalSize !== ZIP64_MARK) return true;
+      marked.add(file.name);
+      return false;
+    },
+  });
+  if (marked.size > 0) Object.assign(entries, zip64Entries(bytes, marked));
+  const zip: OfficeZip = new OfficeParts();
+  for (const [stored, data] of Object.entries(entries)) {
+    const name = partName(stored);
     // Directory entries carry no bytes.
     if (name.endsWith("/")) continue;
     zip.set(name, data);
@@ -58,18 +162,172 @@ export function unzipOffice(bytes: Uint8Array): OfficeZip {
 
 const decoder = new TextDecoder("utf-8");
 
+/** The character set an XML part is written in: a byte order mark, else
+    the declaration's encoding, else UTF-8 (XML 1.0, §4.3.3). Sheets
+    benchmark finding: a workbook whose worksheet declares ISO-8859-1 read
+    every accented letter as U+FFFD. */
+function xmlCharset(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return "utf-16le";
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return "utf-16be";
+  if (bytes[0] !== 0x3c || bytes[1] !== 0x3f) return "utf-8";
+  let head = "";
+  for (let i = 0; i < Math.min(bytes.length, 200) && bytes[i] !== 0x3e; i++) head += String.fromCharCode(bytes[i]);
+  const declared = /encoding\s*=\s*["']([A-Za-z0-9._-]+)["']/.exec(head)?.[1].toLowerCase();
+  return declared ?? "utf-8";
+}
+
 /** An XML part's text, or null when the zip has no such part. */
 export function partText(zip: OfficeZip, path: string): string | null {
   const bytes = zip.get(path);
-  return bytes ? decoder.decode(bytes) : null;
+  if (!bytes) return null;
+  const charset = xmlCharset(bytes);
+  if (charset === "utf-8") return decoder.decode(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    // A label the decoder does not know: read it as UTF-8, as before.
+    return decoder.decode(bytes);
+  }
 }
 
-// One DOM parser for every part: a JSDOM window per part would be the slow
-// part of a 200-slide parse.
-let parser: DOMParser | null = null;
-function domParser(): DOMParser {
-  if (!parser) parser = new new JSDOM("").window.DOMParser();
-  return parser;
+// ── A lean XML tree ──────────────────────────────────────────────────────────
+// A part is read into plain objects, not a browser DOM. jsdom's DOMParser
+// built a full DOM: an 18 MB word/document.xml took a minute and gigabytes,
+// most of it jsdom's live collections behind every `children` read (Word
+// benchmark finding: d2p-imagedata_without_rid, poi-bug65649). The tree is
+// built from the same XML reader jsdom parses with (saxes, namespaces on,
+// every file read as XML 1.0), so a part parses, or fails, exactly as it
+// did; and it answers the DOM calls the Office parsers make (children,
+// localName, attributes, getAttribute, textContent, parentElement,
+// documentElement, getElementsByTagNameNS) with the same values.
+
+class XmlAttr {
+  constructor(
+    readonly name: string,
+    readonly localName: string,
+    readonly prefix: string | null,
+    readonly namespaceURI: string | null,
+    readonly value: string,
+  ) {}
+}
+
+const NO_ELEMENTS: readonly XmlElement[] = Object.freeze([]);
+
+class XmlElement {
+  children: XmlElement[] = NO_ELEMENTS as XmlElement[];
+  /** The text inside, in order among the children: pairs of the number of
+      children before a piece and the piece; null when there is none. */
+  texts: (number | string)[] | null = null;
+  constructor(
+    readonly localName: string,
+    readonly prefix: string | null,
+    readonly namespaceURI: string | null,
+    readonly attributes: XmlAttr[],
+    readonly parentElement: XmlElement | null,
+  ) {}
+
+  get tagName(): string {
+    return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
+  }
+
+  getAttribute(name: string): string | null {
+    for (const a of this.attributes) if (a.name === name) return a.value;
+    return null;
+  }
+
+  get textContent(): string {
+    const out: string[] = [];
+    this.collectText(out);
+    return out.join("");
+  }
+
+  private collectText(out: string[]) {
+    const texts = this.texts;
+    let t = 0;
+    for (let k = 0; k <= this.children.length; k++) {
+      while (texts && t < texts.length && texts[t] === k) {
+        out.push(texts[t + 1] as string);
+        t += 2;
+      }
+      if (k < this.children.length) this.children[k].collectText(out);
+    }
+  }
+
+  getElementsByTagNameNS(namespace: string | null, localName: string): XmlElement[] {
+    const out: XmlElement[] = [];
+    const walk = (el: XmlElement) => {
+      for (const c of el.children) {
+        if ((localName === "*" || c.localName === localName) && (namespace === "*" || c.namespaceURI === namespace)) out.push(c);
+        walk(c);
+      }
+    };
+    walk(this);
+    return out;
+  }
+}
+
+class XmlDocumentTree {
+  readonly textContent = null;
+  constructor(readonly documentElement: XmlElement) {}
+
+  get children(): XmlElement[] {
+    return [this.documentElement];
+  }
+
+  getElementsByTagNameNS(namespace: string | null, localName: string): XmlElement[] {
+    const root = this.documentElement;
+    const own = (localName === "*" || root.localName === localName) && (namespace === "*" || root.namespaceURI === namespace);
+    return [...(own ? [root] : []), ...root.getElementsByTagNameNS(namespace, localName)];
+  }
+}
+
+/** XML text as a lean tree; throws where jsdom's DOMParser reports a parse
+    failure (saxes' first error). */
+function buildXml(text: string): XmlDocumentTree {
+  const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: "1.0", forceXMLVersion: true });
+  let root: XmlElement | null = null;
+  let open: XmlElement | null = null;
+  // An element named parsererror is how jsdom reports a failure: a part
+  // that holds one was read as failed, and still is.
+  let failed = false;
+  parser.on("opentag", (tag) => {
+    const attributes: XmlAttr[] = [];
+    for (const key of Object.keys(tag.attributes)) {
+      const a = tag.attributes[key];
+      attributes.push(new XmlAttr(a.name, a.local, a.prefix === "" ? null : a.prefix, a.uri === "" ? null : a.uri, a.value));
+    }
+    const el = new XmlElement(tag.local, tag.prefix === "" ? null : tag.prefix, tag.uri === "" ? null : tag.uri, attributes, open);
+    if (el.tagName === "parsererror") failed = true;
+    if (open) {
+      if (open.children === NO_ELEMENTS) open.children = [];
+      open.children.push(el);
+    } else root ??= el;
+    open = el;
+  });
+  parser.on("closetag", () => {
+    open = open?.parentElement ?? null;
+  });
+  // Text outside the root is no node of the tree; CDATA is text.
+  const addText = (data: string) => {
+    if (!open || !data) return;
+    (open.texts ??= []).push(open.children.length, data);
+  };
+  parser.on("text", addText);
+  parser.on("cdata", addText);
+  parser.on("doctype", (dt) => {
+    const entityMatcher = /<!ENTITY ([^ ]+) "([^"]+)">/g;
+    let result;
+    while ((result = entityMatcher.exec(dt))) {
+      const [, name, value] = result;
+      if (!(name in parser.ENTITIES)) parser.ENTITIES[name] = value;
+    }
+  });
+  parser.on("error", (err) => {
+    throw err;
+  });
+  parser.write(text).close();
+  if (!root || failed) throw new Error("no document element");
+  return new XmlDocumentTree(root);
 }
 
 /** An XML part parsed to a DOM, or null when the part is missing or does
@@ -82,32 +340,47 @@ export function parseXmlPart(zip: OfficeZip, path: string): XMLDocument | null {
 
 export function parseXml(text: string): XMLDocument | null {
   try {
-    const doc = domParser().parseFromString(text, "application/xml");
-    // jsdom reports a parse failure as a parsererror document.
-    if (doc.getElementsByTagName("parsererror").length > 0) return null;
-    return doc;
+    // The tree answers every DOM call the Office parsers make (above).
+    return buildXml(text) as unknown as XMLDocument;
   } catch {
     return null;
   }
 }
 
+// The children are read from the lean tree's own array (above): a plain
+// array, so a walk over a row of 10,000 cells is linear. jsdom's
+// HTMLCollection looked up named items on each indexed read, and that walk
+// was quadratic (sheets benchmark finding: a 2 MB worksheet with no cells
+// took 57 s).
+
+/** What these helpers read of an element: one of the lean tree's (above),
+    or one read by lib/parse/xml-stream.ts (a worksheet's rows, streamed). */
+export interface XmlElementLike {
+  readonly localName: string;
+  readonly children: ArrayLike<XmlElementLike>;
+  readonly attributes: ArrayLike<{ readonly localName: string; readonly value: string }>;
+  getAttribute(name: string): string | null;
+}
+
 /** The direct children with this local name, in order. */
-export function children(el: Element | null | undefined, localName: string): Element[] {
+export function children<E extends XmlElementLike>(el: E | null | undefined, localName: string): E[] {
   if (!el) return [];
-  const out: Element[] = [];
-  for (const child of el.children) if (child.localName === localName) out.push(child);
+  const out: E[] = [];
+  const all = el.children as ArrayLike<E>;
+  for (let k = 0; k < all.length; k++) if (all[k].localName === localName) out.push(all[k]);
   return out;
 }
 
 /** The first direct child with this local name. */
-export function child(el: Element | null | undefined, ...path: string[]): Element | null {
-  let at: Element | null = el ?? null;
+export function child<E extends XmlElementLike>(el: E | null | undefined, ...path: string[]): E | null {
+  let at: E | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next: Element | null = null;
-    for (const c of at.children) {
-      if (c.localName === name) {
-        next = c;
+    let next: E | null = null;
+    const all = at.children as ArrayLike<E>;
+    for (let k = 0; k < all.length; k++) {
+      if (all[k].localName === name) {
+        next = all[k];
         break;
       }
     }
@@ -117,12 +390,15 @@ export function child(el: Element | null | undefined, ...path: string[]): Elemen
 }
 
 /** Every descendant with this local name, in document order. */
-export function descendants(el: Element | Document | null | undefined, localName: string): Element[] {
+export function descendants<E extends XmlElementLike = Element>(
+  el: { getElementsByTagNameNS(namespace: string, localName: string): ArrayLike<E> } | null | undefined,
+  localName: string,
+): E[] {
   if (!el) return [];
   return Array.from(el.getElementsByTagNameNS("*", localName));
 }
 
-export function attr(el: Element | null | undefined, name: string): string | null {
+export function attr(el: XmlElementLike | null | undefined, name: string): string | null {
   if (!el) return null;
   const value = el.getAttribute(name);
   if (value !== null) return value;
@@ -132,7 +408,7 @@ export function attr(el: Element | null | undefined, name: string): string | nul
   return null;
 }
 
-export function intAttr(el: Element | null | undefined, name: string): number | null {
+export function intAttr(el: XmlElementLike | null | undefined, name: string): number | null {
   const value = attr(el, name);
   if (value === null || value === "") return null;
   const n = Number(value);
@@ -141,7 +417,7 @@ export function intAttr(el: Element | null | undefined, name: string): number | 
 
 /** A boolean attribute the way OOXML writes it: "1", "true", "0", "false",
     absent = the default. */
-export function boolAttr(el: Element | null | undefined, name: string, fallback = false): boolean {
+export function boolAttr(el: XmlElementLike | null | undefined, name: string, fallback = false): boolean {
   const value = attr(el, name);
   if (value === null) return fallback;
   return value === "1" || value === "true" || value === "on";

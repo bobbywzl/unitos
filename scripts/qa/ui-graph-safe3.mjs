@@ -165,55 +165,6 @@ if ((!ONLY || ONLY === "02") && after) {
   await shot(page, "REV3-02-B-keeps");
 }
 
-// ── REV3-04: a reply draft belongs to its account
-if ((!ONLY || ONLY === "04") && after) {
-  const DRAFT = `A's unsent reply ${Date.now()}`;
-  await signIn("rev3-sa");
-  await page.goto(`${BASE}/n/${NB}?doc=rev3-d1`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1500);
-  await openAnnotations();
-  const reply = page.locator('[data-track="reply"]').first();
-  await reply.click();
-  const box = page.locator("textarea").last();
-  await box.fill(DRAFT);
-  await page.waitForTimeout(300);
-  const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("unitos-reply-draft:")));
-  check(keys.some((k) => k.startsWith("unitos-reply-draft:rev3-ua:")), "REV3-04 the draft key names A", keys.join(" "));
-  // C on the same browser.
-  await signIn("rev3-sc");
-  await page.goto(`${BASE}/n/${NB}?doc=rev3-d1`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1500);
-  await openAnnotations();
-  check((await page.locator(`textarea`).evaluateAll((els, d) => els.some((e) => e.value === d), DRAFT)) === false, "REV3-04 C never sees A's draft");
-  await shot(page, "REV3-04-C");
-  // A legacy draft (no account in the key) goes to A on Sign out.
-  await page.waitForLoadState("load");
-  await page.waitForTimeout(3000);
-  await page.evaluate(() =>
-    localStorage.setItem("unitos-reply-draft:link:legacy-x", JSON.stringify({ content: "old words", savedAt: Date.now() })),
-  );
-  await signIn("rev3-sa");
-  await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(5000); // hydrated: Sign out runs its onClick, not the bare link
-  await page.click("a[href='/api/auth/logout']");
-  await page.waitForTimeout(2000);
-  const moved = await page.evaluate(() => ({
-    legacy: localStorage.getItem("unitos-reply-draft:link:legacy-x"),
-    a: localStorage.getItem("unitos-reply-draft:rev3-ua:link:legacy-x"),
-    mine: Object.keys(localStorage).filter((k) => k.startsWith("unitos-reply-draft:rev3-ua:")).length,
-  }));
-  check(moved.legacy === null && moved.a !== null, "REV3-04 Sign out moves a legacy draft to A", JSON.stringify(moved));
-  check(moved.mine >= 2, "REV3-04 Sign out keeps A's drafts", JSON.stringify(moved));
-  sql(`INSERT INTO "Session"(token,"userId","expiresAt") VALUES ('rev3-sa','rev3-ua',now()+interval '30 days') ON CONFLICT DO NOTHING`);
-  // A again: the draft opens.
-  await signIn("rev3-sa");
-  await page.goto(`${BASE}/n/${NB}?doc=rev3-d1`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1500);
-  await openAnnotations();
-  check(await page.locator(`textarea`).evaluateAll((els, d) => els.some((e) => e.value === d), DRAFT), "REV3-04 A's draft opens again for A");
-  await shot(page, "REV3-04-A");
-}
-
 // ── WALK3-05: Show on a note with no source, then Back opens the graph again
 if (!ONLY || ONLY === "05") {
   await signIn("rev3-sa");

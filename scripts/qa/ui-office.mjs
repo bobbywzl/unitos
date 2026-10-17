@@ -8,7 +8,7 @@
 // Expects the server on :3311 against the same database, with either
 // LibreOffice installed (the pictures come from it) or CHROMIUM_PATH set
 // (the browser photographs the replicas). Every run uploads fresh bytes
-// (the label is stamped into the files), so runs never dedupe into each
+// (the label is stamped into the files), so runs never ask about each
 // other. Screenshots land in scripts/qa/out/.
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
@@ -17,7 +17,7 @@ import { unzipSync, zipSync } from "fflate";
 import { writeFileSync } from "node:fs";
 
 // A copy of an Office file with the label written into its core
-// properties: new bytes, so dedupe never hands back an earlier run's
+// properties: new bytes, so no add asks about an earlier run's
 // document.
 function uniqueCopy(file, label, padBytes = 0) {
   const entries = unzipSync(new Uint8Array(readFileSync(file)));
@@ -104,9 +104,20 @@ check("deck pictures claimed as images", images === 1, `${images}`);
 const bookImages = await db.imageAsset.count({ where: { documentId: chartsBookId } });
 check("sheet drawing picture claimed", bookImages === 1, `${bookImages}`);
 
-// Dedupe: the same bytes again return the same document.
-const dedupeId = await upload(nb.id, deckFile, `deck-${label}.pptx`);
-check("re-upload dedupes", dedupeId === deckId);
+// Every add is its own document (SPEC.md §15): the same bytes again ask
+// first (409 duplicate naming the deck), and the confirmed add makes a new one.
+{
+  const form = new FormData();
+  form.set("file", new Blob([readFileSync(deckFile)]), `deck-${label}.pptx`);
+  form.set("notebookId", nb.id);
+  const again = await fetch(`${BASE}/api/documents`, { method: "POST", body: form });
+  const body = await again.json().catch(() => null);
+  check("re-upload asks first", again.status === 409 && body?.duplicate?.documents?.some((d) => d.id === deckId), `HTTP ${again.status}`);
+  form.set("confirmDuplicate", "1");
+  const confirmed = await fetch(`${BASE}/api/documents`, { method: "POST", body: form });
+  const last = confirmed.ok ? await readNdjson(confirmed) : null;
+  check("confirmed re-upload is a new document", Boolean(last?.id) && last.id !== deckId, `${last?.id}`);
+}
 
 // ── Pictures for the uploaded deck (after the response) ───────────────────
 const pictured = await waitFor(async () => {

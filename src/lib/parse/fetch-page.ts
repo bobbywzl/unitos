@@ -1,4 +1,5 @@
 import { outboundFetch, type OutboundResponse } from "@/lib/outbound-fetch";
+import { decodePage } from "@/lib/parse/charset";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { serverT } from "@/lib/i18n/server";
 
@@ -107,7 +108,7 @@ function isPdf(res: OutboundResponse, head: Uint8Array): boolean {
 async function readPage(res: OutboundResponse): Promise<FetchedPage> {
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (isPdf(res, bytes)) return { kind: "pdf", bytes };
-  return { kind: "html", html: new TextDecoder().decode(bytes) };
+  return { kind: "html", html: decodePage(bytes, res.headers.get("content-type")) };
 }
 
 async function request(url: string, timeoutMs: number): Promise<OutboundResponse> {

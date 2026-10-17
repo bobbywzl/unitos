@@ -15,6 +15,7 @@
 
 import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { MAX_NOTE_QUOTES } from "@/lib/anchors/note-quotes-limit";
@@ -574,7 +575,7 @@ export function NoteGatherDock({
                   <button
                     type="button"
                     onClick={() => {
-                      router.push(`/n/${notebookId}?doc=${q.documentId}${q.blockId ? `&block=${q.blockId}` : ""}`);
+                      graphNavigate(router, `/n/${notebookId}?doc=${q.documentId}${q.blockId ? `&block=${q.blockId}` : ""}`);
                       onOpenDocument();
                     }}
                     data-tip={t("graphCover.composerOpenQuote")}

@@ -30,7 +30,7 @@ export const SECTION_HEAD = `${TEXT_META} font-bold tracking-[0.06em] text-sand-
 const ACTION_BASE =
   `inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 ${TEXT_META} font-semibold whitespace-nowrap disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-3.5`;
 
-/** A row action: Reply, Note on this link, Add to note, Open in reader, Dismiss, Gaps only, Waiting on you, Scan for links. */
+/** A row action: Reply, Note on this link, Add to note, Open in reader, Dismiss, Gaps only, Waiting on you, Recommend links. */
 export const ACTION = `${ACTION_BASE} border-line text-sand-700 hover:bg-clay-100 hover:text-clay-800`;
 /** A note action (Add to note, Note on this link): note actions light sage, the notes' colour. */
 export const ACTION_NOTE = `${ACTION_BASE} border-line text-sand-700 hover:bg-sage-100 hover:text-sage-800`;

@@ -5,7 +5,7 @@
 
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
-import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { attachesLeft, rightToLeftRuns } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
@@ -129,14 +129,15 @@ export function withoutSignColumns(lines: Line[], separators: number[]): number[
 
 // Items joined into one cell's text and style runs, a space where the gap
 // between two items reads as one.
-function cellOfItems(items: Item[], size: number): Cell {
+function cellOfItems(cellItems: Item[], size: number): Cell {
+  // A run of right-to-left words reads from the right, as its line does (lines.ts rightToLeftRuns).
+  const items = rightToLeftRuns(cellItems, size);
   const cell: Cell = { x: items[0]?.x ?? 0, text: "", runs: [] };
   let prevEnd: number | null = null;
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
     if (prevEnd !== null && gap > size * 0.12 && !cell.text.endsWith(" ")) {
-      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-      if (!attach) cell.text += " ";
+      if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
     const start = cell.text.length;
     cell.text += item.str;
@@ -313,7 +314,10 @@ export function tableSegment(
 // A table's caption opens with its label and a mark after the number:
 // "Table 2:", "TABLE 1.", "Table II.", "Table A1 –", German's "Tabelle
 // 2:" ("Table 3 shows …" is a sentence).
-const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
+// An appendix's table takes its letter and a hyphen: "Table A-1." (parse
+// loop finding: CRS R48907's "Table A-1. Common Abbreviations" read as a
+// heading, and its table took the appendix's title into its first row).
+const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z][‐–-]?\d+|[IVXL]+)\s*[.:|–—-]/i;
 
 /** A table's caption joins its table: a paragraph that opens with a
     table's label, right over the table on its first page or right under it
@@ -351,6 +355,45 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   const linkOnly = (table: Segment) => /^<table[^>]*><caption[^>]*>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
   const open = (table: Segment | undefined): table is Segment => table !== undefined && (!table.html?.includes("<caption") || linkOnly(table));
   const labeled = segments.flatMap((s, k) => (isCaption(s) ? [k] : []));
+  // A caption's last line, read as a paragraph of its own: IEEE sets a
+  // table's caption centered in capitals, and a title of two lines fills
+  // its first, so the short last line stands apart from it. One line in
+  // capitals, on the caption's page, under a caption that ends in no
+  // period, is the caption's (PDF benchmark finding: ieee-elixpo-caching's
+  // "TABLE III / HUFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION /
+  // ARCHIVES" left ARCHIVES a paragraph between the caption and its table,
+  // and the table took no caption).
+  for (const k of labeled) {
+    const caption = segments[k];
+    const next = segments[k + 1];
+    if (!next || next.type !== "PARAGRAPH" || next.footnote || taken.has(next) || next.page !== (caption.breaks?.at(-1)?.page ?? caption.page)) continue;
+    const tail = next.text.trim();
+    if (tail.includes("\n") || tail.length > 80 || tail !== tail.toUpperCase() || !/\p{Lu}/u.test(tail) || /[.:]$/.test(caption.text.trim())) continue;
+    // Small capitals are set at four fifths of the size.
+    if (next.lineSize !== undefined && caption.lineSize !== undefined && (next.lineSize < caption.lineSize * 0.75 || next.lineSize > caption.lineSize + 0.5)) continue;
+    const at = caption.text.length + 1;
+    caption.text = `${caption.text}\n${next.text}`;
+    caption.runs = [...(caption.runs ?? []), ...(next.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
+    taken.add(next);
+  }
+  // A key line between a caption and its table ("E = Eligible, NE = Not
+  // Eligible, TBD = …") is the caption's: two abbreviations or more, each
+  // with "=" and its meaning, on one line, on the table's page (parse loop
+  // finding: CRS R48907, a Word export, sets Table 1's key under its
+  // caption, and the caption stood apart from its table).
+  for (const k of labeled) {
+    const caption = segments[k];
+    const key = segments[k + 1];
+    const table = segments[k + 2];
+    if (!key || key.type !== "PARAGRAPH" || key.footnote || taken.has(key) || table?.type !== "TABLE" || !table.html) continue;
+    const page = caption.breaks?.at(-1)?.page ?? caption.page;
+    const text = key.text.trim();
+    if (key.page !== page || firstPageOf(table) !== page || text.includes("\n") || text.length > 300 || (text.match(KEY_PAIR_RE) ?? []).length < 2) continue;
+    const at = caption.text.length + 1;
+    caption.text = `${caption.text}\n${key.text}`;
+    caption.runs = [...(caption.runs ?? []), ...(key.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
+    taken.add(key);
+  }
   let over = 0;
   let under = 0;
   for (const k of labeled) {
@@ -398,6 +441,10 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   });
   return segments.filter((s) => !taken.has(s));
 }
+
+// One pair of a key line: an abbreviation, "=", and the start of its
+// meaning ("E = Eligible", "TBD = to be determined").
+const KEY_PAIR_RE = /(?:^|[,;]\s*)[^\s,;=]{1,12}\s*=\s*\p{L}/gu;
 
 /** A caption set under its table: the table's <caption> opens with this. */
 export const BELOW_CAPTION = '<caption style="caption-side: bottom">';
@@ -561,6 +608,7 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   // beside its column headers — the vertical rhythm misleads: rows then come
   // from the anchors, split at the widest gap between consecutive anchors.
   const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
+  const pitch = gaps.length > 0 ? Math.min(...gaps) : Infinity;
   const anchors: number[] = [];
   let lastFirst = -1;
   // A statement's labels: a group's name ends in a colon, and a label that
@@ -583,7 +631,18 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     // nbody  8  16  18 …"). Parse loop finding: TraceMonkey's Figure 13 read
     // 24 such rows as one row of wrapped cells.
     const own = lastFirst >= 0 && valued(lastFirst) && cellsOf[lastFirst].every((c, idx) => idx === 0 || !c.text || VALUE_RE.test(cellsOf[k][idx].text.trim()));
-    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own);
+    // A lowercase first cell further below the line over it than the run's
+    // wrapped lines stand is a row's: a symbol in a list of symbols, set
+    // double-spaced with its wraps single-spaced (parse loop finding: the
+    // DTIC Datcom's list of symbols, p. 13, read "a", "etab" and "Cc" as
+    // one row, "airfoil chord chordwise length of trailing edge tab …").
+    // A letter alone set larger than the run's lines is a speck of the
+    // scan (a sideways label's letter), no symbol (parse loop finding: the
+    // DTIC Datcom p. 45, the "o" of "INCREASED ANGLE-OF-ATTACK" read down
+    // the margin opened a row over "(3) Stall Events" and split its cell).
+    const speck = cellsOf[k][0].text.trim().length === 1 && line.size > size * 1.3;
+    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5 && !speck;
+    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own && !spaced);
     const wrap =
       continues &&
       lastFirst >= 0 &&
@@ -643,6 +702,28 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     });
   }
   return rowStarts;
+}
+
+// A row set further from the next than its words are tall, by more than
+// 0.6 of the text size, keeps its height from its first line to the next
+// row's first line, as a ruled grid's row keeps its height rule to rule
+// (gridRows): a typed table set double-spaced (parse bench finding: the
+// DTIC Datcom's tables set their rows 23 pt apart, and the import drew
+// them 16 pt apart). The last row has no next row to measure to. The rows
+// as rowsOf gathers them from the lines at the row starts, in place.
+export function keepRowPitch(rows: TableRow[], lines: Line[], starts: number[]) {
+  const bounds = [...new Set([0, ...starts])].filter((k) => k < lines.length).sort((a, b) => a - b);
+  if (bounds.length !== rows.length || lines.length === 0) return;
+  // The table's text size, the lines' median: an OCR layer stretches each
+  // line to its own size (the Datcom's typed lines read 11 to 15 pt).
+  const size = median(lines.map((l) => l.size));
+  rows.forEach((row, i) => {
+    if (i + 1 >= bounds.length || row.height !== undefined) return;
+    const [first, next, last] = [lines[bounds[i]], lines[bounds[i + 1]], lines[bounds[i + 1] - 1]];
+    const tall = first.y - next.y;
+    const words = first.y - last.y + size;
+    if (tall - words > size * 0.6) row.height = tall;
+  });
 }
 
 // Lines split into cells, gathered into rows at the row starts.
@@ -720,7 +801,9 @@ export function tableFromRun(run: Line[], leading: number): Segment {
     return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
   }
   const cellsOf = run.map((line) => cellsBySeparators(line, separators));
-  const rows = rowsOf(cellsOf, rowStartsOf(run, cellsOf, leading), columnCount);
+  const starts = rowStartsOf(run, cellsOf, leading);
+  const rows = rowsOf(cellsOf, starts, columnCount);
+  keepRowPitch(rows, run, starts);
   if (isFragmented(rows)) {
     const builder = new TextBuilder();
     for (const line of run) builder.append({ text: line.text.replace(/\t/g, " "), runs: line.runs }, " ");
@@ -1111,6 +1194,28 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    // Entries are no table: a term's line, its default set flush right, and
+    // a sentence set in under it, at no column of the run (a LaTeX
+    // package's manual sets each option so; parse loop finding: two
+    // options between two margin notes read as a table of two rows, each
+    // description inside its option's cell). Two sentences or more, under
+    // half the rows or more.
+    const runColumns = clusterColumns(multiCell.map((k) => lines[k]));
+    const sentences = members.filter((k) => {
+      const line = lines[k];
+      return (
+        line.cells.length === 1 &&
+        line.x > runColumns[0] + 8 &&
+        !isAlignedLine(line, runColumns) &&
+        /^\p{Lu}/u.test(line.text.trim()) &&
+        /[.!?:]$/.test(line.text.trim()) &&
+        line.text.replace(/[^\p{L}]/gu, "").length >= 15
+      );
+    }).length;
+    if (sentences >= 2 && sentences * 2 >= multiCell.length) {
+      i++;
+      continue;
+    }
     // Text that only lines up is no table: two columns of prose side by side
     // (a page whose columns were not split: MMWR p. 21's text above Table 3,
     // arXiv 2504.02736's reference list), form lines with no rule drawn (a
@@ -1156,6 +1261,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     const left = Math.min(...members.map((k) => lines[k].x));
     let first = members[0];
     let absorbed = 0;
+    let rowAbove = false;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
       // A head of short cells right over the run's columns, one in each
@@ -1172,8 +1278,27 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev) || leadIn(prev.text)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
-      if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
+      // A row whose term and meaning fused into one cell (a scan's text
+      // layer sets one space between them), a word starting at the run's
+      // second column, is the run's row, and the lines over it a row's step
+      // up may be its rows too (parse loop finding: the DTIC Datcom's list
+      // of symbols, p. 14, read "MDD drag divergence Mach number, …" and
+      // "Mcrit critical Mach number; …" as paragraphs over the table, and
+      // MDD's second line in Mt's row).
+      // One baseline only: a line of two rows set close (a table's head over
+      // its first row, read as a matrix) is no fused row (the MML book's
+      // Table 8.1, p. 258, read "NameAditya | GenderM | …").
+      const oneBaseline = prev.items.every((it) => Math.abs(it.y - prev.y) < prev.size * 0.35);
+      if (gap >= 0 && gap <= prev.size * ctx.leading * 2.2 && oneBaseline && isFusedRowLine(prev, columns)) {
+        first--;
+        members.unshift(first);
+        absorbed = 0;
+        rowAbove = true;
+        continue;
+      }
+      if (gap < 0 || gap > prev.size * ctx.leading * (rowAbove ? 2.2 : 1.35)) break;
+      rowAbove = false;
       const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
       if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;

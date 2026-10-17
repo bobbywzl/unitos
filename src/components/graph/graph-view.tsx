@@ -52,6 +52,7 @@ import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-cont
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
 import { CoverageRing, useDocumentCoverage, useProjectCoverage } from "@/components/graph/coverage"; // [cover4] [layer5]
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
+import { graphNavigate } from "@/components/graph/graph-history";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -1181,7 +1182,7 @@ function GraphCanvas({
         onExpandLink(link.id);
         return;
       }
-      router.push(`/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
+      graphNavigate(router, `/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
       onOpenDocument();
     },
     [onExpandLink, router, notebookId, onOpenDocument, freezeHover],
@@ -1786,7 +1787,7 @@ function GraphCanvas({
         content.select(id);
         return;
       }
-      router.push(docHref ? docHref(id) : `/n/${notebookId}?doc=${id}`);
+      graphNavigate(router, docHref ? docHref(id) : `/n/${notebookId}?doc=${id}`);
       onOpenDocument();
     },
     [onClearCited, onToggleSelect, picking, router, docHref, notebookId, onOpenDocument, content],

@@ -23,7 +23,10 @@ import { ListName } from "@/components/graph/list-name"; // [lists7]
 import { LinksList } from "@/components/graph/links-list";
 import type { GraphInsets } from "@/components/graph/graph-view";
 import { LinkDetail } from "@/components/graph/link-detail";
-import { StitchBox } from "@/components/graph/stitch-box";
+import { readStitchPick, StitchBox, writeStitchPick } from "@/components/graph/stitch-box";
+import { isImeKey } from "@/lib/ime";
+// Back closes the graph as it would a page; a document opened from it takes its entry (graph-history.ts).
+import { enterGraphHistory, graphNavigate, leaveGraphHistory } from "@/components/graph/graph-history";
 // [graph-notes] The project's notes on the graph and the Notes list.
 import { GraphNotesProvider, type GraphNotesInput } from "@/components/graph/graph-notes";
 import { GraphNotesList, NotesListToggle } from "@/components/graph/graph-notes-list";
@@ -133,7 +136,7 @@ export function GraphOverlay({
   edges: GraphEdge[];
   recommended: RecommendedLinkView[];
   generated: GeneratedDocumentView[];
-  /** Runs of Scan for links this account has left this month. */
+  /** Runs of Recommend links this account has left this month. */
   linkScansLeft: number;
   /** The project's notes, for the notes on the graph and the Notes list. */
   notes?: GraphNotesInput;
@@ -164,6 +167,13 @@ export function GraphOverlay({
     clearGraphKeep(notebookId);
     onClose();
   }, [notebookId, onClose]);
+  // The graph is a step in the browser's history: Back closes it as ✕ does
+  // (graph-history.ts). The newest close, since onClose may change.
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  });
+  useEffect(() => enterGraphHistory(() => closeRef.current()), []);
   const windowWidth = useWindowWidth();
   // One folded list at a time beside the canvas: the recommended links, the
   // generated content, the notes, the links, or one link expanded (WALK2-05).
@@ -376,22 +386,37 @@ export function GraphOverlay({
   // The documents picked for Stitch (SPEC.md §22): a ⇧-click on a node, or
   // any click while picking. Empty = every document. A node that leaves
   // the graph leaves the pick: the pick the canvas and the box read is the
-  // stored one cut to the nodes.
-  const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set());
+  // stored one cut to the nodes. The pick is kept per project for the
+  // browser tab, with the typed command (stitch-box.tsx): closing the graph
+  // and opening it again keeps both.
+  const [pickedIds, setPickedIdsState] = useState<Set<string>>(() => readStitchPick(notebookId));
+  const setPickedIds = useCallback(
+    (update: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setPickedIdsState((prev) => {
+        const next = typeof update === "function" ? update(prev) : update;
+        writeStitchPick(notebookId, next);
+        return next;
+      });
+    },
+    [notebookId],
+  );
   const [picking, setPicking] = useState(false);
-  const toggleSelect = useCallback((documentId: string) => {
-    setPickedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(documentId)) next.delete(documentId);
-      else next.add(documentId);
-      return next;
-    });
-  }, []);
+  const toggleSelect = useCallback(
+    (documentId: string) => {
+      setPickedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(documentId)) next.delete(documentId);
+        else next.add(documentId);
+        return next;
+      });
+    },
+    [setPickedIds],
+  );
   const selectedIds = useMemo(() => {
     const ids = new Set(nodes.map((n) => n.id));
     return new Set([...pickedIds].filter((id) => ids.has(id)));
   }, [nodes, pickedIds]);
-  // Scan for links (SPEC.md §13): the scan the reader asks for. It reads
+  // Recommend links (SPEC.md §13): the scan the reader asks for. It reads
   // every document of the project whole against the others, so it runs only
   // here and only a few times a month; the button says how many are left.
   // While it runs the button reads Stop: a press ends the scan, the links it
@@ -534,7 +559,7 @@ export function GraphOverlay({
   // listener runs in the bubble phase, after them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (e.key !== "Escape" || e.defaultPrevented || isImeKey(e)) return; // an IME's Escape is the IME's
       e.stopPropagation();
       if (isTextBox(e.target)) {
         leaveTextBox(e.target);
@@ -544,7 +569,7 @@ export function GraphOverlay({
       else if (list === "link" && linkFrom && openLinkView) backFromLink();
       else if (list === "find") clearFind(); // [lists7] WALK7-08
       else if (list) setList(null);
-      else close();
+      else leaveGraphHistory(close);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -784,7 +809,7 @@ export function GraphOverlay({
           )}
         </div>
         <button
-          onClick={close}
+          onClick={() => leaveGraphHistory(close)}
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
@@ -879,7 +904,7 @@ export function GraphOverlay({
             onClose={() => setList(null)}
             scan={
               canEdit && nodes.length >= 2 ? (main: boolean) => (
-                // [chrome6] VIEW6-02, WALK6-08: Scan for links in the list it fills.
+                // [chrome6] VIEW6-02, WALK6-08: Recommend links in the list it fills.
                 // [lists7] WALK7-02: at the head row's right end, short, beside ✕;
                 // the main action only under an empty list's line.
                 <button
@@ -1103,7 +1128,7 @@ export function RecommendedLinkList({
   onOpenDocument: () => void;
   // [view2] The links the last Stitch answer proposed: first, and marked.
   proposedLinkIds?: Set<string>;
-  /** [chrome6] Scan for links (VIEW6-02). [lists7] WALK7-02: main = the
+  /** [chrome6] Recommend links (VIEW6-02). [lists7] WALK7-02: main = the
       empty list's one action; else the head row's short pill. */
   scan?: (main: boolean) => ReactNode;
   /** [chrome6] The ✕ the other side lists have (VIEW6-11). */
@@ -1142,7 +1167,7 @@ export function RecommendedLinkList({
     : shown;
 
   function openDocument(documentId: string, linkId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}&link=${linkId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${linkId}`);
     onOpenDocument();
   }
 
@@ -1160,7 +1185,7 @@ export function RecommendedLinkList({
       className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
       {/* [chrome6] VIEW6-02, VIEW6-11: one head row. [lists7] WALK7-01/02:
-          the list's name, then Scan for links and ✕ at the right end. The
+          the list's name, then Recommend links and ✕ at the right end. The
           list's intro is the pill's tooltip (WALK6-08). */}
       <div className={LIST_HEAD /* [lists8] */}>
         <ListName grow>{t("panes.recommendedLinks")}</ListName>

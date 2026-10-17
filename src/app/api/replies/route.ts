@@ -12,7 +12,6 @@ import {
 } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { replayedAt } from "@/lib/replay";
 import { parseBody } from "@/lib/validate";
 
 const createSchema = z
@@ -24,6 +23,10 @@ const createSchema = z
     // project is not found there (SPEC.md §13).
     notebookId: z.string().min(1).optional(),
     content: z.string().min(1).max(4000),
+    // The offline queue replaying a reply on a link (lib/offline/queue.ts
+    // replayBody): the reply lands on the kept row of a link another editor
+    // removed meanwhile.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
   })
   .refine(
     (d) => [d.noteId, d.blockEditId, d.docLinkId].filter(Boolean).length === 1,
@@ -92,14 +95,13 @@ export async function POST(req: Request) {
       },
     });
     if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-    // A reply replayed from the offline queue on a link another editor
-    // removed meanwhile saves on the kept row, which Restore brings back
-    // with its thread: a removed link does not make the words stale
-    // (REV8-01, CLAUDE.md rule zero 6). Online the reader gets the 404 and
-    // keeps the draft. The mark must be a whole number of ms, as the notes
-    // route asks (lib/replay.ts, REV9-07): a made-up header online is no
-    // replay.
-    const replayed = replayedAt(req) !== null;
+    // A reply replayed from the offline queue (onSourceLost "keep",
+    // lib/offline/queue.ts replayBody) on a link another editor removed
+    // meanwhile saves on the kept row, which Restore brings back with its
+    // thread: a removed link does not make the words stale (REV8-01,
+    // CLAUDE.md rule zero 6). Online the reader gets the 404 and keeps the
+    // draft.
+    const replayed = data.onSourceLost === "keep";
     const access = await linkAccess(link, "editor", data.notebookId, { removed: replayed });
     if (access instanceof NextResponse) return access;
     // A link with no project shared across accounts: only its maker's

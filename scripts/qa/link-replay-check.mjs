@@ -1,5 +1,6 @@
 // REV8-01: a note or a reply on a link, replayed from the offline queue
-// (x-unitos-replay), after another editor removed the link, after its
+// (`onSourceLost: "keep"` in the body, as lib/offline/queue.ts replayBody
+// sends it), after another editor removed the link, after its
 // document left the project, or when the link is gone or another account's.
 // Runs on a COPY of the database seeded with the review seeds (r3 seed and
 // seed2, r4 seed4, r5 seed5, r6 seed6; see link-remove-check.ts) and a
@@ -16,11 +17,19 @@ if (DB === "dissect") {
   process.exit(1);
 }
 const q = (sql) => execFileSync("psql", ["-h", "localhost", "-U", "postgres", "-d", DB, "-Atc", sql], { env: { ...process.env, PGPASSWORD: "postgres" } }).toString().trim();
-const call = async (who, method, path, body, headers = {}) => {
-  const res = await fetch(BASE + path, { method, headers: { "Content-Type": "application/json", Cookie: `dissect-session=${who}`, ...headers }, body: body ? JSON.stringify(body) : undefined });
-  return { status: res.status, kept: res.headers.get("x-unitos-quotes-kept"), text: await res.text() };
+const call = async (who, method, path, body, extra = {}) => {
+  const res = await fetch(BASE + path, { method, headers: { "Content-Type": "application/json", Cookie: `dissect-session=${who}` }, body: body ? JSON.stringify({ ...body, ...extra }) : undefined });
+  const text = await res.text();
+  let dropped = null;
+  try {
+    dropped = JSON.parse(text).sourceDropped === true;
+  } catch {
+    // not JSON
+  }
+  return { status: res.status, dropped, text };
 };
-const REPLAY = () => ({ "x-unitos-replay": String(Date.now() - 600e3) });
+// What the queue adds to a replayed note or reply (lib/offline/queue.ts replayBody).
+const REPLAY = () => ({ onSourceLost: "keep" });
 const TAG = `SAFE8 ${Date.now().toString(36)}`;
 let pass = 0, fail = 0;
 const check = (name, ok, info = "") => { if (ok) pass++; else fail++; console.log(`${ok ? "ok  " : "FAIL"} ${name}${info ? " | " + info : ""}`); };
@@ -54,7 +63,7 @@ try {
   check("a link of P with an end outside P, online: 404", r.status === 404);
   r = await call("rev3-sa", "POST", "/api/notes", { sectionId: "rev5-s-p", content: `${TAG} note on detached`, fromLinkId: "safe8-l1" }, REPLAY());
   const det = noteRow(`${TAG} note on detached`);
-  check("same, replay: words + both quotes as text, no sources, header says 2", r.status === 201 && r.kept === "2" && det.includes("> Suffering") && det.includes("> Detached") && det.endsWith("sources: 0"), `${r.status} kept=${r.kept} ${JSON.stringify(det)}`);
+  check("same, replay: words + both quotes as text, no sources, the answer says a source was dropped", r.status === 201 && r.dropped === true && det.includes("> Suffering") && det.includes("> Detached") && det.endsWith("sources: 0"), `${r.status} kept=${r.kept} ${JSON.stringify(det)}`);
   // A link that is gone: words alone.
   r = await call("rev3-sa", "POST", "/api/notes", { sectionId: "rev5-s-p", content: `${TAG} note on gone`, fromLinkId: "safe8-gone" }, REPLAY());
   check("gone link, replay: the words alone", r.status === 201 && noteRow(`${TAG} note on gone`) === `${TAG} note on gone || sources: 0`, `${r.status} ${noteRow(`${TAG} note on gone`)}`);

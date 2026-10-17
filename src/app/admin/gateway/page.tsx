@@ -105,6 +105,7 @@ export default async function AdminGatewayPage() {
     "stitch-select": t("admin.featStitchSelect"),
     merge: t("admin.featMerge"),
     gist: t("admin.featGist"),
+    grammar: t("admin.featGrammar"),
     log: t("admin.featLog"),
     glossary: t("admin.featGlossary"),
     contents: t("admin.featContents"),

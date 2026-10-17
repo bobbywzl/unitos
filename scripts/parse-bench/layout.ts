@@ -27,9 +27,14 @@ const CJK = /^[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]$/u;
     several lines print it, the first at or after the last line placed (the
     reading goes on), else the nearest before it. A table's cell of one or
     two words is placed by its words whole, the same way (a table reads
-    cell by cell, so the last line placed is its neighbor's). A unit half of
-    whose words no line holds (a script the text layer reads blind) is
-    placed on none. */
+    cell by cell, so the last line placed is its neighbor's). A caption's
+    lines stand together: a run of a caption after its first is placed on a
+    line within three line heights under the caption's last line, else on
+    none (a caption's last words stand in the prose too, "production
+    conversation archives" half a page under the table; placed there, the
+    caption's reading runs on from the prose and the table's cells after it
+    land on prose lines). A unit half of whose words no line holds (a script
+    the text layer reads blind) is placed on none. */
 export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
   const runs = new Map<string, number[]>();
   const size = (words: string[], k: number) => (words.slice(k, k + 3).every((w) => CJK.test(w)) ? 6 : 3);
@@ -48,12 +53,25 @@ export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
   });
   let last = 0;
   const next = (found: number[]) => found.find((l) => l >= last) ?? found.reduce((a, b) => (Math.abs(b - last) < Math.abs(a - last) ? b : a));
+  // A caption's line after its first: on the page of the last line placed, from that line's top to three line heights under it.
+  const together = (prev: Line, l: Line) => l.page === prev.page && l.top >= prev.top - 1 && l.top <= prev.top + 3 * (prev.bottom - prev.top);
   return cand.units.map((unit) => {
     const out: number[] = [];
     const words = cand.toks.slice(unit.first, unit.end).map((x) => x.w);
+    const block = cand.blocks[unit.block];
+    const caption = block.kind === "figure" || (block.kind === "table" && unit.index === -1) || (block.kind === "paragraph" && block.role === "caption");
     if (words.length > 0 && words.length < 3 && cand.blocks[unit.block].kind === "table") {
       const found = runs.get(`${words.length}:${words.join(" ")}`);
       if (found) out.push((last = next(found)));
+      return out;
+    }
+    // A unit of one or two words stands on a line that holds those words
+    // and no others (parse bench finding: a Keynote title slide's "Elvis
+    // Saravia", 160 pt under its subtitle, stood on no line, so the
+    // subtitle's space after it read as a blank with no block under it).
+    if (words.length > 0 && words.length < 3) {
+      const found = (runs.get(`${words.length}:${words.join(" ")}`) ?? []).filter((l) => wordsOf(pdf.lines[l].text).length === words.length);
+      if (found.length > 0) out.push((last = next(found)));
       return out;
     }
     const before = last;
@@ -62,7 +80,10 @@ export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
       const n = size(words, k);
       const found = k + n <= words.length ? runs.get(`${n}:${words.slice(k, k + n).join(" ")}`) : undefined;
       if (!found) continue;
-      const line = (last = next(found));
+      const prev = caption && out.length > 0 ? pdf.lines[out[out.length - 1]] : undefined;
+      const line = prev ? found.find((l) => together(prev, pdf.lines[l])) : next(found);
+      if (line === undefined) continue;
+      last = line;
       for (let t = k; t < k + n; t++) held.add(t);
       if (out.at(-1) !== line) out.push(line);
     }
@@ -184,8 +205,10 @@ const byPage = new WeakMap<PdfText, Map<number, Line[]>>();
     list's and a note's; not a table's cells), and start less than that
     measure left of it (not a line across two columns), the leftmost place
     where two of them or more start within a point; on another page
-    (`page`), its lines at the line's place across the page. */
-export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page): number | null {
+    (`page`), its lines at the line's place across the page. With `heads`,
+    lines of any width count: the heads a page sets at the column's edge
+    over blocks it sets in ("Bemerkung 18", "Beweis: Sei …"). */
+export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page, heads = false): number | null {
   let pages = byPage.get(pdf);
   if (!pages) {
     pages = new Map();
@@ -196,8 +219,10 @@ export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<L
     }
     byPage.set(pdf, pages);
   }
-  const column = (pages.get(page) ?? []).filter(
-    (l) => !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
+  const column = (pages.get(page) ?? []).filter((l) =>
+    heads
+      ? !own.has(l) && l.left > line.left - measure && l.left <= line.left + 1 && l.right > line.left
+      : !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
   );
   const lefts = column.map((l) => l.left).sort((a, b) => a - b);
   const count = (x: number) => lefts.filter((y) => Math.abs(y - x) <= 1).length;
@@ -237,6 +262,11 @@ export function indentScores(pdf: PdfText, cand: Flat, placed: number[][]): Inde
     // The first line placed must hold the paragraph's first words; a paragraph of one line placed is one
     // line only where that line holds its words (its wrapped lines may be too short to place).
     const words = units.flatMap((u) => cand.toks.slice(cand.units[u].first, cand.units[u].end).map((t) => t.w));
+    // A paragraph of one or two words tells nothing of its column: the
+    // labels beside it on the page start at its place too (chemformula's
+    // manual p. 23, the arrow labels "ab" and "abc" stacked on one left
+    // edge read as their own column's edge).
+    if (words.length < 3) return;
     const held = wordsOf(lines[0].text).map((w) => w.w).join(" ");
     if (!held.startsWith(words.slice(0, 3).join(" "))) return;
     if (lines.length === 1 && wordsOf(lines[0].text).length < 0.9 * words.length) return;
@@ -251,6 +281,15 @@ export function indentScores(pdf: PdfText, cand: Flat, placed: number[][]): Inde
       if (lines.length === 1 && (edge === null || Math.abs(l.left - edge) <= 2)) {
         const beside = [l.page - 2, l.page + 2].map((p) => columnEdge(pdf, l, measure, own, p)).filter((x): x is number => x !== null);
         if (beside.length > 0) edge = Math.min(edge ?? Infinity, ...beside);
+      }
+      // A page that sets every block in under its heads (a lecture's
+      // "Bemerkung 18", "Beweis: Sei …" at the edge, each body 20 pt in):
+      // its wide lines all stand at the indent, and the heads show the edge
+      // (parse bench finding: GeoTopo's proofs, set in as the page sets
+      // them, counted as indents the page does not set).
+      if (edge !== null && Math.abs(l.left - edge) <= 2) {
+        const head = columnEdge(pdf, l, measure, own, l.page, true);
+        if (head !== null && head < edge - 2) edge = head;
       }
       return edge === null || l.left - edge < -2 ? null : l.left - edge;
     });
@@ -326,10 +365,16 @@ const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit
     their width, only one of them with a caption ("Figure 1." …; the other
     a display's crop, or a picture whose caption is its own labels): a
     drawing's top read apart from the captioned rest, which the page editor
-    draws as two pictures, on two pages at times. The score is the share of
-    the candidate's figures that are no such piece. */
-export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
-  const figures = cand.blocks.flatMap((block) => (block.kind === "figure" && block.at ? [{ block, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
+    draws as two pictures, on two pages at times. With the page's ink, a
+    captioned figure whose region the page draws nothing in but the lines
+    its caption holds is a piece too: its caption read apart from its
+    picture (parse bench finding: a textbook's margin caption "Figure
+    24.1:" read as a figure of its own over the empty margin, its circle a
+    figure with no caption beside it; neither piece counted, as they stand
+    side by side). The score is the share of the candidate's figures that
+    are no such piece. */
+export function figureScores(pdf: PdfText, cand: Flat, ink?: PageInk, placed?: number[][]): FigureScores {
+  const figures = cand.blocks.flatMap((block, at) => (block.kind === "figure" && block.at ? [{ block, at, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
   const captioned = (b: DocBlock) => b.kind === "figure" && b.mathImage === undefined && CAPTION_LABEL_RE.test((b.caption ?? []).map((s) => s.text).join(""));
   const pieces = new Set<number>();
   const found: FigureScores["found"] = [];
@@ -347,10 +392,33 @@ export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
       found.push({ page: a.box.page, text: whole.kind === "figure" ? (whole.caption ?? []).map((span) => span.text).join("").slice(0, 80) : "" });
     });
   });
+  if (ink && placed) {
+    figures.forEach((f, i) => {
+      if (!f.box || pieces.has(i) || !captioned(f.block) || f.block.kind !== "figure") return;
+      const caption = (f.block.caption ?? []).map((s) => s.text).join("");
+      // The page's lines the caption holds (linesOfUnits).
+      const own = (placed[cand.unitsOf[f.at]?.[0] ?? -1] ?? []).map((k) => pdf.lines[k]).filter((l) => l.page === f.box?.page);
+      if (own.length === 0) return;
+      const box = f.box;
+      // A band of ink the caption's lines hold, top to bottom; a picture's band reaches past them.
+      const top = Math.min(...own.map((l) => l.top)) - 2;
+      const bottom = Math.max(...own.map((l) => l.bottom)) + 2;
+      const drawn = ink.bands(box.page, box).filter((b) => b.top < top || b.bottom > bottom);
+      if (drawn.length > 0) return;
+      pieces.add(i);
+      found.push({ page: box.page, text: caption.slice(0, 80) });
+    });
+  }
   return { figures: figures.length, split: pieces.size, score: figures.length > 0 ? 1 - pieces.size / figures.length : null, found };
 }
 
 // ── The body's face ─────────────────────────────────────────────────────────
+
+/** A font's subset prefix: six capitals ("HAAAAA+", the standard's tag) or
+    six hex digits (asciidoctor-pdf's "6ec323+"; parse bench finding: a
+    Chinese book set in one CJK face subset per page counted each subset as a
+    family of its own, and its code font, one subset, as the body's face). */
+export const SUBSET_PREFIX_RE = /^(?:[A-Z]{6}|[0-9a-f]{6})\+/;
 
 /** A face's shape by its name, as a reader tells it: a typewriter face, a
     sans-serif face, else a serif face, by the families a PDF names (a subset
@@ -358,7 +426,7 @@ export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
     symbol font, a face with a trade name only). TeX's own: CMR/ECRM/SFRM and
     Latin Modern Roman serif, CMSS/ECSS/SFSS sans, CMTT/ECTT/SFTT mono. */
 export function faceShape(name: string): "serif" | "sans" | "mono" | null {
-  const n = name.replace(/^[A-Z]{6}\+/, "").toLowerCase();
+  const n = name.replace(SUBSET_PREFIX_RE, "").toLowerCase();
   if (/mono|courier|consol|menlo|inconsolata|typewriter|lucidaconsole|andale|sourcecode|firacode|^(?:cm|ec|sf|lm)tt|nimbusmon|txtt|beramono|cursor/.test(n)) return "mono";
   if (/sans|arial|helvetica|verdana|tahoma|calibri|segoe|frutiger|myriad|gill|futura|univers|roboto|lato|avenir|biolinum|^(?:cm|ec|sf|lm)ss|arimo|carlito|trebuchet|franklin|gothic|meiryo|swiss|optima|montserrat|poppins|raleway|ubuntu|cantarell|heros|avantgarde|candara|corbel|klavika|akzidenz|hei|yahei|dengxian|malgun|dotum|gulim/.test(n)) return "sans";
   if (/serif|times|roman|minion|garamond|palatino|palladio|pagella|georgia|cambria|libertin|charis|utopia|baskerville|caslon|bookman|century|antiqua|^(?:cm|ec|sf)(?:r|bx|ti|sl|csc|cc|rm|u|b)\d|^lmroman|nimbusrom|termes|stix|tinos|caladea|mincho|song|ming|batang|sabon|janson|bembo|plantin|joanna|scala|lucidabright|newton|charter|fourier|dutch|constantia|goudy|didot|bodoni|cochin|hoefler|baskervville|spectral|merriweather|crimson|noto ?serif|source ?serif/.test(n)) return "serif";
@@ -368,8 +436,22 @@ export function faceShape(name: string): "serif" | "sans" | "mono" | null {
 export type FaceTally = { shape: "serif" | "sans" | "mono" | null; family: string; chars: number };
 const faceMemo = new Map<string, FaceTally | null>();
 
+/** A family's name as one family: its PostScript suffix ("MT", "PSMT") and
+    its style ("-Bold", "-Italic", "-Medium") aside. pdftohtml names the
+    regular and the bold of one face apart ("ArialMT", "Arial"; parse bench
+    finding: a Keynote deck sets its bullets in Arial, regular and bold, and
+    its prompts in Courier; counted as two families, the bullets lost to the
+    prompts, and the body's face read as Courier). */
+export function familyKey(name: string): string {
+  return name
+    .replace(SUBSET_PREFIX_RE, "")
+    .replace(/(?:PS)?MT$/, "")
+    .replace(/[-,]?(?:Bold|Italic|Oblique|Regular|Medium|Light|Semibold|SemiBold|Black)+$/, "")
+    .replace(/PS$/, "");
+}
+
 /** The face that sets most of a PDF's characters on its pages (pdftohtml's
-    fonts, by family), with its shape: the body's own face. */
+    fonts, by family: familyKey), with its shape: the body's own face. */
 export function bodyFace(path: string, pages: [number, number] | undefined): FaceTally | null {
   const key = `${path}|${pages?.join("-") ?? ""}`;
   if (faceMemo.has(key)) return faceMemo.get(key) ?? null;
@@ -381,7 +463,7 @@ export function bodyFace(path: string, pages: [number, number] | undefined): Fac
     xml = "";
   }
   const families = new Map<string, string>();
-  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], m[2].replace(/^[A-Z]{6}\+/, ""));
+  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], familyKey(m[2]));
   const chars = new Map<string, number>();
   for (const m of xml.matchAll(/<text [^>]*font="(\d+)"[^>]*>([\s\S]*?)<\/text>/g)) {
     const family = families.get(m[1]);
@@ -420,8 +502,12 @@ export type LabelScores = { pairs: number; wrong: number; score: number | null; 
     the other must count on in their series: a label that repeats or runs
     backwards (a scan's unnamed pages given their PDF numbers among named
     ones: 1, 3, 2, 3) is wrong. A page drawn with no label pairs with none.
-    The scored pages are judged with a page on each side. */
-export function labelScores(labels: string[] | undefined, pageCount: number, pages: [number, number] | undefined): LabelScores {
+    The scored pages are judged with a page on each side. A slide deck
+    (`deck`: every page wider than tall) labels its pages by frame, and a
+    frame of several overlay steps repeats its label on each (beamer's
+    alerts frame, 6, 6, 6): a repeat in a deck is the PDF's own, and only a
+    label that runs backwards is wrong. */
+export function labelScores(labels: string[] | undefined, pageCount: number, pages: [number, number] | undefined, deck = false): LabelScores {
   if (!labels || labels.length === 0) return { pairs: 0, wrong: 0, score: null, found: [] };
   const name = (p: number) => labels[p - 1] ?? String(p);
   const [from, to] = pages ? [Math.max(1, pages[0] - 1), Math.min(pageCount, pages[1] + 1)] : [1, pageCount];
@@ -432,7 +518,7 @@ export function labelScores(labels: string[] | undefined, pageCount: number, pag
     const [a, b] = [labelValue(name(p)), labelValue(name(p + 1))];
     if (!a || !b || a.series !== b.series) continue;
     pairs++;
-    if (b.n > a.n) continue;
+    if (b.n > a.n || (deck && b.n === a.n)) continue;
     wrong++;
     found.push({ page: p + 1, labels: `${name(p)} → ${name(p + 1)}` });
   }
@@ -525,13 +611,15 @@ export function farSpace(pdf: PdfText, ink: PageInk, cand: Flat, placed: number[
     const space = block.spaceAfter ?? 0;
     const shown = next ? next.top - last.bottom : null;
     // The blank is the page's own where the candidate's next block starts right under it (a title page's gap):
-    // its first line at the next ink, or a figure whose crop holds the next ink's top.
+    // its first line at the next ink, or a figure whose crop holds the next ink's top. A line's box stands over
+    // its letters by its face's ascent past its capitals, a fifth of its height or so (parse bench finding: a
+    // Keynote slide's 34 pt item, its box 6.4 pt over its letters' ink, did not start at the next ink).
     const after = cand.blocks.findIndex((x, k) => k > b && (x.at !== undefined || cand.unitsOf[k].some((u) => placed[u].length > 0)));
     const crop = after >= 0 && cand.blocks[after].at ? boxOf(pdf, cand.blocks[after].at) : null;
     const first = after >= 0 && !crop ? cand.unitsOf[after].flatMap((u) => placed[u]).map((i) => pdf.lines[i])[0] : undefined;
     const follows =
       next !== undefined &&
-      (crop ? crop.page === last.page && crop.y1 <= next.top + 3 && crop.y2 >= next.top : first !== undefined && first.page === last.page && first.top >= next.top - 3 && first.top <= next.bottom + 3);
+      (crop ? crop.page === last.page && crop.y1 <= next.top + 3 && crop.y2 >= next.top : first !== undefined && first.page === last.page && first.top >= next.top - Math.max(3, 0.25 * (first.bottom - first.top)) && first.top <= next.bottom + 3);
     if (shown !== null && follows && Math.abs(shown - space) <= Math.max(12, 0.25 * Math.max(space, shown))) return;
     wrong++;
     found.push({ page: last.page, space: Math.round(space), shown: shown === null ? null : Math.round(shown), text: cand.units[cand.unitsOf[b][0]].text.slice(0, 80) });
@@ -789,10 +877,10 @@ export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input
   const columns = columnScores(pdf, cand, placed);
   const indents = indentScores(pdf, cand, placed);
   const tables = tableScores(cand, placed);
-  const figures = figureScores(pdf, cand);
+  const figures = figureScores(pdf, cand, input.ink, placed);
   const crops = cropScores(pdf, cand);
   const pictures = pictureScores(pdf, cand, input.pictures);
-  const captions = captionScores(cand);
+  const captions = captionScores(cand, pdf, placed);
   const overlaps = cropOverlaps(pdf, cand);
   const sides = captionSides(pdf, cand, placed);
   const marks = titleMarks(pdf, cand, placed);

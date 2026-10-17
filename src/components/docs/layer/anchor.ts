@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import type { SourceInput } from "@/lib/anchors/input";
 import { inlineText, outOfIndex } from "@/lib/docs/blocks";
@@ -223,4 +224,32 @@ export function wordAtCaret(editor: Editor): { from: number; to: number } | null
     if (offset < end) break;
   }
   return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end, true) };
+}
+
+// List lines and table cells keep the text's Tab (nest, next cell).
+const TEXT_TAB = new Set(["listItem", "taskItem", "tableCell", "tableHeader"]);
+
+/** Words selected inside one line of a paragraph or a heading (not the
+    whole line, not over lines): Tab there goes to the open AI toolbar in
+    every mode (SPEC.md §6). In a list line or a table cell Tab stays the
+    text's: it nests the line, or goes to the next cell. The reader moves
+    the focus (reader-interactions.tsx); with no toolbar open the text takes
+    Tab (typing/keys.ts). */
+export function tabOpensToolbox(state: EditorState): boolean {
+  const sel = state.selection;
+  // A text selection only: not an image (a node) or table cells.
+  if (sel.empty || "node" in sel || "$anchorCell" in sel) return false;
+  const $from = sel.$from;
+  for (let d = $from.depth; d > 0; d--) {
+    if (TEXT_TAB.has($from.node(d).type.name)) return false;
+  }
+  let blocks = 0;
+  let whole = false;
+  state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    blocks++;
+    whole = sel.from <= pos + 1 && sel.to >= pos + 1 + node.content.size;
+    return false;
+  });
+  return blocks === 1 && !whole;
 }

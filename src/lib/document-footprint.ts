@@ -84,3 +84,14 @@ export async function editableNotebooks(ids: string[], user: User): Promise<Set<
       .map((n) => n.id),
   );
 }
+
+// The projects among these the account can open (owner, editor, or viewer).
+// Sign-in off: the one reader opens every project.
+export async function openableNotebooks(ids: string[], user: User): Promise<Set<string>> {
+  if (!authEnabled()) return new Set(ids);
+  const rows = await db.notebook.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, userId: true, collaborators: { select: { email: true, role: true } } },
+  });
+  return new Set(rows.filter((n) => roleOf(n, user) !== null).map((n) => n.id));
+}

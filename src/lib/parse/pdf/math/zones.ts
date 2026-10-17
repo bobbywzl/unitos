@@ -524,12 +524,16 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
   }
 }
 
-/** Whether a glyph stands on the baseline of another line of text (no
-    display's), within that line, and off this line's: it is that line's. */
+/** Whether a glyph stands on the baseline of another line, within that
+    line, and off this line's: it is that line's. A line of text, or
+    another display's row (parse loop finding: a textbook's aligned rows
+    (24.14a–c) stand 24 pt apart, each a display of its own; the \vec of
+    one row, drawn on its baseline, stood within 1.2 em over the next
+    row's ∫ and went into its formula as a row of its own). */
 export function onOtherLine(g: Glyph, line: Line, lines: Line[]): boolean {
   return (
     Math.abs(line.y - g.y) >= g.size * 0.1 &&
-    lines.some((l) => l !== line && !l.display && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
+    lines.some((l) => l !== line && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
   );
 }
 
@@ -771,19 +775,45 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
   return out;
 }
 
-// Brackets in a formula's LaTeX; any other command is skipped whole.
-const BRACKET_RE = /\\(?:lbrace|rbrace|langle|rangle|lfloor|rfloor|lceil|rceil|[{}])|\\[A-Za-z]+|[()[\]]/g;
+// Brackets in a formula's LaTeX; any other command is skipped whole. A bar
+// counts too: a ket opens at one (|x⟩) and a bra closes at one (⟨x|).
+const BRACKET_RE = /\\(?:lbrace|rbrace|langle|rangle|lfloor|rfloor|lceil|rceil|lvert|rvert|vert|[{}])|\\[A-Za-z]+|[()[\]|]/g;
 const OPENS = new Set(["(", "[", "\\lbrace", "\\{", "\\langle", "\\lfloor", "\\lceil"]);
 const CLOSES = new Set([")", "]", "\\rbrace", "\\}", "\\rangle", "\\rfloor", "\\rceil"]);
+const BARS = new Set(["|", "\\lvert", "\\rvert", "\\vert"]);
 
 /** Every bracket closes one opened before it, of any kind: a half-open
-    interval [0, 1) counts. open: a bracket may stay open at the end. */
+    interval [0, 1) counts. open: a bracket may stay open at the end.
+    Dirac's notation holds: a ⟩ closes at a bar before it (a ket, |x⟩), a
+    ⟨ closes at a bar after it (a bra, ⟨x|), two bars pair (|x|), and a
+    bar alone is no bracket (parse loop finding: a quantum mechanics
+    book's every X̂ |xyz⟩ = x |xyz⟩ read as unbalanced, and was a crop). */
 export function balanced(latex: string, open = false): boolean {
-  let depth = 0;
+  const stack: string[] = [];
   for (const [t] of latex.matchAll(BRACKET_RE)) {
-    if (OPENS.has(t)) depth++;
-    else if (CLOSES.has(t)) depth--;
-    if (depth < 0) return false;
+    if (BARS.has(t)) {
+      if (stack.at(-1) === "|") stack.pop();
+      else stack.push("|");
+    } else if (OPENS.has(t)) stack.push(t);
+    else if (CLOSES.has(t)) {
+      let bars = 0;
+      while (stack.at(-1) === "|") {
+        stack.pop();
+        bars++;
+      }
+      // A ⟩ after a bar closes the bar (a ket), and a ⟨ before the bar
+      // with it (⟨x|y⟩); it closes no bracket outside the ket.
+      if (t === "\\rangle" && bars > 0) {
+        if (stack.at(-1) === "\\langle") stack.pop();
+        continue;
+      }
+      if (stack.length > 0) stack.pop();
+      else return false;
+    }
   }
-  return depth === 0 || open;
+  for (let k = 0; k < stack.length; k++) {
+    if (stack[k] === "|" || (stack[k] === "\\langle" && stack[k + 1] === "|")) continue;
+    return open;
+  }
+  return true;
 }

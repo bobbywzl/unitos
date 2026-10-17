@@ -1,15 +1,17 @@
 // A page's lines cut into segments. Readers are tried in this order:
 // contents lists, tables, code listings, label lines, an algorithm's lines
-// (lists.ts), headings (headings.ts), references and lists (lists.ts), and
+// (lists.ts), headings (headings.ts), references (lists.ts), a right-to-left
+// line's list or paragraph on the page mirrored (mirror.ts), lists, and
 // paragraphs (paragraphs.ts). Each takes the lines from
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
 
-import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
+import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, opensLeaderList, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
-import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { closeLists, joinMarkerCells, liftTallMarkers, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { type Mirror, mirrorPage, readsRightToLeft, unmirror } from "@/lib/parse/pdf/mirror";
 import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -21,11 +23,12 @@ import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pd
 // A contents list that runs past the page break continues on the next page.
 let tocCarry = false;
 
-const PROOF_END_RE = /^[□■∎]$/;
+// An end mark: a proof's (□, ∎), or a remark's or an example's (♢, ◇).
+const PROOF_END_RE = /^[□■∎▢♢◇]$/;
 
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
-  const lines = gatherAuthorGrid(joinRaisedMarks(joinMarkerCells(pageLines)), ctx);
+  const lines = gatherAuthorGrid(joinRaisedMarks(liftTallMarkers(joinMarkerCells(pageLines))), ctx);
   markEdges(lines, ctx);
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();
@@ -34,6 +37,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const fills = markTabs(lines, (k) => runOf[k] === -1, (l) => leftEdge(l, ctx), ctx.drawing, !ctx.tex);
   let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
   tocCarry = false;
+  // A right-to-left line's list or paragraph reads on the page mirrored
+  // (mirror.ts), its blocks back at the page's place.
+  let mirror: Mirror | null = null;
+  const readMirrored = (k: number): Step | null => {
+    if (!readsRightToLeft(lines[k])) return null;
+    mirror ??= mirrorPage(lines, ctx);
+    return unmirror(readList(mirror.lines, k, mirror.ctx, runOf) ?? readParagraph(mirror.lines, k, mirror.ctx, runOf), mirror.axis);
+  };
   // Where each reader's segments begin: its first line and its first segment.
   const starts: { line: number; at: number }[] = [];
   let i = 0;
@@ -53,7 +64,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       continue;
     }
 
-    if (tocMode && isContentsEntry(line)) {
+    if ((tocMode && isContentsEntry(line)) || opensLeaderList(lines, i, ctx.leading)) {
       const step = readContentsEntries(lines, i, ctx.leading);
       segments.push(...step.segments);
       tocMode = false;
@@ -88,8 +99,17 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     tocMode = false;
 
     // A proof's end mark alone on its line (flush right under a display)
-    // ends the block before it, as the page shows it.
-    const last = segments[segments.length - 1];
+    // ends the block before it, as the page shows it. So does a remark's
+    // (parse loop finding: the MML book's ♢ under "… are linearly
+    // independent." read as a display equation of its own).
+    // A block in the margin right of the mark (a note, a side caption)
+    // is no block the mark ends: it ends the last block of its column
+    // (parse loop finding: the MML book's ♢ under a list read as "column
+    // space ♢", the note beside the list, and the side caption's last line
+    // beside the figure over a Remark's end read "Φ : V → W. ♢").
+    const inColumn = (s: Segment) => s.box === undefined || s.box.x1 < line.x;
+    const over = segments.slice(-4).findLast((s) => s.page === line.page && (s.type === "PARAGRAPH" || s.type === "LIST") && inColumn(s));
+    const last = over ?? segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
       appendProofBox(last, line);
       i++;
@@ -115,11 +135,12 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     const step =
       readSplitLine(lines, i) ??
       readCodeListing(lines, i, ctx, runOf) ??
-      readRuleLine(lines, i) ??
+      readRuleLine(lines, i, ctx) ??
       readLabelLine(lines, i, ctx) ??
       readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
       readReferences(lines, i, ctx, runOf) ??
+      readMirrored(i) ??
       readList(lines, i, ctx, runOf) ??
       readParagraph(lines, i, ctx, runOf);
     const heading = step.segments.findLast((s) => s.type === "HEADING");
@@ -241,16 +262,20 @@ function blockText(stack: Line[]): { text: string; runs: Run[] } {
 // that holds four in five of its words: a pull quote, the text's own words
 // set apart ("Many Earth science missions, both airborne and on orbit, …"
 // beside the paragraph it quotes, the Earth Observer p. 7: read as a
-// paragraph).
+// paragraph). A part set smaller than the paragraph is a note in the
+// margin that glosses it, no pull quote (parse loop finding: the MML book's
+// note "coordinate of the orthogonal projection of x onto the subspace
+// spanned by bj" read as a quote, apart from its first line).
 function markPullQuotes(segments: Segment[]): void {
   const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
   const width = (s: Segment) => (s.box ? s.box.x2 - s.box.x1 : 0);
+  const smaller = (s: Segment, t: Segment) => s.lineSize !== undefined && t.lineSize !== undefined && s.lineSize < t.lineSize * 0.9;
   for (const s of segments) {
     if (s.type !== "PARAGRAPH" || /\b(?:quote|caption|center)\b/.test(s.html ?? "")) continue;
     const words = wordsOf(s.text);
     if (words.length < 8) continue;
     const quoted = segments.some((t) => {
-      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t)) return false;
+      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t) || smaller(s, t)) return false;
       const theirs = new Set(wordsOf(t.text));
       return words.filter((w) => theirs.has(w)).length >= words.length * 0.8;
     });
@@ -258,6 +283,55 @@ function markPullQuotes(segments: Segment[]): void {
     const tokens = /class="([^"]*)"/.exec(s.html ?? "")?.[1].split(/\s+/).filter(Boolean) ?? [];
     s.html = `<p class="${[...tokens.filter((t) => !t.startsWith("indent")), "quote"].join(" ")}"></p>`;
     delete s.indent;
+  }
+}
+
+/** A heading set plain that says again a sentence of the text, on its page
+    or within three pages of it, is a pull quote set large: a heading's
+    words are its own. A magazine sets a story's pull quotes over a spread
+    of pages, away from the paragraph they quote (parse loop finding: The
+    MagPi's pull quotes, 16 pt between drawn quote marks, "A realistic
+    driving experience that predated arcade games" on p. 49 from p. 46's
+    paragraph, read as headings among the section heads). */
+export function markPullQuoteHeadings(segments: Segment[]): void {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const tokensOf = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  // The most of the heading's words the paragraph says in a row: a pull
+  // quote says five or more as the paragraph does.
+  const run = (mine: string[], theirs: string[]) => {
+    let best = 0;
+    for (let i = 0; i < mine.length; i++)
+      for (let j = 0; j < theirs.length; j++) {
+        let k = 0;
+        while (i + k < mine.length && j + k < theirs.length && mine[i + k] === theirs[j + k]) k++;
+        best = Math.max(best, k);
+      }
+    return best;
+  };
+  const paragraphs = segments.filter((t) => t.type === "PARAGRAPH" && !/\bquote\b/.test(t.html ?? ""));
+  for (const s of segments) {
+    if (s.type !== "HEADING" || s.headingNum !== undefined || (s.runs ?? []).some((r) => r.bold) || s.text.length > 240) continue;
+    // A section's head is numbered ("33.3 Raising and Lowering …"), in
+    // capitals, or in title case ("IntelliJ / PyCharm / … 中的 Git"); a
+    // pull quote is a sentence, set plain and in sentence case.
+    const text = s.text.trim();
+    if (!/^[“"‘']?\p{L}/u.test(text) || /^(?:fig\.?|figure|table)\s*\d/i.test(text)) continue;
+    const later = (text.match(/\p{L}{3,}/gu) ?? []).slice(1);
+    if (later.filter((w) => /^\p{Ll}/u.test(w)).length < later.length * 0.5) continue;
+    const words = wordsOf(text);
+    if (words.length < 6) continue;
+    const tokens = tokensOf(text);
+    const quoted = paragraphs.some((t) => {
+      if (Math.abs(t.page - s.page) > 3 || t.text.length <= text.length) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8 && run(tokens, tokensOf(t.text)) >= 5;
+    });
+    if (!quoted) continue;
+    s.type = "PARAGRAPH";
+    s.html = '<p class="quote"></p>';
+    delete s.rawSize;
+    delete s.headingNum;
+    delete s.align;
   }
 }
 
@@ -269,11 +343,17 @@ function separatorOf(page: number): Segment {
 
 // A line of rule glyphs alone ("———————", "- - - - - - - -"): the writer's
 // separator (a Google Docs note's line of dashes read as a paragraph).
-// Underscores are a form's blanks, not a separator.
+// Underscores are a form's blanks, not a separator. A scan's dashed rule
+// reads so too, its dashes in cells apart and a speck or two among them
+// (parse loop finding: DTIC's Helicopter Design Datcom p. 8 read its
+// dashed rule as a paragraph, "- - - - ----- ----- '-").
 const RULE_LINE_RE = /^[-–—─━═=~]{8,}$/;
-function readRuleLine(lines: Line[], i: number): Step | null {
+function readRuleLine(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
-  if (line.cells.length !== 1 || !RULE_LINE_RE.test(line.text.replace(/\s/g, ""))) return null;
+  const text = line.text.replace(/\s/g, "");
+  const dashes = text.match(/[-–—]/g)?.length ?? 0;
+  const scanRule = ctx.ocr && dashes >= 8 && text.length - dashes <= 2 && /^[-–—'’.,`]+$/.test(text);
+  if (!(line.cells.length === 1 && RULE_LINE_RE.test(text)) && !scanRule) return null;
   return { segments: [separatorOf(line.page)], next: i + 1 };
 }
 
@@ -344,6 +424,18 @@ function withDrawnSeparators(
       (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),
     );
     if (framed || corner) continue;
+    // A chart's axis: a vertical rule crosses it in its middle, an em past
+    // either end and reaching an em over and under it. A separator stands
+    // alone (parse loop finding: a textbook's circle drawn on two axes, its
+    // x axis read as a separator under the figure). So does one that
+    // stands on it and reaches an em up or down (a potential well's axis,
+    // V(z) drawn up from z, read as a separator under its figure).
+    const crossed = ctx.drawing.rules.some((r) => {
+      const x = (r.x1 + r.x2) / 2;
+      const meets = r.y1 <= y + 2 && r.y2 >= y - 2 && (r.y1 < y - size || r.y2 > y + size);
+      return r.dir === "v" && x > rule.x1 + size && x < rule.x2 - size && meets;
+    });
+    if (crossed) continue;
     at.add(start.at);
   }
   if (at.size === 0) return segments;
@@ -377,6 +469,26 @@ function codeLineText(line: Line, left: number, advance: number): string {
 // Code listing: consecutive monospace lines, blank lines included, are one
 // CODE block with one line per PDF line and the indentation the glyph
 // offsets give.
+// A listing's empty line keeps its line number: a line that is only the
+// number after the line above's, set smaller than the code, between two
+// code lines (parse loop finding: a LaTeX package's manual numbers every
+// line of an example, and each empty line, "3" alone, cut its listing in
+// two and read as a paragraph).
+function bareLineNumber(line: Line, above: Line, below: Line | undefined): boolean {
+  const number = /^\s*(\d{1,4})\s*$/.exec(line.text);
+  const before = /^\s*(\d{1,4})\s/.exec(above.text);
+  const code = above.items.filter((it) => it.mono && it.str.trim());
+  return (
+    number !== null &&
+    before !== null &&
+    Number(number[1]) === Number(before[1]) + 1 &&
+    below !== undefined &&
+    isMonoLine(below) &&
+    code.length > 0 &&
+    line.size < Math.min(...code.map((it) => it.size)) * 0.85
+  );
+}
+
 function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (!isMonoLine(line)) return null;
@@ -385,7 +497,8 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
   while (j < lines.length) {
     const next = lines[j];
     const gap = run[run.length - 1].y - next.y;
-    if (!isMonoLine(next) || runOf[j] !== -1 || gap < 0 || gap > next.size * ctx.leading * 3.4) break;
+    const code = isMonoLine(next) || bareLineNumber(next, run[run.length - 1], lines[j + 1]);
+    if (!code || runOf[j] !== -1 || gap < 0 || gap > next.size * ctx.leading * 3.4) break;
     run.push(next);
     j++;
   }
@@ -395,7 +508,7 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
   const rows: string[] = [];
   run.forEach((l, k) => {
     if (k > 0) {
-      const blank = Math.round((run[k - 1].y - l.y) / (l.size * ctx.leading)) - 1;
+      const blank = Math.round((run[k - 1].y - l.y) / (Math.max(l.size, run[k - 1].size) * ctx.leading)) - 1;
       for (let b = 0; b < Math.min(2, blank); b++) rows.push("");
     }
     rows.push(codeLineText(l, left, advance));

@@ -14,7 +14,7 @@ import { DropDownIcon } from "@/components/docs/icons";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { DEFAULT_HF_MARGIN_PT, formatLength, lengthUnitFor, parseLength, type PageFrame } from "@/components/docs/page/geometry";
-import { PAGE_EVENT, usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
+import { PAGE_EVENT, drawnPageless, usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
 // Headers, footers, and page numbers (SPEC.md §29), Google Docs': the header
@@ -238,7 +238,10 @@ export function HeaderFooterLayer({
   onEditor: (editor: Editor | null) => void;
 }) {
   const t = useT();
+  // The saved setup: its Options save from it. No header is edited on a
+  // page drawn pageless.
   const setup = usePageState(store, (s) => s.setup);
+  const pageless = usePageState(store, drawnPageless);
   const editing = usePageState(store, (s) => s.editing);
   const [menuOpen, setMenuOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
@@ -255,7 +258,7 @@ export function HeaderFooterLayer({
     return () => ro.disconnect();
   }, [editing]);
 
-  if (!editing || setup.pageless) return null;
+  if (!editing || pageless) return null;
   const { area, page } = editing;
   const slot = slotFor(setup, area, page);
   const doc = setup[slot] ?? EMPTY_DOC;
