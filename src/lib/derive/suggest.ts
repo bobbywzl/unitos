@@ -2,7 +2,7 @@ import type { Block } from "@prisma/client";
 import type { ModelMessage } from "ai";
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
-import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { documentPrefix, pageNames, type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { ResolvedOp, SuggestResult } from "@/lib/docs/assistant-suggestions";
@@ -25,6 +25,7 @@ import { suggestPrompt } from "@/lib/prompts/suggest";
 import { suggestCheckPrompt, type CheckedOp } from "@/lib/prompts/suggest-check";
 import { z } from "zod";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import { figureWordsMarkdown, type FigureWords } from "@/lib/assistant/plan";
 
 // The assistant's suggestions (SPEC.md §29), the one code path: the command
 // and its scope → lib/prompts/suggest.ts under the cached document prefix →
@@ -94,7 +95,7 @@ export type SuggestRun = {
   // A command over blocks: this window's place (1 of n) and whether the command covers the whole document.
   window: { n: number; of: number; whole: boolean } | null;
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // The new text the command has left (SUGGEST_MAX_NEW_CHARS), shared by its windows.
   budget: { chars: number };
   signal?: AbortSignal;
@@ -130,7 +131,7 @@ function checkedOp(op: ResolvedOp, text: (id: string) => string): CheckedOp | nu
     case "remove_blocks":
       return { i: op.i, kind: "remove blocks", blockIds: op.blockIds, before: op.base.join("\n"), after: "", why: op.why };
     case "insert_blocks":
-      return { i: op.i, kind: "new blocks after", blockIds: op.afterBlockId ? [op.afterBlockId] : [], before: "", after: op.markdown, why: op.why };
+      return { i: op.i, kind: op.afterBlockId ? "new blocks after" : "new blocks at the start", blockIds: op.afterBlockId ? [op.afterBlockId] : [], before: "", after: op.markdown, why: op.why };
     case "insert_footnote":
       return { i: op.i, kind: "new footnote", blockIds: [op.blockId], before: "", after: op.text, why: op.why };
     case "insert_row":
@@ -154,7 +155,7 @@ const checkAnswerSchema = z.object({
     what the document does not. The ops it names, with its why. A check that
     fails keeps every op: the reader still accepts or rejects each one. */
 export async function checkOps(
-  run: Pick<SuggestRun, "userId" | "lang" | "command" | "instruction" | "signal"> & { document: { rows: Pick<Block, "id" | "text">[] } },
+  run: Pick<SuggestRun, "userId" | "lang" | "command" | "instruction" | "material" | "signal"> & { document: { rows: Pick<Block, "id" | "text">[] } },
   prefix: ModelMessage,
   ops: ResolvedOp[],
 ): Promise<Map<number, string>> {
@@ -165,7 +166,7 @@ export async function checkOps(
     const call = await featureCall("suggest", SUGGEST_EFFORT.fast);
     const result = await callForJson({
       model: call.model,
-      messages: [prefix, { role: "user", content: suggestCheckPrompt({ lang: run.lang, command: run.command, instruction: run.instruction, ops: listed }) }],
+      messages: [prefix, { role: "user", content: suggestCheckPrompt({ lang: run.lang, command: run.command, instruction: run.instruction, material: run.material, ops: listed }) }],
       maxOutputTokens: SUGGEST_CHECK_MAX_OUTPUT_TOKENS,
       providerOptions: call.providerOptions,
       schema: checkAnswerSchema,
@@ -250,6 +251,7 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
   return {
     ops,
     warnings: [
+      ...(result.truncated ? [run.t("api.answerCut")] : []),
       ...read.unreadable.map((why) => run.t(SKIPPED.unreadable, { why })),
       ...skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
       ...[...checked.values()].map((why) => run.t("api.suggestSkipChecked", { why })),
@@ -257,4 +259,27 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
     ],
     summary: result.data.summary,
   };
+}
+
+/** Words read from the selected figure, put under it (SPEC.md §7): one
+    insert_blocks op after the figure, resolved like the model's ops. The
+    words come from the figure's picture, which the document's text cannot
+    ground, so no grounding check holds them; the reader accepts or rejects
+    the suggestion. */
+export function figureWordsSuggestion(
+  words: FigureWords[],
+  figureBlockId: string,
+  document: SuggestDocument,
+  t: TFunc,
+): { ops: ResolvedOp[]; warnings: string[] } {
+  const markdown = figureWordsMarkdown(words);
+  if (!markdown) return { ops: [], warnings: [] };
+  const why = words.map((w) => w.description).join(" ");
+  const resolved = resolveOps([{ op: "insert_blocks", afterBlockId: figureBlockId, markdown, why }], {
+    rows: document.rows,
+    places: document.places,
+    scope: { kind: "blocks", blockIds: [figureBlockId] },
+    budget: { chars: SUGGEST_MAX_NEW_CHARS },
+  });
+  return { ops: resolved.ops, warnings: resolved.skipped.map((s) => t(SKIPPED[s.reason], { why: s.why })) };
 }

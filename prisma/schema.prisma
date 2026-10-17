@@ -697,12 +697,20 @@ model NotebookDocument {
   distillations Json? // DISTILL output: [{id, question, createdAt, quotes}], newest first, per notebook per document (SPEC.md §4)
   extractions   Json? // EXTRACT output: [{id, createdAt, origin, spans}], oldest first — the index gives the label (SPEC.md §4)
   formalized    Json? // FORMALIZE output: {article: {title, markdown, createdAt, createdById}}; Regenerate overwrites
+  // Structure (SPEC.md §32): the document's blocks sorted into buckets on a
+  // canvas, per project — {v, rev, buckets, pieces, connections}
+  // (lib/structure.ts). Null = no structure yet: every block unsorted.
+  structure     Json?
   // The folder the document sits in within this project (SPEC.md §6); null
   // = the project itself, outside every folder. Deleting the folder moves
   // the document up one level (the route does it before the delete); the
   // database's own fallback clears it.
   folderId      String?
   folder        DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // The document's place in its list under Sort by Custom order (SPEC.md
+  // §6): 0 first. Null = never placed by a drag; such rows list first,
+  // newest edit first. A move into another folder clears it.
+  position      Int?
 
   @@id([notebookId, documentId])
   @@index([documentId])
@@ -723,6 +731,9 @@ model DocumentFolder {
   parent     DocumentFolder?    @relation("FolderNesting", fields: [parentId], references: [id], onDelete: Cascade)
   children   DocumentFolder[]   @relation("FolderNesting")
   documents  NotebookDocument[]
+  // The folder's place in its parent's list under Sort by Custom order
+  // (SPEC.md §6), the same as NotebookDocument.position.
+  position   Int?
   createdAt  DateTime           @default(now())
 
   @@index([notebookId])
@@ -1069,4 +1080,25 @@ model ToolRating {
 
   @@index([tool, rating, createdAt])
   @@index([createdAt])
+}
+
+// A kept conversation (SPEC.md §21): the turns of one assistant surface that
+// keeps no note of its own — the media assistant, Ask about a range, Stitch,
+// and the note's assistant — for one account at one place, so the
+// conversation survives leaving the page, a reload, and another device. One
+// row per account per project per place ("media:<documentId>",
+// "ask:<documentId>", "stitch", "note:<noteId>"). It stays until the account
+// clears it (Clear conversation). Soft references like Notebook.userId: no
+// cascade reaches it, and no other account reads it.
+model KeptChat {
+  id         String   @id @default(cuid())
+  userId     String
+  notebookId String
+  place      String
+  turns      Json // [{role: "user" | "assistant", content, data?}], oldest first
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, notebookId, place])
+  @@index([notebookId])
 }

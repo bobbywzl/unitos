@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
@@ -21,7 +21,7 @@ export const maxDuration = 180;
 // notes tray; the recording takes the upload transcription ladder (Groq
 // Whisper → OpenAI Whisper → Gemini); the transcript is a command over the
 // open document and the section's notes; the model (VOICE_MODEL, Claude
-// Sonnet 5) answers with the notes the command asks for, each quote a
+// Sonnet 5.5) answers with the notes the command asks for, each quote a
 // verbatim span of one block; every quote resolves against the real block
 // text and becomes a source; every note lands PENDING in the section — the
 // reader reads it over and accepts it, so nothing enters notes unread. The
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
             : []),
           { role: "user", content: userPrompt },
         ];
-        const voiceCall = await featureCall("voice", VOICE_EFFORT[thinking ?? "deep"]);
+        const voiceCall = await featureCall("voice", VOICE_EFFORT[resolvedThinking(thinking)]);
         const result = await callForJson({
           model: voiceCall.model,
           messages,

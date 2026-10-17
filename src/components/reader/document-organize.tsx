@@ -75,6 +75,7 @@ export function useFoldedCategories(): [ReadonlySet<string>, (key: string) => vo
 
 const SORT_KEY: Record<DocumentSort, TKey> = {
   edited: "panes.documentsSortEdited",
+  custom: "panes.documentsSortCustom",
   added: "panes.documentsSortAdded",
   title: "panes.documentsSortTitle",
   kind: "panes.documentsSortKind",

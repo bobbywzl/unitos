@@ -12,6 +12,8 @@ import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
 // Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
 // command across the project's documents — gather every passage on a
@@ -24,12 +26,12 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // Generated content. Under every reply, what was read of each document: a
 // video or audio document reads as its transcript, and a document with
 // nothing to read says why (the transcript still being written, or failed
-// with the stored reason). The conversation is kept per project for the
-// browser tab, so closing the graph and opening it again keeps it. The box
-// folds to a pill so the canvas is clear.
+// with the stored reason). The conversation is kept for the account per
+// project (lib/kept-chat.ts), so closing the graph, leaving the page, or a
+// reload keeps it; Clear conversation removes it. The box folds to a pill
+// so the canvas is clear.
 
-type Turn = { role: "user" | "assistant"; content: string; result?: StitchResult };
-const threads = new Map<string, Turn[]>();
+type Turn = KeptTurn & { data?: { result?: StitchResult } };
 
 const SUGGESTIONS = [
   "stitch.stitchSuggestGather",
@@ -62,31 +64,27 @@ export function StitchBox({
   const router = useRouter();
   const ime = useImeGuard();
   const { canEdit } = useCollab();
-  const [turns, setTurnsState] = useState<Turn[]>(() => threads.get(notebookId) ?? []);
-  const [command, setCommand] = useState("");
-  const [running, setRunning] = useState(false);
+  const kept = useKeptChat<Turn>(notebookId, "stitch");
+  const { turns, setTurns } = kept;
+  const running = kept.busy;
+  const draftKey = `stitch:${notebookId}`;
+  const [command, setCommandState] = useState("");
+  useChatDraft(draftKey, setCommandState);
+  function setCommand(text: string) {
+    setCommandState(text);
+    writeChatDraft(draftKey, text);
+  }
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  function setTurns(update: (turns: Turn[]) => Turn[]) {
-    setTurnsState((prev) => {
-      const next = update(prev);
-      threads.set(notebookId, next);
-      return next;
-    });
-  }
 
   // The newest turn stays in view.
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns.length, running, open]);
 
-  function stop() {
-    abortRef.current?.abort();
-  }
+  const stop = kept.stop;
 
   async function send() {
     const text = command.trim();
@@ -101,9 +99,7 @@ export function StitchBox({
       .slice(-20)
       .map((turn) => ({ role: turn.role, content: turn.content }));
     setTurns((prev) => [...prev, { role: "user", content: text }]);
-    setRunning(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const controller = kept.begin();
     try {
       const result = await runHeartbeat<StitchResult>(
         `/api/notebooks/${notebookId}/stitch`,
@@ -114,7 +110,7 @@ export function StitchBox({
         },
         controller.signal,
       );
-      setTurns((prev) => [...prev, { role: "assistant", content: result.reply, result }]);
+      setTurns((prev) => [...prev, { role: "assistant", content: result.reply, data: { result } }]);
       // The graph's new curves and the generated list arrive with a refresh.
       if (result.linkCount > 0 || result.document) router.refresh();
     } catch (err) {
@@ -123,8 +119,7 @@ export function StitchBox({
         setError(err instanceof Error ? err.message : t("common.requestFailed"));
       }
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setRunning(false);
+      kept.end(controller);
     }
   }
 
@@ -169,15 +164,7 @@ export function StitchBox({
         <SparkleIcon size={15} className="shrink-0 text-clay" />
         <span className="font-display text-[16px]">{t("stitch.stitch")}</span>
         <span className="min-w-0 flex-1 truncate text-xs text-sand-500">{t("stitch.stitchHint")}</span>
-        {turns.length > 0 && !running && (
-          <button
-            onClick={() => setTurns(() => [])}
-            data-track="stitch-new"
-            className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          >
-            {t("stitch.stitchNew")}
-          </button>
-        )}
+        {turns.length > 0 && !running && <ClearConversation onClear={kept.clear} track="stitch-clear" />}
         <button
           onClick={() => {
             setOpen(false);
@@ -246,7 +233,7 @@ export function StitchBox({
             ) : (
               <div key={i} className="flex max-w-[92%] flex-col gap-1.5 text-[13px] text-sand-800">
                 {turn.content && <Markdown>{turn.content}</Markdown>}
-                {turn.result && <ResultLine result={turn.result} onOpen={openDocument} />}
+                {turn.data?.result && <ResultLine result={turn.data.result} onOpen={openDocument} />}
               </div>
             ),
           )}

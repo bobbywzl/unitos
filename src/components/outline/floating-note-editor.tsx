@@ -690,6 +690,7 @@ export function FloatingNoteEditor({
           note: a change it proposes lands in the draft on Apply. */}
       {editing && note && canEdit && (
         <NoteAssistant
+          notebookId={actions.notebookId}
           noteId={note.id}
           draft={draft}
           onApply={(next) => {

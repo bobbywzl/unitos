@@ -45,7 +45,7 @@ export async function PATCH(
   if (error) return error;
   const folder = await db.documentFolder.findFirst({
     where: { id: folderId, notebookId },
-    select: { id: true },
+    select: { id: true, parentId: true },
   });
   if (!folder) return NextResponse.json({ error: t("api.folderNotFound") }, { status: 404 });
   if (data.parentId) {
@@ -62,7 +62,11 @@ export async function PATCH(
     where: { id: folderId },
     data: {
       ...(data.title !== undefined ? { title: data.title } : {}),
-      ...(data.parentId !== undefined ? { parentId: data.parentId } : {}),
+      // A move into another list drops the place it had in the old one
+      // (Custom order, SPEC.md §6): it lists first in the new one.
+      ...(data.parentId !== undefined
+        ? { parentId: data.parentId, ...(data.parentId !== folder.parentId ? { position: null } : {}) }
+        : {}),
     },
   });
   await bumpNotebook(notebookId);
@@ -70,8 +74,8 @@ export async function PATCH(
 }
 
 // Delete a folder. What it holds — documents and folders — moves up one
-// level, into the folder's parent or the project itself; nothing leaves the
-// project.
+// level, into the folder's parent or the project itself, and lists first
+// there under Custom order; nothing leaves the project.
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ notebookId: string; folderId: string }> },
@@ -88,11 +92,11 @@ export async function DELETE(
   await db.$transaction([
     db.documentFolder.updateMany({
       where: { parentId: folderId },
-      data: { parentId: folder.parentId },
+      data: { parentId: folder.parentId, position: null },
     }),
     db.notebookDocument.updateMany({
       where: { notebookId, folderId },
-      data: { folderId: folder.parentId },
+      data: { folderId: folder.parentId, position: null },
     }),
     db.documentFolder.delete({ where: { id: folderId } }),
   ]);

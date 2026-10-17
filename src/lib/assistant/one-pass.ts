@@ -43,7 +43,9 @@ export function fitsOnePass(rows: Row[], scopeRowIds: string[]): boolean {
 /** One entry of the answer's document, as the model writes it. */
 type Entry = { id: string; text?: string } | { markdown: string };
 
-const id = z.string().trim().min(1).max(64);
+// An id as the model writes it: "abc", or the tag it read, "[block abc]".
+const blockIdOf = (raw: string) => raw.trim().replace(/^\[?block\s+/i, "").replace(/\]$/, "").trim();
+const id = z.string().transform(blockIdOf).pipe(z.string().min(1).max(64));
 // New blocks first: an object with no id reads as one of them or as nothing.
 const entrySchema = z.union([
   id.transform((blockId): Entry => ({ id: blockId })),
@@ -66,9 +68,15 @@ export const onePassAnswerSchema = z.object({
       return parsed.success && parsed.data ? [parsed.data] : [];
     }),
   ),
-  remove: z.array(z.unknown()).catch([]).optional().transform((ids) => (ids ?? []).filter((v): v is string => typeof v === "string" && v.length > 0)),
+  remove: z.array(z.unknown()).catch([]).optional().transform((ids) => (ids ?? []).flatMap((v) => (typeof v === "string" && blockIdOf(v) ? [blockIdOf(v)] : []))),
   formats: z.array(z.unknown()).catch([]).optional().transform((items) => readOps(items ?? [])),
-});
+})
+  // An answer that names no block, removes none, and formats none is no
+  // answer (JSON of another shape): the call runs again with the error, and
+  // never reads as "no change".
+  .refine((a) => a.document.length > 0 || a.remove.length > 0 || a.formats.ops.length > 0, {
+    message: "document must list the scope's block ids",
+  });
 export type OnePassAnswer = z.infer<typeof onePassAnswerSchema>;
 
 export type OnePassRun = {
@@ -86,7 +94,7 @@ export type OnePassRun = {
   material: string | null;
   history: ChatTurn[];
   caretBlockId: string | null;
-  thinking: Thinking;
+  thinking: Exclude<Thinking, "auto">;
   // A document without rich text: its ops become the plan card's block actions.
   plan: boolean;
   signal?: AbortSignal;
@@ -165,9 +173,10 @@ export function readOnePass(
       continue;
     }
     entries.push({ blockId: entry.id });
-    if (entry.text !== undefined && scopeRows.has(entry.id) && !rewrites.has(entry.id) && entry.text.trim() !== (text.get(entry.id) ?? "").trim()) {
-      rewrites.set(entry.id, entry.text);
-    }
+    if (entry.text === undefined || rewrites.has(entry.id) || entry.text.trim() === (text.get(entry.id) ?? "").trim()) continue;
+    if (scopeRows.has(entry.id)) rewrites.set(entry.id, entry.text);
+    // New words for a block out of the scope, or for no block: skipped, and said.
+    else warnings.push(t(SKIPPED.outside, { why }));
   }
   const named = new Set(answer.document.flatMap((e) => ("id" in e ? [e.id] : [])));
   const suggestOps: SuggestOp[] = [
@@ -257,10 +266,21 @@ export async function runOnePass(run: OnePassRun): Promise<OnePassResult> {
     ...run.history.map((m) => m.content),
   ]);
   const read = readOnePass(result.data, { rows: document.rows, units, places: run.places, scope, grounding, t });
-  // The check reads the new blocks as new blocks after the one before them.
+  // The check reads the new blocks as new blocks after the block before
+  // them in the answer's document (none: at the start).
+  const after = new Map<number, string | null>();
+  // A scoped answer starts mid-document: before its first block stands the
+  // block before that one.
+  const firstId = read.entries.find((e): e is { blockId: string } => "blockId" in e)?.blockId;
+  const firstAt = firstId ? document.rows.findIndex((r) => r.id === firstId) : -1;
+  let last: string | null = firstAt > 0 ? document.rows[firstAt - 1].id : null;
+  for (const e of read.entries) {
+    if ("fresh" in e) after.set(e.fresh, last);
+    else if ("blockId" in e) last = e.blockId;
+  }
   const checked = await checkOps(run, prefix, [
     ...read.ops,
-    ...read.fresh.map((f): ResolvedOp => ({ i: f.i, op: "insert_blocks", afterBlockId: null, markdown: f.markdown, why: read.why })),
+    ...read.fresh.map((f, n): ResolvedOp => ({ i: f.i, op: "insert_blocks", afterBlockId: after.get(n) ?? null, markdown: f.markdown, why: read.why })),
   ]);
   const dropped = new Set(checked.keys());
   const ops = read.ops.filter((op) => !dropped.has(op.i));
@@ -271,6 +291,10 @@ export async function runOnePass(run: OnePassRun): Promise<OnePassResult> {
     scope,
     summary: result.data.summary,
     why: read.why,
-    warnings: [...read.warnings, ...[...checked.values()].map((why) => t("api.suggestSkipChecked", { why }))],
+    warnings: [
+      ...(result.truncated ? [t("api.answerCut")] : []),
+      ...read.warnings,
+      ...[...checked.values()].map((why) => t("api.suggestSkipChecked", { why })),
+    ],
   };
 }

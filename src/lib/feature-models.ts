@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   CLASSIFY_MODEL,
   COLLAPSE_MODEL,
+  STRUCTURE_MODEL,
   CONNECT_MODEL,
   CONTENTS_MODEL,
   CONVERT_MODEL,
@@ -65,6 +66,7 @@ export type Feature =
   | "glossary"
   | "contents"
   | "collapse"
+  | "structure"
   | "skeleton"
   | "stitch"
   | "stitch-select"
@@ -103,6 +105,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   glossary: GLM_5_3_FLASH,
   contents: CONTENTS_MODEL,
   collapse: COLLAPSE_MODEL,
+  structure: STRUCTURE_MODEL,
   skeleton: SKELETON_MODEL,
   stitch: STITCH_MODEL,
   "stitch-select": STITCH_SELECT_MODEL,
@@ -159,6 +162,7 @@ export const FEATURE_ORDER: Feature[] = [
   "glossary",
   "contents",
   "collapse",
+  "structure",
   "skeleton",
   "connect",
   "parse",

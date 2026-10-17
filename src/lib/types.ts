@@ -439,6 +439,9 @@ export type AssistantAction =
       sectionId?: string;
       sectionTitle?: string;
       source?: AssistantAnchor & { documentId: string };
+      // The passages of further blocks the note draws on, in the document's
+      // order after source: each becomes a source of the note too.
+      moreSources?: AssistantAnchor[];
       description: string;
     }
   | { type: "add_section"; title: string; description: string }
@@ -452,11 +455,13 @@ export type AssistantAction =
   | { type: "move_block"; blockId: string; afterBlockId: string | null; description: string }
   // A change to a document with rich text (SPEC.md §29): the reader runs it
   // as the assistant's suggestions, never through the plan card.
-  | { type: "suggest"; instruction: string; blockIds?: string[]; reorder?: boolean; description: string }
+  // blockIds: the blocks themselves (a heading the heading alone); sections:
+  // the headings whose whole section the change covers.
+  | { type: "suggest"; instruction: string; blockIds?: string[]; sections?: string[]; reorder?: boolean; description: string }
   // A document without rich text: the edits of many blocks, found part by
   // part on the server (lib/assistant/revise.ts); the plan carries those
   // edits in its place.
-  | { type: "revise"; instruction: string; blockIds?: string[]; reorder?: boolean; description: string }
+  | { type: "revise"; instruction: string; blockIds?: string[]; sections?: string[]; reorder?: boolean; description: string }
   // A video's or an audio's transcript (SPEC.md §11, app/api/blocks/lines):
   // two lines next to each other joined into one; one line split in two, the
   // second from `offset` (its first words, `quote`); a line given to another
@@ -465,7 +470,12 @@ export type AssistantAction =
   | { type: "join_lines"; blockId: string; nextBlockId: string; description: string }
   | { type: "split_line"; blockId: string; offset: number; quote: string; description: string }
   | { type: "set_speaker"; blockId: string; speakerId: string; name: string; previous: string | null; description: string }
-  | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string };
+  | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string }
+  // A new document of the project written from the material (SPEC.md §7):
+  // its title and its markdown, and the passages its quote lines copy, each
+  // resolved to the open document's words (line: the line's index in the
+  // markdown), so the new document links back to its sources.
+  | { type: "create_document"; title: string; markdown: string; quotes: (AssistantAnchor & { documentId: string; line: number })[]; description: string };
 
 export type AssistantPlan = {
   reply: string | null;

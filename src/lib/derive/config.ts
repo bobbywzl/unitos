@@ -35,8 +35,8 @@ export const VISION_MODEL = KIMI_K3;
 // Search API under GLM, Moonshot's web-search formula under Kimi K3 — which
 // is what a GLM id resolves to without the gateway.
 export const WEB_SEARCH_MODEL = GLM_5_3;
-// The voice command (SPEC.md §6) runs on Claude Sonnet 5 (VOICE_MODEL below).
-export const CLAUDE_SONNET_5 = "claude-sonnet-5";
+// The voice command (SPEC.md §6) runs on Claude Sonnet 5.5 (VOICE_MODEL below).
+export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
@@ -98,7 +98,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   ASK: GLM_5_3,
   COMPARE: GLM_5_3,
   ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
-  VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
+  VOICE: CLAUDE_SONNET_5_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
   VISUALIZE: CLAUDE_OPUS_5_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
   DEFINE: GLM_5_3_FLASH, // one word in its sentence (SPEC.md §6)
 };
@@ -123,28 +123,28 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 
 // The voice command (SPEC.md §6): a spoken command over the open document and
 // the section's notes becomes pending notes with the document's quotes as
-// sources. Claude Sonnet 5: it follows a multi-part spoken instruction and
+// sources. Claude Sonnet 5.5: it follows a multi-part spoken instruction and
 // copies quotes exactly at a fifth of Opus 5.5's price ($2 / $10 per million
 // tokens against $5 / $25), and its context holds a whole document with the
 // notes; the document prefix is cached, so a second command on the same
 // document reads it at a tenth of the price. Deep Thinking runs at "high",
 // Fast Thinking at "low" (lib/assistant/thinking.ts).
-export const VOICE_MODEL = CLAUDE_SONNET_5;
+export const VOICE_MODEL = CLAUDE_SONNET_5_5;
 export const VOICE_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 
 // Save as note (SPEC.md §7): an answer organized into one note, its quotes
 // copied verbatim from the blocks the answer cites. The voice command's
-// reasons hold: Claude Sonnet 5 copies quotes exactly and keeps every point.
-export const ORGANIZE_MODEL = CLAUDE_SONNET_5;
+// reasons hold: Claude Sonnet 5.5 copies quotes exactly and keeps every point.
+export const ORGANIZE_MODEL = CLAUDE_SONNET_5_5;
 export const ORGANIZE_EFFORT: ClaudeEffort = "medium";
 export const ORGANIZE_MAX_OUTPUT_TOKENS = 16384;
 
 // The note's assistant (SPEC.md §6): a message about the open note becomes
 // an answer and, when the message asks for a change, the note as it should
-// read. Claude Sonnet 5, for the same reasons: it follows an instruction to
+// read. Claude Sonnet 5.5, for the same reasons: it follows an instruction to
 // the letter and keeps every quote word for word. With the web on, the web
 // feature's model answers, like every assistant surface.
-export const NOTE_ASSISTANT_MODEL = CLAUDE_SONNET_5;
+export const NOTE_ASSISTANT_MODEL = CLAUDE_SONNET_5_5;
 export const NOTE_ASSISTANT_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 export const NOTE_ASSISTANT_MAX_OUTPUT_TOKENS = 32768;
 
@@ -276,15 +276,34 @@ export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
 export const COLLAPSE_WINDOW_CHARS = 30_000;
 
+// Breakwork (SPEC.md §32): the Breakwork assistant reads the whole document
+// under the cached prefix and the structure as it stands, and answers with a
+// reply and, when the reader asked for one, a whole structure: the buckets,
+// each with its blocks as ranges of block numbers, the labels asked for, the
+// connections. The answer stays a few hundred tokens whatever the length of
+// the document. A judgement of what goes with what across the whole
+// document, read while the reader waits: Claude Sonnet 5.5 at medium — it
+// follows many rules at once, answers in well under a minute on a long
+// document, and the document is cached from turn to turn. GLM 5.3 at high
+// reasoned past the route's deadline on a 267-block document.
+export const STRUCTURE_MODEL = CLAUDE_SONNET_5_5;
+export const STRUCTURE_EFFORT: ClaudeEffort = "medium";
+export const STRUCTURE_MAX_OUTPUT_TOKENS = 24576; // the thinking, then a structure of ranges
+export const STRUCTURE_HISTORY_MAX = 20;
+export const STRUCTURE_DEADLINE_MS = 270_000;
+// The text the assistant reads of the document: past it, every block past
+// its fair share is cut to its opening words.
+export const STRUCTURE_READ_CHARS = 400_000;
+
 // The assistant's suggestions (SPEC.md §29): the assistant edits a rich text
-// as suggestions an editor accepts or rejects. Claude Sonnet 5, as the voice
+// as suggestions an editor accepts or rejects. Claude Sonnet 5.5, as the voice
 // command: it copies `find` exactly (a misquote is a skipped change) and
 // follows many rules at once at a fifth of Opus 5.5's price, and the
 // document prefix is cached, so every window and every command on the same
 // document reads it from the cache. Deep Thinking at "high", Fast Thinking
 // at "low". A whole document runs one call per window of the scope's text,
 // SUGGEST_PARALLEL at once.
-export const SUGGEST_MODEL = CLAUDE_SONNET_5;
+export const SUGGEST_MODEL = CLAUDE_SONNET_5_5;
 export const SUGGEST_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 export const SUGGEST_MAX_OUTPUT_TOKENS = 32768; // room for the reasoning and the ops
 // The one pass (lib/assistant/one-pass.ts): a scope this long or shorter is

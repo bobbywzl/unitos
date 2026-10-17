@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { chatTurnSchema } from "@/lib/conversation";
 import { db } from "@/lib/db";
@@ -25,7 +25,8 @@ export const maxDuration = 300;
 
 // The assistant's suggestions over blocks or the whole document (SPEC.md
 // §29): the panel's suggest action, run by the reader. The scope is the
-// named blocks (a heading grows to its section), else the whole document,
+// named blocks (a heading the heading alone) and the named sections (a
+// heading with its section), else the whole document,
 // cut into windows; each window is one runSuggest call, SUGGEST_PARALLEL at
 // once, and its ops stream to the page as it finishes. A command over the
 // whole document, or over more than one window, first keeps the stored text
@@ -42,6 +43,8 @@ const requestSchema = z.object({
   // What the panel's answer passed on: the change to make.
   instruction: z.string().trim().min(1).max(4000).optional(),
   blockIds: z.array(z.string().min(1).max(64)).max(200).optional(),
+  // The headings whose whole section the change covers.
+  sections: z.array(z.string().min(1).max(64)).max(200).optional(),
   // The block the caret stands in: "here".
   caretBlockId: z.string().min(1).max(64).optional(),
   // The panel's answer, which the command may ask to use.
@@ -100,8 +103,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ stage: "read" });
         const [profile, lang] = await Promise.all([loadProfile(data.notebookId), currentLang()]);
         const doc = suggestDocument(document);
-        const whole = !data.blockIds?.length;
-        const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds!);
+        const whole = !data.blockIds?.length && !data.sections?.length;
+        const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds ?? [], data.sections);
         if (scope.length === 0) throw new Error(t("api.blockNotInDocument"));
         let all = windowsOf(doc.rows, doc.places, scope);
         // A scope past the windows of one command: the target pass names the
@@ -130,7 +133,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
         // A scope that fits one call: the one pass, the whole document read
         // at once and its answer by reference (lib/assistant/one-pass.ts).
-        if (fitsOnePass(doc.rows, whole ? [] : scope)) {
+        // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
+        if (fitsOnePass(doc.rows, whole || data.reorder ? [] : scope)) {
           send({ windows: 1 });
           const units = richTextUnits(doc.richText!, doc.rows);
           const pass = await runOnePass({
@@ -138,7 +142,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
             units,
             places: doc.places,
-            scopeRowIds: whole ? [] : scope,
+            scopeRowIds: whole || data.reorder ? [] : scope,
             profile,
             lang,
             t,
@@ -147,16 +151,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             material: data.material ?? null,
             history: data.history ?? [],
             caretBlockId: data.caretBlockId ?? null,
-            thinking: data.thinking ?? "deep",
+            thinking: resolvedThinking(data.thinking),
             plan: false,
             signal,
           });
           const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
           const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
           const ops = [...pass.ops, ...moves];
-          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          // Nothing landed: the summary says why, never the change it meant.
+          const summary = ops.length === 0 && pass.warnings.length > 0 ? t("api.suggestNoneLanded", { why: pass.warnings[0] }) : pass.summary;
+          send({ window: 1, ops, warnings: pass.warnings, summary });
           console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
-          send({ done: true, summary: pass.summary, warnings });
+          send({ done: true, summary, warnings });
           return;
         }
         send({ windows: windows.length + (data.reorder ? 1 : 0) });
@@ -166,7 +172,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               userId,
               document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
               units,
-              scopeRowIds: whole ? [] : scope,
+              scopeRowIds: [],
               profile,
               lang,
               t,
@@ -174,7 +180,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               instruction: data.instruction ?? null,
               material: data.material ?? null,
               history: data.history ?? [],
-              thinking: data.thinking ?? "deep",
+              thinking: resolvedThinking(data.thinking),
               signal,
             }).catch((err: unknown) => err instanceof Error ? err : new Error(String(err)))
           : null;
@@ -205,7 +211,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               scope: { kind: "blocks", blockIds },
               window: { n: i + 1, of: windows.length, whole: whole && !targeted },
               caretBlockId: data.caretBlockId ?? null,
-              thinking: data.thinking ?? "deep",
+              thinking: resolvedThinking(data.thinking),
               budget,
               signal,
               reorder: data.reorder,
@@ -236,7 +242,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ done: true, summary, warnings });
       } catch (err) {
         console.error("[suggest] failed:", err);
-        send({ error: t("api.suggestFailed", { reason: modelErrorMessage(err) }) });
+        // The one pass already says the suggestions could not be written.
+        // A pass the deadline stopped says time ran out, not a raw abort.
+        const reason = deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : modelErrorMessage(err);
+        const said = t("api.suggestFailed", { reason: "" }).trim();
+        send({ error: reason.startsWith(said) ? reason : t("api.suggestFailed", { reason }) });
       } finally {
         stopHeartbeat();
         if (!cancelled) controller.close();

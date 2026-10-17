@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   attachmentKind,
   capFileName,
@@ -167,12 +167,49 @@ type OutgoingMessage = {
 // once the answer lands. The key removes it from the queue.
 type QueuedMessage = OutgoingMessage & { key: string };
 
-// The conversation survives a tab switch and a document switch within the
-// same tab (both remount the panel, so the thread lives outside it, per
-// project, for the page's life) and a reload (it is saved, SPEC.md §21: one
-// note per reader per project, loaded once per project per tab — see the
-// hydration effect below).
-const threads = new Map<string, Thread>();
+// The conversation survives a tab switch, a document switch, and leaving the
+// page within the same tab (each remounts the panel, so the thread lives
+// outside it, per project, for the page's life) and a reload (it is saved,
+// SPEC.md §21: one note per reader per project, loaded once per project per
+// tab — see the hydration effect below). The panel's refs read and write the
+// shared thread, so an answer that lands after the panel closed still lands
+// in it, and a panel open on the project shows it (the listeners).
+type SharedThread = Thread & {
+  // Read from the server, or started here: no load needed.
+  loaded: boolean;
+  listeners: Set<() => void>;
+  // The saves in order, so the second never starts a second note.
+  saving: Promise<void>;
+};
+const threads = new Map<string, SharedThread>();
+function sharedThread(notebookId: string): SharedThread {
+  let thread = threads.get(notebookId);
+  if (!thread) {
+    thread = {
+      turns: [],
+      conversationNoteId: null,
+      sideChats: [],
+      openKey: null,
+      loaded: false,
+      listeners: new Set(),
+      saving: Promise.resolve(),
+    };
+    threads.set(notebookId, thread);
+  }
+  return thread;
+}
+/** A ref onto one field of the shared thread. */
+function sharedRef<K extends keyof Thread>(shared: SharedThread, key: K): { current: Thread[K] } {
+  const thread: Thread = shared;
+  return {
+    get current() {
+      return thread[key];
+    },
+    set current(value: Thread[K]) {
+      thread[key] = value;
+    },
+  };
+}
 
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
@@ -182,6 +219,9 @@ const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
   { id: "document", labelKey: "assistant.scopeDocumentLabel", hintKey: "assistant.scopeDocumentHint" },
   { id: "notebook", labelKey: "assistant.scopeProjectLabel", hintKey: "assistant.scopeProjectHint" },
 ];
+
+type Habit = { kind: string; text: string; count: number };
+const HABITS_HIDDEN_KEY = "unitos.assistant.habitsHiddenUntil";
 
 // Recommended functions for the open document, in this order.
 const RECOMMENDED: { depth: SummaryDepth; labelKey: TKey; hintKey: TKey }[] = [
@@ -310,15 +350,15 @@ export function AssistantPanel({
   // turn after continues it. Empty = the panel's first layout. The note it
   // is saved on, once a turn has persisted; null until then, and again once
   // New conversation clears it.
-  const cached = threads.get(notebookId);
-  const [turns, setTurnsState] = useState<Turn[]>(() => cached?.turns ?? []);
+  const shared = useMemo(() => sharedThread(notebookId), [notebookId]);
+  const [turns, setTurnsState] = useState<Turn[]>(() => shared.turns);
   const [conversationNoteId, setConversationNoteId] = useState<string | null>(
-    () => cached?.conversationNoteId ?? null,
+    () => shared.conversationNoteId,
   );
   // The side chats of this conversation, and the one on screen (SPEC.md §7).
-  const [sideChats, setSideChatsState] = useState<SideChat[]>(() => cached?.sideChats ?? []);
-  const [openKey, setOpenKeyState] = useState<string | null>(() => cached?.openKey ?? null);
-  const [hydrated, setHydrated] = useState(() => cached !== undefined);
+  const [sideChats, setSideChatsState] = useState<SideChat[]>(() => shared.sideChats);
+  const [openKey, setOpenKeyState] = useState<string | null>(() => shared.openKey);
+  const [hydrated, setHydrated] = useState(() => shared.loaded);
   // The conversations list (SPEC.md §7): this reader's conversations of the
   // project, read when the list opens; null until then.
   const [listOpen, setListOpen] = useState(false);
@@ -326,18 +366,32 @@ export function AssistantPanel({
   const [listError, setListError] = useState<string | null>(null);
   // The thread as the running send() reads it: state is stale inside its own
   // closure, and a queued message sends from there.
-  const turnsRef = useRef<Turn[]>(turns);
-  const sideChatsRef = useRef<SideChat[]>(sideChats);
-  const openKeyRef = useRef<string | null>(openKey);
-  const noteIdRef = useRef<string | null>(conversationNoteId);
+  // They read and write the shared thread, so a run that outlives this panel
+  // still writes where the next panel reads.
+  const turnsRef = useMemo(() => sharedRef(shared, "turns"), [shared]);
+  const sideChatsRef = useMemo(() => sharedRef(shared, "sideChats"), [shared]);
+  const openKeyRef = useMemo(() => sharedRef(shared, "openKey"), [shared]);
+  const noteIdRef = useMemo(() => sharedRef(shared, "conversationNoteId"), [shared]);
+  // The refs changed: every panel open on this project draws them.
   function cacheThread() {
-    threads.set(notebookId, {
-      turns: turnsRef.current,
-      conversationNoteId: noteIdRef.current,
-      sideChats: sideChatsRef.current,
-      openKey: openKeyRef.current,
-    });
+    shared.loaded = true;
+    for (const listener of shared.listeners) listener();
   }
+  useEffect(() => {
+    const listener = () => {
+      setTurnsState(shared.turns);
+      setSideChatsState(shared.sideChats);
+      setOpenKeyState(shared.openKey);
+      setConversationNoteId(shared.conversationNoteId);
+      setHydrated(true);
+    };
+    shared.listeners.add(listener);
+    // What changed between the first render and now.
+    if (shared.loaded) listener();
+    return () => {
+      shared.listeners.delete(listener);
+    };
+  }, [shared]);
   function setSideChats(update: (list: SideChat[]) => SideChat[]) {
     sideChatsRef.current = update(sideChatsRef.current);
     setSideChatsState(sideChatsRef.current);
@@ -375,23 +429,22 @@ export function AssistantPanel({
       );
       return;
     }
-    setTurnsState((prev) => {
-      turnsRef.current = update(prev);
-      cacheThread();
-      return turnsRef.current;
-    });
+    turnsRef.current = update(turnsRef.current);
+    setTurnsState(turnsRef.current);
+    cacheThread();
   }
   // The panel is keyed by document, so it remounts on every document switch;
   // the thread cache (keyed by project) means this only actually fetches the
   // first time this project's conversation is shown in this browser tab.
   useEffect(() => {
-    if (threads.has(notebookId)) return;
+    if (shared.loaded) return;
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}`);
         const json = (await res.json().catch(() => null)) as StoredConversation | null;
-        if (cancelled || !res.ok || !json) return;
+        // A message sent while the load ran started the thread here: it stands.
+        if (cancelled || !res.ok || !json || shared.loaded) return;
         const loaded = toTurns(json.turns ?? []);
         const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
@@ -433,6 +486,36 @@ export function AssistantPanel({
   const [error, setError] = useState<string | null>(null);
   // Recommended output: generated in this session, over the stored initials.
   const [recDepth, setRecDepth] = useState<SummaryDepth | null>(null);
+  // The reader's habits (SPEC.md §7): the asks they repeat, offered again as
+  // chips under Recommended; Hide keeps them away for thirty days.
+  const [habits, setHabits] = useState<Habit[]>([]);
+  useEffect(() => {
+    let hidden = false;
+    try {
+      hidden = Number(localStorage.getItem(HABITS_HIDDEN_KEY) ?? 0) > Date.now();
+    } catch {
+      /* no storage */
+    }
+    if (hidden) return;
+    let gone = false;
+    fetch(`/api/assistant/habits?notebookId=${encodeURIComponent(notebookId)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ habits?: Habit[] }>) : null))
+      .then((json) => {
+        if (!gone && Array.isArray(json?.habits)) setHabits(json.habits);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [notebookId]);
+  function hideHabits() {
+    setHabits([]);
+    try {
+      localStorage.setItem(HABITS_HIDDEN_KEY, String(Date.now() + 30 * 86_400_000));
+    } catch {
+      /* no storage */
+    }
+  }
   const [recTexts, setRecTexts] = useState<SummaryLevels>({});
   const [recBusy, setRecBusy] = useState<SummaryDepth | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
@@ -653,7 +736,13 @@ export function AssistantPanel({
   // every one after updates it in place. Fire-and-forget — a save that fails
   // costs the reader nothing they would notice this session; the thread
   // stays on screen either way, from the threads cache above.
-  async function saveConversation(savedTurns: Turn[], sideChatKey: string | null) {
+  // Saves run one after another on the shared thread: the first one's note
+  // id is in place before the next one starts, so a conversation is one note.
+  function saveConversation(savedTurns: Turn[], sideChatKey: string | null) {
+    shared.saving = shared.saving.then(() => saveConversationNow(savedTurns, sideChatKey));
+    return shared.saving;
+  }
+  async function saveConversationNow(savedTurns: Turn[], sideChatKey: string | null) {
     const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
     if (sideChatKey && !side) return;
     try {
@@ -959,6 +1048,9 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
+    // The question saves now, so leaving the page or a reload before the
+    // answer lands never loses it; the answer saves over it when it lands.
+    void saveConversation([...threadTurns, userTurn], sideChatKey);
     const setAnswer = (content: string, plan?: Turn["plan"], suggest?: string) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
@@ -1005,11 +1097,13 @@ export function AssistantPanel({
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text: answered, error: streamError } = splitStreamError(streamed);
-      const { text, plan } = splitStreamPlan(answered);
-      if (streamError || !text.trim()) {
+      const { text: written, plan } = splitStreamPlan(answered);
+      if (streamError || (!written.trim() && !plan?.actions.length)) {
         setAnswer("");
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
+      // An answer that is its actions alone reads as what they do.
+      const text = written.trim() ? written : plan!.actions.map((a) => a.description).filter(Boolean).join(" ");
       // The assistant's suggestions go to the open page (SPEC.md §29); the
       // other actions go to the reader's plan card (SPEC.md §7), where they
       // wait for approval, and Undo follows them.
@@ -1090,9 +1184,11 @@ export function AssistantPanel({
     const request: SuggestRequest = {
       documentId,
       key: queuedKey(),
-      command: command.slice(0, 4000),
+      // A message of attachments alone has no words: the instruction says the change.
+      command: (command.trim() || action.instruction).slice(0, 4000),
       instruction: action.instruction,
       blockIds: action.blockIds,
+      sections: action.sections,
       reorder: action.reorder,
       material: material.slice(0, 20_000),
       history: history
@@ -1715,6 +1811,31 @@ export function AssistantPanel({
               </button>
             ))}
           </div>
+          {habits.length > 0 && (
+            <div className="space-y-1.5" data-track="assistant-habits">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("assistant.habits")}</span>
+                <button type="button" onClick={hideHabits} className="text-xs text-sand-500 hover:text-sand-800">
+                  {t("assistant.habitsHide")}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {habits.map((h) => (
+                  <button
+                    key={h.kind}
+                    type="button"
+                    onClick={() => void send({ content: h.text, images: [], files: [] })}
+                    disabled={busy}
+                    title={t("assistant.habitsHint", { n: h.count })}
+                    data-track="assistant-habit"
+                    className="rounded-full bg-card px-3 py-1 text-left text-xs text-sand-800 shadow-soft hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+                  >
+                    {h.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {recDepth && (recommendedShown || recError || recBusy === recDepth) && (
             <div className="rounded-2xl bg-card p-4 shadow-soft">
               <div className="mb-2 flex items-center justify-between">

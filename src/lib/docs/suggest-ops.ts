@@ -15,6 +15,7 @@ import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
 import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
 import { texError } from "@/lib/katex";
+import { restoreControlEscapes } from "@/lib/tex-escapes";
 import { ungrounded, type Grounding } from "@/lib/docs/grounding";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
@@ -99,6 +100,11 @@ export function readOps(items: unknown[]): ReadOps {
         value === null && key !== "afterBlockId" ? [] : [[key, key === "why" && typeof value === "string" ? clip(value.trim(), WHY_MAX) : value]],
       ),
     );
+    // A model that names the op under another key ("type", "kind", "action").
+    if (typeof lenient.op !== "string") {
+      const named = ["type", "kind", "action"].map((key) => lenient[key]).find((v): v is string => typeof v === "string");
+      if (named) lenient.op = named;
+    }
     const parsed = suggestOpSchema.safeParse(lenient);
     if (!parsed.success) read.unreadable.push(typeof fields.why === "string" && fields.why.trim() ? clip(fields.why.trim(), WHY_MAX) : String(fields.op ?? "?"));
     else if (read.ops.length < SUGGEST_MAX_OPS) read.ops.push(parsed.data);
@@ -189,17 +195,19 @@ export function blockPlaces(doc: RichNode): Map<string, BlockPlace> {
 const levelOf = (style: SuggestStyle | null | undefined): number =>
   style === "title" ? 1 : style && /^h[1-6]$/.test(style) ? Number(style.slice(1)) : 0;
 
-/** The blocks a command names, in document order: a heading grows to its
-    section, down to the next heading of its level or above. */
-export function scopeOf(rows: IndexRow[], places: Map<string, BlockPlace>, blockIds: string[]): string[] {
+/** The blocks a command names, in document order: each named block as
+    itself (a heading the heading alone), and each heading of `sections`
+    with its section, down to the next heading of its level or above. */
+export function scopeOf(rows: IndexRow[], places: Map<string, BlockPlace>, blockIds: string[], sections: string[] = []): string[] {
   const named = new Set(blockIds);
+  const grown = new Set(sections);
   const out: string[] = [];
   let open = 0;
   for (const row of rows) {
     const level = row.type === "HEADING" ? levelOf(places.get(row.id)?.style) : 0;
     if (level && level <= open) open = 0;
-    if (level && !open && named.has(row.id)) open = level;
-    if (open || named.has(row.id)) out.push(row.id);
+    if (level && !open && grown.has(row.id)) open = level;
+    if (open || named.has(row.id) || grown.has(row.id)) out.push(row.id);
   }
   return out;
 }
@@ -308,6 +316,8 @@ const TEXT_ROWS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 type Claim =
   | { kind: "words"; row: number; from: number; to: number }
   | { kind: "style"; row: number; attr: "style" | "alignment" | "spacing" | "indent" }
+  // A block's words written anew: the block stays, so a style on it lands too.
+  | { kind: "text"; row: number }
   | { kind: "rows"; rows: number[] }
   | { kind: "gap"; after: number };
 
@@ -324,7 +334,11 @@ function conflicts(a: Claim, b: Claim): boolean {
   }
   if (a.kind === "words" && b.kind === "words") return a.row === b.row && a.from <= b.to && b.from <= a.to;
   if (a.kind === "style" && b.kind === "style") return a.row === b.row && a.attr === b.attr;
-  if ((a.kind === "style" && b.kind === "words") || (a.kind === "words" && b.kind === "style")) return false;
+  // A style and the words of one block are two changes: both land.
+  if (a.kind === "style" || b.kind === "style") {
+    const other = a.kind === "style" ? b : a;
+    if (other.kind === "words" || other.kind === "text") return false;
+  }
   const rowsOf = (c: Claim) => (c.kind === "rows" ? c.rows : c.kind === "gap" ? [] : [c.row]);
   return rowsOf(a).some((k) => rowsOf(b).includes(k));
 }
@@ -333,7 +347,13 @@ function conflicts(a: Claim, b: Claim): boolean {
     when it occurs once. */
 function once(text: string, needle: string): QuoteHit | "notFound" | "ambiguous" {
   const selector = { quotedText: needle, prefix: "", suffix: "" };
-  const hit = matchInTextLoose(text, selector);
+  let hit = matchInTextLoose(text, selector);
+  // Words not found with a control character before a letter: a TeX
+  // command's backslash the JSON read as one (lib/tex-escapes.ts).
+  if (!hit && /[\t\b\f\n\r][A-Za-z]/.test(needle)) {
+    selector.quotedText = restoreControlEscapes(needle);
+    hit = matchInTextLoose(text, selector);
+  }
   if (!hit) return "notFound";
   const rest = text.slice(0, hit.start) + "\u0000".repeat(hit.end - hit.start) + text.slice(hit.end);
   return matchInTextLoose(rest, selector) ? "ambiguous" : hit;
@@ -487,7 +507,7 @@ export function resolveOps(
       }
       if (row.type === "EQUATION" && texError(text) !== null) return "tex";
       if (!text || text === row.text.trim()) return null;
-      return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: text.length };
+      return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "text", row: k }, chars: text.length };
     }
     if (figure(op.blockId)) return "object";
     const k = order.get(op.blockId);
@@ -519,7 +539,7 @@ export function resolveOps(
       // A new paragraph is replace_blocks.
       if (/\n\s*\n/.test(op.text)) return "notText";
       if (op.text.trim() === row.text.trim()) return null;
-      return { op: { i, op: op.op, blockId: row.id, base: row.text, text: op.text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: op.text.length };
+      return { op: { i, op: op.op, blockId: row.id, base: row.text, text: op.text, why: op.why }, claim: { kind: "text", row: k }, chars: op.text.length };
     }
     // Code takes no formatting and no footnote; a footnote holds none.
     if ((op.op === "format_words" || op.op === "insert_footnote") && row.type === "CODE") return "notText";

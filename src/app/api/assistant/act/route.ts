@@ -1,7 +1,7 @@
 import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { annotationKind } from "@/lib/annotations/kind";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
@@ -22,7 +22,7 @@ import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
 // A revise action reads its windows within the route's time: those not
 // started by then are reported (lib/assistant/revise.ts).
 const REVISE_DEADLINE_MS = 150_000;
-import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
+import { figureWordsSuggestion, runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { svgChartCall } from "@/lib/derive/svg-chart";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
@@ -42,7 +42,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, fitActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
@@ -112,7 +112,9 @@ const requestSchema = z.object({
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(4000),
+        // An answer runs to 8000 characters (chatTurnSchema): a follow-up
+        // after a long answer is never refused.
+        content: z.string().min(1).max(8000),
       }),
     )
     .max(20)
@@ -134,6 +136,10 @@ const requestSchema = z.object({
   // suggestions run with the chip's command and no chat model; `command` is
   // the chip's label, stored as the reader's message.
   suggestCommand: z.enum(Object.keys(SUGGEST_COMMANDS) as [SuggestCommand, ...SuggestCommand[]]).optional(),
+  // A figure with no words to anchor to (an image pasted into the page
+  // editor, SPEC.md §7 words from a figure): the selection is the figure
+  // itself, sent in place of an anchor.
+  figureBlockId: z.string().min(1).max(64).optional(),
 });
 
 // The matches (SPEC.md §7): the passages across the document that deal
@@ -299,36 +305,44 @@ async function handle(req: Request, t: TFunc) {
   if (chip && shared) return importSharedResponse(t);
   if (chip && edits !== "suggestions") return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
   if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
+  // A selected figure carries the figure itself: image bytes when there is
+  // one, an SVG chart's source, or the PDF page it sits on. The model sees
+  // it, so words read from it can go under it (figureBlockId).
+  let figureBlockId: string | null = null;
+  const selectFigure = async (blockId: string): Promise<boolean> => {
+    const block = await db.block.findFirst({
+      where: { id: blockId, documentId: document.id },
+      select: { type: true, html: true, text: true, page: true, region: true },
+    });
+    const figure = figureContent(block);
+    if (!figure || !block) return false;
+    const visual = await figureVisual(figure, block, document.id, document.sourceUrl);
+    attachedImage = visual?.image ?? null;
+    svgSource = figure.svgSource ?? null;
+    if (attachedImage || svgSource) figureBlockId = blockId;
+    selectionBlock = [
+      `The reader has selected the figure in block ${blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
+      ...(visual
+        ? [
+            visual.page
+              ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
+              : "The figure's image is attached.",
+          ]
+        : []),
+      ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
+      ...(figure.kind === "video"
+        ? ["The figure is a video you cannot watch. Work from the caption and the document."]
+        : []),
+      "The command applies to this figure unless it says otherwise.",
+    ].join("\n");
+    return true;
+  };
   if (anchor && anchored && layer === "core") {
     selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText, true);
   } else if (anchor && anchored) {
-    const anchoredBlock = await db.block.findUnique({
-      where: { id: anchor.blockId },
-      select: { type: true, html: true, text: true, page: true, region: true },
-    });
-    const figure = figureContent(anchoredBlock);
-    if (figure && anchoredBlock) {
-      const visual = await figureVisual(figure, anchoredBlock, document.id, document.sourceUrl);
-      attachedImage = visual?.image ?? null;
-      svgSource = figure.svgSource ?? null;
-      selectionBlock = [
-        `The reader has selected the figure in block ${anchor.blockId}. Its caption: "${figure.caption.slice(0, 500) || "(no caption)"}".`,
-        ...(visual
-          ? [
-              visual.page
-                ? "The PDF page the figure sits on is attached. Find the figure on it by its caption; read only that figure."
-                : "The figure's image is attached.",
-            ]
-          : []),
-        ...(figure.svgSource ? ["The figure is this SVG chart:", figure.svgSource] : []),
-        ...(figure.kind === "video"
-          ? ["The figure is a video you cannot watch. Work from the caption and the document."]
-          : []),
-        "The command applies to this figure unless it says otherwise.",
-      ].join("\n");
-    } else {
-      selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
-    }
+    if (!(await selectFigure(anchor.blockId))) selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
+  } else if (data.figureBlockId) {
+    if (!(await selectFigure(data.figureBlockId))) return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
     // client could capture it; the transcript for the range grounds the words.
@@ -413,6 +427,7 @@ async function handle(req: Request, t: TFunc) {
     sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
     pages: pageLines(document.blocks),
     transcript: transcript?.lines ?? null,
+    figureBlockId,
   });
 
   const messages: ModelMessage[] = [
@@ -435,9 +450,12 @@ async function handle(req: Request, t: TFunc) {
   // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
+  // How hard this command runs (SPEC.md §7): the reader's choice, or Auto's
+  // reading of the command (lib/assistant/depth.ts).
+  const depthInput = { message: data.command, turns: history.length, attachments: attachedImage ? 1 : 0, scope: "document" as const };
   const chatCall = await featureCall(
     web ? "web" : attachedImage ? await pictureFeature("act") : "act",
-    thinkingEffort(data.thinking),
+    thinkingEffort(data.thinking, depthInput),
   );
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
@@ -477,15 +495,24 @@ async function handle(req: Request, t: TFunc) {
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
     sources: [data.command, ...history.map((turn) => turn.content)],
+    figureBlockId,
     t,
   };
-  const enriched = enrichActions(fitActions(result.data.actions, edits), planContext);
+  // Words read from the selected figure and put under it (SPEC.md §7): on a
+  // document with rich text they become one suggestion of new blocks after
+  // the figure, landed with the other suggestions; on a document without it
+  // they stay insert_paragraph actions, which the reader shows under the
+  // figure as the assistant's suggestion.
+  const fitted = fitActions(result.data.actions, edits);
+  const figureWords = edits === "suggestions" ? splitFigureWords(fitted, figureBlockId) : { words: [], rest: fitted };
+  const enriched = enrichActions(figureWords.rest, planContext);
   let actions = enriched.actions;
   const warnings = enriched.warnings;
 
   // A revise action (a document without rich text, SPEC.md §7) is read part
   // by part now, as the sidebar's is: the plan carries the block actions it
-  // finds in its place. It covers the selected blocks when it names none.
+  // finds in its place. It covers the selected blocks when it names no
+  // blocks and no sections.
   const revise = actions.find((a): a is Extract<AssistantAction, { type: "revise" }> => a.type === "revise");
   if (revise) {
     const selected = [...new Set(passage.map((segment) => segment.blockId))];
@@ -501,10 +528,11 @@ async function handle(req: Request, t: TFunc) {
       instruction: revise.instruction,
       material: result.data.reply,
       history,
-      blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
+      blockIds: revise.blockIds ?? (!revise.sections && selected.length > 0 ? selected : undefined),
+      sections: revise.sections,
       reorder: revise.reorder,
       caretBlockId: null,
-      thinking: data.thinking ?? "deep",
+      thinking: resolvedThinking(data.thinking, depthInput),
       signal: AbortSignal.any([req.signal, deadline]),
       deadline,
     });
@@ -526,10 +554,11 @@ async function handle(req: Request, t: TFunc) {
     let window: { n: number; of: number; whole: boolean } | null = null;
     const cut: string[] = [];
     let onePassRows: string[] | null = null;
-    if (!suggest?.blockIds && passage.length > 0) scope = wordsScope(document.blocks, passage);
+    const named = Boolean(suggest?.blockIds || suggest?.sections);
+    if (!named && passage.length > 0) scope = wordsScope(document.blocks, passage);
     else {
-      const whole = !suggest?.blockIds;
-      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      const whole = !named;
+      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds ?? [], suggest!.sections);
       let windows = windowsOf(doc.rows, doc.places, inScope);
       let targeted = false;
       // A scope past one window and the one pass: the target pass names the
@@ -557,7 +586,8 @@ async function handle(req: Request, t: TFunc) {
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole: whole && !targeted };
       // A scope that fits one call goes by the one pass (lib/assistant/one-pass.ts).
-      const rowsInScope = whole ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      // A move reads the whole document: the blocks go where the instruction says, in or out of the scope.
+      const rowsInScope = whole || suggest!.reorder ? [] : inScope;
       if (!chip && fitsOnePass(doc.rows, rowsInScope)) onePassRows = rowsInScope;
     }
     if (onePassRows !== null && suggest) {
@@ -577,7 +607,7 @@ async function handle(req: Request, t: TFunc) {
           material: null,
           history,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           plan: false,
           signal: req.signal,
         });
@@ -591,13 +621,12 @@ async function handle(req: Request, t: TFunc) {
       // A command that moves blocks: the order pass runs beside the window,
       // and its moves land after the window's words (lib/assistant/reorder.ts).
       const units = suggest?.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
-      const selected = [...new Set(passage.map((segment) => segment.blockId))];
       const ordering = suggest?.reorder
         ? runOrderPass({
             userId: user.id,
             document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
             units,
-            scopeRowIds: suggest.blockIds ? scopeOf(doc.rows, doc.places, suggest.blockIds) : selected,
+            scopeRowIds: [],
             profile,
             lang,
             t,
@@ -605,7 +634,7 @@ async function handle(req: Request, t: TFunc) {
             instruction: suggest.instruction,
             material: null,
             history,
-            thinking: data.thinking ?? "deep",
+            thinking: resolvedThinking(data.thinking, depthInput),
             signal: req.signal,
           }).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
         : null;
@@ -623,7 +652,7 @@ async function handle(req: Request, t: TFunc) {
           scope,
           window,
           caretBlockId: null,
-          thinking: data.thinking ?? "deep",
+          thinking: resolvedThinking(data.thinking, depthInput),
           budget: { chars: SUGGEST_MAX_NEW_CHARS },
           signal: req.signal,
           reorder: suggest?.reorder,
@@ -646,26 +675,50 @@ async function handle(req: Request, t: TFunc) {
     }
   }
 
+  if (figureBlockId && figureWords.words.length > 0) {
+    const under = await figureWordsSuggestion(figureWords.words, figureBlockId, suggestDocument({ ...document, richText: await storedRichText() }), t);
+    // Its index follows the command's other ops: each op's index is its own.
+    const first = Math.max(-1, ...(suggestions?.ops ?? []).map((op) => op.i)) + 1;
+    suggestions = {
+      ops: [...(suggestions?.ops ?? []), ...under.ops.map((op) => ({ ...op, i: first + op.i }))],
+      warnings: [...(suggestions?.warnings ?? []), ...under.warnings],
+      summary: suggestions?.summary || result.data.reply || figureWords.words[0].description,
+    };
+  }
+
   // An anchored conversation persists like the tools' output: one note in the
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
-  // With suggestions, the reply shown and stored is their summary.
+  // With suggestions, the reply shown is their summary, one sentence whose
+  // subject is the suggestions; the stored turn adds that they are in the
+  // document, so a later confirmation reads as answered. A suggest run that
+  // landed nothing says why, not what it meant to change.
+  const landed = suggestions ? suggestions.ops.length > 0 : false;
+  // A model reply that says what it would change never stands in for that.
   const answer =
-    result.data.reply ??
+    suggestions && !landed
+      ? suggestions.warnings[0]
+        ? t("api.suggestNoneLanded", { why: suggestions.warnings[0] })
+        : t("api.suggestNoChange")
+      : (result.data.reply ??
     (suggestions
-      ? suggestions.summary || t(suggestions.ops.length > 0 ? "api.suggestMade" : "api.suggestNoChange")
+      ? suggestions.summary
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
-        : "No actions proposed.");
+        : "No actions proposed."));
   const replyText = answer;
   // The stored turn names the actions it proposed, so a later "implement"
-  // reads which change it confirms.
-  const proposed = actions.map((a) => a.description).filter(Boolean);
+  // reads which change it confirms; a suggest that ran is not proposed, its
+  // suggestions are in the document, and the turn says so.
+  const proposed = actions.filter((a) => !(suggestions && a.type === "suggest")).map((a) => a.description).filter(Boolean);
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
-    { role: "assistant", content: proposed.length > 0 ? `${replyText}\n\nProposed actions: ${proposed.join("; ")}` : replyText },
+    {
+      role: "assistant",
+      content: [replyText, landed ? t("api.suggestMade") : "", proposed.length > 0 ? `Proposed actions: ${proposed.join("; ")}` : ""].filter(Boolean).join("\n\n"),
+    },
   ];
   if (data.sideChatOf) {
     // A side chat persists like the conversation it came from, on a note that

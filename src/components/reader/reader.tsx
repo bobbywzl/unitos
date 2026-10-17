@@ -32,6 +32,7 @@ import {
 import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reveal, inactiveReveal, useReveal, type RevealContext } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
+import { FigureSuggestionCard } from "@/components/reader/figure-suggestion";
 import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
 import { coreKey } from "@/lib/anchors/core-key";
 import { useLang } from "@/components/lang-provider";
@@ -80,8 +81,8 @@ export type TranscriptVariant = {
   // Lines covered by a time-anchored annotation: underlined, like a
   // highlighted span in an article.
   annotatedLineIds: Set<string>;
-  // The moment's tools, floating over a line on hover: comment, explain,
-  // open the note.
+  // The line's tool, floating over a hovered line: an annotated line opens
+  // its annotation. Null when the line has none.
   lineTools: (line: TranscriptLine) => React.ReactNode;
   // Above the lines: the player, the tool bar, and the view bar. Below:
   // whatever the view bar's other views show.
@@ -245,6 +246,7 @@ function TranscriptBody({
                 html: null,
               };
               const annotated = annotatedLineIds.has(line.id);
+              const tools = lineTools(line);
               return (
                 <span key={line.id} className="group/line relative">
                   {documentId && (
@@ -272,15 +274,17 @@ function TranscriptBody({
                       }}
                     />
                   </span>{" "}
-                  {/* The line's tools, floating over the text on hover. */}
-                  <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
-                    <span
-                      data-anchor-skip
-                      className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
-                    >
-                      {lineTools(line)}
+                  {/* The line's tool, floating over the text on hover. */}
+                  {tools && (
+                    <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
+                      <span
+                        data-anchor-skip
+                        className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
+                      >
+                        {tools}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </span>
               );
             })}
@@ -1696,6 +1700,7 @@ const BlockRow = memo(function BlockRow({
         ) : (
           <BlockView block={block} highlights={NO_HIGHLIGHTS} documentId={documentId} />
         )}
+        {documentId && block.type === "FIGURE" && <FigureSuggestionCard documentId={documentId} blockId={block.id} />}
         <div className="relative -my-1.5 h-3">
           <button
             onMouseDown={keepSelection}
@@ -1755,6 +1760,7 @@ const BlockRow = memo(function BlockRow({
         {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
         {body}
         {translation ? <TranslationLine text={translation} lang={lang} /> : null}
+        {documentId && block.type === "FIGURE" && <FigureSuggestionCard documentId={documentId} blockId={block.id} />}
       </div>
     );
   }

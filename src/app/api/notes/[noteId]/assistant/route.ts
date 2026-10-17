@@ -1,7 +1,7 @@
 import { isStepCount, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { thinkingSchema } from "@/lib/assistant/thinking";
+import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { NOTE_ASSISTANT_EFFORT, NOTE_ASSISTANT_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
@@ -104,7 +104,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
   // With the web on, the web feature's model answers, with its provider's
   // search (SPEC.md §7); else the note's assistant's own.
   const web = data.web ?? true;
-  const call = await featureCall(web ? "web" : "note-assistant", NOTE_ASSISTANT_EFFORT[data.thinking ?? "deep"]);
+  const call = await featureCall(web ? "web" : "note-assistant", NOTE_ASSISTANT_EFFORT[resolvedThinking(data.thinking, { message: data.message })]);
   const messages: ModelMessage[] = [
     ...(document
       ? [
