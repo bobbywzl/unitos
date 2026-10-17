@@ -86,7 +86,7 @@ function renderTex(tex: string): string {
 
 export function EquationHost({ editor }: { editor: Editor }) {
   const [pos, setPos] = useDocPos(editor);
-  useEditorTick(editor);
+  useEditorTick(editor, () => pos === null);
   useViewportTick(pos !== null);
   useEffect(() => onInsert(editor, (e) => e.type === "equation" && setPos(e.pos)), [editor, setPos]);
 

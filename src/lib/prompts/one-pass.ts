@@ -77,7 +77,7 @@ export function onePassPrompt(ctx: OnePassCtx): string {
     '7. A group the command asks for gets a heading: {"new": "## <what the group has in common>"} before its blocks, a level below the heading of the scope. A heading of the document that the new order makes wrong goes in remove.',
     "8. Keep together what belongs together: a quote and the words that comment on it, a sentence and the list it introduces, steps in their order.",
     `9. Keep the document's language in text and new. Write summary and why in ${languageName(ctx.lang)}. summary: one sentence whose subject is the suggestion, or the suggestions when there are more than one, on the kind of change and where, in the command's own words ("The suggestions write the two formulas as plain text."). Old and new words the command itself gives may be named; words the pass wrote (a correction, a rewrite, a translation) are never named, the selected words are never quoted back (they are "the selected sentence", line, or words), and what stays as it is is left out. why: one sentence on why.`,
-    "10. When the command asks no change, return document as the blocks stand, remove empty, and say so in summary.",
+    "10. A command written as a question (\"can you expand on…?\", \"could you shorten…?\") asks the change it names. When neither the command nor the assistant's instruction asks a change, return document as the blocks stand, remove empty, and say so in summary.",
     "",
     "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"summary": "…", "why": "…", "document": ["<id>", {"id": "<id>", "text": "…"}, {"new": "…"}, …], "remove": ["<id>"], "formats": [ … ]}',

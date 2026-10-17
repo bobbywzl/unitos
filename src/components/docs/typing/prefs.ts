@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 // Tools > Preferences in Google Docs (SPEC.md §29, typing): the automatic
-// formatting switches and the substitutions list, with Google's defaults.
+// formatting switches, the spelling and grammar switches, and the
+// substitutions list, with Google's defaults.
 // They hold for every blank document in this browser (localStorage); a
 // private window or blocked storage keeps the defaults.
 
@@ -30,6 +31,13 @@ const prefsSchema = z.object({
   // Ignore all: words the spelling check takes as spelled right in one
   // document, by the document's id; the newest documents kept.
   ignoredWords: z.record(z.string().max(64), z.array(z.string().min(1).max(100)).max(500)),
+  // Show spelling suggestions (Tools > Spelling and grammar, Ctrl+Alt+X):
+  // the red squiggle under misspelled English words. Show grammar
+  // suggestions: the blue squiggle under grammar and wording problems in
+  // English paragraphs. Both hold for the page editor and the note editor;
+  // stored before these existed, a missing one reads as on.
+  showSpelling: z.boolean(),
+  showGrammar: z.boolean(),
   // The metric the floating word counter shows.
   counterMetric: z.enum(["pages", "words", "characters", "charactersNoSpaces"]),
 });
@@ -82,6 +90,8 @@ const DEFAULT_PREFS: TypingPrefs = {
   substitutionBlocklist: [],
   dictionary: [],
   ignoredWords: {},
+  showSpelling: true,
+  showGrammar: true,
   counterMetric: "words",
 };
 

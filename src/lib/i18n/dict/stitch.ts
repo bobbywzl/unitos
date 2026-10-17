@@ -124,7 +124,7 @@ const zh: Record<keyof typeof en, string> = {
   generated: "生成内容",
   generatedShort: "生成",
   generatedDesc: "缝合为项目写的每个页面，最新在前。点击一行在阅读器中打开。",
-  generatedEmpty: "尚未生成内容。在下方让缝合根据文档写一个页面。",
+  generatedEmpty: "尚未生成文档。在下方让缝合根据文档写一个页面。",
   generatedFrom: "来自指令：{command}",
   generatedProvenance: "显示生成文档出自哪里",
   openGenerated: "打开此生成文档",

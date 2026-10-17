@@ -24,6 +24,7 @@
 import { ACTION, ACTION_ON, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import type { GraphEdge, GraphEdgeLink, ReplyView } from "@/lib/types";
 import {
   commentWaits,
@@ -535,7 +536,7 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
       data-track="graph-comment-open"
       onClick={() => {
         markSeen(c); // [lists9] WALK9-06
-        router.push(annotationReferenceHref(notebookId, { annotationId: c.id, documentId, sourceId: c.sourceId, kind: "comment" }));
+        graphNavigate(router, annotationReferenceHref(notebookId, { annotationId: c.id, documentId, sourceId: c.sourceId, kind: "comment" }));
         onOpenDocument();
       }}
       data-tip={t("graphCover.commentOpenTitle")}

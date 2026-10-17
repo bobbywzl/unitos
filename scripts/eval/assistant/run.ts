@@ -1,7 +1,7 @@
 // The assistant loop's runner (SPEC.md §7, §25). The model and the judge
 // are outside this script: an agent reads each prompt file and writes the
 // answer, so a Claude session stands in for the assistant's model (Gemini
-// 3.8 Flash in production) and for the edit passes' (Claude Sonnet 5). The
+// 3.8 Flash in production) and for the edit passes' (Claude Sonnet 5.5). The
 // script builds the prompts exactly as the route does, reads the answer the
 // way the route does (the actions fence, lib/assistant/plan.ts), runs the
 // edit passes through their own code (lib/assistant/revise.ts, the external

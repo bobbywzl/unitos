@@ -1,17 +1,20 @@
+import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { duplicateAnswer } from "@/lib/documents/duplicates";
+import { ownTrace } from "@/lib/documents/orphans";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
-import { imageToPdf } from "@/lib/handwritten/image-pdf";
+import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
-import { attachDocument } from "@/lib/parse/attach";
+import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
@@ -30,26 +33,18 @@ export const maxDuration = 300;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
-// The library: the documents attached to corpora the reader can open.
+// The Library (SPEC.md §15): the account's documents in no project — kept
+// when it deleted the project that held them, or written in by it
+// (lib/documents/orphans.ts). A document in a project is reached through
+// its project; every add is its own document, so the Library never hands a
+// project's document to another project. Sign-in off: every document in no
+// project.
 export async function GET() {
   const t = await serverT();
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: t("api.signInRequired") }, { status: 401 });
   const documents = await db.document.findMany({
-    where: authEnabled()
-      ? {
-          notebooks: {
-            some: {
-              notebook: {
-                OR: [
-                  { userId: user.id },
-                  { collaborators: { some: { email: user.email } } },
-                ],
-              },
-            },
-          },
-        }
-      : undefined,
+    where: authEnabled() ? ownTrace(user.id) : { notebooks: { none: {} } },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -70,12 +65,16 @@ export async function GET() {
 // assistant's finishing step, which runs them before the document opens
 // (SPEC.md §15). Conversion and transcription keep their own chains.
 
+// confirmDuplicate: the reader said Add again to the ask a repeat add
+// answers with (409 `duplicate`, lib/documents/duplicates.ts); without it a
+// file or a link the account already has adds nothing.
 const urlSchema = z.object({
   // The folder of the project the new document lands in (SPEC.md §6).
   folderId: z.string().min(1).nullable().optional(),
   url: z.url(),
   notebookId: z.string().min(1),
   split: z.boolean().default(false),
+  confirmDuplicate: z.boolean().default(false),
 });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
@@ -89,6 +88,7 @@ const fileFieldsSchema = z.object({
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
   pdfPages: z.preprocess(jsonField, pageRangesSchema.optional()),
+  confirmDuplicate: z.enum(["0", "1"]).default("0"),
 });
 
 // A form field that holds JSON, read; not JSON, it stays text and fails
@@ -152,6 +152,7 @@ export async function POST(req: Request) {
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
       pdfPages: form.get("pdfPages"),
+      confirmDuplicate: form.get("confirmDuplicate") ?? "0",
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -169,15 +170,34 @@ export async function POST(req: Request) {
     let pages = fields.data.pages === "1";
     // An image imports as one handwritten page (SPEC.md §16): it wraps into a
     // one-page PDF here and skips the judgment — there is no text layer to weigh.
-    if (sniffImage(bytes)) {
+    const wrapped = sniffImage(bytes) !== null;
+    if (wrapped) {
       try {
         bytes = await imageToPdf(bytes);
       } catch (err) {
         console.error("Image wrap failed:", err);
-        return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+        const error =
+          err instanceof ImageTooLargeError
+            ? t("api.imagePixelsTooMany", { width: err.width, height: err.height })
+            : t("api.imageUnreadable");
+        return NextResponse.json({ error }, { status: 400 });
       }
       filename = filename.replace(IMAGE_EXTENSIONS, "");
       pages = true;
+    }
+    // A file the account already has asks first (SPEC.md §15): nothing
+    // parses until the reader says Add again, and the client sends the file
+    // again with confirmDuplicate.
+    const repeat = await duplicateAnswer(
+      access.user,
+      fields.data.notebookId,
+      { fileHash: createHash("sha256").update(bytes).digest("hex"), pdfPages: fields.data.pdfPages },
+      fields.data.confirmDuplicate === "1",
+      t,
+    );
+    if (repeat) return repeat;
+    if (wrapped) {
+      // A PDF of one page now, read as handwritten pages below.
     } else if (parse.sniffOfficeFile(bytes) === "docx") {
       // A Word file (SPEC.md §30): its own parser, no judgment, no model pass.
       return progressResponse(async (onProgress) => {
@@ -187,7 +207,7 @@ export async function POST(req: Request) {
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Word ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -212,7 +232,7 @@ export async function POST(req: Request) {
             const deck = bytes;
             after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
           }
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Slides/sheets ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -227,7 +247,7 @@ export async function POST(req: Request) {
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Markdown ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -268,7 +288,7 @@ export async function POST(req: Request) {
           // not to convert; nothing starts.
           after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
         }
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(fields.data.notebookId, document, deduped);
       } catch (err) {
         console.error("PDF ingest failed:", err);
         throw new Error(describeIngestError(err, t, "pdf"));
@@ -292,8 +312,12 @@ export async function POST(req: Request) {
   }
 
   // A YouTube link is a video document, wherever it was pasted (SPEC.md §11).
+  // A video, a media link, or a page the account already has asks first
+  // (SPEC.md §15): nothing is fetched until the reader says Add again.
   const youtubeId = parseYouTubeId(data.url);
   if (youtubeId) {
+    const repeat = await duplicateAnswer(access.user, data.notebookId, { youtubeId }, data.confirmDuplicate, t);
+    if (repeat) return repeat;
     return progressResponse(async (onProgress) => {
       let ingested: Awaited<ReturnType<typeof ingestYouTube>>;
       try {
@@ -317,6 +341,8 @@ export async function POST(req: Request) {
   // A direct video or audio file link is a media document too (SPEC.md §11):
   // the bytes download and store like an uploaded file, transcription starts.
   if (isMediaUrl(data.url)) {
+    const repeat = await duplicateAnswer(access.user, data.notebookId, { url: data.url }, data.confirmDuplicate, t);
+    if (repeat) return repeat;
     return progressResponse(async (onProgress) => {
       let ingested: Awaited<ReturnType<typeof ingestMediaUrl>>;
       try {
@@ -337,6 +363,14 @@ export async function POST(req: Request) {
     });
   }
 
+  const repeat = await duplicateAnswer(
+    access.user,
+    data.notebookId,
+    { url: data.url, splitMarker: parse.SPLIT_URL_MARKER },
+    data.confirmDuplicate,
+    t,
+  );
+  if (repeat) return repeat;
   return progressResponse(async (onProgress) => {
     try {
       const { document, extra, deduped } = await parse.ingestUrl(
@@ -360,10 +394,10 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // The skeletons build after the response (SPEC.md §22).
       for (const doc of documents) after(() => refreshSkeleton(doc.id, user?.id ?? null).catch(() => {}));
+      // An edited import of the same address in this project: the add made
+      // a new copy, and the reader is told (SPEC.md §30).
       return {
-        id: document.id,
-        title: document.title,
-        deduped,
+        ...(await addedResult(data.notebookId, document, deduped)),
         ...(documents.length > 1
           ? { documents: documents.map((d) => ({ id: d.id, title: d.title })) }
           : {}),

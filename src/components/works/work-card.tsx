@@ -3,9 +3,13 @@
 import Link, { useLinkStatus } from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { MoreIcon } from "@/components/icons";
+import { useEscapeLayer } from "@/lib/escape-layers";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { LoadingDots } from "@/components/thinking";
 import { TierMark } from "@/components/tier-mark";
 import { Instruments } from "@/components/works/instruments";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 export type WorkItem = {
   id: string;
@@ -21,6 +25,14 @@ export type WorkItem = {
 
 // A work: a 5.5 × 8.5 book with a spine, its counts as tags, and the instrument
 // fan behind the cover (design 2a). Rename and delete sit behind the quiet ⋯.
+// Rename turns the title into a field in place, as the reader's title does
+// (notebook-title.tsx): Enter keeps, Escape drops, a blur keeps typed words.
+// The menu opens under the title, so the reader sees which project it acts on.
+// The title starts under the ⋯, with no empty band above it; on a phone two
+// books stand side by side, so the type and the tags are a size smaller.
+// The card menu's width (w-44).
+const MENU_WIDTH = 176;
+
 export function WorkCard({
   work,
   onRename,
@@ -29,7 +41,7 @@ export function WorkCard({
   offline,
 }: {
   work: WorkItem;
-  onRename: (id: string, current: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => void;
   onLeave?: (id: string) => void;
   // Offline copy (SPEC.md §17, Unitos Ultra): the card's state and the toggle.
@@ -37,24 +49,42 @@ export function WorkCard({
   offline?: { saved: boolean; saving: boolean; ultra: boolean; onToggle: (id: string) => void };
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPlace, setMenuPlace] = useState({ top: 64, left: false });
   const menuRef = useRef<HTMLDivElement>(null);
+  // The inline rename: the field's words, and the title shown until the
+  // page's data has the new one.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
+  const [seenTitle, setSeenTitle] = useState(work.title);
+  if (seenTitle !== work.title) {
+    setSeenTitle(work.title);
+    setSavedTitle(null);
+  }
+  const title = savedTitle ?? work.title;
+  async function keepRename() {
+    const next = renaming?.trim() ?? "";
+    setRenaming(null);
+    if (!next || next === title) return;
+    setSavedTitle(next);
+    try {
+      await onRename(work.id, next);
+    } catch {
+      setSavedTitle(null);
+    }
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [menuOpen]);
+  // One Escape layer; the focus goes back to ⋯ (lib/escape-layers.ts).
+  useEscapeLayer(menuOpen, () => setMenuOpen(false));
 
   return (
     <li className="work relative list-none">
@@ -62,47 +92,52 @@ export function WorkCard({
 
       <Link
         href={`/n/${work.id}`}
-        className="relative z-1 flex aspect-[5.5/8.5] flex-col rounded-[18px] bg-sand-100 px-[18px] pt-6 pb-[18px] text-center shadow-soft transition-[transform,box-shadow] duration-300 hover:-translate-y-[5px] hover:shadow-lift"
+        className="relative z-1 flex aspect-[5.5/8.5] flex-col rounded-[18px] bg-sand-100 px-3 pt-6 pb-3 sm:px-[18px] sm:pb-[18px] text-center shadow-soft transition-[transform,box-shadow] duration-300 hover:-translate-y-[5px] hover:shadow-lift"
       >
         <span
           aria-hidden
           className="absolute top-3 bottom-3 left-[13px] w-[3px] rounded-full bg-sand-300"
         />
-        <span className="mt-14 px-2 font-display text-[22px] leading-[1.25]">{work.title}</span>
+        <span
+          data-card-title
+          className={`mt-6 px-2 font-display text-[17px] leading-[1.25] break-words sm:text-[22px] ${renaming !== null ? "invisible" : ""}`}
+        >
+          {title}
+        </span>
         {work.shared && (
           <span className="mt-1.5 px-2 text-xs text-sand-600">
             {t("works.byOwner", { name: work.shared.ownerName })}
           </span>
         )}
         <CoverDot />
-        <span className="mt-auto flex flex-wrap justify-center gap-1.5">
-          <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
+        <span className="mt-auto flex flex-wrap justify-center gap-1 sm:gap-1.5">
+          <span className="rounded-full bg-sand-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sand-700">
             {t(work.sectionCount === 1 ? "works.sectionCountOne" : "works.sectionCountOther", {
               n: work.sectionCount,
             })}
           </span>
-          <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
+          <span className="rounded-full bg-sand-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sand-700">
             {t(work.documentCount === 1 ? "works.documentCountOne" : "works.documentCountOther", {
               n: work.documentCount,
             })}
           </span>
           {work.pendingCount > 0 && (
-            <span className="rounded-full bg-clay-200 px-3 py-1 text-xs font-semibold text-clay-800">
+            <span className="rounded-full bg-clay-200 px-2 py-1 text-xs font-semibold sm:px-3 text-clay-800">
               {t("works.pendingCount", { n: work.pendingCount })}
             </span>
           )}
           {offline?.saved && (
-            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+            <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
               {t("works.offlineBadge")}
             </span>
           )}
           {work.shared ? (
-            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+            <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
               {t(work.shared.role === "editor" ? "panes.roleEditor" : "panes.roleViewer")}
             </span>
           ) : (
             work.collaboratorCount > 0 && (
-              <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+              <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
                 {t("works.sharedBadge", { n: work.collaboratorCount })}
               </span>
             )
@@ -112,29 +147,36 @@ export function WorkCard({
 
       <div ref={menuRef} className="absolute top-2.5 right-2.5 z-2">
         <button
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={(e) => {
+            // The menu opens just under the title, so the title stays in
+            // view, and inside the screen's 16 px gutter: right-aligned to ⋯,
+            // or left-aligned when that would cross the left gutter.
+            if (!menuOpen) {
+              const more = e.currentTarget.getBoundingClientRect();
+              const titleBottom = e.currentTarget.closest("li")?.querySelector("[data-card-title]")?.getBoundingClientRect().bottom;
+              setMenuPlace({
+                top: Math.max(4, Math.round((titleBottom ?? more.bottom + 60) - more.bottom + 6)),
+                left: more.right - MENU_WIDTH < 16,
+              });
+            }
+            if (!menuOpen) focusMenuIfKey(e, `[data-card-menu="${work.id}"]`);
+            setMenuOpen(!menuOpen);
+          }}
+          onKeyDown={(e) => menuButtonKeys(e, menuOpen, `[data-card-menu="${work.id}"]`)}
           aria-label={t("works.moreActionsFor", { title: work.title })}
           data-tip={t("works.projectActions")}
           aria-expanded={menuOpen}
           className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="1" />
-            <circle cx="5" cy="12" r="1" />
-            <circle cx="19" cy="12" r="1" />
-          </svg>
+          <MoreIcon size={16} />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 mt-1 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+          <div
+            data-card-menu={work.id}
+            onKeyDown={menuKeys}
+            className="absolute flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float"
+            style={{ top: `calc(100% + ${menuPlace.top}px)`, ...(menuPlace.left ? { left: 0 } : { right: 0 }) }}
+          >
             <Link
               href={`/n/${work.id}/notes`}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
@@ -167,8 +209,9 @@ export function WorkCard({
               <button
                 onClick={() => {
                   setMenuOpen(false);
-                  onRename(work.id, work.title);
+                  setRenaming(title);
                 }}
+                data-track="project-rename"
                 className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("works.rename")}
@@ -198,6 +241,28 @@ export function WorkCard({
           </div>
         )}
       </div>
+      {renaming !== null && (
+        <input
+          autoFocus
+          value={renaming}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setRenaming(e.target.value)}
+          onBlur={() => void keepRename()}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e) || isImeKey(e)) return;
+            if (e.key === "Enter") void keepRename();
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setRenaming(null);
+            }
+          }}
+          maxLength={200}
+          aria-label={t("works.corpusTitle")}
+          data-track="project-rename-field"
+          className="absolute inset-x-2 top-[52px] z-3 rounded-full bg-card px-3 py-1 text-center font-display text-[17px] shadow-soft outline-none sm:inset-x-3 sm:text-[20px]"
+        />
+      )}
     </li>
   );
 }

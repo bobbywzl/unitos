@@ -1,7 +1,7 @@
 // List markers: what opens a list item at the start of a line, read by family
 // and value so that a list's items can be checked to follow one another.
 
-import type { Run } from "@/lib/parse/pdf/types";
+import type { Item, Run } from "@/lib/parse/pdf/types";
 
 export const BULLET_RE = /^\s*([•▪◦‣●·*-]|\d{1,2}[.)]|\([a-z\d]{1,3}\)|[ivx]{1,4}[.)])\s+/i;
 export const GLYPH_BULLET_RE = /^\s*[•▪◦‣●·*-]\s+/;
@@ -41,8 +41,19 @@ export type Marker = {
 // A glyph bullet opens an item before words; a dash or an asterisk only with
 // a space after it ("-5 °C" and "*15" are words). A glyph alone on its line
 // is no item: a proof's end mark (□) after a display read as an empty list.
-const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►✓✔])\s*(?=\S)/;
+// A right-to-left list points its triangles left (◂, ◄): an Arabic book's
+// "◂" items read as paragraphs.
+const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►◂◄▸✓✔])\s*(?=\S)/;
 const BULLET_WORD_RE = /^([-–—*·∙])\s+/;
+// A dash drawn as a run of its own, its words starting where it ends (parse
+// loop finding: PowerPoint draws a sub-item's "—" bullet alone and its
+// words at the tab right after it; "—Helping to select …" ran into the item
+// over it as its words).
+const DASH_DRAWN_RE = /^([-–—])(?=\p{L})/u;
+// A ">" set bold before words: a magazine draws its bullet so (parse loop
+// finding: The MagPi's Quick Facts set each fact after a ">" in Raleway
+// Black, and the facts read as paragraphs opening ">").
+const CHEVRON_RE = /^>\s+(?=\S)/;
 // Word's second-level bullet: a letter "o" set in Courier New before words
 // that are not monospace (nested Word list items read as lines of text).
 const COURIER_O_RE = /^o\s+(?=\S)/;
@@ -93,7 +104,7 @@ function asLetter(m: Marker): Marker | null {
 
 /** The marker that opens this line, if any. `after` is the marker of the
     item before it in the same list, for the one-letter numerals. */
-export function readMarker(line: { text: string; runs: Run[] }, after?: Marker | null): Marker | null {
+export function readMarker(line: { text: string; runs: Run[]; items?: Item[] }, after?: Marker | null): Marker | null {
   const lead = /^\s*/.exec(line.text)?.[0].length ?? 0;
   const text = line.text.slice(lead);
   const make = (m: RegExpExecArray, family: MarkerFamily, shape: string, value: number, checked = false): Marker => ({
@@ -107,7 +118,9 @@ export function readMarker(line: { text: string; runs: Run[] }, after?: Marker |
   let m: RegExpExecArray | null;
   if ((m = BOX_RE.exec(text))) return make(m, "box", "", 0, m[1] !== "☐");
   if ((m = BULLET_GLYPH_RE.exec(text)) || (m = BULLET_WORD_RE.exec(text))) return make(m, "bullet", "", 0);
+  if ((m = DASH_DRAWN_RE.exec(text)) && drawnAlone(line.items, m[1])) return make(m, "bullet", "", 0);
   if ((m = COURIER_O_RE.exec(text)) && setApart(line, lead, 1, "mono")) return make(m, "bullet", "", 0);
+  if ((m = CHEVRON_RE.exec(text)) && setApart(line, lead, 1, "bold")) return make(m, "bullet", "", 0);
   if ((m = CITE_RE.exec(text))) return make(m, "cite", "[x]", /^\d+$/.test(m[1]) ? Number(m[1]) : 0);
   if ((m = LEGAL_RE.exec(text))) return make(m, "legal", m[1], Number(m[2]));
   if ((m = PREFIXED_RE.exec(text))) return make(m, "prefixed", `${m[1]}x.`, Number(m[2]));
@@ -118,8 +131,11 @@ export function readMarker(line: { text: string; runs: Run[] }, after?: Marker |
   } else if ((m = CLOSED_RE.exec(text))) {
     const c = counter(m[1]);
     // "A." and "I." open initials as often as items ("A. Vaswani"); a
-    // capital letter needs the item before it, or to open its family.
-    if (c) found = make(m, c.family, `x${m[2]}`, c.value);
+    // capital letter needs the item before it, or to open its family. A
+    // "p." before a number is a page reference: a citation's "[Coh+08,"
+    // wrapped to "p. 51]. The amount …", and the paragraph's first line
+    // read as a list's band of its own (parse loop finding).
+    if (c && !/^p\.\s+\d/.test(text)) found = make(m, c.family, `x${m[2]}`, c.value);
   } else if ((m = BARE_RE.exec(text)) && setApart(line, lead, m[0].trimEnd().length, "bold")) {
     found = make(m, "arabic", m[1] ? "*x" : "x", Number(m[2]));
   }
@@ -128,6 +144,16 @@ export function readMarker(line: { text: string; runs: Run[] }, after?: Marker |
   if (letter && after && follows(after, letter) && !follows(after, found)) return letter;
   if (letter && found.value !== 1 && !(after && follows(after, found))) return letter;
   return found;
+}
+
+// The line's first run is the dash alone, and its words start where the
+// dash ends: a bullet the page draws apart, not a dash typed before a word
+// (a typed dash shares its word's run).
+function drawnAlone(items: Item[] | undefined, dash: string): boolean {
+  const drawn = (items ?? []).filter((it) => it.str.trim() !== "");
+  if (drawn.length < 2 || drawn[0].str.trim() !== dash) return false;
+  const [mark, words] = drawn;
+  return Math.abs(words.x - (mark.x + mark.w)) <= mark.size * 0.2;
 }
 
 // A marker set apart by its style: its own run in a style (bold, monospace)

@@ -1,0 +1,365 @@
+// The sheets benchmark's reference for a workbook (scripts/parse-bench/sheets.mts):
+// Apache POI reads the .xlsx — never the code under test — and writes what a
+// reader should see of each sheet as JSON: the sheets in workbook order with
+// their names and whether they are hidden, and per visible sheet the cells as
+// Excel shows them (POI's DataFormatter, cached values for formulas), the
+// merges, and the frozen rows and columns. The grid is the spec's (SPEC.md
+// §27): hidden rows and columns left out, trailing empty rows and columns
+// trimmed, at most 10,000 rows and 256 columns. A formula the file stores
+// without its value (a workbook a library wrote, as openpyxl does) shows what
+// Excel shows on opening it: POI computes it; one POI cannot compute is left
+// empty.
+//
+//   java -cp '.bench/sheets/jars/*' scripts/parse-bench/sheets-ref/SheetsRef.java in.xlsx out.json [in out ...]
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import org.apache.poi.ss.format.CellFormat;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.FormulaError;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.PaneInformation;
+import org.apache.poi.xssf.usermodel.XSSFCell;
+import org.apache.poi.xssf.usermodel.XSSFChartSheet;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+public class SheetsRef {
+  static final int MAX_ROWS = 10_000;
+  static final int MAX_COLS = 256;
+  // A quoted or escaped literal between two digit placeholders.
+  static final java.util.regex.Pattern LITERAL_BETWEEN_DIGITS = java.util.regex.Pattern.compile("[0#?](?:\"[^\"]*\"|\\\\.)+[0#?]");
+  // 9999-12-31, the last day Excel shows.
+  static final double MAX_DATE_SERIAL = 2958465;
+
+  public static void main(String[] args) throws Exception {
+    for (int i = 0; i + 1 < args.length; i += 2) {
+      String json;
+      try {
+        json = read(new File(args[i]));
+      } catch (Throwable e) {
+        json = "{\"error\":" + str(e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage())) + "}";
+      }
+      Files.writeString(Path.of(args[i + 1]), json, StandardCharsets.UTF_8);
+    }
+  }
+
+  static String read(File file) throws Exception {
+    StringBuilder out = new StringBuilder("{\"sheets\":[");
+    try (InputStream in = new FileInputStream(file); Workbook wb = WorkbookFactory.create(in)) {
+      DataFormatter formatter = new DataFormatter(Locale.US);
+      formatter.setUseCachedValuesForFormulaCells(true);
+      FormulaEvaluator evaluator = wb.getCreationHelper().createFormulaEvaluator();
+      for (int s = 0; s < wb.getNumberOfSheets(); s++) {
+        Sheet sheet = wb.getSheetAt(s);
+        boolean hidden = wb.isSheetHidden(s) || wb.isSheetVeryHidden(s);
+        if (s > 0) out.append(',');
+        out.append("{\"name\":").append(str(wb.getSheetName(s))).append(",\"hidden\":").append(hidden);
+        if (sheet instanceof XSSFChartSheet) {
+          out.append(",\"chartsheet\":true,\"rows\":[],\"merges\":[],\"frozenRows\":0,\"frozenCols\":0}");
+          continue;
+        }
+        computeUncached(sheet, evaluator);
+        sheetJson(sheet, formatter, out);
+        out.append('}');
+      }
+    }
+    return out.append("]}").toString();
+  }
+
+  /** Formulas stored without a value, or with an empty number (<v></v>
+      without t="str", as openpyxl writes), get the value POI computes: Excel
+      computes them on open. Read as stored, POI takes an empty number for
+      0. An empty string result (t="str") is a value Excel stored. */
+  static void computeUncached(Sheet sheet, FormulaEvaluator evaluator) {
+    for (Row row : sheet) {
+      if (row.getRowNum() >= MAX_ROWS) break;
+      for (Cell cell : row) {
+        if (cell.getCellType() != CellType.FORMULA || !(cell instanceof XSSFCell x)) continue;
+        var ct = x.getCTCell();
+        if (ct.isSetV() && (!ct.getV().isEmpty() || ct.getT() == org.openxmlformats.schemas.spreadsheetml.x2006.main.STCellType.STR)) continue;
+        try {
+          evaluator.evaluateFormulaCell(cell);
+        } catch (Throwable e) {
+          cell.setBlank();
+        }
+      }
+    }
+  }
+
+  record RefCell(String text, String kind, boolean general, Double number) {}
+
+  static void sheetJson(Sheet sheet, DataFormatter formatter, StringBuilder out) {
+    int lastRow = Math.min(sheet.getLastRowNum(), MAX_ROWS - 1);
+    int totalRows = sheet.getLastRowNum() + 1;
+    // Every cell as shown, by sheet coordinates.
+    List<RefCell[]> grid = new ArrayList<>();
+    int maxCol = -1;
+    for (int r = 0; r <= lastRow; r++) {
+      Row row = sheet.getRow(r);
+      RefCell[] cells = new RefCell[0];
+      if (row != null && row.getLastCellNum() > 0) {
+        int last = Math.min(row.getLastCellNum(), MAX_COLS);
+        cells = new RefCell[last];
+        for (int c = 0; c < last; c++) {
+          Cell cell = row.getCell(c);
+          if (cell == null) continue;
+          RefCell rc = cellOf(cell, formatter);
+          if (rc == null) continue;
+          cells[c] = rc;
+        }
+      }
+      grid.add(cells);
+    }
+    // A merged-away cell shows nothing in Excel, whatever words the file
+    // keeps in it: only the merge's first cell is shown.
+    List<CellRangeAddress> merges = new ArrayList<>(sheet.getMergedRegions());
+    for (CellRangeAddress m : merges) {
+      for (int r = m.getFirstRow(); r <= m.getLastRow() && r < grid.size(); r++) {
+        RefCell[] cells = grid.get(r);
+        for (int c = m.getFirstColumn(); c <= m.getLastColumn() && c < cells.length; c++) {
+          if (r != m.getFirstRow() || c != m.getFirstColumn()) cells[c] = null;
+        }
+      }
+    }
+    for (RefCell[] cells : grid) for (int c = 0; c < cells.length; c++) if (cells[c] != null && !cells[c].text.isEmpty()) maxCol = Math.max(maxCol, c);
+    boolean[] hiddenRow = new boolean[grid.size()];
+    for (int r = 0; r < grid.size(); r++) {
+      Row row = sheet.getRow(r);
+      hiddenRow[r] = row != null && row.getZeroHeight();
+    }
+    // The used range: the last row and column with words, and merges whose
+    // origin has words.
+    int usedRow = -1;
+    for (int r = 0; r < grid.size(); r++) for (RefCell c : grid.get(r)) if (c != null && !c.text.isEmpty()) usedRow = r;
+    for (CellRangeAddress m : merges) {
+      int r0 = m.getFirstRow(), c0 = m.getFirstColumn();
+      if (r0 < grid.size() && c0 < grid.get(r0).length && grid.get(r0)[c0] != null && !grid.get(r0)[c0].text.isEmpty()) {
+        usedRow = Math.max(usedRow, Math.min(m.getLastRow(), MAX_ROWS - 1));
+        maxCol = Math.max(maxCol, Math.min(m.getLastColumn(), MAX_COLS - 1));
+      }
+    }
+    int[] rowMap = new int[usedRow + 1];
+    int keptRows = 0;
+    for (int r = 0; r <= usedRow; r++) rowMap[r] = r < hiddenRow.length && hiddenRow[r] ? -1 : keptRows++;
+    int[] colMap = new int[maxCol + 1];
+    int keptCols = 0;
+    for (int c = 0; c <= maxCol; c++) colMap[c] = sheet.isColumnHidden(c) ? -1 : keptCols++;
+
+    out.append(",\"rows\":[");
+    boolean firstRow = true;
+    for (int r = 0; r <= usedRow; r++) {
+      if (rowMap[r] < 0) continue;
+      if (!firstRow) out.append(',');
+      firstRow = false;
+      out.append('[');
+      RefCell[] cells = r < grid.size() ? grid.get(r) : new RefCell[0];
+      // Trailing empty cells of the row are left out.
+      int lastKept = -1;
+      for (int c = 0; c <= maxCol && c < cells.length; c++) if (colMap[c] >= 0 && cells[c] != null && !cells[c].text.isEmpty()) lastKept = c;
+      boolean firstCell = true;
+      for (int c = 0; c <= lastKept; c++) {
+        if (colMap[c] < 0) continue;
+        if (!firstCell) out.append(',');
+        firstCell = false;
+        RefCell cell = cells[c];
+        if (cell == null || cell.text.isEmpty()) {
+          out.append("null");
+          continue;
+        }
+        out.append("{\"t\":").append(str(cell.text)).append(",\"k\":\"").append(cell.kind).append('"');
+        if (cell.general) out.append(",\"g\":1");
+        if (cell.number != null && Double.isFinite(cell.number)) out.append(",\"v\":").append(cell.number);
+        out.append('}');
+      }
+      out.append(']');
+    }
+    out.append("],\"merges\":[");
+    boolean firstMerge = true;
+    for (CellRangeAddress m : merges) {
+      int r0 = m.getFirstRow(), c0 = m.getFirstColumn();
+      if (r0 > usedRow || c0 > maxCol || rowMap[r0] < 0 || colMap[c0] < 0) continue;
+      int r1 = rowMap[r0], c1 = colMap[c0];
+      for (int r = r0; r <= Math.min(m.getLastRow(), usedRow); r++) if (rowMap[r] >= 0) r1 = rowMap[r];
+      for (int c = c0; c <= Math.min(m.getLastColumn(), maxCol); c++) if (colMap[c] >= 0) c1 = colMap[c];
+      if (r1 == rowMap[r0] && c1 == colMap[c0]) continue;
+      if (!firstMerge) out.append(',');
+      firstMerge = false;
+      out.append('[').append(rowMap[r0]).append(',').append(colMap[c0]).append(',').append(r1).append(',').append(c1).append(']');
+    }
+    out.append(']');
+    int frozenRows = 0, frozenCols = 0;
+    PaneInformation pane = sheet.getPaneInformation();
+    if (pane != null && (pane.isFreezePane() || frozenSplit(sheet))) {
+      for (int r = 0; r < pane.getHorizontalSplitPosition() && r <= usedRow; r++) if (rowMap[r] >= 0) frozenRows++;
+      for (int c = 0; c < pane.getVerticalSplitPosition() && c <= maxCol; c++) if (colMap[c] >= 0) frozenCols++;
+    }
+    out.append(",\"frozenRows\":").append(frozenRows).append(",\"frozenCols\":").append(frozenCols);
+    if (totalRows > MAX_ROWS) out.append(",\"cutRows\":").append(totalRows);
+  }
+
+  /** A pane in the state frozenSplit is frozen: "Panes are frozen, but
+      were not before being frozen they were split" (ECMA-376 Part 1,
+      §18.18.52, ST_PaneState). POI counts only the state frozen. */
+  static boolean frozenSplit(Sheet sheet) {
+    if (!(sheet instanceof XSSFSheet x)) return false;
+    var views = x.getCTWorksheet().getSheetViews();
+    if (views == null || views.sizeOfSheetViewArray() == 0) return false;
+    var pane = views.getSheetViewArray(0).getPane();
+    return pane != null && pane.getState() == org.openxmlformats.schemas.spreadsheetml.x2006.main.STPaneState.FROZEN_SPLIT;
+  }
+
+  static RefCell cellOf(Cell cell, DataFormatter formatter) {
+    CellType type = cell.getCellType();
+    if (type == CellType.FORMULA) type = cell.getCachedFormulaResultType();
+    String format = cell.getCellStyle() == null ? "General" : cell.getCellStyle().getDataFormatString();
+    boolean general = format == null || format.equalsIgnoreCase("General");
+    switch (type) {
+      case STRING:
+        return new RefCell(cell.getCellType() == CellType.FORMULA ? cell.getRichStringCellValue().getString() : formatter.formatCellValue(cell), "s", general, null);
+      case NUMERIC: {
+        double value = cell.getNumericCellValue();
+        // A format's section left empty shows nothing for the numbers it
+        // covers: ";;;" hides every number, and "0;;" shows a negative
+        // number and zero as nothing (ECMA-376 Part 1, §18.8.31; Microsoft's
+        // "Hide cell values" uses ";;;"). DataFormatter skips empty
+        // sections and showed ";;;" as 0.0.
+        if (emptySection(format, value)) return new RefCell("", "n", general, value);
+        boolean date1904 = cell.getSheet().getWorkbook() instanceof XSSFWorkbook x && x.isDate1904();
+        // Excel shows a date or a time below 0 or past 9999-12-31 as a row
+        // of "#" across the cell (in the 1904 date system a negative one
+        // shows with its sign). DataFormatter showed a year past 9999 (1E+20
+        // read August 3, 5881510). The cell's width sets how many "#"
+        // Excel draws; the reference writes one, and the comparison takes
+        // any row of "#" for it.
+        if (DateUtil.isCellDateFormatted(cell) && (value > (date1904 ? MAX_DATE_SERIAL - 1462 : MAX_DATE_SERIAL) || (value < 0 && !date1904))) {
+          return new RefCell("#", "n", general, value);
+        }
+        long step = timeStep(format);
+        // Excel rounds a time to the second (or to the tenths, hundredths,
+        // or thousandths "ss.0" shows) before it shows the hours and
+        // minutes, and the rounding carries: 0.36458 (08:44:59.7) shows
+        // 08:45 in "hh:mm". DataFormatter cuts the seconds off and showed
+        // 08:44; POI's own Excel formatter, CellFormat, rounds and shows
+        // 08:45, 00:00 for 0.999999, and 01:00.0 for 59.99 seconds.
+        if (step > 0 && value >= 0 && DateUtil.isCellDateFormatted(cell)) {
+          double rounded = Math.round(value * step) / (double) step;
+          return new RefCell(formatter.formatRawCellContents(rounded, cell.getCellStyle().getDataFormat(), format, date1904), "n", general, value);
+        }
+        // A literal between digit placeholders always shows, and the digits
+        // fill the placeholders around it from the right (ECMA-376 Part 1,
+        // §18.8.31): 41310 in ###"."###"."##0 shows .41.310, and 5551234
+        // in (###) ###-#### shows () 555-1234. DataFormatter drops the
+        // literals (41310, and (555-1234) for the phone number) and reads
+        // a fraction's whole part and numerator as one number. POI's own
+        // Excel formatter, CellFormat, keeps the literals: it reads these
+        // formats.
+        if (format != null && LITERAL_BETWEEN_DIGITS.matcher(format).find() && !DateUtil.isCellDateFormatted(cell)) {
+          try {
+            return new RefCell(CellFormat.getInstance(Locale.US, format).apply(value).text, "n", general, value);
+          } catch (Exception e) {
+            // DataFormatter below.
+          }
+        }
+        return new RefCell(formatter.formatCellValue(cell), "n", general, value);
+      }
+      case BOOLEAN:
+        return new RefCell(cell.getBooleanCellValue() ? "TRUE" : "FALSE", "b", general, null);
+      case ERROR: {
+        String text;
+        try {
+          text = FormulaError.forInt(cell.getErrorCellValue()).getString();
+        } catch (Exception e) {
+          text = "#ERROR";
+        }
+        return new RefCell(text, "e", general, null);
+      }
+      default:
+        return null;
+    }
+  }
+
+  /** The steps in a day a time format rounds to: 86,400 for a format that
+      shows hours or seconds, times ten for each "0" after "ss."; 0 for a
+      format that shows no time. Quoted text, escapes, and bracketed colors
+      and conditions are left out; [h], [m], and [s] are kept. */
+  static long timeStep(String format) {
+    if (format == null) return 0;
+    String plain = format
+        .replaceAll("\"[^\"]*\"", "")
+        .replaceAll("\\\\.", "")
+        .replaceAll("_.|\\*.", "")
+        .replaceAll("(?i)\\[(?![hms]+\\])[^\\]]*\\]", "");
+    int decimals = 0;
+    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)s\\.(0{1,3})").matcher(plain);
+    while (m.find()) decimals = Math.max(decimals, m.group(1).length());
+    String shown = plain.replaceAll("(?i)s\\.0{1,3}", "s");
+    if (!shown.matches("(?is).*[hs].*") || shown.matches("(?s).*[#?0].*") || shown.toLowerCase(Locale.ROOT).contains("general")) return 0;
+    return 86_400L * (long) Math.pow(10, decimals);
+  }
+
+  /** Is the section of the format that shows this number empty: one
+      section covers every number; of two, the first covers zero and up and
+      the second the negatives; of three or four, positive, negative, and
+      zero. False for a format with conditions ([>100]), which choose their
+      own sections. */
+  static boolean emptySection(String format, double value) {
+    if (format == null || format.indexOf(';') < 0 || format.matches("(?s).*\\[[<>=].*")) return false;
+    List<String> sections = new ArrayList<>();
+    StringBuilder cur = new StringBuilder();
+    for (int i = 0; i < format.length(); i++) {
+      char ch = format.charAt(i);
+      if (ch == '"') {
+        int end = format.indexOf('"', i + 1);
+        if (end < 0) end = format.length() - 1;
+        cur.append(format, i, end + 1);
+        i = end;
+      } else if (ch == '\\' && i + 1 < format.length()) {
+        cur.append(ch).append(format.charAt(++i));
+      } else if (ch == ';') {
+        sections.add(cur.toString());
+        cur.setLength(0);
+      } else {
+        cur.append(ch);
+      }
+    }
+    sections.add(cur.toString());
+    String section;
+    if (sections.size() == 2) section = value >= 0 ? sections.get(0) : sections.get(1);
+    else section = value > 0 ? sections.get(0) : value < 0 ? sections.get(1) : sections.get(2);
+    return section.isEmpty();
+  }
+
+  static String str(String s) {
+    StringBuilder b = new StringBuilder("\"");
+    for (int i = 0; i < s.length(); i++) {
+      char ch = s.charAt(i);
+      switch (ch) {
+        case '"' -> b.append("\\\"");
+        case '\\' -> b.append("\\\\");
+        case '\n' -> b.append("\\n");
+        case '\r' -> b.append("\\r");
+        case '\t' -> b.append("\\t");
+        default -> {
+          if (ch < 0x20) b.append(String.format("\\u%04x", (int) ch));
+          else b.append(ch);
+        }
+      }
+    }
+    return b.append('"').toString();
+  }
+}

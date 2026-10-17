@@ -17,7 +17,7 @@ const en = {
   color: "Color",
   background: "Background",
   backgroundDesc:
-    "Who you are and what you read for. Injected into every AI prompt: notes, distillation, analysis. Optional. A work can override this from its Context tab.",
+    "Who you are and what you read for. Every AI tool reads it: notes, extraction, analysis. Optional.",
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
@@ -84,6 +84,8 @@ const en = {
   dataNotes: "Notes",
   dataDigests: "Digests",
   dataDigestsDesc: "The stored project context the assistant reads, one per project.",
+  dataKeptChats: "Kept conversations",
+  dataKeptChatsDesc: "Your questions and the assistant's answers, one conversation per project and place, kept until you clear them.",
   dataPositions: "Reading positions",
   dataPositionsDesc: "Where you left off in each document, so the reader opens there.",
   dataClicks: "Clicks",
@@ -99,7 +101,7 @@ const en = {
   dataDriveDesc: "Linked: a refresh token Unitos uses to read a Drive file when you add it. Unlink revokes it.",
   dataBrowser: "In your browser only",
   dataBrowserValue:
-    "Language cookie, theme, offline work queued on this device, and the offline copies of saved projects.",
+    "Language cookie, theme, typed words not saved yet, offline work queued on this device, and the offline copies of saved projects.",
   dataOffline: "Projects saved for offline",
   dataOfflineDesc: "Each copy is the project's pages and images in this browser's cache. Sign out removes them.",
   dataLogs: "Server logs",
@@ -130,7 +132,7 @@ const zh: Record<keyof typeof en, string> = {
   color: "颜色",
   background: "背景",
   backgroundDesc:
-    "你是谁、为什么而读。注入到每个 AI 提示词中：笔记、提炼、分析。可选。各项目可在其“背景”页签覆盖此设置。",
+    "你是谁、为什么而读。每个 AI 工具都会读它：笔记、提取、分析。可选。",
   backgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   singleReader:
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
@@ -186,6 +188,8 @@ const zh: Record<keyof typeof en, string> = {
   dataNotes: "笔记",
   dataDigests: "汇编",
   dataDigestsDesc: "助手读取的项目背景存档，每个项目一份。",
+  dataKeptChats: "保留的对话",
+  dataKeptChatsDesc: "你的提问和助手的回答，每个项目的每个位置一段对话，一直保留，直到你清除它。",
   dataPositions: "阅读位置",
   dataPositionsDesc: "你在每个文档上次读到的位置，阅读器打开时回到那里。",
   dataClicks: "点击",
@@ -200,7 +204,7 @@ const zh: Record<keyof typeof en, string> = {
   dataDriveNone: "未关联",
   dataDriveDesc: "已关联时：一个刷新令牌，Unitos 在你添加 Drive 文件时用它读取该文件。取消关联即撤销。",
   dataBrowser: "仅在你的浏览器中",
-  dataBrowserValue: "语言 Cookie、主题、本设备上排队的离线工作，以及已离线保存项目的离线副本。",
+  dataBrowserValue: "语言 Cookie、主题、尚未保存的输入文字、本设备上排队的离线工作，以及已离线保存项目的离线副本。",
   dataOffline: "已离线保存的项目",
   dataOfflineDesc: "每个离线副本是该项目的页面和图片，存在此浏览器的缓存中。退出登录会移除它们。",
   dataLogs: "服务器日志",

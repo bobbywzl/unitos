@@ -1,19 +1,21 @@
 import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
+import type { User } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
+import { duplicateAnswer } from "@/lib/documents/duplicates";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
-import { imageToPdf } from "@/lib/handwritten/image-pdf";
+import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
 import { describeIngestError } from "@/lib/parse/ingest-error";
-import { attachDocument } from "@/lib/parse/attach";
+import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -46,6 +48,10 @@ const bodySchema = z.object({
   // reader picked in the upload box. Absent = the whole recording. Video only.
   clipStart: z.number().min(0).optional(),
   clipEnd: z.number().min(0).optional(),
+  // The reader said Add again to the ask a repeat add answers with (409
+  // `duplicate`, lib/documents/duplicates.ts). The 409 keeps the staged
+  // chunks, so the confirmed retry completes the same uploadId.
+  confirmDuplicate: z.boolean().default(false),
 }).refine((d) => d.clipStart === undefined || d.clipEnd === undefined || d.clipEnd > d.clipStart, {
   message: "clipEnd must be after clipStart",
 });
@@ -68,7 +74,7 @@ export async function POST(req: Request) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
 
-  if (data.kind === "video") return completeVideo(data, user?.id ?? null, t);
+  if (data.kind === "video") return completeVideo(data, access.user, t);
 
   // The parse chain (jsdom, unpdf) loads per request; see /api/documents.
   let parse: typeof import("@/lib/parse/ingest");
@@ -105,22 +111,43 @@ export async function POST(req: Request) {
     bytes.set(chunk.data, offset);
     offset += chunk.data.length;
   }
-  // Chunks are staging only; the assembled bytes are in memory now.
-  await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
 
   let filename = data.filename;
   let pages = data.pages;
   // An image imports as one handwritten page (SPEC.md §16): it wraps into a
   // one-page PDF here and skips the judgment — there is no text layer to weigh.
-  if (sniffImage(bytes)) {
+  const wrapped = sniffImage(bytes) !== null;
+  if (wrapped) {
     try {
       bytes = await imageToPdf(bytes);
     } catch (err) {
       console.error("Image wrap failed:", err);
-      return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+      await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
+      const error =
+        err instanceof ImageTooLargeError
+          ? t("api.imagePixelsTooMany", { width: err.width, height: err.height })
+          : t("api.imageUnreadable");
+      return NextResponse.json({ error }, { status: 400 });
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
+  }
+  // A file the account already has asks first (SPEC.md §15): nothing
+  // parses, and the chunks stay staged for the confirmed retry (swept after
+  // a day when none comes, /api/uploads).
+  const repeat = await duplicateAnswer(
+    access.user,
+    data.notebookId,
+    { fileHash: createHash("sha256").update(bytes).digest("hex"), pdfPages: data.pdfPages },
+    data.confirmDuplicate,
+    t,
+  );
+  if (repeat) return repeat;
+  // Chunks are staging only; the assembled bytes are in memory now.
+  await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
+
+  if (wrapped) {
+    // A PDF of one page now, read as handwritten pages below.
   } else if (parse.sniffOfficeFile(bytes) === "docx") {
     // A Word file (SPEC.md §30): its own parser, no judgment, no model pass.
     return progressResponse(async (onProgress) => {
@@ -129,7 +156,7 @@ export async function POST(req: Request) {
         await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Word ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -153,7 +180,7 @@ export async function POST(req: Request) {
           const deck = bytes;
           after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
         }
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -166,7 +193,7 @@ export async function POST(req: Request) {
         const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
         await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Markdown ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -205,7 +232,7 @@ export async function POST(req: Request) {
         // to convert; nothing starts.
         after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
       }
-      return { id: document.id, title: document.title, deduped };
+      return await addedResult(data.notebookId, document, deduped);
     } catch (err) {
       console.error("PDF ingest failed:", err);
       throw new Error(describeIngestError(err, t, "pdf"));
@@ -214,9 +241,9 @@ export async function POST(req: Request) {
 }
 
 // Video completion. The staged chunks are validated in place (uniform slice
-// size, contiguous), hashed one at a time for dedupe, then copied to VideoChunk
-// rows with one INSERT … SELECT.
-async function completeVideo(data: Body, userId: string | null, t: TFunc) {
+// size, contiguous), hashed one at a time (a file the account already has
+// asks first), then copied to VideoChunk rows with one INSERT … SELECT.
+async function completeVideo(data: Body, user: User, t: TFunc) {
   const staged = await db.$queryRaw<{ index: number; len: number }[]>`
     SELECT "index", octet_length("data") AS len
     FROM "UploadChunk" WHERE "uploadId" = ${data.uploadId} ORDER BY "index"`;
@@ -258,18 +285,10 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
   }
   const fileHash = hash.digest("hex");
 
-  // Dedupe by fileHash: a re-upload attaches the existing video document.
-  const existing = await db.document.findFirst({ where: { fileHash }, orderBy: { createdAt: "asc" } });
-  if (existing) {
-    await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-    await attachDocument(data.notebookId, existing.id, data.folderId);
-    await bumpNotebook(data.notebookId);
-    return progressResponse(async () => ({
-      id: existing.id,
-      title: existing.title,
-      deduped: true,
-    }));
-  }
+  // A file the account already has asks first (SPEC.md §15): the chunks
+  // stay staged for the confirmed retry (swept after a day when none comes).
+  const repeat = await duplicateAnswer(user, data.notebookId, { fileHash }, data.confirmDuplicate, t);
+  if (repeat) return repeat;
 
   const title = data.filename.replace(/\.[a-z0-9]+$/i, "");
   return progressResponse(async (onProgress) => {

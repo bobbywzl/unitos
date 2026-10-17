@@ -174,6 +174,7 @@ function lenient(item: unknown, edits?: DocumentEdits): unknown {
     fields.type = named ?? inferType(fields, edits);
   }
   else fields.type = changeTypeFor(fields.type, edits);
+  if (edits === "suggestions") asSuggestion(fields);
   for (const key of ["blockIds", "sections"] as const) {
     const list = fields[key];
     const ids = Array.isArray(list) ? [...new Set(list.filter((id) => typeof id === "string" && id))] : [];
@@ -187,6 +188,27 @@ function lenient(item: unknown, edits?: DocumentEdits): unknown {
     fields.description = clip(fields.instruction, DESCRIPTION_MAX);
   }
   return fields;
+}
+
+/** A block action on a document with rich text, which takes suggestions
+    alone: edit_block and remove_block become the suggest action that makes
+    the same change, so the change lands as suggestions instead of being
+    dropped. insert_paragraph stands: the words read from a figure take it
+    (lib/prompts/act.ts). Any other type stands. */
+function asSuggestion(fields: Record<string, unknown>): void {
+  const text = (key: string) => (typeof fields[key] === "string" ? (fields[key] as string) : "");
+  const id = (key: string) => (typeof fields[key] === "string" && fields[key] ? [fields[key] as string] : undefined);
+  let change: { instruction: string; blockIds?: string[] } | null = null;
+  if (fields.type === "edit_block" && text("blockId") && text("newText")) {
+    change = { instruction: `Rewrite this block so that it reads exactly: ${text("newText")}`, blockIds: id("blockId") };
+  } else if (fields.type === "remove_block" && text("blockId")) {
+    change = { instruction: "Remove this block.", blockIds: id("blockId") };
+  }
+  if (!change || change.instruction.length > INSTRUCTION_MAX) return;
+  for (const key of ["blockId", "newText"]) delete fields[key];
+  fields.type = "suggest";
+  fields.instruction = change.instruction;
+  if (change.blockIds) fields.blockIds = change.blockIds;
 }
 
 /** Actions as a model writes them: a list, an object holding one under
@@ -205,7 +227,14 @@ function changeTypeFor(type: unknown, edits?: DocumentEdits): unknown {
 /** Read actions put in the kind the document takes (changeTypeFor): the
     selection chat reads its actions before it knows the document. */
 export function fitActions(read: ReadActions, edits: DocumentEdits): ReadActions {
-  return { ...read, actions: read.actions.map((a) => ({ ...a, type: changeTypeFor(a.type, edits) }) as RawAction) };
+  return {
+    ...read,
+    actions: read.actions.map((a) => {
+      const fields: Record<string, unknown> = { ...a, type: changeTypeFor(a.type, edits) };
+      if (edits === "suggestions") asSuggestion(fields);
+      return fields as RawAction;
+    }),
+  };
 }
 
 function inferType(fields: Record<string, unknown>, edits?: DocumentEdits): string {

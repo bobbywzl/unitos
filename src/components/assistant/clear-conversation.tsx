@@ -3,7 +3,9 @@
 import { useT } from "@/components/lang-provider";
 
 // Clear conversation (SPEC.md §21): the one way a kept conversation goes
-// (lib/kept-chat.ts). It asks first; the conversation cannot be brought back.
+// (lib/kept-chat.ts). It asks nothing, as every delete: the turns leave at
+// once and the Undo pill puts them back; the server's copy goes when the
+// pill goes.
 export function ClearConversation({
   onClear,
   track,
@@ -18,12 +20,10 @@ export function ClearConversation({
     <button
       type="button"
       data-no-drag
-      onClick={() => {
-        if (confirm(t("assistant.clearConversationConfirm"))) onClear();
-      }}
+      onClick={onClear}
       data-track={track}
       data-tip={t("assistant.clearConversationTitle")}
-      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 min-h-6 pointer-coarse:min-h-11 pointer-coarse:px-3.5 ${className}`}
+      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:inline-flex pointer-coarse:h-9 pointer-coarse:items-center pointer-coarse:py-0 ${className}`}
     >
       {t("assistant.clearConversation")}
     </button>

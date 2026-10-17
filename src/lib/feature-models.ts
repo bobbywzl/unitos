@@ -9,6 +9,7 @@ import {
   CONVERT_MODEL,
   DERIVATION_MODEL,
   GIST_MODEL,
+  GRAMMAR_MODEL,
   GLM_5_3,
   GLM_5_3_FLASH,
   KIMI_K3,
@@ -72,6 +73,7 @@ export type Feature =
   | "stitch-select"
   | "merge"
   | "gist"
+  | "grammar"
   | "log"
   | "connect"
   | "parse"
@@ -111,6 +113,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   "stitch-select": STITCH_SELECT_MODEL,
   merge: MERGE_MODEL,
   gist: GIST_MODEL,
+  grammar: GRAMMAR_MODEL,
   log: GIST_MODEL,
   connect: CONNECT_MODEL,
   parse: PARSE_MODEL,
@@ -158,6 +161,7 @@ export const FEATURE_ORDER: Feature[] = [
   "stitch-select",
   "merge",
   "gist",
+  "grammar",
   "log",
   "glossary",
   "contents",

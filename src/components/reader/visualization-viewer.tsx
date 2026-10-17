@@ -68,12 +68,21 @@ export function VisualizationViewer() {
             onClick={(e) => e.stopPropagation()}
             className="flex max-h-full max-w-full flex-col items-center gap-4"
           >
-            {/* An animation plays here as it does in the card: SMIL runs in an <img>. */}
+            {/* An animation plays here as it does in the card: SMIL runs in an
+                <img>. It fills the width it has, up to 1100 px and 78% of the
+                screen's height: a picture stored with a viewBox and no size
+                would draw at the browser's default, smaller than in the card. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={shown.src}
               alt={shown.caption}
-              className="max-h-[78vh] max-w-[min(92vw,1100px)] rounded-2xl bg-card object-contain shadow-float"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                  img.style.width = `min(100vw - 3rem, 1100px, 78vh * ${img.naturalWidth / img.naturalHeight})`;
+                }
+              }}
+              className="h-auto max-h-[78vh] w-[min(100vw_-_3rem,1100px)] rounded-2xl bg-card object-contain shadow-float"
             />
             {shown.caption && (
               <figcaption className="max-w-[min(92vw,720px)] text-center text-[15px] leading-relaxed text-sand-800">

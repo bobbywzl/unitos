@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
+import { useEditingNotes } from "@/components/outline/editing-notes";
+import { useDeferredValue, useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
-import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
+import { useNewFeature } from "@/components/new-feature";
 import { Presence } from "@/components/presence";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
@@ -17,7 +19,7 @@ import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionBoard } from "@/components/outline/section-board";
 import { SectionItem } from "@/components/outline/section-item";
-import { NoteGroups, NotesOrganize, useNoteGrouping } from "@/components/outline/note-groups";
+import { NoteGroups, NotesViewMenu, useNoteGrouping } from "@/components/outline/note-groups";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import {
   filterSections,
@@ -32,7 +34,8 @@ import {
 // which hoists the whole pending queue to the top. A search shows the notes
 // it found whole, with the words it found lit up, in the same sections.
 // Selecting two or more notes offers Compare: the compare view opens over the
-// page with one pane per note (compare-view.tsx). By document opens the
+// page with one pane per note (compare-view.tsx). Document columns, the last row
+// of the view menu, opens the
 // project's notes as a grid over the page, one column per document and one
 // row per section (document-columns.tsx): the page is the whole project,
 // where the tray in the reader holds the open document's notes alone.
@@ -40,7 +43,12 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const t = useT();
   const { canEdit } = useCollab();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
-  const [query, setQuery] = useState("");
+  // The field takes every key at once; the list follows a moment later
+  // (useDeferredValue), so typing never waits for the list.
+  const [typed, setQuery] = useState("");
+  const query = useDeferredValue(typed);
+  // An editor opening or closing redraws the search's list (noteMatches).
+  useEditingNotes();
   const [grouping, setGrouping] = useNoteGrouping();
   const needle = query.trim();
   const found = needle ? filterSections(tree, query) : tree;
@@ -83,54 +91,83 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
 
+  // While a board covers the page, the page behind it takes no focus and no
+  // key: Tab walks the board, and a composer the page draws for the same
+  // section never takes the caret from the board's (section-board.tsx).
+  const behind = board !== null || undefined;
+
   return (
     <div className="flex flex-col">
-      <div className="mb-2 flex flex-wrap items-baseline gap-3.5">
+      <div inert={behind} className="mb-2 flex flex-wrap items-baseline gap-3.5">
         <h1 className="text-[38px]">{notebook.title}</h1>
+        {/* The tray's queue head (SPEC.md §6): the count, and Accept all.
+            The keys stay; Accept all's tooltip and each card's say them. */}
         {pending.length > 0 && (
-          <span className="rounded-full bg-clay-200 px-3.5 py-1 text-xs font-semibold text-clay-800">
-            {t("outline.pendingCount", { n: pending.length })}
+          <span className="flex items-baseline gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              {t("outline.pendingHeader", { n: pending.length })}
+            </span>
+            {canEdit && pending.length > 1 && (
+              <button
+                onClick={() => {
+                  for (const note of pending) void actions.acceptNote(note.id);
+                }}
+                data-track="notes-accept-all"
+                data-tip={t("outline.acceptAllTitle")}
+                className={`text-[11.5px] font-semibold text-sage-700 hover:text-sage-800 ${TOUCH_HIT}`}
+              >
+                {t("outline.acceptAll")}
+              </button>
+            )}
           </span>
         )}
-        <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
+      {/* One row on a phone too: the search takes what the icons leave. */}
+      <div inert={behind} className="mt-2 flex items-center gap-2">
         <input
-          value={query}
+          value={typed}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
           placeholder={t("outline.searchNotes")}
           aria-label={t("outline.searchNotes")}
           type="search"
-          className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
+          className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500 sm:w-72 sm:flex-none"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
-        <NotesOrganize grouping={grouping} onGrouping={setGrouping} />
-        {notebook.documents.length > 0 && (
-          <button
-            onClick={() => {
-              byDocumentNew.seen();
-              setByDocument(true);
-            }}
-            data-track="by-document"
-            data-tip={t("outline.byDocumentTitle")}
-            className={`flex items-center rounded-full bg-card px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
-              byDocumentNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
-            }`}
-          >
-            {t("outline.byDocument")}
-            {byDocumentNew.isNew && <NewPill />}
-          </button>
-        )}
+        {/* Group by and Document columns in one menu (SPEC.md §6). */}
+        <NotesViewMenu
+          grouping={grouping}
+          onGrouping={setGrouping}
+          onColumns={
+            notebook.documents.length > 0
+              ? () => {
+                  byDocumentNew.seen();
+                  setByDocument(true);
+                }
+              : undefined
+          }
+          columnsNew={notebook.documents.length > 0 && byDocumentNew.isNew}
+        />
       </div>
 
       {grouping !== "section" ? (
-        <div className="pt-[22px]">
-          <NoteGroups tree={tree} grouping={grouping} documents={notebook.documents} actions={actions} variant="page" search={query} />
+        <div inert={behind} className="pt-[22px]">
+          <NoteGroups
+            tree={tree}
+            grouping={grouping}
+            documents={notebook.documents}
+            actions={actions}
+            variant="page"
+            search={query}
+            onMerge={(id, intoId) => void actions.mergeNotes(intoId, [id], "join")}
+          />
+          {needle && found.length === 0 && (
+            <p className="text-sm text-sand-600">{t("outline.noNotesMatch", { query: needle })}</p>
+          )}
         </div>
       ) : (
-      <div className="flex flex-col gap-[30px] pt-[22px]">
+      <div inert={behind} className="flex flex-col gap-[30px] pt-[22px]">
         {/* One drag across the whole page (SPEC.md §6): a note dragged out
             of its section drops into any other, a note held over another
             joins it, and a section reorders among its siblings. */}
@@ -188,15 +225,22 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       </div>
       )}
 
-      <SelectionBar
-        tree={tree}
-        actions={actions}
-        onCompare={(ids) => {
-          setCompare(ids);
-          actions.clearSelection();
-        }}
-      />
-      <MergeUndoBar actions={actions} />
+      {/* The bars are drawn on the body (merge-undo.tsx): while a board is
+          open it draws both of its own, and By document its selection bar. */}
+      {board === null && !byDocument && (
+        <SelectionBar
+          tree={tree}
+          actions={actions}
+          onCompare={(ids) => {
+            setCompare(ids);
+            actions.clearSelection();
+          }}
+        />
+      )}
+      {/* One pill on every surface: a reject's Undo too (SPEC.md §6). */}
+      {board === null && (
+        <MergeUndoBar actions={actions} rejected={lastRejected} onUndoReject={() => void undoReject()} />
+      )}
 
       <Presence show={board !== null} exit="fade">
         {board && (
@@ -206,6 +250,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             actions={actions}
             onChange={setBoard}
             onClose={() => setBoard(null)}
+            rejected={lastRejected}
+            onUndoReject={() => void undoReject()}
           />
         )}
       </Presence>
@@ -237,19 +283,6 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           />
         )}
       </Presence>
-
-      {lastRejected && (
-        <div className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float">
-          <span className="text-[13px] text-sand-600">{t("outline.noteRejected")}</span>
-          <button
-            onClick={() => void undoReject()}
-            data-tip={t("outline.undoRejectTitle")}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-          >
-            {t("outline.undo")}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // Projects (from a copy of `dissect`): LINDA (7 documents, 9 generated, recommended links, notes across
 // documents), FORTY (40 documents, none generated). Writes nothing: no Stitch command, no Accept.
 // Checks: generated documents not drawn with the switch off (VIEW6-03) and the page switch draws them; no
-// Generated content pill at 0; Scan for links and ✕ head the Recommended links list (VIEW6-02, VIEW6-11) and
+// Generated content pill at 0; Recommend links and ✕ head the Recommended links list (VIEW6-02, VIEW6-11) and
 // the ✕ closes it; a recommended link is at most 160 px; Generated content has a ✕; Find shows Ask Stitch and
 // no Pick for two or more documents (WALK6-08); Open in notes shows on hover, always on touch (VIEW6-06); the
 // key is under 420 px at 1440 and under 600 at 390 (VIEW6-10); at 1440 a node's card covers no node, and the
@@ -48,7 +48,7 @@ for (const lang of ["en", "zh"]) {
   check(`${lang} VIEW6-03: off again, none drawn`, (await page.locator(".react-flow__node.graph-generated").count()) === 0);
 
   // VIEW6-02 / VIEW6-11: the Recommended links list.
-  check(`${lang} VIEW6-02: no Scan for links in the header`, (await page.locator('.graph-pill-row [data-track="graph-recommend-links"]').count()) === 0);
+  check(`${lang} VIEW6-02: no Recommend links in the header`, (await page.locator('.graph-pill-row [data-track="graph-recommend-links"]').count()) === 0);
   await page.locator('[data-track="graph-recommended-links"]').click();
   const rec = page.locator('[data-graph-side-list="recommended"]');
   await rec.waitFor();
@@ -59,7 +59,7 @@ for (const lang of ["en", "zh"]) {
     const first = el.querySelector("[data-graph-recommended]")?.getBoundingClientRect();
     return { scan: scan ? Math.round(scan.top) : null, close: close ? Math.round(close.top) : null, first: first ? Math.round(first.top) : null };
   });
-  check(`${lang} VIEW6-02: Scan for links and ✕ head the list`, head.scan !== null && head.close !== null && Math.abs(head.scan - head.close) < 8 && (head.first === null || head.scan < head.first), JSON.stringify(head));
+  check(`${lang} VIEW6-02: Recommend links and ✕ head the list`, head.scan !== null && head.close !== null && Math.abs(head.scan - head.close) < 8 && (head.first === null || head.scan < head.first), JSON.stringify(head));
   const heights = await rec.locator("[data-graph-recommended]").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
   check(`${lang} VIEW6-11: a recommended link is at most 160 px`, heights.length > 0 && Math.max(...heights) <= 160, heights.join(","));
   check(`${lang} WALK6-08: the list's intro is the pill's tooltip`, ((await page.locator('[data-track="graph-recommended-links"]').getAttribute("data-tip")) ?? "").length > 40);

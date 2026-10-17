@@ -116,7 +116,10 @@ export async function resolveDocumentSources(
   layer: Layer | null = null,
 ): Promise<ResolvedSource[]> {
   const [sources, blocks] = await Promise.all([
-    db.source.findMany({ where: { documentId, layer } }),
+    // By id: ids are made in time order, so sources on the same words come
+    // back in the order they were made, on every read (block-view.tsx paints
+    // and lists stacked words in this order).
+    db.source.findMany({ where: { documentId, layer }, orderBy: { id: "asc" } }),
     loadedBlocks ??
       db.block.findMany({
         where: { documentId },

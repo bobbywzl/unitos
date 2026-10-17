@@ -15,6 +15,7 @@
 
 import { CLOSE, DOC_CHIP, HEAD_PLAIN, LEAD, LEAD_PRIMARY, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
 import { useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import type { DocumentOutline } from "@/lib/graph/outline";
@@ -205,7 +206,7 @@ export function NodeCardPanel({
   }, [node.id]);
 
   function go(href: string) {
-    router.push(href);
+    graphNavigate(router, href);
     onOpenDocument();
   }
   const facts = [

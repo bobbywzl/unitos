@@ -28,6 +28,7 @@
 
 import { ACTION, CLOSE, LIST_HEAD, TEXT_BODY, TEXT_HIT, TEXT_META, TEXT_NAME } from "./graph-ui";
 import { useRouter } from "next/navigation";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import type { PartTitle, ProjectPartTitles } from "@/lib/graph/outline-titles";
@@ -393,7 +394,7 @@ export function DocumentsList({
             onOpenLink={onOpenLink}
             onLeave={onOpenDocument}
             onGo={(href) => {
-              router.push(href);
+              graphNavigate(router, href);
               onOpenDocument();
             }}
             onLight={(id) => setRowLit?.(id ? new Set([id]) : null)}

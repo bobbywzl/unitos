@@ -1,8 +1,10 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { keepSection } from "@/lib/notes/removed";
 import { normalizeSectionOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -80,19 +82,26 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ sectionId: 
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
-  const noteCount = await db.note.count({ where: { sectionId } });
-  // Children are promoted to top level (parentId set to null by the default referential action).
-  await db.section.delete({ where: { id: sectionId } });
+  // The section is kept whole before it goes (lib/notes/removed.ts): its
+  // notes with their sources, replies, edits, and side chats. History's
+  // Restore and the Undo after the delete put it back as it was.
+  const kept = await keepSection(sectionId);
+  const noteCount = kept?.notes.length ?? (await db.note.count({ where: { sectionId } }));
+  // One write: the event that keeps it, and the delete. Children are
+  // promoted to top level (parentId set to null by the default referential action).
+  const [event] = await db.$transaction([
+    db.notebookEvent.create({
+      data: {
+        notebookId: section.notebookId,
+        userId: access.user.id,
+        kind: "SECTION_REMOVE",
+        content: section.title,
+        meta: { noteCount, ...(kept ? { kept: kept as unknown as Prisma.InputJsonValue } : {}) },
+      },
+    }),
+    db.section.delete({ where: { id: sectionId } }),
+  ]);
   await normalizeSectionOrders(section.notebookId);
-  await db.notebookEvent.create({
-    data: {
-      notebookId: section.notebookId,
-      userId: access.user.id,
-      kind: "SECTION_REMOVE",
-      content: section.title,
-      meta: { noteCount },
-    },
-  });
   await bumpNotebook(section.notebookId);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, eventId: event.id, noteCount });
 }

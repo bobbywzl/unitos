@@ -44,6 +44,28 @@
   text-decoration-color: #8ab4f8;
 }
 
+/* Unitos's own squiggles (typing/proofing.ts): red under a misspelled
+   English word, blue under a grammar or wording problem, in the browser's
+   colors above. A click opens the squiggle's card (typing/proofing-card.tsx). */
+.docs-misspelled {
+  text-decoration: underline wavy #dd0000;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-skip-ink: none;
+}
+.docs-grammar {
+  text-decoration: underline wavy #4285f4;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-skip-ink: none;
+}
+.dark .docs-misspelled {
+  text-decoration-color: #f28b82;
+}
+.dark .docs-grammar {
+  text-decoration-color: #8ab4f8;
+}
+
 /* A word Docs corrected: a dashed gray underline. */
 .docs-autocorrected {
   text-decoration: underline dashed var(--docs-autocorrect);
@@ -194,6 +216,63 @@
   align-items: center;
   gap: 8px;
   padding: 4px 4px 4px 12px;
+}
+/* A phone: the bar docked under the toolbar, edge to edge; More options
+   shows the replace rows under the field. */
+.docs-findbar[data-docked] {
+  flex-wrap: wrap;
+  padding: 8px;
+}
+.docs-findbar[data-docked] > .docs-outlined {
+  flex: 1;
+  min-width: 0;
+}
+.docs-findbar[data-docked] > .docs-outlined input {
+  width: 100%;
+}
+.docs-findbar[data-docked] .docs-find-buttons {
+  gap: 0;
+  padding: 0 0 0 4px;
+}
+.docs-findbar-replace {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+.docs-findbar[data-docked] .docs-findbar-with {
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--docs-tb-outline);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 16px/24px var(--docs-ui-font);
+}
+.docs-findbar[data-docked] .docs-findbar-with:focus {
+  padding: 0 15px;
+  border: 2px solid var(--docs-blue);
+  outline: none;
+}
+.docs-findbar[data-docked] .docs-findbar-checks input {
+  width: auto;
+}
+.docs-findbar-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.docs-findbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.docs-findbar-actions .docs-replace-message {
+  min-height: 0;
+  margin: 0 auto 0 0;
 }
 
 /* ── Find and replace ─────────────────────────────────────────────────── */
@@ -523,10 +602,13 @@
   .docs-wc-anchor,
   .docs-voice,
   .docs-ac-bubble,
+  .docs-proof-card,
   .docs-tab-hint {
     display: none !important;
   }
-  .docs-autocorrected {
+  .docs-autocorrected,
+  .docs-misspelled,
+  .docs-grammar {
     text-decoration: none;
   }
   .tiptap-invisible-character {

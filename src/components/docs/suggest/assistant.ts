@@ -7,7 +7,7 @@ import { TableMap } from "@tiptap/pm/tables";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
-import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { DOCS_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
 import { diffSegments } from "@/lib/anchors/remap";
@@ -52,13 +52,21 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
   // A style change lands after the other ops: a line it makes a list line
   // still takes the words changed in it.
   for (const op of [...ops.filter((o) => o.op !== "set_style"), ...ops.filter((o) => o.op === "set_style")]) {
-    const reason = land(editor, tr, op, author, made, styleOf);
+    // An op the page throws on is skipped, and the others still land.
+    let reason: SkipReason | null;
+    try {
+      reason = land(editor, tr, op, author, made, styleOf);
+    } catch (err) {
+      console.error("[suggest] an op did not land:", op.op, err);
+      reason = "notText";
+    }
     if (reason) skipped.push({ i: op.i, reason });
   }
   if (!tr.docChanged) return { ids: [], skipped };
   editor.view.dispatch(closeHistory(tr).setMeta(suggestChangesKey, { skip: true }));
-  // Viewing mode hides suggestions: the page shows them in Editing mode.
-  if (!editor.isEditable) fireDocs(editor, DOCS_EVENT.mode, "editing");
+  // Viewing mode hides suggestions: the page passes into Suggesting mode to
+  // show them, for this visit, and the keys stay where they are.
+  if (!editor.isEditable) fireDocs(editor, DOCS_EVENT.mode, { mode: "suggesting", passing: true } satisfies ModeRequest);
   return { ids: readSuggestions(tr.doc).flatMap((s) => (made.includes(s.id) ? [s.id] : [])), skipped };
 }
 
@@ -296,7 +304,9 @@ function land(
           if (!found) return "changed";
           // The toolbar's own command, on this block.
           const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
-          new CommandManager({ editor, state }).createChain(edit).setTextAlign(op.alignment).run();
+          // A block the command does not take: skipped, and said.
+          const ran = new CommandManager({ editor, state }).createChain(edit).setTextAlign(op.alignment).run();
+          if (!ran && !edit.docChanged) return "notText";
           return edit;
         })
       );
@@ -311,7 +321,9 @@ function land(
           if (!found) return "changed";
           // The Styles menu's and the list buttons' own commands, on this block.
           const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
-          restyle(new CommandManager({ editor, state }).createChain(edit), op.baseStyle, op.style).run();
+          // A block the commands do not take: skipped, and said.
+          const ran = restyle(new CommandManager({ editor, state }).createChain(edit), op.baseStyle, op.style).run();
+          if (!ran && !edit.docChanged) return "notText";
           return edit;
         })
       );

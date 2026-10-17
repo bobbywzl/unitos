@@ -1,5 +1,6 @@
 "use client";
 
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 
@@ -13,7 +14,16 @@ export function shortNoteId(id: string): string {
 }
 
 /** The id chip: click copies the short form; the title carries the full id. */
-export function NoteId({ id, className }: { id: string; className?: string }) {
+export function NoteId({
+  id,
+  className,
+  annotation = false,
+}: {
+  id: string;
+  className?: string;
+  /** An annotation's id chip: its own words, not a note's. */
+  annotation?: boolean;
+}) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   return (
@@ -25,9 +35,9 @@ export function NoteId({ id, className }: { id: string; className?: string }) {
         setTimeout(() => setCopied(false), 1500);
       }}
       data-track="note-id-copy"
-      title={t("outline.noteIdTitle", { id })}
-      aria-label={t("outline.copyNoteId")}
-      className={`shrink-0 rounded-full font-mono text-[10.5px] tracking-tight text-sand-500 hover:text-clay-700 ${className ?? ""}`}
+      title={t(annotation ? "outline.annotationIdTitle" : "outline.noteIdTitle", { id })}
+      aria-label={t(annotation ? "outline.copyAnnotationId" : "outline.copyNoteId")}
+      className={`shrink-0 rounded-full font-mono text-[10.5px] tracking-tight text-sand-500 hover:text-clay-700 ${TOUCH_HIT} ${className ?? ""}`}
     >
       {copied ? t("outline.copied") : shortNoteId(id)}
     </button>

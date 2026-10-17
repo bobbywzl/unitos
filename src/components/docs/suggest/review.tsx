@@ -8,12 +8,15 @@ import { whyOf } from "@/components/docs/suggest/assistant";
 import { describe } from "@/components/docs/suggest/card";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useT } from "@/components/lang-provider";
+import { useEscapeLayer } from "@/lib/escape-layers";
 
 // Review suggested edits (SPEC.md §29): Google Docs' box under the toolbar,
 // on every suggestion or on one command's of the assistant. The assistant's
 // run opens it on its own when its suggestions land: the box names the run,
 // shows the change the caret is in with its why and Accept and Reject for
 // it, keeps Accept all and Reject all, and says why a change did not land.
+// It is one of the page's Escape layers: Escape closes it wherever the focus
+// is.
 
 export function ReviewPanel({
   editor,
@@ -45,6 +48,7 @@ export function ReviewPanel({
   assistant?: boolean;
 }) {
   const t = useT();
+  useEscapeLayer(true, onClose);
   const current = at && ids.includes(at) ? (readSuggestions(editor.state.doc).find((s) => s.id === at) ?? null) : null;
   const why = current ? whyOf(current.id) : undefined;
   const skippedList = skipped ?? [];
@@ -64,9 +68,6 @@ export function ReviewPanel({
       role="dialog"
       aria-label={t("docsSuggest.reviewSuggestedEdits")}
       className="docs-suggest-review"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
     >
       <div className="docs-suggest-review-head">
         <span className="docs-suggest-review-count" aria-live="polite">

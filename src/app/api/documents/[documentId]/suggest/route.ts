@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { SUGGEST_DEADLINE_MS, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGEST_PARALLEL } from "@/lib/derive/config";
 import { loadProfile } from "@/lib/derive/context";
 import { modelErrorMessage } from "@/lib/derive/json-call";
+import { failureLine } from "@/app/api/assistant/failure-line";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
@@ -158,9 +159,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
           const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
           const ops = [...pass.ops, ...moves];
-          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          // Nothing landed: the summary says why, never the change it meant.
+          const summary = ops.length === 0 && pass.warnings.length > 0 ? t("api.suggestNoneLanded", { why: pass.warnings[0] }) : pass.summary;
+          send({ window: 1, ops, warnings: pass.warnings, summary });
           console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
-          send({ done: true, summary: pass.summary, warnings });
+          send({ done: true, summary, warnings });
           return;
         }
         send({ windows: windows.length + (data.reorder ? 1 : 0) });
@@ -219,7 +222,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
             send({ window: i + 1, ...result });
           } catch (err) {
             if (deadline.aborted) late = true;
-            else send({ window: i + 1, error: modelErrorMessage(err) });
+            else send({ window: i + 1, error: failureLine(t, err, "suggest window") });
           }
         });
         if (late) warnings.push(t("api.suggestOutOfTime"));
@@ -240,7 +243,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         send({ done: true, summary, warnings });
       } catch (err) {
         console.error("[suggest] failed:", err);
-        send({ error: t("api.suggestFailed", { reason: modelErrorMessage(err) }) });
+        // A pass the deadline stopped says time ran out, in the reader's
+        // words; any other failure is the one failure line (the raw text
+        // goes to the server log).
+        send({
+          error:
+            deadline.aborted && !req.signal.aborted ? t("api.suggestTimedOut") : failureLine(t, err, "suggest"),
+        });
       } finally {
         stopHeartbeat();
         if (!cancelled) controller.close();

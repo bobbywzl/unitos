@@ -548,6 +548,7 @@ export const VideoPlayer = forwardRef<
     <div
       ref={containerRef}
       tabIndex={0}
+      data-video-player
       onKeyDown={onKeyDown}
       className="flex flex-col overflow-hidden rounded-[24px] shadow-float outline-none"
       style={{ background: STAGE, "--player-text": STAGE_TEXT } as React.CSSProperties}

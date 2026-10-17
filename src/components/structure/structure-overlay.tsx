@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { useCollab } from "@/components/collab/collab-context";
 import { PlusIcon, UndoIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { failureLine, noReason } from "@/components/assistant/failure";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import {
   BUCKET_GAP,
@@ -344,7 +345,7 @@ export function StructureOverlay({
           });
           if (!res.ok || !res.body) {
             const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-            throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+            throw new Error(detail?.error ?? noReason(res, t));
           }
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
@@ -366,7 +367,7 @@ export function StructureOverlay({
         } catch (err) {
           setToolRuns((runs) => ({
             ...runs,
-            [blockId]: { kind, text: "", streaming: false, error: err instanceof Error ? err.message : t("common.requestFailed") },
+            [blockId]: { kind, text: "", streaming: false, error: failureLine(err, t) },
           }));
         }
       })();

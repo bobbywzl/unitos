@@ -138,8 +138,16 @@ function buildDecorations(doc: PMNode, plan: Plan, heights: Map<string, number>)
 const sameFootnote = (a: FootnotePlan | undefined, b: FootnotePlan | undefined) =>
   !!a && !!b && a.pos === b.pos && a.page === b.page && a.first === b.first && Math.abs(a.top - b.top) < 0.5;
 
+// The text waits, unseen, for the first pass (data-docs-paging, page.css):
+// unpaginated, the words run past the first page, the pane cannot scroll
+// to the reading position, and the reader saw the top, then a jump. The
+// first pass, or REVEAL_MS at most, shows it, with the reading position
+// already placed (reader-interactions.tsx holds it on the page's changes).
+const REVEAL_MS = 600;
+
 class Paginator {
   private frame = 0;
+  private revealTimer: ReturnType<typeof setTimeout> | null = null;
   private lastHeight = -1;
   /** Each textblock's natural height at the last pass. */
   private heightsAtPass = new WeakMap<Element, number>();
@@ -161,8 +169,18 @@ class Paginator {
     document.addEventListener("pointerdown", this.onPointerDown, true);
     for (const type of RELEASE) document.addEventListener(type, this.onPointerUp, true);
     document.fonts.addEventListener("loadingdone", this.refresh);
+    view.dom.setAttribute("data-docs-paging", "");
+    this.revealTimer = setTimeout(this.reveal, REVEAL_MS);
     this.schedule();
   }
+
+  /** The first pass is done (or never came): the text shows. */
+  private reveal = () => {
+    if (this.revealTimer === null) return;
+    clearTimeout(this.revealTimer);
+    this.revealTimer = null;
+    this.view.dom.removeAttribute("data-docs-paging");
+  };
 
   private onPointerDown = (e: PointerEvent) => {
     if (e.button === 0 && e.target instanceof Node && this.view.dom.contains(e.target)) this.pointerDown = true;
@@ -247,6 +265,7 @@ class Paginator {
       if (found.length > 0) this.dispatch({ spacers: [], footnotes: [] });
       this.lastHeight = this.view.dom.offsetHeight;
       host.onPages(1);
+      this.reveal();
       return;
     }
 
@@ -304,6 +323,7 @@ class Paginator {
     this.lastHeight = this.view.dom.offsetHeight;
     caretViews.get(this.view)?.place();
     host.onPages(plan.pages);
+    this.reveal();
   }
 
   /** Tabs to their stops, before the pages read the layout. */
@@ -326,6 +346,7 @@ class Paginator {
     document.removeEventListener("pointerdown", this.onPointerDown, true);
     for (const type of RELEASE) document.removeEventListener(type, this.onPointerUp, true);
     document.fonts.removeEventListener("loadingdone", this.refresh);
+    this.reveal();
   }
 }
 

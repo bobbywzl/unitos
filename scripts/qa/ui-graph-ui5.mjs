@@ -284,7 +284,7 @@ if (ONLY.includes("draft")) {
     await page.evaluate(
       ([will, flute]) => {
         localStorage.setItem(`graph-link-note:user-1:${will}`, JSON.stringify({ content: "an unsent thought", sectionId: null, savedAt: Date.now() }));
-        localStorage.setItem(`unitos-reply-draft:user-1:link:${flute}`, JSON.stringify({ content: "an unsent reply", savedAt: Date.now() }));
+        localStorage.setItem("unitos-card-drafts", JSON.stringify({ [`reply:link:${flute}`]: "an unsent reply" })); // a reply draft is a card draft (lib/toolbar-drafts.ts)
       },
       [WILL, FLUTE],
     );
@@ -304,10 +304,10 @@ if (ONLY.includes("draft")) {
     await page.locator(`[data-annotation-link-id="${FLUTE}"]`).first().waitFor({ timeout: 60000 }).catch(() => {});
     check((await page.locator(`[data-annotation-link-id="${FLUTE}"] [data-link-draft]`).count()) >= 1 || !after, "the reader's link card carries the dot");
     await shot(page, "WALK5-13-reader", w);
-    await page.evaluate(([will, flute]) => {
+    await page.evaluate((will) => {
       localStorage.removeItem(`graph-link-note:user-1:${will}`);
-      localStorage.removeItem(`unitos-reply-draft:user-1:link:${flute}`);
-    }, [WILL, FLUTE]);
+      localStorage.removeItem("unitos-card-drafts");
+    }, WILL);
     await ctx.close();
   }
 }

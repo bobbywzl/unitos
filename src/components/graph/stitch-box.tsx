@@ -17,6 +17,7 @@ import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
 import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
@@ -63,6 +64,36 @@ const HISTORY_TURN_MAX = 8_000;
 
 // Each chip fills its template; the cursor lands at {topic}, or at the end
 // of a template without {topic}. No chip runs on its own.
+// The pick, per project for the browser tab: Escape, a closed graph, or a
+// reload never throws away the documents picked for a command (the command
+// itself is a chat draft, lib/kept-chat.ts). Session storage, with the memory
+// as the fallback when the store is blocked.
+const picks = new Map<string, string[]>();
+const pickKey = (notebookId: string) => `unitos-stitch-pick-${notebookId}`;
+
+export function readStitchPick(notebookId: string): Set<string> {
+  try {
+    const stored = sessionStorage.getItem(pickKey(notebookId));
+    if (stored !== null) {
+      const ids: unknown = JSON.parse(stored);
+      if (Array.isArray(ids)) return new Set(ids.filter((id): id is string => typeof id === "string"));
+    }
+  } catch {
+    // Blocked store or a bad value: the memory's copy.
+  }
+  return new Set(picks.get(notebookId) ?? []);
+}
+
+export function writeStitchPick(notebookId: string, ids: Set<string>) {
+  picks.set(notebookId, [...ids]);
+  try {
+    if (ids.size > 0) sessionStorage.setItem(pickKey(notebookId), JSON.stringify([...ids]));
+    else sessionStorage.removeItem(pickKey(notebookId));
+  } catch {
+    // Blocked store: the memory keeps it for this tab.
+  }
+}
+
 const SUGGESTIONS = [
   { label: "stitch.stitchSuggestAsk", template: "stitch.stitchSuggestAskTemplate" },
   { label: "stitch.stitchSuggestGather", template: "stitch.stitchSuggestGatherTemplate" },
@@ -360,13 +391,13 @@ export function StitchBox({
   }
 
   function openDocument(documentId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}`);
     onOpenDocument();
   }
 
   // Open in reader: the reader jumps to ?block= and flashes it.
   function openBlock(documentId: string, blockId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}&block=${blockId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}&block=${blockId}`);
     onOpenDocument();
   }
 

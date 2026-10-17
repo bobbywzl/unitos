@@ -13,7 +13,8 @@
 // on amsbook notes, a Word form, a Google Docs export, and a pdfLaTeX
 // paper, every text item's origin is a glyph origin here.
 
-import { mathFamily, namedGlyphs, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
+import { displayNames, mathFamily, namedGlyphs, symbolNames, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
+import { isSpacerName, ligatureOfName } from "@/lib/parse/pdf/programs";
 import type { Box } from "@/lib/parse/pdf/types";
 
 export type Glyph = {
@@ -50,6 +51,13 @@ export type Glyph = {
   // Read by its glyph name where the font has no Unicode map (glyphs.ts
   // namedGlyphs): unicode holds what the name says.
   named?: true;
+  // The symbol the glyph's name in the PDF's font encoding names, where it
+  // is not what the text layer reads (glyphs.ts symbolNames): MathTime's
+  // "rho1" read as a control character.
+  symbol?: string;
+  // The glyph's name in the PDF's font encoding says it is an operator's
+  // display form (MnSymbol's "integral.disp"; glyphs.ts displayNames).
+  display?: true;
   // Its fill color as it shows over white (#rrggbb); absent where no plain
   // color fills it (a pattern).
   color?: string;
@@ -66,7 +74,11 @@ export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; image
 // A font by pdf.js's id: its name, font matrix, and writing direction.
 // differences: the glyph name of each code, where the font's encoding gives
 // one (pdf.js's font with fontExtraProperties).
-export type FontLookup = (id: string) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean; differences?: ArrayLike<string | null | undefined> } | null;
+// glyphNames: the names the embedded program gives its glyphs, by glyph id,
+// for a font whose codes are its glyph ids (programs.ts).
+export type FontLookup = (
+  id: string,
+) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean; differences?: ArrayLike<string | null | undefined>; glyphNames?: ArrayLike<string | undefined> } | null;
 
 // pdf.js operator numbers (OPS, pdf.js 6.1).
 const OP = {
@@ -179,6 +191,47 @@ type State = {
 
 type PdfGlyph = { originalCharCode?: number; unicode?: string; width?: number; isSpace?: boolean };
 
+// A coding font's ligatures by code, each with the characters it joins, and
+// its spacers' codes, from the embedded program's glyph names (programs.ts).
+type Ligatures = { chars: Map<number, string[]>; spacers: Set<number> };
+
+function ligaturesOf(names: ArrayLike<string | undefined> | undefined): Ligatures | null {
+  if (!names) return null;
+  const chars = new Map<number, string[]>();
+  const spacers = new Set<number>();
+  for (let code = 0; code < names.length; code++) {
+    const name = names[code];
+    if (name === undefined) continue;
+    const joined = ligatureOfName(name);
+    if (joined) chars.set(code, joined);
+    else if (isSpacerName(name)) spacers.add(code);
+  }
+  return chars.size > 0 ? { chars, spacers } : null;
+}
+
+/** A coding font's ligature reads as the characters it joins: its spacers
+    just before it on its baseline read its first characters, one each, and
+    the ligature's glyph the rest. A ligature's glyph the text layer reads
+    as no character of its name is left as it reads: the codes are no glyph
+    ids there. */
+function readLigatures(glyphs: Glyph[], ligatures: Map<Glyph, string[]>, spacers: Set<Glyph>) {
+  if (ligatures.size === 0) return;
+  glyphs.forEach((g, k) => {
+    const chars = ligatures.get(g);
+    if (!chars || !chars.includes(g.unicode)) return;
+    const before: Glyph[] = [];
+    for (let j = k - 1; j >= 0 && before.length < chars.length - 1; j--) {
+      const s = glyphs[j];
+      const next = before[0] ?? g;
+      if (!spacers.has(s) || s.font !== g.font || Math.abs(s.y - g.y) > 0.5 || Math.abs(s.x + s.w - next.x) > g.size * 0.1) break;
+      before.unshift(s);
+    }
+    before.forEach((s, i) => (s.symbol = chars[i]));
+    const rest = chars.slice(before.length).join("");
+    if (rest !== g.unicode) g.symbol = rest;
+  });
+}
+
 export function readDrawing(
   ops: { fnArray: number[]; argsArray: unknown[] },
   fonts: FontLookup,
@@ -188,6 +241,9 @@ export function readDrawing(
   view: Box = { x1: 0, y1: 0, x2: pageWidth, y2: pageHeight },
 ): PageDrawing {
   const glyphs: Glyph[] = [];
+  // A coding font's ligatures and their spacers (readLigatures).
+  const ligatureGlyphs = new Map<Glyph, string[]>();
+  const spacers = new Set<Glyph>();
   const rules: Rule[] = [];
   const fills: Fill[] = [];
   const images: Box[] = [];
@@ -217,13 +273,26 @@ export function readDrawing(
   let annotation = 0;
   // pdf.js sends W (clip) just before the path it clips to.
   let clipping = false;
-  const fontCache = new Map<string, { base: string; family: MathFamily | null; scale: number; vertical: boolean; named: Map<number, string> | null }>();
+  const fontCache = new Map<
+    string,
+    {
+      base: string;
+      family: MathFamily | null;
+      scale: number;
+      vertical: boolean;
+      named: Map<number, string> | null;
+      symbols: Map<number, string> | null;
+      displays: Set<number> | null;
+      ligatures: Ligatures | null;
+    }
+  >();
   const fontOf = (id: string) => {
     let hit = fontCache.get(id);
     if (!hit) {
       const font = fonts(id);
       const base = (font?.name ?? "").replace(/^[A-Z]{6}\+/, "");
-      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true, named: namedGlyphs(base, font?.differences) };
+      const named = namedGlyphs(base, font?.differences);
+      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true, named, symbols: named ? null : symbolNames(font?.differences), displays: displayNames(font?.differences), ligatures: ligaturesOf(font?.glyphNames) };
       fontCache.set(id, hit);
     }
     return hit;
@@ -392,6 +461,12 @@ export function readDrawing(
               glyph.unicode = named;
               glyph.named = true;
             }
+            const symbol = font.symbols?.get(glyph.code);
+            if (symbol !== undefined && symbol !== glyph.unicode.normalize("NFKC")) glyph.symbol = symbol;
+            if (font.displays?.has(glyph.code)) glyph.display = true;
+            if (font.ligatures?.spacers.has(glyph.code)) spacers.add(glyph);
+            const ligature = font.ligatures?.chars.get(glyph.code);
+            if (ligature) ligatureGlyphs.set(glyph, ligature);
             if (
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
@@ -455,6 +530,7 @@ export function readDrawing(
       }
     }
   }
+  readLigatures(glyphs, ligatureGlyphs, spacers);
   return { glyphs: unicodeMath(glyphs), rules, fills, images, paths, shades };
 }
 

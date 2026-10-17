@@ -335,8 +335,8 @@ if (want("header")) {
     // [chrome6] VIEW6-08: below 768px a pill is its mark and its count; its name stays for a screen reader.
     if (w >= 768) check(`${w} ${lang}: every pill shows a name`, r.includes(words[0]) && g.includes(words[1]), `${r} | ${g}`);
     else check(`${w} ${lang}: a pill is its mark and count, its name read aloud`, !/[A-Za-z\u4e00-\u9fff]/.test(r + g) && (await named(rec)).includes(lang === "en" ? "Recommended links" : "推荐链接") && (await named(gen)).includes(lang === "en" ? "Generated content" : "生成内容"), `${r} | ${g}`);
-    // [chrome6] VIEW6-02: Scan for links heads the Recommended links list, not the header.
-    check(`${w} ${lang}: no Scan for links in the header`, (await page.locator('.graph-overlay > div [data-track="graph-recommend-links"]').count()) === 0);
+    // [chrome6] VIEW6-02: Recommend links heads the Recommended links list, not the header.
+    check(`${w} ${lang}: no Recommend links in the header`, (await page.locator('.graph-overlay > div [data-track="graph-recommend-links"]').count()) === 0);
     // [chrome6] WALK6-07: every pill in view, no sideways scroll of the pill row.
     const pillsIn = await page.evaluate(() => [...document.querySelectorAll('.graph-pill-row > *')].every((el) => el.getBoundingClientRect().right <= window.innerWidth + 0.5));
     check(`${w} ${lang}: every pill in view`, pillsIn);

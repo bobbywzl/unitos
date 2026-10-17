@@ -81,6 +81,7 @@ export function CompareDialog({ editor, onClose }: { editor: Editor; onClose: ()
       title={t("docsPage.compareDocuments")}
       onClose={onClose}
       className="docs-small-dialog docs-compare-dialog"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

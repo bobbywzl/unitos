@@ -11,6 +11,21 @@
 
 /** How long the pointer holds still before the card lifts. */
 export const HOLD_MS = 150;
+/** How long a finger holds still before anything held to drag lifts — a
+    note, a board's tile, the floating card, an annotation carried to a
+    note, a row of the document list: long enough that a finger resting a
+    moment before a swipe scrolls the list. A release before it, without
+    a move, is a tap. */
+export const TOUCH_HOLD_MS = 300;
+
+/** The hold for this pointer: a finger's, else a mouse's or a pen's. */
+export function holdMs(pointerType: string): number {
+  return pointerType === "touch" ? TOUCH_HOLD_MS : HOLD_MS;
+}
+/** How long a mouse holds still on words before their quote can lift (a
+    mark in the text, SPEC.md §6): long enough that a slow click, or a pause
+    before a drag that selects, stays what it is. */
+export const WORDS_HOLD_MS = 500;
 /** How far the pointer may drift during the hold and still count as still. */
 export const HOLD_TOLERANCE_PX = 6;
 /** A mouse that moves this far at once lifts the card without the hold. */
@@ -87,27 +102,45 @@ export function stopClickAfterDrag() {
 
 /** Watch a press until it is a hold or a move: onLift runs when the card
     should lift, with the pointer's place. A press that ends or drifts first
-    runs nothing. Returns at once; the listeners leave with the press. */
+    runs nothing. Returns at once; the listeners leave with the press.
+
+    On words (`words`, a mark in the text), words are for selecting first.
+    A touch never lifts: its long press selects the word, as everywhere,
+    and the quote is carried from the card's grip. A mouse holds still for
+    WORDS_HOLD_MS, `armed` shows the reader the quote is ready, and only a
+    move after that lifts it: a press that ends where it began is a click,
+    however slow, and a press that moves first is a selection. */
 export function watchHold(
   e: { clientX: number; clientY: number; pointerType: string },
   onLift: (at: { x: number; y: number }) => void,
   {
     pull = true,
+    words = false,
+    armed,
   }: {
     /** False: a mouse pull never lifts, only the hold does — on text the
         reader may want to select, a pull is a selection. */
     pull?: boolean;
+    /** The press is on words the reader may select (above). */
+    words?: boolean;
+    /** On words: true once the hold is ready to lift, false when the press
+        ends either way. */
+    armed?: (on: boolean) => void;
   } = {},
 ) {
+  if (words && e.pointerType === "touch") return;
   const start = { x: e.clientX, y: e.clientY };
-  const mouse = pull && e.pointerType !== "touch";
+  const mouse = pull && !words && e.pointerType !== "touch";
   let lifted = false;
+  let ready = false;
   const stop = () => {
     clearTimeout(timer);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", stop);
     window.removeEventListener("pointercancel", stop);
     window.removeEventListener("blur", stop);
+    if (ready) armed?.(false);
+    ready = false;
   };
   const lift = (at: { x: number; y: number }) => {
     if (lifted) return;
@@ -120,10 +153,16 @@ export function watchHold(
   const onMove = (ev: PointerEvent) => {
     const at = { x: ev.clientX, y: ev.clientY };
     const moved = distanceBetween(start, at);
-    if (mouse && moved >= HOLD_DISTANCE_PX) lift(at);
+    if (ready && moved > HOLD_TOLERANCE_PX) lift(at);
+    else if (mouse && moved >= HOLD_DISTANCE_PX) lift(at);
     else if (moved > HOLD_TOLERANCE_PX) stop();
   };
-  const timer = setTimeout(() => lift(start), HOLD_MS);
+  const timer = words
+    ? setTimeout(() => {
+        ready = true;
+        armed?.(true);
+      }, WORDS_HOLD_MS)
+    : setTimeout(() => lift(start), holdMs(e.pointerType));
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", stop);
   window.addEventListener("pointercancel", stop);

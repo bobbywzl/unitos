@@ -62,7 +62,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
     return NextResponse.json({ ok: true, cores, complete: after?.complete ?? false });
   } catch (err) {
     console.error("Collapse failed:", err);
-    const error = t("api.collapseFailed");
+    // The assistant's plain line (SPEC.md §7); the reason is in the log.
+    const error = t("assistant.failedServer");
     return has
       ? NextResponse.json({ ok: true, ...before, error })
       : NextResponse.json({ error }, { status: 422 });

@@ -155,7 +155,7 @@ const checkAnswerSchema = z.object({
     what the document does not. The ops it names, with its why. A check that
     fails keeps every op: the reader still accepts or rejects each one. */
 export async function checkOps(
-  run: Pick<SuggestRun, "userId" | "lang" | "command" | "instruction" | "signal"> & { document: { rows: Pick<Block, "id" | "text">[] } },
+  run: Pick<SuggestRun, "userId" | "lang" | "command" | "instruction" | "material" | "signal"> & { document: { rows: Pick<Block, "id" | "text">[] } },
   prefix: ModelMessage,
   ops: ResolvedOp[],
 ): Promise<Map<number, string>> {
@@ -166,7 +166,7 @@ export async function checkOps(
     const call = await featureCall("suggest", SUGGEST_EFFORT.fast);
     const result = await callForJson({
       model: call.model,
-      messages: [prefix, { role: "user", content: suggestCheckPrompt({ lang: run.lang, command: run.command, instruction: run.instruction, ops: listed }) }],
+      messages: [prefix, { role: "user", content: suggestCheckPrompt({ lang: run.lang, command: run.command, instruction: run.instruction, material: run.material, ops: listed }) }],
       maxOutputTokens: SUGGEST_CHECK_MAX_OUTPUT_TOKENS,
       providerOptions: call.providerOptions,
       schema: checkAnswerSchema,
@@ -251,6 +251,7 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
   return {
     ops,
     warnings: [
+      ...(result.truncated ? [run.t("api.answerCut")] : []),
       ...read.unreadable.map((why) => run.t(SKIPPED.unreadable, { why })),
       ...skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
       ...[...checked.values()].map((why) => run.t("api.suggestSkipChecked", { why })),

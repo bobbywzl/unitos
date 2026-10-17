@@ -3,7 +3,7 @@
 import { ACTION_NOTE } from "./graph-ui";
 import { useEffect } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
-import { DRAFT_KEPT_EVENT, linkNoteDraftKey, readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
+import { readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
 import { useCollab } from "@/components/collab/collab-context";
 import { NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -16,12 +16,9 @@ import { useNoteGather, type GatherQuote } from "@/components/graph/note-gather"
 // box of its own before). The dock's Save sends the two ends as the link's
 // own anchors (`POST /api/notes` with `fromLinkId`), so the note quotes both
 // ends as before. Words typed in the box of before, kept in the browser for
-// the account (lib/note-drafts.ts; a refused offline replay puts words there
-// too, keepDroppedWords), go on into the new note when the link opens, with
-// the section picked then; the box's key clears once the new note's draft
-// holds them (rule zero item 6). Words the queue puts there while the link
-// is open go in the same way at once, after the words typed in the new
-// note, so the next keystroke writes over nothing (REV9-02).
+// the account (lib/note-drafts.ts), go on into the new note when the link
+// opens, with the section picked then; the box's key clears once the new
+// note's draft holds them (rule zero item 6).
 
 export type NoteOnLinkLink = Pick<GraphEdgeLink, "id" | "fromDocumentId" | "toDocumentId" | "quotedText" | "toQuotedText">;
 
@@ -35,8 +32,7 @@ function linkEnds(link: NoteOnLinkLink): GatherQuote[] {
 
 /** The press of Note on this link, or null for a viewer: the link's ends go
     into the new note, which opens with the focus in its words box. Words
-    left in the box of before go in with them, once, as the link opens, and
-    words the queue puts back while the link is open go in at once. */
+    left in the box of before go in with them, once, as the link opens. */
 export function useNoteOnLink(link: NoteOnLinkLink): (() => void) | null {
   const gather = useNoteGather();
   const { myId } = useCollab();
@@ -51,13 +47,6 @@ export function useNoteOnLink(link: NoteOnLinkLink): (() => void) | null {
       writeLinkNoteDraft(myId, id, "", null);
     };
     takeUp();
-    // The queue put a dropped Note on this link's words into the link's
-    // draft (keepDroppedWords, REV9-02): the new note takes them up now.
-    const onKept = (e: Event) => {
-      if ((e as CustomEvent<{ key?: unknown }>).detail?.key === linkNoteDraftKey(myId, id)) takeUp();
-    };
-    window.addEventListener(DRAFT_KEPT_EVENT, onKept);
-    return () => window.removeEventListener(DRAFT_KEPT_EVENT, onKept);
   }, [add, myId, id, fromDocumentId, toDocumentId, quotedText, toQuotedText]);
   if (!gather) return null;
   return () => {

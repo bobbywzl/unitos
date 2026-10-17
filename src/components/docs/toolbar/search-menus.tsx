@@ -11,6 +11,9 @@ import { ToolbarEditor } from "@/components/docs/toolbar/controls";
 // Search the menus (SPEC.md §29): the way to everything Google Docs keeps
 // in its menu bar. It finds every registered command (commands.ts) and
 // every toolbar action by name, and values too ("font size 14", "zoom 150").
+// With nothing typed it lists the six menus, so a reader who does not know a
+// command's name can read the menu it lives in: a press, or Right, on a menu
+// lists its commands, and Left goes back to the menus.
 
 export type SearchAction = {
   id: string;
@@ -22,9 +25,15 @@ export type SearchAction = {
   shortcut?: string;
   icon?: ReactNode;
   run: () => void;
+  /** A row that lists a menu's commands instead of running: the menu's name. */
+  opens?: string;
   enabled?: boolean;
   /** Why the action is off, under its label. */
   note?: string;
+  /** The row writes into the document (Insert, Format): on a tie it ranks
+      under a row that opens or shows something, so Enter never writes on a
+      guess. */
+  writes?: boolean;
 };
 
 /** Raised on the editor's text, opens Search the menus (Alt+/). */
@@ -44,25 +53,29 @@ function score(action: SearchAction, query: string): number {
   return 0;
 }
 
-/** The actions that match, best first. */
+/** The actions that match, best first; on a tie, a row that opens or shows
+    something before a row that writes, then the menus' order. */
 function searchActions(actions: SearchAction[], query: string): SearchAction[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return actions
     .map((a, i) => ({ a, i, s: score(a, q) }))
     .filter((r) => r.s > 0)
-    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .sort((x, y) => y.s - x.s || Number(!!x.a.writes) - Number(!!y.a.writes) || x.i - y.i)
     .slice(0, 40)
     .map((r) => r.a);
 }
 
 export function SearchMenus({
   actions,
+  menus,
   valueActions,
   onDone,
 }: {
   /** Every action, built when the search opens. */
   actions: () => SearchAction[];
+  /** The menus' names, in Google Docs' order, for the empty query. */
+  menus: string[];
   /** The actions a typed value asks for ("font size 14"). */
   valueActions: (query: string) => SearchAction[];
   /** The page takes the focus back. */
@@ -74,6 +87,8 @@ export function SearchMenus({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [rect, setRect] = useState<{ left: number; top: number } | null>(null);
+  /** The menu whose commands the list shows, with nothing typed. */
+  const [menu, setMenu] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -107,6 +122,7 @@ export function SearchMenus({
       setAll(actionsRef.current());
       setRect({ left: Math.max(8, Math.min(r.left, window.innerWidth - 358)), top: r.top + (r.height - 28) / 2 });
       setQuery("");
+      setMenu(null);
       setActive(0);
       setOpen(true);
     });
@@ -121,12 +137,14 @@ export function SearchMenus({
     if (!backToPage) {
       setOpen(false);
       setQuery("");
+      setMenu(null);
       return;
     }
     // The field leaves the page first; then the page takes the focus.
     flushSync(() => {
       setOpen(false);
       setQuery("");
+      setMenu(null);
     });
     onDone();
   };
@@ -140,9 +158,26 @@ export function SearchMenus({
     return () => dom.removeEventListener(SEARCH_MENUS_EVENT, onOpen);
   }, [editor]);
 
-  const results = open && query.trim() ? [...valueActions(query), ...searchActions(all, query)] : [];
+  // Typed: what matches. Nothing typed: the menus, or the open menu's own
+  // commands, in the order the menu holds them.
+  const menuRows: SearchAction[] = menus.map((name) => ({ id: `menu-${name}`, label: name, where: "", opens: name, run: () => setMenu(name) }));
+  const results: SearchAction[] = !open
+    ? []
+    : query.trim()
+      ? [...valueActions(query), ...searchActions(all, query)]
+      : menu
+        ? all.filter((a) => a.where === menu)
+        : menuRows;
+  const openMenu = (name: string) => {
+    setMenu(name);
+    setActive(0);
+  };
   const run = (action: SearchAction | undefined) => {
     if (!action || action.enabled === false) return;
+    if (action.opens) {
+      openMenu(action.opens);
+      return;
+    }
     hide(true);
     // The page has the focus back before the action runs, so a command
     // acts on the selection the reader left.
@@ -167,11 +202,19 @@ export function SearchMenus({
       className="docs-search-input"
       onChange={(e) => {
         setQuery(e.target.value);
+        setMenu(null);
         setActive(0);
       }}
       onBlur={() => !opening.current && hide(false)}
       onKeyDown={(e) => {
-        if (e.key === "ArrowDown") {
+        if (e.key === "ArrowRight" && !query && results[active]?.opens) {
+          e.preventDefault();
+          openMenu(results[active].opens);
+        } else if (e.key === "ArrowLeft" && !query && menu) {
+          e.preventDefault();
+          setMenu(null);
+          setActive(0);
+        } else if (e.key === "ArrowDown") {
           e.preventDefault();
           setActive((i) => Math.min(results.length - 1, i + 1));
         } else if (e.key === "ArrowUp") {
@@ -183,7 +226,10 @@ export function SearchMenus({
         } else if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          hide(true);
+          if (menu && !query) {
+            setMenu(null);
+            setActive(0);
+          } else hide(true);
         }
       }}
     />
@@ -233,11 +279,11 @@ export function SearchMenus({
         rect &&
         createPortal(
           <div data-edit-control data-docs-menu>
-            <div className="docs-search-open" data-results={query.trim() ? "" : undefined} style={{ left: rect.left, top: rect.top }}>
+            <div className="docs-search-open" data-results={results.length > 0 ? "" : undefined} style={{ left: rect.left, top: rect.top }}>
               <SearchIcon size={20} />
               {field}
             </div>
-            {query.trim() && (
+            {(results.length > 0 || query.trim()) && (
               <div
                 ref={listRef}
                 id="docs-search-results"
@@ -264,7 +310,7 @@ export function SearchMenus({
                   >
                     {a.icon}
                     <span className="docs-search-label">{a.label}</span>
-                    <span className="docs-search-where">{a.where}</span>
+                    <span className="docs-search-where">{a.opens ? "›" : a.where}</span>
                     {a.shortcut && <span className="docs-search-keys">{a.shortcut}</span>}
                     {a.note && <span className="docs-search-note">{a.note}</span>}
                   </button>

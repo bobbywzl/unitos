@@ -4,6 +4,8 @@
 // checks it again, because the client's check is a courtesy, not the gate.
 
 import { IMAGE_EXTENSIONS, isImageFile } from "@/lib/handwritten/image";
+import { DEFAULT_LANG, isLang, LANG_COOKIE } from "@/lib/i18n/config";
+import { translate } from "@/lib/i18n/dictionaries";
 
 export { IMAGE_ACCEPT, IMAGE_EXTENSIONS, isImageFile, sniffImage } from "@/lib/handwritten/image";
 
@@ -62,16 +64,36 @@ export function imageFigureHtml(src: string, alt: string): string {
 }
 
 /** Store one dropped image and get its URL back. Throws with the server's
-    plain reason — too large, not an image, or Unitos Premium. */
+    plain reason — too large, not an image, or Unitos Premium — or, when the
+    server gave none (a server error, no network), the one failure line
+    "Not saved. Try again." (offline: "Not saved. Try again when you are
+    online."); the status and the error go to the console. */
 export async function uploadImage(file: File): Promise<{ id: string; url: string }> {
-  const res = await fetch("/api/images", {
-    method: "POST",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/images", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+  } catch (err) {
+    console.warn("Image not saved:", err instanceof Error ? err.message : String(err));
+    throw new Error(notSavedLine());
+  }
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(detail?.error ?? `Request failed (${res.status})`);
+    if (detail?.error && res.status < 500) throw new Error(detail.error);
+    console.warn("Image not saved:", res.status, detail?.error ?? "");
+    throw new Error(notSavedLine());
   }
   return (await res.json()) as { id: string; url: string };
+}
+
+/** "Not saved. Try again." in the page's language (the lang cookie); offline,
+    "Not saved. Try again when you are online.", the line of every write
+    (`src/lib/api.ts`). */
+function notSavedLine(): string {
+  const value = typeof document === "undefined" ? null : document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
+  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  return translate(isLang(value) ? value : DEFAULT_LANG, offline ? "common.offline" : "common.notSaved");
 }

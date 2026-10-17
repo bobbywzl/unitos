@@ -2,18 +2,35 @@ import type { Activators, SensorInstance, SensorProps } from "@dnd-kit/core";
 import {
   distanceBetween,
   HOLD_DISTANCE_PX,
-  HOLD_MS,
   HOLD_TOLERANCE_PX,
+  holdMs,
   skipsDrag,
 } from "@/lib/hold-drag";
 
+/** The scroll of every box around a card when it lifted. */
+type LiftScroll = { el: Element; top: number; left: number };
+let liftScrolls: LiftScroll[] = [];
+
+/** A drag that changed nothing (let go where it was, off every list, or
+    Escape) puts the lists back where they were scrolled: the drag's
+    auto-scroll never costs the reader the place (sortable.tsx). */
+export function restoreLiftScroll() {
+  const scrolls = liftScrolls;
+  liftScrolls = [];
+  if (scrolls.length === 0) return;
+  requestAnimationFrame(() => {
+    for (const { el, top, left } of scrolls) el.scrollTo({ top, left });
+  });
+}
+
 // The board's sensor (components/sortable.tsx): hold to drag (lib/hold-drag.ts).
 // dnd-kit's own pointer sensor takes a hold or a distance, never both, so
-// this one is written out: the pointer holds still for HOLD_MS and the card
-// lifts, or a mouse moves HOLD_DISTANCE_PX and it lifts at once; a press
-// that ends first is a click, and a finger that drifts first is a scroll.
+// this one is written out: the pointer holds still for HOLD_MS (a finger for
+// TOUCH_HOLD_MS) and the card lifts, or a mouse moves HOLD_DISTANCE_PX and it
+// lifts at once; a press that ends first is a click, and a finger that drifts
+// first is a scroll.
 // A press on an input, a text field, or a control marked data-no-drag never
-// starts a drag.
+// starts a drag. Escape puts a lifted card back and does nothing else.
 
 type Point = { x: number; y: number };
 
@@ -49,19 +66,24 @@ export class HoldSensor implements SensorInstance {
   private doc: Document;
   private removers: (() => void)[] = [];
   private lateRemovers: (() => void)[] = [];
+  private hold: number;
 
   constructor(props: SensorProps<HoldSensorOptions>) {
     this.props = props;
     const event = props.event;
     this.start = pointOf(event) ?? { x: 0, y: 0 };
     this.mouse = !(event instanceof PointerEvent && event.pointerType === "touch");
+    this.hold = holdMs(event instanceof PointerEvent ? event.pointerType : "mouse");
     this.doc = event.target instanceof Node ? event.target.ownerDocument ?? document : document;
     const win = this.doc.defaultView ?? window;
 
     this.listen(this.doc, "pointermove", this.onMove, { passive: false });
     this.listen(this.doc, "pointerup", this.onUp);
     this.listen(this.doc, "pointercancel", this.onCancel);
-    this.listen(this.doc, "keydown", this.onKey);
+    // Escape while a card is lifted belongs to the drag: heard first, on the
+    // window's capture, and kept from every other listener, so it puts the
+    // card back and closes nothing (a section's board, a selection).
+    this.listen(win, "keydown", this.onKey, { capture: true });
     // Once the card is lifted, a finger that moves must move the card, not
     // the list: the scroll is refused on the move event itself.
     this.listen(this.doc, "touchmove", this.onTouchMove, { passive: false });
@@ -70,8 +92,8 @@ export class HoldSensor implements SensorInstance {
     this.listen(win, "dragstart", preventDefault);
     this.listen(win, "contextmenu", preventDefault);
 
-    this.timer = setTimeout(() => this.begin(), HOLD_MS);
-    props.onPending(props.active, { delay: HOLD_MS, tolerance: HOLD_TOLERANCE_PX }, this.start);
+    this.timer = setTimeout(() => this.begin(), this.hold);
+    props.onPending(props.active, { delay: this.hold, tolerance: HOLD_TOLERANCE_PX }, this.start);
   }
 
   private listen(
@@ -89,6 +111,14 @@ export class HoldSensor implements SensorInstance {
     this.activated = true;
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
+    const target = this.props.event.target;
+    const scrolls: LiftScroll[] = [];
+    liftScrolls = scrolls;
+    for (let el = target instanceof Element ? target.parentElement : null; el; el = el.parentElement) {
+      if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) {
+        scrolls.push({ el, top: el.scrollTop, left: el.scrollLeft });
+      }
+    }
     // The click the release would fire lands on the control the hold began
     // on: stopped, for the one click after the release (detach waits).
     const stopClick = (e: Event) => e.stopPropagation();
@@ -129,7 +159,7 @@ export class HoldSensor implements SensorInstance {
       }
       this.props.onPending(
         this.props.active,
-        { delay: HOLD_MS, tolerance: HOLD_TOLERANCE_PX },
+        { delay: this.hold, tolerance: HOLD_TOLERANCE_PX },
         this.start,
         { x: at.x - this.start.x, y: at.y - this.start.y },
       );
@@ -155,10 +185,16 @@ export class HoldSensor implements SensorInstance {
     this.detach();
     if (!activated) this.props.onAbort(this.props.active);
     this.props.onCancel();
+    if (activated) restoreLiftScroll();
   };
 
   private onKey = (event: Event) => {
-    if (event instanceof KeyboardEvent && event.key === "Escape") this.onCancel();
+    if (!(event instanceof KeyboardEvent) || event.key !== "Escape") return;
+    if (this.activated) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.onCancel();
   };
 }
 

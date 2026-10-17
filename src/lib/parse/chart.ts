@@ -36,9 +36,11 @@ type Kind = "col" | "bar" | "line" | "area" | "pie" | "doughnut" | "scatter";
 
 type Series = {
   name: string;
+  named: boolean; // false: the file names it not; name is the legend's stand-in
   cats: string[];
   vals: (number | null)[];
   xs: (number | null)[]; // scatter only
+  xFormatCode: string | null; // scatter only: the x values' number format
   color: string | null;
   pointColors: Map<number, string>;
   marker: boolean;
@@ -65,13 +67,25 @@ const LEGEND_POSITIONS = new Set(["r", "l", "t", "b", "tr"]);
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
-function richText(el: Element | null): string {
+/** The words of a rich text: each paragraph's runs joined, the lines (a
+    paragraph, or a line break inside one) joined with `gap`. Slides
+    benchmark finding: a title of three lines read as one word. */
+function richText(el: Element | null, gap = " "): string {
   if (!el) return "";
-  return cleanText(
-    descendants(el, "t")
-      .map((t) => t.textContent ?? "")
-      .join(""),
-  ).trim();
+  const paras = descendants(el, "p");
+  if (paras.length === 0) return cleanText(descendants(el, "t").map((t) => t.textContent ?? "").join("")).trim();
+  const lines: string[] = [];
+  for (const p of paras) {
+    let line = "";
+    for (const c of Array.from(p.children)) {
+      if (c.localName === "br") {
+        lines.push(line);
+        line = "";
+      } else line += descendants(c, "t").map((t) => t.textContent ?? "").join("");
+    }
+    lines.push(line);
+  }
+  return lines.map((l) => cleanText(l).trim()).filter(Boolean).join(gap);
 }
 
 function cacheValues(container: Element | null, palette?: ChartPalette): { text: string[]; numbers: (number | null)[]; formatCode: string | null } {
@@ -79,7 +93,17 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
   const numbers: (number | null)[] = [];
   let formatCode: string | null = null;
   if (!container) return { text, numbers, formatCode };
-  const cache = descendants(container, "numCache")[0] ?? descendants(container, "strCache")[0] ?? descendants(container, "numLit")[0] ?? descendants(container, "strLit")[0];
+  const found =
+    descendants(container, "numCache")[0] ??
+    descendants(container, "strCache")[0] ??
+    descendants(container, "numLit")[0] ??
+    descendants(container, "strLit")[0] ??
+    descendants(container, "multiLvlStrCache")[0];
+  // Categories on several levels (multiLvlStrRef): the first level is each
+  // point's own label, the next ones group them. Slides benchmark finding:
+  // a chart over two-level categories lost every category name.
+  const multi = found?.localName === "multiLvlStrCache";
+  const cache = multi ? (children(found, "lvl")[0] ?? found) : found;
   if (!cache) {
     const formula = descendants(container, "f")[0]?.textContent?.trim();
     const cells = formula && palette?.resolveRef ? palette.resolveRef(formula) : null;
@@ -92,7 +116,7 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
     return { text, numbers, formatCode };
   }
   formatCode = child(cache, "formatCode")?.textContent?.trim() || null;
-  const count = intAttr(child(cache, "ptCount"), "val") ?? 0;
+  const count = intAttr(child(multi ? found : cache, "ptCount"), "val") ?? 0;
   const byIdx = new Map<number, string>();
   for (const pt of children(cache, "pt")) {
     const idx = intAttr(pt, "idx");
@@ -110,9 +134,26 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
 
 function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalette): Series {
   const tx = child(ser, "tx");
-  const name = tx ? cacheValues(tx, palette).text[0] ?? richText(tx) : "";
-  const cat = cacheValues(child(ser, "cat") ?? child(ser, "xVal"), palette);
+  // The name: a cached reference, a rich text, or a literal (c:v). Slides
+  // benchmark finding: a chart that names its series in c:v lost the names.
+  const name = tx ? cacheValues(tx, palette).text[0] ?? (richText(tx) || cleanText(child(tx, "v")?.textContent ?? "").trim()) : "";
+  const catEl = child(ser, "cat") ?? child(ser, "xVal");
+  const cat = cacheValues(catEl, palette);
   const val = cacheValues(child(ser, "val") ?? child(ser, "yVal"), palette);
+  // Number categories (a numCache) show in their format code, as the axis
+  // shows them: m/d/yy shows 37261.0 as 1/5/02. Slides benchmark finding:
+  // date categories read as raw serials.
+  if (kind !== "scatter" && (descendants(catEl, "numCache")[0] ?? descendants(catEl, "numLit")[0])) {
+    cat.text = cat.text.map((t, i) => {
+      const n = cat.numbers[i];
+      if (n === null || n === undefined) return t;
+      try {
+        return cleanText(ssf.format(cat.formatCode ?? "General", n)) || t;
+      } catch {
+        return t;
+      }
+    });
+  }
   const spPr = child(ser, "spPr");
   const fill = palette.resolveColor(colorIn(child(spPr, "solidFill")));
   const line = palette.resolveColor(colorIn(child(child(spPr, "ln"), "solidFill")));
@@ -125,11 +166,15 @@ function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalet
   const dLbls = child(ser, "dLbls");
   const markerEl = child(ser, "marker");
   const markerSymbol = attr(child(markerEl, "symbol"), "val");
+  // An unnamed series shows as "Series1", "Series2" in the legend, no
+  // space, as Excel and PowerPoint name it.
   return {
-    name: name || `Series ${index + 1}`,
+    name: name || `Series${index + 1}`,
+    named: name !== "",
     cats: cat.text,
     vals: val.numbers,
     xs: kind === "scatter" ? cat.numbers : [],
+    xFormatCode: kind === "scatter" ? cat.formatCode : null,
     color: (kind === "line" || kind === "scatter" ? line ?? fill : fill ?? line) ?? null,
     pointColors,
     marker: markerSymbol !== "none",
@@ -216,6 +261,19 @@ function formatValue(v: number, formatCode: string | null): string {
   return String(Math.round(v * 1000) / 1000);
 }
 
+/** A value in the chart's data rows: in its format code, and General in
+    full as a sheet's cell writes it (0.70870299), not the axis's short form
+    (0.709, 1.23e+6). Slides benchmark finding: a chart of ratios lost every
+    digit past the third. */
+function dataValue(v: number, formatCode: string | null): string {
+  if (formatCode && formatCode !== "General") return formatValue(v, formatCode);
+  try {
+    return cleanText(ssf.format("General", v)) || String(v);
+  } catch {
+    return String(v);
+  }
+}
+
 /** Nice axis bounds and step: 4 to 7 steps of 1, 2, 2.5, or 5 × 10^k. */
 function niceScale(min: number, max: number, fixedMin: number | null, fixedMax: number | null): { min: number; max: number; step: number } {
   let lo = fixedMin ?? Math.min(0, min);
@@ -257,10 +315,19 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   const H = Math.max(200, Math.round((1000 * size.height) / Math.max(1, size.width)));
   const font = Math.max(11, Math.min(20, W * 0.02));
   const out: string[] = [];
-  const explicitTitle = richText(child(chart, "title"));
+  // The title: a rich text, else a cell's cached words (c:strRef). Slides
+  // benchmark finding: a title taken from a cell read as "Chart Title".
+  const explicitTitle =
+    richText(child(chart, "title"), "\n") || cleanText(cacheValues(child(child(chart, "title"), "tx"), palette).text.join(" ")).trim();
   const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
   const allSeries = plots.flatMap((p) => p.series);
-  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length === 1 ? allSeries[0].name : "");
+  // A title element without words is the automatic title: the one series'
+  // name, else "Chart Title" (one series the file names not, or several:
+  // PowerPoint's own thumbnails of lo chart-theme-override and lo
+  // tdf112089). Slides benchmark finding: the legend's stand-in "Series1"
+  // read as the title, and a chart of several series lost its title.
+  const only = allSeries.length === 1 ? allSeries[0] : null;
+  const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length > 0 ? (only?.named ? only.name : "Chart Title") : "");
 
   // Series colors: the file's, else the accents in order.
   let colorIndex = 0;
@@ -333,21 +400,38 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
 function dataRows(plots: Plot[]): string[][] {
   const series = plots.flatMap((p) => p.series);
   const rows: string[][] = [];
+  // The header names the series the file names; with none named, no header
+  // (an unnamed series' "Series1" is the legend's stand-in, not the file's
+  // words).
+  const header = (lead: string[]) => {
+    if (series.some((s) => s.named)) rows.push([...lead, ...series.map((s) => (s.named ? s.name : ""))]);
+  };
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];
   const scatter = plots[0].kind === "scatter";
   if (scatter) {
-    rows.push(["", ...series.map((s) => s.name)]);
+    header([""]);
     const longest = Math.max(...series.map((s) => s.vals.length));
-    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : "", ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]);
+    // An x value that is text (a scatter chart over named points) keeps
+    // its name: the chart places it by its position, the data says which.
+    // A number x shows in its format, General as a cell writes it: the
+    // cache's 5.550000000000001 reads 5.55. Slides benchmark finding (a
+    // scatter chart's 71 x values).
+    const x = series[0];
+    for (let i = 0; i < longest; i++) rows.push([x.xs[i] !== null && x.xs[i] !== undefined ? dataValue(x.xs[i] as number, x.xFormatCode) : (x.cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
     return rows;
   }
   if (categories.length > 0) {
-    rows.push(["", ...series.map((s) => s.name)]);
-    categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]));
+    header([""]);
+    // A value past the last category (an empty cell closing the category
+    // range) is drawn all the same, its label empty: its row keeps it.
+    // Slides benchmark finding: a bar chart of 6 values over 5 categories
+    // lost its last value in the words.
+    const count = Math.max(categories.length, ...series.map((s) => s.vals.length));
+    for (let i = 0; i < count; i++) rows.push([categories[i] ?? "", ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
   } else {
-    rows.push(series.map((s) => s.name));
+    header([]);
     const longest = Math.max(...series.map((s) => s.vals.length));
-    for (let i = 0; i < longest; i++) rows.push(series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode))));
+    for (let i = 0; i < longest; i++) rows.push(series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode))));
   }
   return rows;
 }

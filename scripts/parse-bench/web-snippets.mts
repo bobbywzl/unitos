@@ -2,8 +2,12 @@
 // magazines, government and company pages), each marked with a few passages
 // the article must hold and a few it must not (a date line, a menu, a
 // footer). The URL parse (parseHtmlContent) reads each page offline, as
-// web.mts does; a passage counts when the document's title and body hold it,
-// spaces read as one.
+// web.mts does, each page decoded by its own charset (lib/parse/charset.ts),
+// as the fetch decodes it; a passage counts when the document's title, body,
+// or References section holds it, spaces read as one. The References section
+// is the one the reader shows under the body: the page's reference list and
+// the link references a kept block cites, as the import keeps them
+// (pruneReferences, lib/parse/ingest.ts).
 //
 //   npx tsx scripts/parse-bench/web-snippets.mts [--limit n] [--only file,file]
 //     [--baseline] [--save-baseline] [--worst n] [--detail file] [--parts-dir dir]
@@ -36,6 +40,8 @@ globalThis.fetch = (async () => {
 }) as typeof fetch;
 
 const { parseHtmlContent } = await import("@/lib/parse/url");
+const { decodePage } = await import("@/lib/parse/charset");
+const { pruneReferences } = await import("@/lib/parse/references");
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const TRAF = join(ROOT, ".bench", "web", "trafilatura");
@@ -69,7 +75,12 @@ if (detail) urls = urls.filter((u) => data[u].file === detail);
 else if (only) urls = urls.filter((u) => only.includes(data[u].file));
 if (limit) urls = urls.slice(0, limit);
 
-const norm = (text: string) => text.replace(/\s+/g, " ").trim();
+// A soft hyphen (U+00AD) is drawn as nothing but at a line's end: a passage
+// marked with or without one ("Ita­li­ens", "Italiens") is the same words.
+// A letter is the same letter in either Unicode normal form: a page set in
+// decomposed form ("u" and a combining diaeresis for "ü", a Bengali letter
+// and its nukta) draws what the marked passage, composed, writes.
+const norm = (text: string) => text.normalize("NFC").replace(/­/g, "").replace(/\s+/g, " ").trim();
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms} ms`)), ms))]);
 }
@@ -105,8 +116,12 @@ for (const url of parts > 0 ? [] : urls) {
   if (!path) error = "file not found";
   else {
     try {
-      const parsed = await withTimeout(parseHtmlContent(readFileSync(path, "utf8"), url), PAGE_TIMEOUT_MS);
-      text = [parsed.title ?? "", ...parsed.blocks.filter((b) => b.type !== "SEPARATOR").map((b) => b.text)].join("\n\n");
+      const parsed = await withTimeout(parseHtmlContent(decodePage(readFileSync(path)), url), PAGE_TIMEOUT_MS);
+      text = [
+        parsed.title ?? "",
+        ...parsed.blocks.filter((b) => b.type !== "SEPARATOR").map((b) => b.text),
+        ...pruneReferences(parsed.blocks, parsed.references ?? [], parsed.formalReferences ?? 0).map((r) => r.text),
+      ].join("\n\n");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
