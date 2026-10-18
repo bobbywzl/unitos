@@ -19,11 +19,12 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useT } from "@/components/lang-provider";
 import { SparkleIcon, TrashIcon } from "@/components/icons";
-import { topBucketOf, type StructureConnection } from "@/lib/structure";
+import { BUCKET_WIDTH, topBucketOf, type Structure, type StructureConnection } from "@/lib/structure";
 import { BucketBox } from "@/components/structure/bucket-box";
 import {
   endOfHandle,
   useStructure,
+  type StructureBlock,
 } from "@/components/structure/structure-context";
 
 // The structure canvas (SPEC.md §32): every top bucket a node, drawn by its
@@ -36,7 +37,13 @@ import {
 // Ctrl/Cmd+wheel to zoom.
 
 type BucketNodeData = { bucketId: string };
-type ConnectionEdgeData = { connection: StructureConnection };
+// reversed: the curve runs from the connection's second end to its first
+// (the second end stands to the left), so the arrow is at the curve's start.
+type ConnectionEdgeData = { connection: StructureConnection; reversed: boolean };
+
+// The room between two top buckets, in px, under which they count as one
+// column: their connection joins their right sides.
+const SIDE_GAP = 24;
 
 function BucketNode({ id, data }: NodeProps<BucketNodeData>) {
   const { structure } = useStructure();
@@ -66,6 +73,7 @@ function ConnectionEdge({
   const t = useT();
   const { selectedConnectionId, selectConnection } = useStructure();
   const connection = data?.connection;
+  const reversed = data?.reversed ?? false;
   const open = connection ? selectedConnectionId === connection.id : false;
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
@@ -89,7 +97,8 @@ function ConnectionEdge({
           connection.byAssistant && !connection.label ? "6 5" : undefined
         }
         className="react-flow__edge-path"
-        markerEnd="url(#structure-arrow)"
+        markerEnd={reversed ? undefined : `url(#${lit ? "structure-arrow-lit" : "structure-arrow"})`}
+        markerStart={reversed ? `url(#${lit ? "structure-arrow-lit" : "structure-arrow"})` : undefined}
       />
       {/* A wide invisible path takes the click. */}
       <path
@@ -102,8 +111,10 @@ function ConnectionEdge({
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan pointer-events-auto absolute flex flex-col items-center gap-1.5"
+          // The open card stands over the other connections' labels.
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            zIndex: open ? 10 : undefined,
           }}
         >
           <button
@@ -137,7 +148,7 @@ function ConnectionEdge({
 // the connection as it is when the card opens (the card mounts per open).
 function ConnectionCard({ connection }: { connection: StructureConnection }) {
   const t = useT();
-  const { selectConnection, canEdit, ops } = useStructure();
+  const { structure, blocks, selectConnection, canEdit, ops } = useStructure();
   const [label, setLabel] = useState(connection.label);
   const [comment, setComment] = useState(connection.comment);
   const commit = () => {
@@ -155,10 +166,10 @@ function ConnectionCard({ connection }: { connection: StructureConnection }) {
       className="menu-in flex w-[300px] flex-col gap-2 rounded-2xl border border-line bg-card/95 p-3 shadow-float backdrop-blur-md"
       onClick={(e) => e.stopPropagation()}
     >
-      <p className="text-[11px] text-sand-500">
+      <p className="text-[11px] leading-snug text-sand-600">
         {t("structure.connectionBetween", {
-          from: endName(connection.from.kind, t),
-          to: endName(connection.to.kind, t),
+          from: endName(structure, blocks, connection.from, t),
+          to: endName(structure, blocks, connection.to, t),
         })}
       </p>
       {canEdit ? (
@@ -221,8 +232,25 @@ function ConnectionCard({ connection }: { connection: StructureConnection }) {
   );
 }
 
-function endName(kind: "bucket" | "piece", t: ReturnType<typeof useT>): string {
-  return t(kind === "bucket" ? "structure.bucket" : "structure.piece");
+// An end by name, so the card says which two things the curve joins: a
+// bucket by its title, a piece by its label or the block's first words.
+function endName(
+  structure: Structure,
+  blocks: Map<string, StructureBlock>,
+  end: StructureConnection["from"],
+  t: ReturnType<typeof useT>,
+): string {
+  const words = (text: string) => {
+    const one = text.replace(/\s+/g, " ").trim();
+    return one.length > 60 ? `${one.slice(0, 57).trimEnd()}…` : one;
+  };
+  if (end.kind === "bucket") {
+    const title = structure.buckets.find((b) => b.id === end.id)?.title;
+    return t("structure.connectionEndBucket", { name: words(title || t("structure.bucketUntitled")) });
+  }
+  const piece = structure.pieces.find((p) => p.blockId === end.id);
+  const text = piece?.label || blocks.get(end.id)?.text || piece?.preview || "";
+  return t("structure.connectionEndPiece", { name: words(text) });
 }
 
 const nodeTypes = { bucket: BucketNode };
@@ -267,28 +295,49 @@ function Canvas() {
     });
   }, [tops, canEdit, setFlowNodes]);
 
+  // A curve joins the sides of its two ends that face each other, so it
+  // runs through the room between the buckets, not back under them: the
+  // first end's right side to the second end's left when the second stands
+  // to the right; the second's right side to the first's left when it
+  // stands to the left (the arrow then sits at the curve's start, so it
+  // still points at the second end); both right sides when the two share a
+  // column, or a bucket. The nodes' places are read live, so a bucket
+  // dragged across another turns its curves as it goes.
   const flowEdges = useMemo<FlowEdge<ConnectionEdgeData>[]>(() => {
     const bucketOfEnd = (end: StructureConnection["from"]) =>
       end.kind === "bucket"
         ? end.id
         : structure.pieces.find((p) => p.blockId === end.id)?.bucketId;
+    const xOf = new Map(flowNodes.map((n) => [n.id, n.position.x]));
     return structure.connections.flatMap((c) => {
       const fromBucket = bucketOfEnd(c.from);
       const toBucket = bucketOfEnd(c.to);
       if (!fromBucket || !toBucket) return [];
+      const fromTop = topBucketOf(structure, fromBucket);
+      const toTop = topBucketOf(structure, toBucket);
+      const fromX = xOf.get(fromTop) ?? 0;
+      const toX = xOf.get(toTop) ?? 0;
+      const fromHandle = (side: "l" | "r") => `${side}|${c.from.kind}|${c.from.id}`;
+      const toHandle = (side: "l" | "r") => `${side}|${c.to.kind}|${c.to.id}`;
+      const route =
+        fromTop !== toTop && fromX + BUCKET_WIDTH + SIDE_GAP <= toX
+          ? { source: fromTop, target: toTop, sourceHandle: fromHandle("r"), targetHandle: toHandle("l"), reversed: false }
+          : fromTop !== toTop && toX + BUCKET_WIDTH + SIDE_GAP <= fromX
+            ? { source: toTop, target: fromTop, sourceHandle: toHandle("r"), targetHandle: fromHandle("l"), reversed: true }
+            : { source: fromTop, target: toTop, sourceHandle: fromHandle("r"), targetHandle: toHandle("r"), reversed: false };
       return [
         {
           id: c.id,
-          source: topBucketOf(structure, fromBucket),
-          target: topBucketOf(structure, toBucket),
-          sourceHandle: `r|${c.from.kind}|${c.from.id}`,
-          targetHandle: `l|${c.to.kind}|${c.to.id}`,
+          source: route.source,
+          target: route.target,
+          sourceHandle: route.sourceHandle,
+          targetHandle: route.targetHandle,
           type: "connection",
-          data: { connection: c },
+          data: { connection: c, reversed: route.reversed },
         },
       ];
     });
-  }, [structure]);
+  }, [structure, flowNodes]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -315,6 +364,17 @@ function Canvas() {
             orient="auto-start-reverse"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--sand-500)" />
+          </marker>
+          <marker
+            id="structure-arrow-lit"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)" />
           </marker>
         </defs>
       </svg>

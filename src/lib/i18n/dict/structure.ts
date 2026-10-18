@@ -22,8 +22,6 @@ const en = {
   canvasHint:
     "Drag a bucket by its header. Drag a block between buckets, or back to Unsorted. Drag from the dot at the side of a bucket or a block to another to connect them; click a connection's label to name it.",
   // Buckets
-  bucket: "bucket",
-  piece: "block",
   bucketUntitled: "Untitled bucket",
   bucketTitle: "Bucket title",
   bucketTitlePlaceholder: "Name this bucket",
@@ -65,7 +63,10 @@ const en = {
   // Connections
   connectionTitle: "Open this connection: its label and comment",
   connectionUnlabeled: "Unlabeled",
-  connectionBetween: "From a {from} to a {to}",
+  // The card's first line: the two ends by name, in the arrow's direction.
+  connectionBetween: "From {from} to {to}",
+  connectionEndBucket: "the bucket “{name}”",
+  connectionEndPiece: "the block “{name}”",
   connectionLabel: "Connection label",
   connectionLabelPlaceholder: "How they relate: supports, contradicts, example of…",
   connectionComment: "Connection comment",
@@ -127,8 +128,6 @@ const zh: Record<keyof typeof en, string> = {
   empty: "还没有类别。添加一个类别并从“未归类”里拖入块，或让左侧的助手为你归类整篇文档。",
   emptyViewer: "还没有类别。编辑者可以在这里归类文档。",
   canvasHint: "按住类别标题可拖动类别。块可在类别之间拖动，或拖回“未归类”。从类别或块侧边的圆点拖到另一个上即可建立关联；点击关联的标签可命名。",
-  bucket: "类别",
-  piece: "块",
   bucketUntitled: "未命名类别",
   bucketTitle: "类别标题",
   bucketTitlePlaceholder: "为这个类别命名",
@@ -169,6 +168,8 @@ const zh: Record<keyof typeof en, string> = {
   connectionTitle: "打开这个关联：标签和评论",
   connectionUnlabeled: "未命名",
   connectionBetween: "从{from}到{to}",
+  connectionEndBucket: "类别“{name}”",
+  connectionEndPiece: "块“{name}”",
   connectionLabel: "关联标签",
   connectionLabelPlaceholder: "两者的关系：支持、矛盾、举例……",
   connectionComment: "关联评论",

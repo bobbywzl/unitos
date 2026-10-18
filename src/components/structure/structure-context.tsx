@@ -89,6 +89,15 @@ export function handleId(side: "l" | "r", end: StructureEnd): string {
   return `${side}|${end.kind}|${end.id}`;
 }
 
+/** True when the end is one of the two ends of the connection whose card
+    is open: the end draws a ring, so the reader sees what the curve joins. */
+export function isOpenConnectionEnd(structure: Structure, selectedConnectionId: string | null, end: StructureEnd): boolean {
+  if (!selectedConnectionId) return false;
+  const c = structure.connections.find((x) => x.id === selectedConnectionId);
+  if (!c) return false;
+  return [c.from, c.to].some((e) => e.kind === end.kind && e.id === end.id);
+}
+
 export function endOfHandle(handle: string | null | undefined): StructureEnd | null {
   if (!handle) return null;
   const [, kind, id] = handle.split("|");

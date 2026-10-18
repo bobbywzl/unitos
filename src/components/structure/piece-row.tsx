@@ -8,7 +8,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { annotationKindColor } from "@/lib/annotations/kind";
 import type { StructurePiece } from "@/lib/structure";
-import { handleId, PIECE_DRAG_TYPE, pieceHashOf, useStructure, type PieceAnnotation } from "@/components/structure/structure-context";
+import { handleId, isOpenConnectionEnd, PIECE_DRAG_TYPE, pieceHashOf, useStructure, type PieceAnnotation } from "@/components/structure/structure-context";
 
 // One piece (SPEC.md §32): a block placed in a bucket. Folded, the row shows
 // the label and the block's first words; a click opens it: the whole block,
@@ -20,7 +20,7 @@ import { handleId, PIECE_DRAG_TYPE, pieceHashOf, useStructure, type PieceAnnotat
 
 export function PieceRow({ piece }: { piece: StructurePiece }) {
   const t = useT();
-  const { blocks, annotationsByBlock, canEdit, ops, setDragging, openBlock, runTool, toolRuns } = useStructure();
+  const { structure, selectedConnectionId, blocks, annotationsByBlock, canEdit, ops, setDragging, openBlock, runTool, toolRuns } = useStructure();
   const block = blocks.get(piece.blockId);
   const [open, setOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
@@ -29,6 +29,8 @@ export function PieceRow({ piece }: { piece: StructurePiece }) {
   const gone = !block;
   const changed = block ? pieceHashOf(block.text) !== piece.hash : false;
   const end = { kind: "piece" as const, id: piece.blockId };
+  // An end of the open connection: the ring says what its curve joins.
+  const joined = isOpenConnectionEnd(structure, selectedConnectionId, end);
 
   function onDragStart(e: DragEvent) {
     e.dataTransfer.setData(PIECE_DRAG_TYPE, piece.blockId);
@@ -42,7 +44,7 @@ export function PieceRow({ piece }: { piece: StructurePiece }) {
       draggable={canEdit}
       onDragStart={onDragStart}
       onDragEnd={() => setDragging(null)}
-      className={`nodrag relative rounded-xl border bg-paper/70 ${open ? "border-line" : "border-transparent hover:border-line"} ${canEdit ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`nodrag relative rounded-xl border bg-paper/70 ${joined ? "border-clay ring-2 ring-clay/30" : open ? "border-line" : "border-transparent hover:border-line"} ${canEdit ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       <Handle type="target" position={Position.Left} id={handleId("l", end)} className="structure-handle" />
       <Handle type="source" position={Position.Right} id={handleId("r", end)} className="structure-handle" />

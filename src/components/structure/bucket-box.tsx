@@ -6,7 +6,7 @@ import { MoreIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { BUCKET_HUES, BUCKET_WIDTH, bucketPieces, childBuckets, type BucketHue } from "@/lib/structure";
 import { PieceRow } from "@/components/structure/piece-row";
-import { BUCKET_HUE_VAR, handleId, PIECE_DRAG_TYPE, useStructure } from "@/components/structure/structure-context";
+import { BUCKET_HUE_VAR, handleId, isOpenConnectionEnd, PIECE_DRAG_TYPE, useStructure } from "@/components/structure/structure-context";
 
 // One bucket (SPEC.md §32): its header — the title, the description, the
 // hue bar, the menu — then its pieces in order, then the buckets inside it.
@@ -18,7 +18,7 @@ const MAX_BODY = 560;
 
 export function BucketBox({ bucketId, depth }: { bucketId: string; depth: number }) {
   const t = useT();
-  const { structure, canEdit, ops, dragging, setDragging } = useStructure();
+  const { structure, canEdit, ops, dragging, setDragging, selectedConnectionId } = useStructure();
   const bucket = structure.buckets.find((b) => b.id === bucketId);
   const pieces = bucketPieces(structure, bucketId);
   const children = childBuckets(structure, bucketId);
@@ -50,6 +50,8 @@ export function BucketBox({ bucketId, depth }: { bucketId: string; depth: number
   if (!bucket) return null;
   const hue = bucket.color ? BUCKET_HUE_VAR[bucket.color] : null;
   const end = { kind: "bucket" as const, id: bucketId };
+  // An end of the open connection: the ring says what its curve joins.
+  const joined = isOpenConnectionEnd(structure, selectedConnectionId, end);
 
   // Where a dragged piece lands: before the row the pointer is over the top
   // half of, else after it.
@@ -90,7 +92,7 @@ export function BucketBox({ bucketId, depth }: { bucketId: string; depth: number
   return (
     <div
       className={`structure-bucket flex flex-col rounded-[18px] border bg-card shadow-float ${
-        dropIndex !== null ? "border-clay ring-2 ring-clay/30" : "border-line"
+        dropIndex !== null || joined ? "border-clay ring-2 ring-clay/30" : "border-line"
       }`}
       style={{ width: depth === 0 ? BUCKET_WIDTH : undefined }}
       onDragOver={onDragOver}
