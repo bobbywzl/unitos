@@ -10,11 +10,12 @@ import { keys } from "@/components/docs/keys";
 import { MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
 import {
-  DEFAULT_STYLES,
+  baseStyles,
   deepestHeading,
   replaceAllChanges,
   saveDefaultStyles,
   savedDefaultStyles,
+  styleBaseOf,
   styleFont,
   updateStyleToMatch,
   type NamedStyle,
@@ -84,9 +85,13 @@ export function styleOptions(editor: Editor, t: TFunc): { key: TKey; words: stri
 }
 
 /** A style's item drawn in the style, its size capped at 24 pt. */
-function preview(styles: Record<DocStyle, NamedStyle>, style: DocStyle): { style: CSSProperties; plain: boolean } {
+function preview(
+  styles: Record<DocStyle, NamedStyle>,
+  defaults: Record<DocStyle, NamedStyle>,
+  style: DocStyle,
+): { style: CSSProperties; plain: boolean } {
   const s = styles[style];
-  const plainColor = s.color === DEFAULT_STYLES[style].color;
+  const plainColor = s.color === defaults[style].color;
   return {
     style: {
       fontFamily: fontStack(styleFont(styles, style)),
@@ -129,7 +134,7 @@ export function StylesSelect({
         <>
           {menuStyles(deepestHeading(editor.state.doc)).map((s) => {
             const name = t(STYLE_LABEL[s]);
-            const look = preview(styles, s);
+            const look = preview(styles, baseStyles(styleBaseOf(editor.state.doc)), s);
             const combo = STYLE_KEYS[s];
             return (
               <MenuItem

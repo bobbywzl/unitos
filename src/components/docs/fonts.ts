@@ -21,12 +21,18 @@ export const DOCS_FONTS: DocsFont[] = [
   { name: "Amatic SC", fallback: "cursive", web: true, weights: W2 },
   { name: "Arial", fallback: "Arimo, 'Liberation Sans', Helvetica, sans-serif", web: false, weights: W2 },
   { name: "Calibri", fallback: "Carlito, sans-serif", web: false, weights: W2 },
+  // The reader's display face (globals.css --font-caprasimo, loaded with
+  // the app): the headings of a web page's or a Markdown file's import.
+  { name: "Caprasimo", fallback: "var(--font-caprasimo, serif)", web: true, weights: [400] },
   { name: "Cambria", fallback: "Caladea, serif", web: false, weights: W2 },
   { name: "Caveat", fallback: "cursive", web: true, weights: [400, 500, 600, 700] },
   { name: "Comfortaa", fallback: "sans-serif", web: true, weights: [300, 400, 500, 600, 700] },
   { name: "Comic Sans MS", fallback: "'Comic Neue', 'Comic Sans', cursive", web: false, weights: W2 },
   { name: "Courier New", fallback: "Cousine, 'Liberation Mono', monospace", web: false, weights: W2 },
   { name: "EB Garamond", fallback: "Garamond, serif", web: true, weights: [400, 500, 600, 700, 800] },
+  // The reader's text face (globals.css --font-figtree): the Normal text of
+  // a web page's or a Markdown file's import.
+  { name: "Figtree", fallback: "var(--font-figtree, system-ui), sans-serif", web: true, weights: [300, 400, 500, 600, 700, 800, 900] },
   { name: "Georgia", fallback: "Gelasio, serif", web: false, weights: W2 },
   { name: "Impact", fallback: "Anton, 'Arial Black', sans-serif", web: false, weights: [400] },
   { name: "Lexend", fallback: "sans-serif", web: true, weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },

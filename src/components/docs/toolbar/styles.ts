@@ -53,6 +53,55 @@ export const DEFAULT_STYLES: Record<DocStyle, NamedStyle> = {
   h6: { ...base, size: 11, color: "#666666", italic: true, spaceBefore: 12, spaceAfter: 4 },
 };
 
+/** The reader's look (SPEC.md §29 Named styles), the base of a web page's
+    and a Markdown file's import: the block reader's faces, sizes, line
+    height, and gaps — Figtree 17px (13 pt) at a 1.75 line height, a 16px
+    gap after a paragraph, the headings in Caprasimo at the reader's sizes
+    and margins (block-view.tsx HEADING_CLASSES, document-title.tsx). The
+    style lines multiply by 1.15 (namedStyleSheet), so 1.52 draws 1.75. */
+export const READER_STYLES: Record<DocStyle, NamedStyle> = {
+  normal: { ...base, font: "Figtree", size: 13, lineSpacing: 1.52, spaceAfter: 12 },
+  title: { ...base, font: "Caprasimo", size: 25, lineSpacing: 1, spaceAfter: 20 },
+  subtitle: { ...base, size: 15, color: "#666666", spaceAfter: 16 },
+  h1: { ...base, font: "Caprasimo", size: 19.5, lineSpacing: 1, spaceBefore: 30, spaceAfter: 9 },
+  h2: { ...base, font: "Caprasimo", size: 16.5, lineSpacing: 1, spaceBefore: 24, spaceAfter: 7.5 },
+  h3: { ...base, font: "Caprasimo", size: 15, lineSpacing: 1, spaceBefore: 18, spaceAfter: 7.5 },
+  h4: { ...base, font: "Caprasimo", size: 13.5, lineSpacing: 1, spaceBefore: 15, spaceAfter: 6 },
+  h5: { ...base, font: "Caprasimo", size: 13, lineSpacing: 1, spaceBefore: 15, spaceAfter: 6 },
+  h6: { ...base, font: "Caprasimo", size: 13, lineSpacing: 1, spaceBefore: 12, spaceAfter: 6 },
+};
+
+/** Which defaults a document's named styles start from: Google Docs' (a
+    blank document, a Word file's and a PDF's import, which store their
+    file's own look) or the reader's (a web page's and a Markdown file's
+    import, which have no look of their own). Stored on the doc node as
+    STYLE_BASE_ATTR; a document without it is Docs'. */
+export type StyleBase = "docs" | "reader";
+export const STYLE_BASE_ATTR = "namedStyleBase";
+
+export function styleBaseOf(doc: { attrs: Readonly<Record<string, unknown>> }): StyleBase {
+  return doc.attrs[STYLE_BASE_ATTR] === "reader" ? "reader" : "docs";
+}
+
+/** The base an import's kind gives it: the reader's for a web page's and a
+    Markdown or text file's import, Docs' for the rest. */
+export function importStyleBase(kind: string | null | undefined): StyleBase {
+  return kind === "url" || kind === "markdown" ? "reader" : "docs";
+}
+
+/** The rich text drawn on its base: a copy that names no base takes `base`.
+    Nothing is written: the attribute rides along in the page, and is stored
+    only with the reader's next save of their own edits. */
+export function withStyleBase<T extends { attrs?: Record<string, unknown> | null }>(doc: T, base: StyleBase): T {
+  if (base === "docs" || doc.attrs?.[STYLE_BASE_ATTR]) return doc;
+  return { ...doc, attrs: { ...doc.attrs, [STYLE_BASE_ATTR]: base } };
+}
+
+/** The defaults a base starts from. */
+export function baseStyles(base: StyleBase): Record<DocStyle, NamedStyle> {
+  return base === "reader" ? READER_STYLES : DEFAULT_STYLES;
+}
+
 /** The doc node's attribute that holds a style's changes. */
 export const STYLE_ATTR: Record<DocStyle, string> = {
   normal: "namedStyleNormal",
@@ -103,11 +152,12 @@ export function readChanges(doc: { attrs: Readonly<Record<string, unknown>> }): 
   return out;
 }
 
-/** The document's named styles: the defaults with its changes. */
+/** The document's named styles: its base's defaults with its changes. */
 export function readStyles(doc: { attrs: Readonly<Record<string, unknown>> }): Record<DocStyle, NamedStyle> {
   const changes = readChanges(doc);
+  const defaults = baseStyles(styleBaseOf(doc));
   const out = {} as Record<DocStyle, NamedStyle>;
-  for (const style of STYLE_ORDER) out[style] = { ...DEFAULT_STYLES[style], ...changes[style] };
+  for (const style of STYLE_ORDER) out[style] = { ...defaults[style], ...changes[style] };
   return out;
 }
 
@@ -127,10 +177,10 @@ export function blockStyle(node: PMNode): DocStyle {
   return docStyle === "title" || docStyle === "subtitle" ? docStyle : "normal";
 }
 
-/** A style's stored changes: the fields that differ from the default. An
-    import's named styles are stored so too (lib/docs/import.ts). */
-export function styleChanges(style: DocStyle, value: NamedStyle): StyleChanges {
-  const d = DEFAULT_STYLES[style];
+/** A style's stored changes: the fields that differ from the base's
+    default. An import's named styles are stored so too (lib/docs/import.ts). */
+export function styleChanges(style: DocStyle, value: NamedStyle, base: StyleBase = "docs"): StyleChanges {
+  const d = baseStyles(base)[style];
   const out: StyleChanges = {};
   if (value.font !== null && value.font !== (style === "normal" ? d.font : null)) out.font = value.font;
   if (value.size !== d.size) out.size = value.size;
@@ -270,7 +320,7 @@ function styleAtCaret(state: EditorState, style: DocStyle): NamedStyle {
 export function updateStyleToMatch(editor: Editor, style: DocStyle): void {
   const { state } = editor;
   const next = styleAtCaret(state, style);
-  const tr = setStyleChanges(state.tr, style, styleChanges(style, next));
+  const tr = setStyleChanges(state.tr, style, styleChanges(style, next, styleBaseOf(state.doc)));
   const $from = state.selection.$from;
   const block = $from.parent;
   if (block.isTextblock && blockStyle(block) === style) {
@@ -364,7 +414,9 @@ const STYLE_SELECTOR: Record<DocStyle, string> = {
     headings without a face of their own take them. A paragraph's own
     spacing and alignment still win: they are inline. */
 export function namedStyleSheet(doc: PMNode, root: string, full = false): string {
-  const changes = full ? readStyles(doc) : readChanges(doc);
+  // The page's own sheet draws Docs' defaults; a document on the reader's
+  // base draws every style in full.
+  const changes = full || styleBaseOf(doc) === "reader" ? readStyles(doc) : readChanges(doc);
   const rules: string[] = [];
   const rule = (selector: string, decls: (string | false | null | undefined)[]) => {
     const list = decls.filter(Boolean);
@@ -384,6 +436,14 @@ export function namedStyleSheet(doc: PMNode, root: string, full = false): string
     ];
     if (style === "normal") rule("", face);
     rule(STYLE_SELECTOR[style], style === "normal" ? paragraph : [...face, ...paragraph]);
+  }
+  // The reader's lists run line under line, and its tables' cells hold
+  // their words close: Normal text's gap goes after a whole list, not after
+  // each line, and never inside a cell. A paragraph's own spacing still wins.
+  if (styleBaseOf(doc) === "reader") {
+    const after = readStyles(doc).normal.spaceAfter;
+    rules.push(`${root} :is(li, td, th) p:not([data-doc-style]) { padding-bottom: 0 }`);
+    rules.push(`${root} > :is(ul, ol) { padding-bottom: ${after}pt }`);
   }
   if (rules.length > 0) rules.push(`${root} > :first-child { padding-top: 0 }`);
   return rules.join("\n");

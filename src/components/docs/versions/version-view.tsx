@@ -14,7 +14,7 @@ import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import { pageStore, useDrawnSetup, usePageState } from "@/components/docs/page/store";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
-import { namedStyleSheet } from "@/components/docs/toolbar/styles";
+import { namedStyleSheet, STYLE_BASE_ATTR, styleBaseOf, withStyleBase } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
 import { api, ApiError } from "@/lib/api";
 import { setVersionsOpen } from "@/lib/assistant/side-chat-open";
@@ -194,7 +194,9 @@ export function VersionView({
     if (!el || !doc || before === undefined) return;
     const schema = editor.schema;
     try {
-      const node = schema.nodeFromJSON(doc);
+      // A version kept before the document named its base draws on the
+      // base the page draws with.
+      const node = schema.nodeFromJSON(withStyleBase(doc, styleBaseOf(editor.state.doc)));
       // The oldest version has nothing before it to show changes against.
       const shown = showChanges && before ? markChanges(schema, node, schema.nodeFromJSON(before), color) : node;
       const html = DOMSerializer.fromSchema(schema).serializeFragment(shown.content);
@@ -271,7 +273,11 @@ export function VersionView({
     if (editor.isDestroyed) return;
     const node = editor.schema.nodeFromJSON(doc);
     const tr = editor.state.tr.replaceWith(0, editor.state.doc.content.size, node.content);
-    for (const [name, value] of Object.entries(node.attrs)) tr.setDocAttribute(name, value);
+    for (const [name, value] of Object.entries(node.attrs)) {
+      // A version that names no base keeps the base the page draws with.
+      if (name === STYLE_BASE_ATTR && value == null) continue;
+      tr.setDocAttribute(name, value);
+    }
     editor.view.dispatch(tr);
     onClose();
     editor.commands.focus("start");

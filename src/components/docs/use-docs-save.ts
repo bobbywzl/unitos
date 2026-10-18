@@ -5,6 +5,7 @@ import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
+import { STYLE_BASE_ATTR } from "@/components/docs/toolbar/styles";
 import { clearDocDraft, readDocDraft, writeDocDraft } from "@/lib/docs/drafts";
 import { mergeRichText } from "@/lib/docs/merge";
 import { compactRichText, newBlockId, type NullDefaults, type RichNode } from "@/lib/docs/schema";
@@ -203,6 +204,8 @@ function applyStored(editor: Editor, json: RichNode): void {
   // A step the schema would not take on the way: the whole text at once.
   if (!tr.doc.content.eq(next.content)) tr = editor.state.tr.replaceWith(0, doc.content.size, next.content);
   for (const [key, value] of Object.entries(next.attrs)) {
+    // A stored copy that names no base keeps the base the page draws with.
+    if (key === STYLE_BASE_ATTR && value == null) continue;
     if (JSON.stringify(doc.attrs[key]) !== JSON.stringify(value)) tr.setDocAttribute(key, value);
   }
   if (!tr.docChanged) return;

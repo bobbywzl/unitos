@@ -3,7 +3,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { firstFamily, loadFontInUse } from "@/components/docs/fonts";
 import { LineNumbers } from "@/components/docs/ext/line-numbers";
-import { namedStyleSheet, readChanges, STYLE_ATTR, STYLE_ORDER } from "@/components/docs/toolbar/styles";
+import { namedStyleSheet, readStyles, STYLE_ATTR, STYLE_BASE_ATTR, STYLE_ORDER } from "@/components/docs/toolbar/styles";
 import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 
 // The toolbar's extensions (SPEC.md §29): the named styles on the doc node,
@@ -76,8 +76,10 @@ export function facesInUse(doc: PMNode): Map<string, Set<number>> {
     }
     return false;
   });
-  for (const changes of Object.values(readChanges(doc))) {
-    if (changes.font && !faces.has(changes.font)) faces.set(changes.font, new Set());
+  // The named styles' faces: the document's changes and its base's own
+  // (the reader's: Figtree, Caprasimo).
+  for (const style of Object.values(readStyles(doc))) {
+    if (style.font && !faces.has(style.font)) faces.set(style.font, new Set());
   }
   return faces;
 }
@@ -86,9 +88,11 @@ const DocsToolbar = Extension.create({
   name: "docsToolbar",
 
   addGlobalAttributes() {
-    const styleAttrs = Object.fromEntries(
-      STYLE_ORDER.map((style) => [STYLE_ATTR[style], { default: null, rendered: false }]),
-    );
+    const styleAttrs = Object.fromEntries([
+      ...STYLE_ORDER.map((style) => [STYLE_ATTR[style], { default: null, rendered: false }]),
+      // The defaults the named styles start from (toolbar/styles.ts StyleBase).
+      [STYLE_BASE_ATTR, { default: null, rendered: false }],
+    ]);
     return [
       { types: ["doc"], attributes: styleAttrs },
       {

@@ -1,6 +1,6 @@
 import type { DocStyle } from "@/components/docs/extensions";
 import { listFormat, sameLevel } from "@/components/docs/toolbar/lists";
-import { DEFAULT_STYLES, STYLE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
+import { DEFAULT_STYLES, importStyleBase, STYLE_ATTR, STYLE_BASE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
   CAPTION_STYLES,
   DEFAULT_PAGE_SETUP,
@@ -1734,9 +1734,13 @@ class Converter {
     if (notes.length > 0) content.push({ type: "footnotes", content: notes });
     // The named styles the page's look set, stored as the page editor stores
     // a style's changes (components/docs/toolbar/styles.ts).
+    // A web page and a Markdown or text file bring no look of their own:
+    // their import draws on the reader's (StyleBase).
+    const base = importStyleBase(this.input.kind);
     const attrs: Record<string, unknown> = {};
+    if (base !== "docs") attrs[STYLE_BASE_ATTR] = base;
     for (const [style, look] of Object.entries(this.looks) as [DocStyle, NamedStyle][]) {
-      const changes = styleChanges(style, look);
+      const changes = styleChanges(style, look, base);
       if (Object.keys(changes).length > 0) attrs[STYLE_ATTR[style]] = JSON.stringify(changes);
     }
     const doc: RichNode = Object.keys(attrs).length > 0 ? { type: "doc", attrs, content } : { type: "doc", content };
