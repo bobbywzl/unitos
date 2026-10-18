@@ -54,6 +54,8 @@ import {
   subscribeSaved,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { tabAccount } from "@/lib/tab-account";
 import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
@@ -216,6 +218,22 @@ export function Workspace({
     enabled: true,
     accountId: collab.authOn ? collab.myId : null,
   });
+  // The open document is the one this project opens next time with no
+  // document in its address (SPEC.md §6, LastDocument). Fire and forget, as
+  // the reading position's save: a lost save opens the project on an older
+  // document, and loses no work. The tab's account rides along, so a tab the
+  // browser has since signed into another account saves nothing.
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    const account = tabAccount();
+    fetch(`/api/notebooks/${notebook.id}/last-document`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(account ? { [ACCOUNT_HEADER]: account } : {}) },
+      body: JSON.stringify({ documentId: activeDocumentId }),
+    }).catch(() => {
+      // offline, or the network dropped: the project opens the older document
+    });
+  }, [notebook.id, activeDocumentId]);
   const [collapsed, setCollapsed] = useState(false);
   // Set while the tray is folded for a floating note (below), so that fold is
   // undone when the note docks or closes.

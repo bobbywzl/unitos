@@ -228,7 +228,17 @@ export default async function NotebookPage(props: {
       noteEdits.get(nd.document.id)?.toISOString(),
     ]),
   }));
-  const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
+  // No document in the address (the dashboard's card, Back to the project):
+  // the document the account last had open here (SPEC.md §6, LastDocument),
+  // if the project still holds it; else the first document.
+  const lastId = doc
+    ? null
+    : ((await db.lastDocument.findUnique({
+        where: { userId_notebookId: { userId: user.id, notebookId } },
+        select: { documentId: true },
+      }))?.documentId ?? null);
+  const openId = doc ?? lastId;
+  const activeId = openId && attached.some((d) => d.id === openId) ? openId : (attached[0]?.id ?? null);
   // The address named a document this project does not hold (a note's jump
   // or a History row after Remove from this project, an old link): the
   // first document opens, and the reader says so (reader-panes.tsx). A

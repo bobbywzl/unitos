@@ -633,6 +633,21 @@ model ReadingPosition {
   @@index([documentId])
 }
 
+// The document an account last had open in a project (SPEC.md §6): a project
+// opened with no document in its address (/n/<id>, the dashboard's card)
+// opens this one, if the project still holds it; else its first document.
+// One row per account per project, replaced on every open. Soft references
+// (no foreign keys), like ReadingPosition.userId: a row whose project or
+// document is gone is skipped, never read as an error.
+model LastDocument {
+  userId     String
+  notebookId String
+  documentId String
+  at         DateTime @default(now())
+
+  @@id([userId, notebookId])
+}
+
 // A document kept for an account after the project that held it was
 // deleted (SPEC.md §6): the deleting owner's claim on each document only that
 // project held, written in the delete's transaction, so the document stays in
