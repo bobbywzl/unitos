@@ -1,3 +1,5 @@
+import { TimeIn } from "@/components/local-time";
+import { TIME_SLOT } from "@/lib/time-slot";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
@@ -40,10 +42,6 @@ type AccountRow = {
 };
 
 type Held = { projects: number; documents: number; notes: number };
-
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -145,8 +143,8 @@ export default async function AdminAccountsPage() {
                 </div>
                 {a.createdAt && a.lastSeenAt && (
                   <p className="mt-2 text-xs text-sand-500">
-                    {t("admin.accountCreated", { date: fmtDate(a.createdAt) })} ·{" "}
-                    {t("admin.accountLastSeen", { date: fmtDate(a.lastSeenAt) })}
+                    <TimeIn text={t("admin.accountCreated", { date: TIME_SLOT })} at={a.createdAt} dateOnly /> ·{" "}
+                    <TimeIn text={t("admin.accountLastSeen", { date: TIME_SLOT })} at={a.lastSeenAt} />
                   </p>
                 )}
                 {a.email !== null && (

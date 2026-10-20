@@ -422,8 +422,10 @@ function replayBody(record: QueuedWrite): unknown {
   const body = record.body;
   if (!body || typeof body !== "object" || !NOTE_WRITE.test(record.path)) return body;
   if (record.method === "DELETE") return body;
-  if ("source" in body || "addSource" in body) return { ...body, onSourceLost: "keep" };
-  return body;
+  // A note made offline is dated when it was written, not when it syncs.
+  const made = record.method === "POST" && record.path === "/api/notes" ? { writtenAt: new Date(record.queuedAt).toISOString() } : {};
+  if ("source" in body || "addSource" in body) return { ...body, ...made, onSourceLost: "keep" };
+  return { ...body, ...made };
 }
 
 /** Tell the page what a note write's answer says: a quote that lost its

@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useLang } from "@/components/lang-provider";
+import { TIME_SLOT } from "@/lib/time-slot";
 
 // A stored time drawn in the viewer's own time zone, with the zone named
 // ("Oct 20, 2026, 4:20 PM PDT"). A server page cannot know the viewer's
@@ -20,4 +21,17 @@ export function LocalTime({ at, dateOnly = false }: { at: Date | string; dateOnl
     : { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
   const text = new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", live ? options : { ...options, timeZone: "UTC" }).format(date);
   return <time dateTime={date.toISOString()}>{text}</time>;
+}
+
+/** A translated line with a time in it: `text` holds TIME_SLOT
+    (lib/time-slot.ts) where the time goes. */
+export function TimeIn({ text, at, dateOnly = false }: { text: string; at: Date | string; dateOnly?: boolean }) {
+  const [before, after = ""] = text.split(TIME_SLOT);
+  return (
+    <>
+      {before}
+      <LocalTime at={at} dateOnly={dateOnly} />
+      {after}
+    </>
+  );
 }

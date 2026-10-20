@@ -14,6 +14,9 @@ export type NotificationItem = {
   title: string;
   body: string; // markdown
   createdAt: string;
+  // A release's notification: createdAt is the release's day, at 00:00 UTC
+  // (lib/releases-server.ts), so it is read as a day in UTC.
+  release: boolean;
   // Kind "feedback": the feedback the reply answers. Null when that feedback
   // row is gone; the title then carries its message.
   feedback: { message: string } | null;
@@ -95,7 +98,7 @@ export function Notifications({ items }: { items: NotificationItem[] }) {
           <p className="mt-1.5 text-sm font-semibold text-sand-800">
             {n.kind === "feedback" ? t("works.feedbackReplyTitle") : n.title}
             <span className="ml-2 text-xs font-normal text-sand-500">
-              {new Date(n.createdAt).toLocaleDateString(dateLocale)}
+              {new Date(n.createdAt).toLocaleDateString(dateLocale, n.release ? { timeZone: "UTC" } : undefined)}
             </span>
           </p>
           <NotificationBody key={n.id}>

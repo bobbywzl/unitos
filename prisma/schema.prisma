@@ -52,6 +52,11 @@ model User {
   // last opened, so it waits ASK_AGAIN_MS before opening again.
   activeSeconds  Int       @default(0)
   billingAskedAt DateTime?
+  // When an admin last reset the account (lib/account-reset.ts): the account
+  // starts over as new from then (the welcome, the release notifications).
+  // Null = never reset since this column existed. createdAt stays the
+  // sign-up date.
+  resetAt      DateTime?
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   sessions     Session[]
@@ -744,6 +749,9 @@ model NotebookDocument {
   // §6): 0 first. Null = never placed by a drag; such rows list first,
   // newest edit first. A move into another folder clears it.
   position      Int?
+  // When the document was added to this project (Sort by Added). Null = added
+  // before this column existed: the document's own createdAt stands in.
+  addedAt       DateTime? @default(now())
 
   @@id([notebookId, documentId])
   @@index([documentId])

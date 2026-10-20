@@ -103,7 +103,9 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
         // The active time and the billing ask (lib/active-time.ts) start over.
         activeSeconds: 0,
         billingAskedAt: null,
-        createdAt: now,
+        // The account starts over as new from now; createdAt keeps the
+        // sign-up date.
+        resetAt: now,
         lastSeenAt: now,
       },
     });

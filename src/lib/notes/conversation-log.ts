@@ -85,7 +85,7 @@ export async function ensureConversationLog(
 ): Promise<ConversationLog | null> {
   const note = await db.note.findUnique({
     where: { id: noteId },
-    select: { derivationType: true, content: true, conversation: true, log: true },
+    select: { derivationType: true, content: true, conversation: true, log: true, updatedAt: true },
   });
   if (!note) return null;
   const turns = loggedTurns(note).slice(0, LOG_BATCH);
@@ -124,6 +124,10 @@ export async function ensureConversationLog(
       text: byMessage.get(i + 1) ?? logLine(m.content),
     })),
   };
-  await db.note.update({ where: { id: noteId }, data: { log } });
+  // The log is not an edit: the note keeps its time (Last edited, the
+  // assistant history, and the conversation's save check read it). A note
+  // changed since it was read keeps its own state; the next read writes the
+  // log again.
+  await db.note.updateMany({ where: { id: noteId, updatedAt: note.updatedAt }, data: { log, updatedAt: note.updatedAt } });
   return log;
 }

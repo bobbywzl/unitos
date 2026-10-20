@@ -1,3 +1,5 @@
+import { TimeIn } from "@/components/local-time";
+import { TIME_SLOT } from "@/lib/time-slot";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
@@ -42,7 +44,6 @@ export default async function AdminPage() {
   ]);
   // The model per role (lib/models.ts): the constant, the id called now,
   // and what the last model update found.
-  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
   const models = ROLE_ORDER.map((role) => {
     const row = modelRows.find((r) => r.role === role);
     return {
@@ -51,8 +52,8 @@ export default async function AdminPage() {
       defaultId: MODEL_ROLES[role].defaultId,
       modelId: row?.modelId ?? MODEL_ROLES[role].defaultId,
       previousModelId: row?.previousModelId ?? "",
-      checkedAt: row ? fmtDate(row.checkedAt) : null,
-      changedAt: row?.changedAt ? fmtDate(row.changedAt) : null,
+      checkedAt: row?.checkedAt ?? null,
+      changedAt: row?.changedAt ?? null,
       note: row?.note ?? "",
     };
   });
@@ -139,11 +140,17 @@ export default async function AdminPage() {
               </div>
               <div className="text-xs text-sand-600">
                 {m.modelId !== m.defaultId && `${t("admin.modelDefault", { id: m.defaultId })} · `}
-                {m.checkedAt
-                  ? t("admin.modelChecked", { date: m.checkedAt })
-                  : t("admin.modelNotChecked")}
-                {m.changedAt &&
-                  ` · ${t("admin.modelChanged", { date: m.changedAt, from: m.previousModelId })}`}
+                {m.checkedAt ? (
+                  <TimeIn text={t("admin.modelChecked", { date: TIME_SLOT })} at={m.checkedAt} />
+                ) : (
+                  t("admin.modelNotChecked")
+                )}
+                {m.changedAt && (
+                  <>
+                    {" · "}
+                    <TimeIn text={t("admin.modelChanged", { date: TIME_SLOT, from: m.previousModelId })} at={m.changedAt} />
+                  </>
+                )}
               </div>
               {m.note && <div className="text-xs text-sand-500">{m.note}</div>}
             </div>

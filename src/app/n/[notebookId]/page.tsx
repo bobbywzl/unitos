@@ -222,7 +222,9 @@ export default async function NotebookPage(props: {
     // Re-parse of an edited import asks first (document-bar.tsx).
     importEdited: editedSinceImport(nd.document),
     kind: kindOf(nd),
-    addedAt: nd.document.createdAt.toISOString(),
+    // When it was added to this project; a row older than that column reads
+    // as the document's own creation.
+    addedAt: (nd.addedAt ?? nd.document.createdAt).toISOString(),
     editedAt: documentEditedAt(nd.document.createdAt.toISOString(), [
       nd.document.richTextSavedAt?.toISOString(),
       noteEdits.get(nd.document.id)?.toISOString(),

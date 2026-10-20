@@ -74,7 +74,9 @@ export default async function Home() {
   // The releases that shipped since the account was made land as update
   // notifications on this open (SPEC.md §18, lib/releases.ts).
   const lang = await currentLang();
-  await ensureReleaseNotifications(user.id, user.createdAt, lang);
+  // The account's start: its sign-up, or the admin's last reset of it.
+  const startedAt = user.resetAt ?? user.createdAt;
+  await ensureReleaseNotifications(user.id, startedAt, lang);
   // The account's open notifications from the admin (SPEC.md §18), newest
   // first; a release's in this language only (one card per release).
   const notifications = await db.notificationRecipient.findMany({
@@ -88,6 +90,7 @@ export default async function Home() {
           title: true,
           body: true,
           createdAt: true,
+          releaseKey: true,
           // Kind "feedback": the feedback the reply answers, shown above it.
           feedback: { select: { message: true } },
         },
@@ -167,15 +170,15 @@ export default async function Home() {
       <div className="pt-6 sm:pt-10">
         {/* The welcome flow and the nudges are for a new account: no project
             yet, and created within NEW_ACCOUNT_DAYS (welcome-flow.tsx).
-            welcomeKey is the account's birth: an admin reset stamps createdAt
-            anew, so a reset account is new again and the splash shows again.
+            welcomeKey is the account's start: an admin reset stamps resetAt,
+            so a reset account is new again and the splash shows again.
             An account older than that — one that signed up before the flow
             existed — is never welcomed and never nudged. */}
         <WelcomeFlow
           firstWork={works.length === 0 && collabRows.length === 0}
-          createdAt={user.createdAt.toISOString()}
+          createdAt={startedAt.toISOString()}
           firstName={user.name.trim().split(/\s+/)[0] || user.name}
-          welcomeKey={`${user.id}:${user.createdAt.toISOString()}`}
+          welcomeKey={`${user.id}:${startedAt.toISOString()}`}
         />
         <Notifications
           items={notifications.map(({ notification: n }) => ({
@@ -184,6 +187,7 @@ export default async function Home() {
             title: n.title,
             body: n.body,
             createdAt: n.createdAt.toISOString(),
+            release: n.releaseKey !== null,
             feedback: n.feedback,
           }))}
         />

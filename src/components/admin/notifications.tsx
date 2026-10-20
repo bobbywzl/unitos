@@ -18,6 +18,7 @@ export type SentNotification = {
   title: string;
   body: string;
   createdAt: string;
+  release: boolean; // a release's notification: createdAt is its day at 00:00 UTC
   recipients: string[]; // recipient names
   dismissed: number;
 };
@@ -232,7 +233,11 @@ export function AdminNotifications({
               <li key={n.id} className="rounded-2xl bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-sand-600">
                   <NotificationKindChip kind={n.kind} />
-                  <span>{new Date(n.createdAt).toLocaleString(dateLocale)}</span>
+                  <span>
+                    {n.release
+                      ? new Date(n.createdAt).toLocaleDateString(dateLocale, { timeZone: "UTC" })
+                      : new Date(n.createdAt).toLocaleString(dateLocale)}
+                  </span>
                   <span>· {t("admin.sentRecipients", { n: n.recipients.length })}</span>
                   <span className="ml-auto">{t("admin.sentDismissed", { n: n.dismissed })}</span>
                 </div>

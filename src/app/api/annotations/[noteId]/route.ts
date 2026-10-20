@@ -69,14 +69,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (access instanceof NextResponse) return access;
   const note = await db.note.findUnique({
     where: { id: noteId },
-    select: { derivationType: true, color: true, section: { select: { hidden: true, notebookId: true } } },
+    select: { derivationType: true, color: true, updatedAt: true, section: { select: { hidden: true, notebookId: true } } },
   });
   if (!note?.section.hidden || annotationKind(note) !== "comment") {
     return NextResponse.json({ error: t("api.onlyCommentsResolved") }, { status: 400 });
   }
   await db.note.update({
     where: { id: noteId },
-    data: { resolvedById: data.resolved ? access.user.id : null },
+    // Resolve is not an edit: the comment keeps its time (Last edited).
+    data: { resolvedById: data.resolved ? access.user.id : null, updatedAt: note.updatedAt },
   });
   await bumpNotebook(note.section.notebookId);
   return NextResponse.json({ ok: true });

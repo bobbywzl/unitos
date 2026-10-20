@@ -11,9 +11,10 @@ import { startNudges } from "@/components/nudges";
 // (components/nudges.tsx): small floating captions, one at a time, that
 // point at the next thing to try, for this account alone. localStorage keeps
 // the splash to one showing per account: the stored value is welcomeKey — the
-// account's id and createdAt — so a second account on this browser is welcomed
-// too, and so is an account an admin reset (the reset stamps createdAt anew).
-// firstWork gates the splash to accounts with no project yet, and createdAt
+// account's id and its start (the sign-up, or the admin's last reset) — so a
+// second account on this browser is welcomed too, and so is an account an
+// admin reset. firstWork gates the splash to accounts with no project yet,
+// and createdAt (the account's start)
 // to new ones — created within NEW_ACCOUNT_DAYS; an older account, one that
 // signed up before the flow existed, is never welcomed and never nudged.
 

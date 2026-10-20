@@ -23,7 +23,7 @@ function isEmptyRichText(doc: RichNode): boolean {
 export async function keepCurrentVersion(documentId: string, name: string | null) {
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: { richText: true, richTextRev: true, richTextSavedAt: true, richTextSavedBy: true },
+    select: { richText: true, richTextRev: true, richTextSavedAt: true, richTextSavedBy: true, createdAt: true },
   });
   if (!document?.richText) return null;
   if (isEmptyRichText(document.richText as unknown as RichNode)) return "empty" as const;
@@ -35,7 +35,8 @@ export async function keepCurrentVersion(documentId: string, name: string | null
       richText: document.richText as Prisma.InputJsonValue,
       userId: document.richTextSavedBy,
       name,
-      savedAt: document.richTextSavedAt ?? new Date(),
+      // Never saved since it was made: the text is as old as the document.
+      savedAt: document.richTextSavedAt ?? document.createdAt,
     },
     update: name ? { name } : {},
     select: VERSION_FIELDS,

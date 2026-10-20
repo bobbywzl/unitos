@@ -49,6 +49,27 @@ async function userIdOf(
   return null;
 }
 
+/** Whether an event is older than what the account holds: the same
+    subscription, with a period that ends before the one stored. Stripe
+    retries an event for days, so an old one can land after a newer one; it
+    must not move the period's end back, nor the tier with it. */
+async function staleFor(userId: string, subscriptionId: string, periodEnd: Date): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { subscriptionId: true, subscriptionEndsAt: true } });
+  return Boolean(user && subscriptionId && user.subscriptionId === subscriptionId && user.subscriptionEndsAt && periodEnd < user.subscriptionEndsAt);
+}
+
+/** The line of an invoice that says what it buys: the subscription's own
+    line, not a proration (an upgrade's invoice credits the unused time of the
+    old price first); an invoice of prorations alone takes its largest
+    charge. */
+function mainLine(invoice: Stripe.Invoice): Stripe.InvoiceLineItem | undefined {
+  const lines = invoice.lines.data;
+  const proration = (l: Stripe.InvoiceLineItem) =>
+    Boolean(l.parent?.subscription_item_details?.proration || l.parent?.invoice_item_details?.proration);
+  const latest = (list: Stripe.InvoiceLineItem[]) => [...list].sort((a, b) => b.period.end - a.period.end)[0];
+  return latest(lines.filter((l) => !proration(l))) ?? [...lines].sort((a, b) => b.amount - a.amount)[0];
+}
+
 const PAID: readonly Stripe.Subscription.Status[] = ["active", "trialing"];
 const ENDED: readonly Stripe.Subscription.Status[] = ["canceled", "unpaid", "incomplete_expired"];
 
@@ -61,6 +82,7 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
   const customerId = idOf(sub.customer);
 
   if (PAID.includes(sub.status)) {
+    if (await staleFor(userId, sub.id, periodEnd)) return;
     const before = await db.user.findUnique({ where: { id: userId }, select: { subscriptionId: true } });
     await db.user.update({
       where: { id: userId },
@@ -98,6 +120,7 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
   }
   // past_due, paused, incomplete: the tier holds until Stripe ends the
   // subscription. The period's end is kept current.
+  if (await staleFor(userId, sub.id, periodEnd)) return;
   await db.user.updateMany({
     where: { id: userId, subscriptionId: sub.id },
     data: { subscriptionEndsAt: periodEnd },
@@ -111,7 +134,7 @@ export async function recordInvoice(invoice: Stripe.Invoice): Promise<string | n
   if (invoice.status !== "paid" || invoice.amount_paid === 0) return null;
   const details = invoice.parent?.subscription_details ?? null;
   const subscriptionId = idOf(details?.subscription);
-  const line = invoice.lines.data[0];
+  const line = mainLine(invoice);
   const priceId = idOf(line?.pricing?.price_details?.price);
   const tier = tierOf(details?.metadata, priceId);
   const userId = await userIdOf(details?.metadata, invoice.customer);
@@ -135,7 +158,9 @@ export async function recordInvoice(invoice: Stripe.Invoice): Promise<string | n
   });
   // A paid invoice keeps the tier on: the same write the subscription
   // event makes, so a late subscription event cannot leave a paid account
-  // gated.
+  // gated. An old invoice that lands late is kept as its receipt and changes
+  // nothing on the account.
+  if (await staleFor(userId, subscriptionId, periodEnd)) return purchase.id;
   await db.user.update({
     where: { id: userId },
     data: {

@@ -62,11 +62,25 @@ const createSchema = z
     // offline queue replaying Add to notes, a quote dropped on a section).
     // Unset, the create is refused whole.
     onSourceLost: z.enum(["refuse", "keep"]).optional(),
+    // When the note was written: the offline queue sends the time the note
+    // was queued, so a note written offline keeps its own date when it syncs
+    // (WRITTEN_AT_MAX_AGE_MS back at most; never later than now).
+    writtenAt: z.string().datetime().optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
     message: "Provide content or fromAnnotationId, not both",
   });
+
+/** The oldest writtenAt a create takes: older reads as now. */
+const WRITTEN_AT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** The time a new note is dated: writtenAt when it is in range, else now. */
+function writtenTime(writtenAt: string | undefined): Date {
+  const now = Date.now();
+  const at = writtenAt ? Date.parse(writtenAt) : NaN;
+  return Number.isFinite(at) && at <= now && at >= now - WRITTEN_AT_MAX_AGE_MS ? new Date(at) : new Date(now);
+}
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
 export async function POST(req: Request) {
@@ -213,6 +227,7 @@ export async function POST(req: Request) {
   }
 
   const count = await db.note.count({ where: { sectionId } });
+  const written = writtenTime(data.writtenAt);
   const note = await db.note.create({
     data: {
       ...(data.id ? { id: data.id } : {}),
@@ -223,6 +238,8 @@ export async function POST(req: Request) {
       ...(derivationType ? { derivationType } : {}),
       createdById: access.user.id,
       documentId,
+      createdAt: written,
+      updatedAt: written,
       // Top: before every sibling; the normalize below makes the orders 0..n again.
       order: data.top ? -1 : count,
       ...(sources.length > 0 ? { sources: { create: sources } } : {}),

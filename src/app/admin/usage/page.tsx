@@ -1,3 +1,5 @@
+import { TimeIn } from "@/components/local-time";
+import { TIME_SLOT } from "@/lib/time-slot";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/admin-auth";
@@ -411,7 +413,11 @@ type HorizonRow = { key: string; days: number; cost: number; calls: number; toke
 // all-time row says when the record starts.
 function HorizonTable({ t, rows, firstDay }: { t: TFunc; rows: HorizonRow[]; firstDay: Date }) {
   const label = (row: HorizonRow) =>
-    row.key === "all" ? t("admin.usageHorizonAll", { date: firstDay.toISOString().slice(0, 10) }) : t("admin.usageHorizonDays", { n: row.key });
+    row.key === "all" ? (
+      <TimeIn text={t("admin.usageHorizonAll", { date: TIME_SLOT })} at={firstDay} dateOnly />
+    ) : (
+      t("admin.usageHorizonDays", { n: row.key })
+    );
   return (
     <div className="overflow-x-auto rounded-2xl bg-card p-4 shadow-soft">
       <p className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("admin.usageHorizons")}</p>

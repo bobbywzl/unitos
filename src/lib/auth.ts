@@ -81,6 +81,7 @@ export const LOCAL_USER: User = {
   subscriptionEndsAt: null,
   activeSeconds: 0,
   billingAskedAt: null,
+  resetAt: null,
   createdAt: new Date(0),
   lastSeenAt: new Date(0),
 };

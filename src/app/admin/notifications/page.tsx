@@ -32,6 +32,7 @@ export default async function AdminNotificationsPage() {
     title: n.title,
     body: n.body,
     createdAt: n.createdAt.toISOString(),
+    release: n.releaseKey !== null,
     recipients: n.recipients.map((r) => nameOf.get(r.userId) ?? r.userId),
     dismissed: n.recipients.filter((r) => r.dismissedAt).length,
   }));
