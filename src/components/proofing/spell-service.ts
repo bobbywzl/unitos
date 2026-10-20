@@ -1,5 +1,5 @@
 import type NSpell from "nspell";
-import { rankedSuggestions, readsAsEnglish, SPELL_SAMPLE, wordsInText, type TextWord } from "@/lib/spell-words";
+import { checkWords, rankedSuggestions, readsAsEnglish, SPELL_SAMPLE, wordsInText, type TextWord } from "@/lib/spell-words";
 
 // The spelling check's client (SPEC.md §29, typing): the page editor's and
 // the note editor's red squiggles ask it which words of a paragraph are
@@ -7,16 +7,21 @@ import { rankedSuggestions, readsAsEnglish, SPELL_SAMPLE, wordsInText, type Text
 // runs in a worker (spell.worker.ts); where a worker cannot start, nspell
 // runs here, built once.
 
-type Ask = { kind: "check"; paragraphs: string[][] } | { kind: "suggest"; word: string };
+type Ask = { kind: "check"; paragraphs: { word: string; opens: boolean }[][] } | { kind: "suggest"; word: string };
 export type SpellRequest = Ask & { id: number };
 export type SpellReply =
   | { id: number; failed: true }
   | { id: number; suggestions: string[] }
-  | { id: number; results: { bad: number[]; known: number }[] };
+  | { id: number; results: { bad: [number, string | null][]; known: number }[] };
 
-/** A paragraph's spelling: its misspelled words, and whether it reads as
-    English (a paragraph that does not gets no red squiggle). */
-export type ParagraphSpelling = { english: boolean; misspelled: TextWord[] };
+/** A misspelled word the check is sure of, and the word it surely means
+    (lib/spell-words.ts, sureFix). */
+export type SureMisspelling = TextWord & { fix: string };
+
+/** A paragraph's spelling: the misspelled words that get a red squiggle,
+    and whether it reads as English (a paragraph that does not gets no red
+    squiggle). */
+export type ParagraphSpelling = { english: boolean; misspelled: SureMisspelling[] };
 
 type Pending = (reply: SpellReply) => void;
 
@@ -72,19 +77,8 @@ async function ask(request: Ask): Promise<SpellReply> {
   const spell = await loadHere();
   if (!spell) return { id, failed: true };
   if (request.kind === "suggest") return { id, suggestions: spell.suggest(request.word) };
-  return {
-    id,
-    results: request.paragraphs.map((words) => {
-      const bad: number[] = [];
-      let known = 0;
-      words.forEach((word, i) => {
-        if (spell.correct(word)) {
-          if (i < SPELL_SAMPLE) known++;
-        } else bad.push(i);
-      });
-      return { bad, known };
-    }),
-  };
+  const correct = (word: string) => spell.correct(word);
+  return { id, results: request.paragraphs.map((words) => checkWords(words, correct)) };
 }
 
 /** The spelling of each paragraph, its words as wordsInText reads them (or
@@ -95,23 +89,25 @@ export async function checkParagraphs(
   accepted: ReadonlySet<string>,
 ): Promise<ParagraphSpelling[] | null> {
   const words = paragraphs.map((p) => p.words ?? wordsInText(p.text));
-  const reply = await ask({ kind: "check", paragraphs: words.map((list) => list.map((w) => w.word)) });
+  const reply = await ask({ kind: "check", paragraphs: words.map((list) => list.map((w) => ({ word: w.word, opens: w.opens }))) });
   if (!("results" in reply)) return null;
   return reply.results.map(({ bad, known }, i) => {
     const list = words[i];
-    const misspelled: TextWord[] = [];
+    const misspelled: SureMisspelling[] = [];
     let k = known;
-    for (const at of bad) {
+    for (const [at, fix] of bad) {
       if (accepted.has(list[at].word.toLowerCase())) {
         if (at < SPELL_SAMPLE) k++;
-      } else misspelled.push(list[at]);
+      } else if (fix) misspelled.push({ ...list[at], fix });
     }
     return { english: readsAsEnglish(paragraphs[i].text, list.length, k), misspelled };
   });
 }
 
-/** Up to five spelling suggestions for a word, the likeliest first. */
-export async function spellingSuggestions(word: string): Promise<string[]> {
+/** Up to five spelling suggestions for a word, the likeliest first: the
+    word it surely means (`fix`) heads them. */
+export async function spellingSuggestions(word: string, fix?: string): Promise<string[]> {
   const reply = await ask({ kind: "suggest", word });
-  return "suggestions" in reply ? rankedSuggestions(word, reply.suggestions) : [];
+  const ranked = "suggestions" in reply ? rankedSuggestions(word, reply.suggestions) : [];
+  return fix ? [fix, ...ranked.filter((s) => s !== fix)].slice(0, 5) : ranked;
 }

@@ -359,6 +359,16 @@ export function DocsToolbar({
     undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), get on() { return historyOn(target, false); } },
     redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), get on() { return historyOn(target, true); } },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
+    // Spelling and grammar check: the panel that steps through the squiggles (typing/proofing-panel.tsx).
+    check: {
+      id: "spelling-grammar",
+      key: "docsTyping.spellingAndGrammarCheck",
+      Icon: SpellcheckIcon,
+      where: "tools",
+      words: ["spell check", "spellcheck", "grammar check", "proofread", "check spelling", "拼写检查", "语法检查"],
+      run: () => fireDocs(editor, TYPING_EVENT.proofingPanel),
+      on: !inHeader,
+    },
     spelling: { id: "spelling", key: "docsTyping.showSpelling", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
     // Voice typing (SPEC.md §29, typing): opens the microphone box at the left of the page.
     voice: { id: "voice-typing", key: "docsTyping.voiceTyping", combo: "Mod+Shift+S", Icon: VoiceTypingIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.voice), on: !inHeader },
@@ -647,6 +657,7 @@ export function DocsToolbar({
           fold: 10,
           content: (
             <>
+              {button(A.check)}
               {button(A.voice)}
               {button(A.paint, paint.active)}
               {zoomBox}

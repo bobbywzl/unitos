@@ -29,7 +29,7 @@ const PAINT_PAUSE_MS = 200;
 const GRAMMAR_MIN_WORDS = 3;
 
 type Line = { el: Element; text: string; at: (from: number, to: number) => Range | null };
-type Mark = { range: Range; kind: "spelling"; word: string } | { range: Range; kind: "grammar"; issue: GrammarIssue; text: string };
+type Mark = { range: Range; kind: "spelling"; word: string; fix: string } | { range: Range; kind: "grammar"; issue: GrammarIssue; text: string };
 
 type Registry = { add(range: Range): void; delete(range: Range): boolean };
 type HighlightApi = { highlights: Map<string, Registry> & { set(name: string, h: Registry): void }; Highlight: new () => Registry };
@@ -189,7 +189,7 @@ export function NoteProofing({ target }: { target: RefObject<HTMLElement | null>
           if (!range) continue;
           // The word the caret is ending is not marked until the caret leaves it.
           if (caret && caret.anchorNode === range.endContainer && caret.anchorOffset === range.endOffset) continue;
-          add({ range, kind: "spelling", word: w.word });
+          add({ range, kind: "spelling", word: w.word, fix: w.fix });
         }
       });
       paintGrammar(lines);
@@ -260,7 +260,7 @@ export function NoteProofing({ target }: { target: RefObject<HTMLElement | null>
         if (!mark) return setOpen(null);
         setOpen({ mark, suggestions: null });
         if (mark.kind === "spelling") {
-          void spellingSuggestions(mark.word).then((suggestions) => setOpen((o) => (o && o.mark === mark ? { ...o, suggestions } : o)));
+          void spellingSuggestions(mark.word, mark.fix).then((suggestions) => setOpen((o) => (o && o.mark === mark ? { ...o, suggestions } : o)));
         }
       }, 0);
     };

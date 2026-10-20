@@ -129,6 +129,11 @@ const en = {
   ignore: "Ignore",
   removeWords: "Remove “{words}”",
   noSpellingSuggestions: "No spelling suggestions",
+  // The Spelling and grammar panel (typing/proofing-panel.tsx).
+  spellingAndGrammarCheck: "Spelling and grammar check",
+  spellingAndGrammar: "Spelling and grammar",
+  noProofing: "No spelling or grammar suggestions.",
+  proofingOff: "Spelling and grammar suggestions are turned off.",
   dictionary: "Dictionary",
   // The reader's own words (typing/spelling.ts, typing/dictionary-dialog.tsx).
   addToDictionary: "Add to dictionary",
@@ -292,6 +297,10 @@ const zh: Record<keyof typeof en, string> = {
   ignore: "忽略",
   removeWords: "删除“{words}”",
   noSpellingSuggestions: "没有拼写建议",
+  spellingAndGrammarCheck: "拼写和语法检查",
+  spellingAndGrammar: "拼写和语法",
+  noProofing: "没有拼写或语法建议。",
+  proofingOff: "拼写建议和语法建议已关闭。",
   dictionary: "词典",
   addToDictionary: "添加到词典",
   ignoreAll: "全部忽略",

@@ -92,8 +92,9 @@ function Counter({ count, current, query }: { count: number; current: number; qu
   );
 }
 
-/** Where the bar sits: under the page editor's header, 44 px from its right edge. */
-function useBarPosition(editor: Editor, open: boolean) {
+/** Where the bar sits: under the page editor's header, 44 px from its right
+    edge (the Spelling and grammar panel sits there too). */
+export function useBarPosition(editor: Editor, open: boolean) {
   const [pos, setPos] = useState<{ top: number; right: number; left: number } | null>(null);
   useLayoutEffect(() => {
     if (!open) return;

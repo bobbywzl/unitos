@@ -22,6 +22,7 @@ import { setTypingPrefs, subscribeTypingPrefs, typingPrefs } from "@/components/
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
 import { setProofing } from "@/components/docs/typing/proofing";
 import { ProofingLayer } from "@/components/docs/typing/proofing-layer";
+import { ProofingPanel } from "@/components/docs/typing/proofing-panel";
 import { acceptedWords, setAcceptedWords } from "@/components/docs/typing/spelling";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
@@ -29,7 +30,8 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
 // Preferences, the keyboard shortcuts, voice typing, the spelling and
-// grammar switches and their squiggles (typing/proofing.ts), the personal
+// grammar switches and their squiggles (typing/proofing.ts), the Spelling
+// and grammar panel (typing/proofing-panel.tsx), the personal
 // dictionary and the words ignored in the document (typing/spelling.ts),
 // and images dropped anywhere on the page
 // (typing/drop.ts); in Search the
@@ -215,6 +217,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
+  const [proofingOpen, setProofingOpen] = useState(false);
 
   // The reader's own words, the personal dictionary's and this document's
   // ignored ones: the page's spelling check passes them (typing/spelling.ts).
@@ -298,6 +301,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       [TYPING_EVENT.spelling, toggleSpelling],
       [TYPING_EVENT.grammar, toggleGrammar],
       [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],
+      [TYPING_EVENT.proofingPanel, () => setProofingOpen((o) => !o)],
     ];
     window.addEventListener("keydown", onKey);
     for (const [name, on] of events) view.dom.addEventListener(name, on);
@@ -353,6 +357,8 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       <VoiceTyping editor={editor} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
       <AutocorrectBubble editor={editor} />
       <ProofingLayer editor={editor} documentId={documentId} />
+      {/* The squiggles draw in Editing and Suggesting only: the panel too. */}
+      {proofingOpen && editing && <ProofingPanel editor={editor} documentId={documentId} premium={premium} onClose={() => setProofingOpen(false)} />}
     </>
   );
 }

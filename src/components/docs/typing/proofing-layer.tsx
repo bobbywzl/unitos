@@ -19,7 +19,7 @@ type Open = { squiggle: Squiggle; suggestions: string[] | null };
 
 /** Put `replacement` where `expected` stands, with its marks: one undo step.
     Nothing happens when the words there changed. */
-function replaceWords(editor: Editor, from: number, to: number, expected: string, replacement: string): void {
+export function replaceWords(editor: Editor, from: number, to: number, expected: string, replacement: string): void {
   const { state } = editor;
   if (to > state.doc.content.size || state.doc.textBetween(from, to) !== expected) return;
   const marks = state.doc.resolve(from).marksAcross(state.doc.resolve(to)) ?? undefined;
@@ -28,7 +28,7 @@ function replaceWords(editor: Editor, from: number, to: number, expected: string
   editor.view.focus();
 }
 
-const expectedOf = (s: Squiggle) => (s.kind === "grammar" ? s.issue.wrong : s.word);
+export const expectedOf = (s: Squiggle) => (s.kind === "grammar" ? s.issue.wrong : s.word);
 
 export function ProofingLayer({ editor, documentId }: { editor: Editor; documentId: string }) {
   const [open, setOpen] = useState<Open | null>(null);
@@ -48,7 +48,7 @@ export function ProofingLayer({ editor, documentId }: { editor: Editor; document
         if (!squiggle) return setOpen(null);
         setOpen({ squiggle, suggestions: null });
         if (squiggle.kind === "spelling") {
-          void spellingSuggestions(squiggle.word).then((suggestions) =>
+          void spellingSuggestions(squiggle.word, squiggle.fix).then((suggestions) =>
             setOpen((o) => (o && o.squiggle === squiggle ? { ...o, suggestions } : o)),
           );
         }

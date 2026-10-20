@@ -31,6 +31,7 @@ export const TYPING_EVENT = {
   voice: "docs:voice",
   spelling: "docs:spelling",
   grammar: "docs:grammar",
+  proofingPanel: "docs:spelling-and-grammar",
   personalDictionary: "docs:personal-dictionary",
   wordCount: "docs:word-count",
 } as const;

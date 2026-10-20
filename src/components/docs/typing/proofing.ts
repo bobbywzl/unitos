@@ -8,7 +8,8 @@ import { checkParagraphs } from "@/components/proofing/spell-service";
 import { GRAMMAR_PAUSE_MS, type GrammarIssue } from "@/lib/grammar";
 
 // The page editor's squiggles (SPEC.md §29, typing). A red squiggle under
-// each misspelled English word of the whole document, and a blue one under
+// each misspelled English word of the whole document whose fix the check
+// is sure of (lib/spell-words.ts, sureFix), and a blue one under
 // the grammar and wording problems of English paragraphs, in Editing and
 // Suggesting; none in Viewing. Both are decorations: nothing in the text
 // changes until the reader accepts on a squiggle's card
@@ -42,7 +43,7 @@ type ProofState = {
 
 /** What a squiggle's card shows. */
 export type Squiggle =
-  | { kind: "spelling"; from: number; to: number; word: string }
+  | { kind: "spelling"; from: number; to: number; word: string; fix: string }
   | { kind: "grammar"; from: number; to: number; issue: GrammarIssue; text: string };
 
 const proofingKey = new PluginKey<ProofState>("docsProofing");
@@ -206,11 +207,28 @@ export function squiggleAt(state: EditorState, pos: number): Squiggle | null {
     return { kind: "grammar", from: grammar.from, to: grammar.to, issue: grammar.spec.issue, text };
   }
   const spell = hit(s.spell);
-  if (spell?.spec.word !== undefined) return { kind: "spelling", from: spell.from, to: spell.to, word: spell.spec.word };
+  if (spell?.spec.word !== undefined) return { kind: "spelling", from: spell.from, to: spell.to, word: spell.spec.word, fix: spell.spec.fix };
   return null;
 }
 
 const isNode = (d: Decoration) => (d.spec as { node?: boolean }).node === true;
+
+/** Every squiggle of the document, in order (the Spelling and grammar
+    panel, typing/proofing-panel.tsx). */
+export function allSquiggles(state: EditorState): Squiggle[] {
+  const s = proofingKey.getState(state);
+  if (!s) return [];
+  const list: Squiggle[] = [];
+  for (const d of s.grammar.find()) {
+    const $pos = state.doc.resolve(d.from);
+    const text = $pos.parent.isTextblock && $pos.depth > 0 ? paragraphText($pos.parent, $pos.before()).text : d.spec.text;
+    list.push({ kind: "grammar", from: d.from, to: d.to, issue: d.spec.issue, text });
+  }
+  for (const d of s.spell.find()) {
+    if (!isNode(d) && d.spec.word !== undefined) list.push({ kind: "spelling", from: d.from, to: d.to, word: d.spec.word, fix: d.spec.fix });
+  }
+  return list.filter((q) => q.from < q.to).sort((a, b) => a.from - b.from || (a.kind === "grammar" ? -1 : 1));
+}
 
 /** A paragraph's text as the grammar check reads it — without the words a
     suggestion removes — and where each stretch of it stands on the page. */
@@ -359,7 +377,7 @@ class Driver {
           this.held = { pos: item.pos, to: w.to };
           continue;
         }
-        decos.push(Decoration.inline(w.from, w.to, { class: "docs-misspelled" }, { word: w.word, inclusiveStart: false, inclusiveEnd: false }));
+        decos.push(Decoration.inline(w.from, w.to, { class: "docs-misspelled" }, { word: w.word, fix: w.fix, inclusiveStart: false, inclusiveEnd: false }));
       }
       return { pos: item.pos, node: item.node, decos };
     });

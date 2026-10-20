@@ -1,6 +1,6 @@
 import nspell from "nspell";
 import type { SpellReply, SpellRequest } from "@/components/proofing/spell-service";
-import { SPELL_SAMPLE } from "@/lib/spell-words";
+import { checkWords } from "@/lib/spell-words";
 
 // The spelling check off the page's thread (SPEC.md §29, typing): nspell
 // with the English Hunspell dictionary (public/spelling), built here once on
@@ -30,19 +30,8 @@ scope.onmessage = async (e: MessageEvent<SpellRequest>) => {
   if (!spell) reply = { id: request.id, failed: true };
   else if (request.kind === "suggest") reply = { id: request.id, suggestions: spell.suggest(request.word) };
   else {
-    reply = {
-      id: request.id,
-      results: request.paragraphs.map((words) => {
-        const bad: number[] = [];
-        let known = 0;
-        words.forEach((word, i) => {
-          if (spell.correct(word)) {
-            if (i < SPELL_SAMPLE) known++;
-          } else bad.push(i);
-        });
-        return { bad, known };
-      }),
-    };
+    const correct = (word: string) => spell.correct(word);
+    reply = { id: request.id, results: request.paragraphs.map((words) => checkWords(words, correct)) };
   }
   scope.postMessage(reply);
 };

@@ -598,6 +598,7 @@
 
 @media print {
   .docs-findbar,
+  .docs-proof-panel,
   .docs-replace,
   .docs-wc-anchor,
   .docs-voice,
@@ -636,4 +637,53 @@
 }
 .docs-prose li[data-mark-font]::marker {
   font-family: var(--docs-mark-font);
+}
+
+/* ── The Spelling and grammar panel: top right, under the toolbar ─────── */
+.docs-proof-panel {
+  position: fixed;
+  z-index: 60;
+  width: min(340px, calc(100vw - 32px));
+  border-radius: 16px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-proof-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 4px 16px;
+}
+.docs-proof-panel-head h2 {
+  flex: 1;
+  min-width: 0;
+  font: 500 16px/24px var(--docs-ui-font);
+}
+.docs-proof-panel-count {
+  padding: 0 4px;
+  color: var(--docs-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.docs-proof-panel-body {
+  padding: 4px 16px 12px;
+}
+.docs-proof-panel-kind {
+  margin-bottom: 6px;
+  padding: 0 4px;
+  color: var(--docs-muted);
+  font-size: 12px;
+}
+.docs-proof-panel-empty {
+  padding: 4px;
+  color: var(--docs-muted);
+}
+.docs-proof-panel-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--docs-tb-outline);
 }
