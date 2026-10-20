@@ -4,6 +4,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { DigestRebuild } from "@/components/admin/digest-rebuild";
 import { Fold } from "@/components/admin/fold";
+import { LocalTime } from "@/components/local-time";
 
 // The digest store, per user: every corpus → every document → its annotations,
 // distillations, extractions, summaries — plus the corpus's notes. Document
@@ -15,10 +16,6 @@ import { Fold } from "@/components/admin/fold";
 
 function fmtChars(n: number): string {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n);
-}
-
-function fmtTime(d: Date): string {
-  return `${d.toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 
 function clamp(s: string, max = 600): string {
@@ -192,7 +189,7 @@ function DocumentCard({ doc, t }: { doc: DigestDocument; t: TFunc }) {
 // A corpus out of view is not styled or laid out until it scrolls near
 // (content-visibility): the page holds every document of every corpus, and
 // styling and laying out all of them took 700 ms on each visit.
-function CorpusCard({ row, t }: { row: DigestRow; t: TFunc }) {
+function CorpusCard({ row, changedAt, t }: { row: DigestRow; changedAt: Date | undefined; t: TFunc }) {
   const { parts, counts } = row;
   return (
     <details
@@ -202,7 +199,15 @@ function CorpusCard({ row, t }: { row: DigestRow; t: TFunc }) {
       <summary className="cursor-pointer">
         <span className="text-base font-semibold text-sand-800">{parts.corpusTitle}</span>
         <span className="ml-2 text-xs text-sand-500">
-          {t("admin.built", { time: fmtTime(row.builtAt) })}
+          {/* When the content last changed is the date that matters; the build
+              time is only when the stored digest was made, and a stale digest
+              is made again when this page loads. */}
+          {changedAt && (
+            <>
+              {t("admin.contentChanged")} <LocalTime at={changedAt} /> ·{" "}
+            </>
+          )}
+          {t("admin.builtLabel")} <LocalTime at={row.builtAt} />
           {row.rebuilt ? ` ${t("admin.rebuiltOnLoad")}` : ""}
         </span>
         <span className="mt-1.5 flex flex-wrap gap-1.5">
@@ -255,9 +260,12 @@ export type DigestAccount = { email: string; name: string; picture: string };
 
 export async function DigestStore({
   rows,
+  changedAt,
   accounts,
 }: {
   rows: DigestRow[];
+  // notebookId → when its content last changed (contentChangedAt).
+  changedAt: Map<string, Date>;
   // userId → account identity, from the User table. The local reader has none.
   accounts: Record<string, DigestAccount>;
 }) {
@@ -326,7 +334,7 @@ export async function DigestStore({
             </div>
             <div className="space-y-3 p-4">
               {userRows.map((row) => (
-                <CorpusCard key={row.notebookId} row={row} t={t} />
+                <CorpusCard key={row.notebookId} row={row} changedAt={changedAt.get(row.notebookId)} t={t} />
               ))}
               {userRows.length === 0 && (
                 <p className="text-sm text-sand-600">{t("admin.noCorpora")}</p>

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { ensureAllDigests } from "@/lib/digest/ensure";
+import { contentChangedAt } from "@/lib/digest/fingerprint";
 import { serverT } from "@/lib/i18n/server";
 import { DigestStore } from "@/components/admin/digest-store";
 
@@ -14,7 +15,7 @@ export default async function AdminDigestPage() {
   if (!(await isAdmin())) redirect("/admin/login");
 
   const t = await serverT();
-  const [rows, users] = await Promise.all([ensureAllDigests(), db.user.findMany()]);
+  const [rows, changedAt, users] = await Promise.all([ensureAllDigests(), contentChangedAt(), db.user.findMany()]);
   const accounts = Object.fromEntries(
     users.map((u) => [u.id, { email: u.email, name: u.name, picture: u.picture }]),
   );
@@ -25,7 +26,7 @@ export default async function AdminDigestPage() {
         <h1 className="text-[28px]">{t("admin.digest")}</h1>
         <p className="text-sm text-sand-600">{t("admin.digestDesc")}</p>
       </header>
-      <DigestStore rows={rows} accounts={accounts} />
+      <DigestStore rows={rows} changedAt={changedAt} accounts={accounts} />
     </main>
   );
 }

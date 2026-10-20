@@ -130,3 +130,35 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
   }
   return out;
 }
+
+// When each corpus's content last changed, from the times its rows keep: the
+// corpus itself (title, profile), its notes and annotations, its removals
+// (NotebookEvent), and its documents' edits, links, saves, transcripts, and
+// creation. The admin digest page shows it beside the build time, which is
+// only when the stored digest was last made. A change no row keeps a time
+// for (a document attached, a section added) does not move it.
+export async function contentChangedAt(notebookIds?: string[]): Promise<Map<string, Date>> {
+  const ids = notebookIds && notebookIds.length > 0 ? notebookIds : null;
+  const where = (column: Prisma.Sql) => (ids ? Prisma.sql`WHERE ${column} IN (${Prisma.join(ids)})` : Prisma.empty);
+  const rows = await db.$queryRaw<{ nid: string; m: Date | null }[]>(Prisma.sql`
+    SELECT nid, max(m) AS m FROM (
+      SELECT id AS nid, "updatedAt" AS m FROM "Notebook" ${where(Prisma.sql`id`)}
+      UNION ALL
+      SELECT s."notebookId", max(n."updatedAt") FROM "Note" n JOIN "Section" s ON n."sectionId" = s.id
+        ${where(Prisma.sql`s."notebookId"`)} GROUP BY 1
+      UNION ALL
+      SELECT "notebookId", max("createdAt") FROM "NotebookEvent" ${where(Prisma.sql`"notebookId"`)} GROUP BY 1
+      UNION ALL
+      SELECT nd."notebookId", max(greatest(d."createdAt", d."richTextSavedAt", v."transcriptStartedAt",
+                                           (SELECT max(e."createdAt") FROM "BlockEdit" e WHERE e."documentId" = d.id),
+                                           (SELECT max(l."createdAt") FROM "DocLink" l WHERE l."fromDocumentId" = d.id)))
+        FROM "NotebookDocument" nd
+        JOIN "Document" d ON d.id = nd."documentId"
+        LEFT JOIN "VideoAsset" v ON v."documentId" = d.id
+        ${where(Prisma.sql`nd."notebookId"`)} GROUP BY 1
+    ) changes
+    GROUP BY nid`);
+  const out = new Map<string, Date>();
+  for (const r of rows) if (r.m) out.set(r.nid, r.m);
+  return out;
+}
