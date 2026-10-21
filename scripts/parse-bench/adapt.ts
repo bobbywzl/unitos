@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily, fontStack } from "@/components/docs/fonts";
 import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
-import { readStyles, sizeInPt, type NamedStyle } from "@/components/docs/toolbar/styles";
+import { readStyles, sizeInPt, styleBaseOf, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { captionMathOf, type RichMark, type RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 import { parseRegion, type Region } from "@/lib/video/types";
@@ -56,7 +56,14 @@ export type DocBlock = RefBlock & {
 export type Side = "top" | "right" | "bottom" | "left";
 /** A document as the model holds it. `fonts`: a reference's fonts by role;
     a candidate's body font, the size its other roles are measured against. */
-export type Doc = { blocks: DocBlock[]; fonts?: Fonts };
+/** The look an import draws its spacing in (the reader's look,
+    components/docs/toolbar/styles.ts READER_STYLES; lib/docs/import.ts
+    spaceAfter): after, the gap under every paragraph in points; apart,
+    how much wider than it a page's gap must be to stay; scale, the page's
+    points in the reader's (Normal text's size over the body's). The
+    spacing metric judges the import by it (metrics.ts spacingScores). */
+export type SpacingLook = { after: number; apart: number; scale: number };
+export type Doc = { blocks: DocBlock[]; fonts?: Fonts; spacingLook?: SpacingLook };
 export type Pages = [number, number] | undefined;
 type Look = Omit<Span, "text">;
 type Item = Extract<RefBlock, { kind: "list" }>["items"][number];
@@ -742,6 +749,8 @@ class ImportReader {
     printed: PrintedNote[] = [],
     private readonly media = new Map<string, string>(),
     private readonly kind?: "pdf" | "docx",
+    /** The document draws on the reader's base (styles.ts StyleBase). */
+    private readonly readerBase = false,
   ) {
     this.inRange = inRangeOf(pages);
     this.unmarked = printed.filter((note) => note.label === "" && note.words.length > 0).map((note) => note.words);
@@ -809,9 +818,12 @@ class ImportReader {
     return alignValue(node.attrs?.textAlign) ?? alignValue(this.styles[style].align);
   }
 
-  /** The space the page editor draws under and over a block, in points: its own, else its named style's. */
-  private spacingOf(node: RichNode | undefined, style: DocStyle): { after: number; before: number } {
-    const own = (key: "spaceAfter" | "spaceBefore") => (typeof node?.attrs?.[key] === "number" ? (node.attrs[key] as number) : this.styles[style][key]);
+  /** The space the page editor draws under and over a block, in points:
+      its own, else its named style's; on the reader's base a list's line
+      and a cell's paragraph draw none of the style's (namedStyleSheet). */
+  private spacingOf(node: RichNode | undefined, style: DocStyle, inList = false): { after: number; before: number } {
+    const own = (key: "spaceAfter" | "spaceBefore") =>
+      typeof node?.attrs?.[key] === "number" ? (node.attrs[key] as number) : inList && this.readerBase ? 0 : this.styles[style][key];
     return { after: own("spaceAfter"), before: own("spaceBefore") };
   }
 
@@ -1043,7 +1055,7 @@ class ImportReader {
         else if (children[lead]) this.words(children[lead], into);
         if (into.hasText) {
           const first = children[lead]?.type === "paragraph" ? children[lead] : undefined;
-          const space = this.spacingOf(first, "normal");
+          const space = this.spacingOf(first, "normal", true);
           looks.push({ align: alignValue(first?.attrs?.textAlign), after: space.after, before: space.before });
           const checked = item.attrs?.checked === true;
           // A bullet line draws a bullet, or no marker where its level's bullet is empty (a bibliography's
@@ -1158,7 +1170,9 @@ class ImportReader {
     `printed`: the reference's footnotes, whose marks the import's take;
     `media`: a Word figure's html by its media id (richTextFromImport's
     figures); `kind`: the file the import came from. */
-export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[], shown?: TitleShown, media?: Map<string, string>, kind?: "pdf" | "docx"): Doc {
+/** bodySize: the page's body size in points (ParsedDocument.bodyFont), for
+    the spacing look an import on the reader's base is judged by. */
+export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[], shown?: TitleShown, media?: Map<string, string>, kind?: "pdf" | "docx", bodySize?: number): Doc {
   const headings = new Set<string>();
   const visit = (node: RichNode) => {
     if (node.type === "heading") headings.add(wordsOf(textOf(node)).map((w) => w.w).join(" "));
@@ -1167,7 +1181,8 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
   visit(doc);
   headings.delete("");
   const styles = readStyles({ attrs: doc.attrs ?? {} });
-  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings, shown, printed, media, kind);
+  const readerBase = styleBaseOf({ attrs: doc.attrs ?? {} }) === "reader";
+  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings, shown, printed, media, kind, readerBase);
   for (const node of doc.content ?? []) reader.node(node, false);
   reader.settle();
   const blocks = reader.blocks;
@@ -1183,7 +1198,12 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
     const next = blocks[i + 1];
     if ((block.kind === "paragraph" || block.kind === "list") && block.spaceAfter !== undefined && next) block.spaceAfter += reader.spaceBefore.get(next) ?? 0;
   });
-  return { blocks: contentsLists(blocks, reader.entryDepth), fonts: { body: reader.faceOf({ type: "paragraph" }, "normal") } };
+  // An import on the reader's base draws the reader's gap under every
+  // paragraph and keeps the page's where it is wider (lib/docs/import.ts
+  // spaceAfter, pageSpace): the spacing metric judges it so.
+  const look: SpacingLook | undefined =
+    readerBase && bodySize && bodySize > 0 ? { after: styles.normal.spaceAfter, apart: 2, scale: styles.normal.size / bodySize } : undefined;
+  return { blocks: contentsLists(blocks, reader.entryDepth), fonts: { body: reader.faceOf({ type: "paragraph" }, "normal") }, ...(look ? { spacingLook: look } : {}) };
 }
 
 /** The converter writes a contents list as one paragraph per entry, each a

@@ -1,4 +1,4 @@
-import { dropChars, isMathText, type Doc, type DocBlock } from "./adapt";
+import { dropChars, isMathText, type Doc, type DocBlock, type SpacingLook } from "./adapt";
 import { mathLeaves, mathTokens, normLabel, sequenceSimilarity, textMathTokens } from "./math";
 import type { Font, FontRole, Fonts, RefBlock, Span } from "./model";
 import { garblesOf, wordsOf, type Garble } from "./text";
@@ -112,7 +112,7 @@ export type MathItem = {
   /** An equation shown as an image: the glyph text read from it. */
   image?: string;
 };
-export type Flat = { blocks: DocBlock[]; units: Unit[]; toks: Tok[]; math: MathItem[]; unitsOf: number[][] };
+export type Flat = { blocks: DocBlock[]; units: Unit[]; toks: Tok[]; math: MathItem[]; unitsOf: number[][]; spacingLook?: SpacingLook };
 
 type Row = Extract<RefBlock, { kind: "table" }>["rows"][number];
 
@@ -213,7 +213,7 @@ function textColor(doc: Doc, block: DocBlock): string | undefined {
 
 /** A document as units, words, and formulas in reading order. */
 export function flatten(doc: Doc): Flat {
-  const flat: Flat = { blocks: doc.blocks, units: [], toks: [], math: [], unitsOf: [] };
+  const flat: Flat = { blocks: doc.blocks, units: [], toks: [], math: [], unitsOf: [], ...(doc.spacingLook ? { spacingLook: doc.spacingLook } : {}) };
   doc.blocks.forEach((block, b) => {
     flat.unitsOf.push([]);
     const breaks = (unit: number, shift = 0) => (block.breaks ?? []).filter((x) => x.unit === unit).map((x) => x.at + shift);
@@ -1699,11 +1699,21 @@ function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | nu
     block whose candidate says no space (a parse that measured none there;
     the import always draws one) is not counted here. A page may space a
     checklist's items or a list's paragraphs 4 to 6 pt apart where the page
-    editor drew them tight. */
+    editor drew them tight. An import on the reader's base (cand.spacingLook)
+    is judged by the gap that look gives the page's: the page's gap, in the
+    reader's measure, where it is wider than the reader's by `apart`, else
+    the reader's; before a heading the heading's own space is the gap, and
+    the block is not counted. */
 function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
   let total = 0;
   let right = 0;
   const misses: PropertyMiss[] = [];
+  const look = cand.spacingLook;
+  const drawn = (want: number) => {
+    if (!look) return want;
+    const scaled = Math.round(want * look.scale * 2) / 2;
+    return scaled >= look.after + look.apart ? scaled : look.after;
+  };
   const judge = (rb: number, want: number, got: number | undefined, what: string) => {
     total++;
     if (got !== undefined && nearPoints(got, want)) right++;
@@ -1714,7 +1724,8 @@ function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | 
     const cb = al.owner[rb];
     const other = cb >= 0 ? cand.blocks[cb] : null;
     const said = other?.kind === "paragraph" || other?.kind === "list" ? other.spaceAfter : undefined;
-    if (block.spaceAfter !== undefined && said !== undefined && al.owner[rb + 1] !== cb) judge(rb, block.spaceAfter, said, "after");
+    const beforeHeading = look !== undefined && ref.blocks[rb + 1]?.kind === "heading";
+    if (block.spaceAfter !== undefined && said !== undefined && al.owner[rb + 1] !== cb && !beforeHeading) judge(rb, drawn(block.spaceAfter), said, "after");
     if (block.kind === "list" && block.itemSpace !== undefined) judge(rb, block.itemSpace, other?.kind === "list" ? (other.itemSpace ?? 0) : undefined, "between items");
   });
   return { score: total > 0 ? right / total : null, misses };

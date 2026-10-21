@@ -283,7 +283,12 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // A title the parse takes from a later page is scored with that page.
   const pdfPath = path.replace(/\.docx$/i, ".pdf");
   const shown = pages && pages[0] > 1 && existsSync(pdfPath) ? laterTitle(pdfTextOf(pdfPath, pages), pdfTextOf(pdfPath, [1, 1])) : undefined;
-  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media, /\.docx$/i.test(path) ? "docx" : "pdf") : { blocks: [] } };
+  const docs = {
+    parse: fromParse(parsed, pages, shown),
+    import: parsed.richText
+      ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media, /\.docx$/i.test(path) ? "docx" : "pdf", parsed.bodyFont?.size)
+      : { blocks: [] },
+  };
   if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
   result.formulas = { parse: formulasByPage(flatten(docs.parse)), ...(parsed.richText ? { import: formulasByPage(flatten(docs.import)) } : {}) };
@@ -346,7 +351,9 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
     const imported = flatten(docs.import);
     const placed = linesOfUnits(result.pdf, imported);
     const look = lookScores(imported, { page: parsed.pageSize, setup: parsed.pageSetup, word: word ? wordBorders(path) : undefined, rich: parsed.richText, parse: docs.parse, pdf: result.pdf, placed, path: pdfPath });
-    const importLayout = layoutScores(result.pdf, imported, placed, { drawn: docs.import.fonts?.body.shape, face, labels, pictures, ink });
+    // An import on the reader's base draws the reader's face whatever the
+    // page's (lib/docs/import.ts): its face is not judged.
+    const importLayout = layoutScores(result.pdf, imported, placed, { drawn: docs.import.spacingLook ? undefined : docs.import.fonts?.body.shape, face, labels, pictures, ink });
     result.freeImport = freeScores(result.pdf, imported, result.glyphs?.import, word, look, importLayout);
   }
   since("free", t0);
