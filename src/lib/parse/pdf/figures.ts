@@ -432,7 +432,13 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // picture beside it, joined the picture, and the bullets under the line
   // read as the picture's labels: a PowerPoint deck's p. 9 lost its
   // bullets). A rule pairs with a picture when half of it lies over the
-  // picture.
+  // picture, or when it runs from the picture to another picture: a
+  // diagram's spoke (parse loop finding: a hub diagram's top and bottom
+  // circles, joined to the hub by vertical spokes, stayed out of the
+  // figure, and their labels read as a paragraph and a caption; the
+  // diagonal spokes, no rules, had joined the other five).
+  const images = parts.filter((part) => part.image).map((part) => part.box);
+  const inPicture = (x: number, y: number, b: Box) => x >= b.x1 - 2 && x <= b.x2 + 2 && y >= b.y1 - 2 && y <= b.y2 + 2;
   const apart = (p: Part, q: Part) => {
     const [rule, picture] = p.thin && q.image ? [p.box, q.box] : q.thin && p.image ? [q.box, p.box] : [null, null];
     if (!rule || !picture) return false;
@@ -441,7 +447,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const at = across ? (rule.y1 + rule.y2) / 2 : (rule.x1 + rule.x2) / 2;
     const within = across ? at >= picture.y1 && at <= picture.y2 : at >= picture.x1 && at <= picture.x2;
     const over = within ? Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)) : 0;
-    return over < (a2 - a1) * 0.5;
+    if (over >= (a2 - a1) * 0.5) return false;
+    const ends: [number, number][] = across ? [[rule.x1, at], [rule.x2, at]] : [[at, rule.y1], [at, rule.y2]];
+    const spoke = ends.some(([x, y], k) => inPicture(x, y, picture) && images.some((other) => other !== picture && inPicture(ends[1 - k][0], ends[1 - k][1], other)));
+    return !spoke;
   };
   for (const cell of cells.values()) {
     for (let a = 0; a < cell.length; a++) {
