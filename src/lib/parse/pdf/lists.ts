@@ -311,11 +311,17 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
       mark.family !== "box" &&
       gap > next.size * ctx.leading * 1.5 &&
       (item.lines.length === 1 ? after !== undefined && runOf[j + 1] === -1 && comesBack(next, after) : !hangs);
+    // A slide sets its bullets far apart: the same bullet at the item's
+    // marker, up to three and a half lines under the item, is the list's
+    // next item (parse loop finding: a NASA deck's four bullets, 18 pt
+    // and 49 pt apart, read as four lists).
+    const sameBullet =
+      mark !== null && mark.family === "bullet" && mark.text === item.marker.text && Math.abs((drawn ?? next.x) - item.markerX) <= next.size * 0.3;
     const spaced =
       !paragraphs &&
       (gap <= next.size * ctx.leading * 2.2 ||
       (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2) ||
-      (spacing.length === 0 && inSequence && gap <= next.size * ctx.leading * 3.5));
+      (spacing.length === 0 && (inSequence || sameBullet) && gap <= next.size * ctx.leading * 3.5));
     if (mark && !wrap && spaced && joinsList(items, next, mark, drawn ?? next.x)) {
       spacing.push(gap);
       items.push(itemOf(next, mark, drawn ?? next.x));
