@@ -21,6 +21,9 @@ import {
   SUGGEST_MODEL,
   SVG_CHART_MODEL,
   VISION_MODEL,
+  GEMINI_FLASH,
+  CLAUDE_SONNET_5_5,
+  KIMI_ROUTING,
   VISUALIZE_MODEL,
   VOICE_MODEL,
   ORGANIZE_MODEL,
@@ -244,7 +247,7 @@ export async function featureModelId(feature: Feature): Promise<string> {
   // the assistant, and every tool — when Kimi K3 has its key. KIMI_K3 is
   // the kimi role's default id, so the bimonthly model update still moves
   // it. A call outside a request (cron) reads English and keeps its model.
-  if ((await currentLang()) === "zh" && modelConfigured(KIMI_K3)) return KIMI_K3;
+  if (KIMI_ROUTING && (await currentLang()) === "zh" && modelConfigured(KIMI_K3)) return KIMI_K3;
   const row = (await rows())[feature];
   if (row) return row;
   const id = FEATURE_DEFAULTS[feature];
@@ -257,6 +260,28 @@ export async function featureModelId(feature: Feature): Promise<string> {
     (Kimi K3) — GLM takes text alone. */
 export async function pictureFeature(feature: Feature): Promise<Feature> {
   return isGlmModel(await resolveModelId(await featureModelId(feature))) ? "vision" : feature;
+}
+
+// The models a failed call runs again on, in order: the first with its key
+// that is not the one that failed. A call that carries a picture needs a
+// model that reads pictures (Gemini, Claude, Kimi); a text call takes GLM
+// first, the cheapest.
+const PICTURE_FALLBACKS = [GEMINI_FLASH, CLAUDE_SONNET_5_5, ...(KIMI_ROUTING ? [KIMI_K3] : [])];
+const TEXT_FALLBACKS = [GLM_5_3, ...(KIMI_ROUTING ? [KIMI_K3] : []), GEMINI_FLASH, CLAUDE_SONNET_5_5];
+
+/** The model a streamed call runs again on when its model failed before
+    any text came (a provider's outage, its balance spent: Moonshot refused
+    every Kimi K3 call at a negative balance, and Circle & ask answered
+    nothing), or null when none is left. The gateway's own fallbacks
+    (litellm/config.yaml) run first under the gateway; this one runs
+    without it. */
+export async function fallbackCall(failedId: string, effort: Effort, picture: boolean): Promise<ModelCall | null> {
+  const failed = await resolveModelId(failedId);
+  for (const id of picture ? PICTURE_FALLBACKS : TEXT_FALLBACKS) {
+    if ((await resolveModelId(id)) === failed || !modelConfigured(id)) continue;
+    return modelCall(id, effort);
+  }
+  return null;
 }
 
 /** The feature's model at this effort, and the id called. */

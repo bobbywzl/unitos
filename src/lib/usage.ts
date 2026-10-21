@@ -108,17 +108,26 @@ export function computeCostUsd(model: string, t: TokenCounts): number {
   );
 }
 
-/** The AI SDK's usage shape → plain token counts. */
+/** The AI SDK's usage shape → plain token counts. The SDK's inputTokens is
+    every input token, the cache's reads and writes included: the plain
+    input is what is left after them (noCacheTokens where the provider
+    reports it). Counting inputTokens whole and the cache reads beside it
+    priced every cached token twice, at the input price and at the cache
+    price: a call on a cached document cost more here than the provider
+    billed. */
 export function sdkTokens(usage: {
   inputTokens?: number;
   outputTokens?: number;
-  inputTokenDetails?: { cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  inputTokenDetails?: { noCacheTokens?: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
 }): TokenCounts {
+  const cacheRead = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWrite = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
+  const input = usage.inputTokenDetails?.noCacheTokens ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite);
   return {
-    inputTokens: usage.inputTokens ?? 0,
+    inputTokens: input,
     outputTokens: usage.outputTokens ?? 0,
-    cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
   };
 }
 

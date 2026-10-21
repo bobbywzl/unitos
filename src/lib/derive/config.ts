@@ -26,10 +26,12 @@ export const GLM_5_3 = "glm-5.3";
 export const GLM_5_3_FLASH = "glm-5.3-flash";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5_5 = "claude-opus-5-5";
-// GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
-// a figure, a page image, a picture attached to the assistant, a video
-// frame — goes to Kimi K3 instead, whatever the feature's model.
-export const VISION_MODEL = KIMI_K3;
+// Kimi K3 is off: Moonshot refused every call at a balance of zero (20 Oct
+// 2026, exceeded_current_quota_error), and Circle & ask answered nothing.
+// The features it served run elsewhere (VISION_MODEL, DISTILL below, the
+// Chinese reader's rule in lib/feature-models.ts, the fallbacks) until this
+// is true again.
+export const KIMI_ROUTING = false;
 // The assistant with Web on runs on GLM 5.3, the same model as with Web
 // off. The search follows the model that answers (lib/kimi.ts): Z.ai's Web
 // Search API under GLM, Moonshot's web-search formula under Kimi K3 — which
@@ -37,6 +39,12 @@ export const VISION_MODEL = KIMI_K3;
 export const WEB_SEARCH_MODEL = GLM_5_3;
 // The voice command (SPEC.md §6) runs on Claude Sonnet 5.5 (VOICE_MODEL below).
 export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
+// GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
+// a figure, a page image, a picture attached to the assistant, a video
+// frame — goes to the vision model instead, whatever the feature's model:
+// Claude Sonnet 5.5, which reads small print and numbers in a figure at
+// two fifths of Opus 5.5's price (Kimi K3 while KIMI_ROUTING).
+export const VISION_MODEL = KIMI_ROUTING ? KIMI_K3 : CLAUDE_SONNET_5_5;
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
@@ -81,8 +89,9 @@ export const SVG_CHART_EFFORT: ClaudeEffort = "high";
 // Model per derivation type (SPEC.md §2). One place to change. GLM 5.3 for
 // the tools that reason over a passage or answer the reader; GLM 5.3 Flash
 // for the readings, which find and copy passages into structure. Extract
-// (DISTILL) runs on Kimi K3: a question against the whole document, and
-// the quotes have to be copied exactly. Define runs on GLM 5.3 Flash: a
+// (DISTILL) runs on GLM 5.3 (Kimi K3 while KIMI_ROUTING): a question
+// against the whole document, and the quotes have to be copied exactly.
+// Define runs on GLM 5.3 Flash: a
 // definition is one sentence, two at most, like the glossary's, and the
 // reader waits for it with the toolbar open.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
@@ -93,7 +102,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SUMMARIZE: GLM_5_3,
   SYNTHESIS: GEMINI_3_8_FLASH,
   FIND: GLM_5_3_FLASH,
-  DISTILL: KIMI_K3, // Extract: the reader's question and the quotes that answer it
+  DISTILL: KIMI_ROUTING ? KIMI_K3 : GLM_5_3, // Extract: the reader's question and the quotes that answer it
   FORMALIZE: GLM_5_3,
   ASK: GLM_5_3,
   COMPARE: GLM_5_3,
