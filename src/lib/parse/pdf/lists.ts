@@ -386,7 +386,22 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
       item.bodyX > item.markerX + next.size * 0.5 &&
       Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
       prev.y - next.y <= next.size * ctx.leading * 1.3;
-    if (under || hanging || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
+    // An item's line that ends in a word, with no stop, leaves the item
+    // unfinished: an unmarked line one pitch under it, at the marker where
+    // the item's wraps stand left of the marker (the Federal Register sets
+    // its bullets at the first-line indent and its wraps at the column's
+    // edge), goes on with the item though the line above stopped short
+    // (parse loop finding: "(Codex) Maximum" over "Residue Levels (MRLs)."
+    // read as the item and a paragraph).
+    const insetWraps = item.lines.slice(1).some((l) => l.x < item.markerX - next.size * 0.3);
+    const unfinished =
+      mark === null &&
+      !next.display &&
+      insetWraps &&
+      /\p{L}$/u.test(prev.text.trim()) &&
+      Math.abs(next.x - item.markerX) <= next.size * 0.3 &&
+      prev.y - next.y <= next.size * ctx.leading * 1.3;
+    if (under || hanging || unfinished || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
       item.lines.push(next);
       j++;
       continue;
