@@ -25,7 +25,7 @@ import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, joinOnPage, mergeAcrossPages, notesAfterDisplays, shiftSpansInto } from "@/lib/parse/pdf/merge";
 import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
-import { embeddedGlyphNames } from "@/lib/parse/pdf/programs";
+import { embeddedGlyphNames, embeddedInkOfFace } from "@/lib/parse/pdf/programs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
@@ -63,6 +63,9 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 
 /** pages: the PDF's pages the blocks come from, 1-based (the reader's
     choice at the add); absent or empty, every page. */
+// A font whose name says its weight: its name is believed over its glyphs.
+const WEIGHT_WORD_RE = /bold|black|heavy|light|regular|roman|medium|book|semi|demi|thin|ultra|extra|^CM|^LM|^SF|KaTeX/i;
+
 export type PdfParseOptions = { pages?: number[] };
 
 // A choice of fewer pages than this reads the pages nearest it too, until
@@ -98,6 +101,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const flagsByFont = new Map<string, FontFlags>();
   const unnamedFonts = new Set<string>();
   const realNames = new Map<string, string>();
+  const faceLetters = new Map<string, number>();
   let layerChars = 0;
 
   for (const pageNumber of read) {
@@ -175,35 +179,56 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // page: TeX draws none (columns.ts markSpaces).
     const drawsSpaces = !isTexPage(drawing.glyphs);
     const glyphText = glyphTexts(drawing.glyphs);
+    const realNameOf = (fontName: string): string | null => {
+      const known = realNames.get(fontName);
+      if (known !== undefined) return known;
+      if (unnamedFonts.has(fontName)) return null;
+      let realName: string | null = null;
+      try {
+        const font = page.commonObjs.get(fontName) as { name?: string } | null;
+        realName = font?.name ?? null;
+      } catch {
+        realName = null;
+      }
+      if (realName !== null) realNames.set(fontName, realName);
+      if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
+      return realName;
+    };
+    // The face: the name without its subset prefix and a cut's suffix
+    // (Advent's "AdvOTea1a7398+fb" is AdvOTea1a7398's ligatures).
+    const faceOf = (fontName: string): string | undefined => realNameOf(fontName)?.replace(/^[A-Z]{6}\+/, "").replace(/\+[0-9a-f]{2}$/i, "") || undefined;
+    // The document's main text face: the face that sets the most letters
+    // on the pages read so far. A run upright in another face, outside
+    // math and code, is set apart by its face (Flags.faced).
+    for (const raw of textItems) {
+      const face = faceOf(String(raw.fontName ?? ""));
+      if (face) faceLetters.set(face, (faceLetters.get(face) ?? 0) + (raw.str.match(/\p{L}/gu)?.length ?? 0));
+    }
+    const mainFace = [...faceLetters].sort((a, b) => b[1] - a[1])[0]?.[0];
+    // A face whose name says no weight is bold when its glyphs fill their
+    // boxes well past the main face's (programs.ts embeddedInkOfFace):
+    // Advent 3B2 names a bold face by a hash with no weight in it, and
+    // its descriptor says StemV 0 (parse loop finding: a Nature
+    // Communications paper's bold leads "Performance on CNNs." read as
+    // plain, and the one-size-smaller "Methods" leads too).
+    const heavyFace = (face: string): boolean => {
+      if (WEIGHT_WORD_RE.test(face) || face === mainFace) return false;
+      const ink = embeddedInkOfFace(data, face);
+      if (ink === null) return false;
+      const main = mainFace === undefined ? null : embeddedInkOfFace(data, mainFace);
+      return main === null ? ink >= 0.58 : ink >= 0.5 && ink >= main * 1.22;
+    };
     const flagsOf = (fontName: string): FontFlags => {
       let flags = flagsByFont.get(fontName);
       if (!flags) {
-        let realName: string | null = null;
-        try {
-          const font = page.commonObjs.get(fontName) as { name?: string } | null;
-          realName = font?.name ?? null;
-        } catch {
-          realName = null;
-        }
-        // The face: the name without its subset prefix and a cut's suffix
-        // (Advent's "AdvOTea1a7398+fb" is AdvOTea1a7398's ligatures).
-        const face = realName === null ? undefined : realName.replace(/^[A-Z]{6}\+/, "").replace(/\+[0-9a-f]{2}$/i, "") || undefined;
+        const realName = realNameOf(fontName);
+        const face = faceOf(fontName);
         flags = { ...fontFlags(realName), ...(face ? { face } : {}) };
+        if (!flags.bold && !flags.math && face !== undefined && heavyFace(face)) flags.bold = true;
         flagsByFont.set(fontName, flags);
-        if (realName !== null) realNames.set(fontName, realName);
-        if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
       }
       return flags;
     };
-    // The page's main text face: the face that sets the most letters. A
-    // run upright in another face, outside math and code, is set apart by
-    // its face (Flags.faced).
-    const letters = new Map<string, number>();
-    for (const raw of textItems) {
-      const face = flagsOf(String(raw.fontName ?? "")).face;
-      if (face) letters.set(face, (letters.get(face) ?? 0) + (raw.str.match(/\p{L}/gu)?.length ?? 0));
-    }
-    const mainFace = [...letters].sort((a, b) => b[1] - a[1])[0]?.[0];
     const facedBy = (flags: FontFlags): boolean =>
       flags.face !== undefined && mainFace !== undefined && flags.face !== mainFace && !flags.math && !flags.mono && !flags.italic;
     const hrefAt = (x: number, y: number, w: number, size: number) => {
