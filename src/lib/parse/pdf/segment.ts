@@ -250,7 +250,7 @@ function gatherAuthorGrid(lines: Line[], ctx: PageContext): Line[] {
 
 // An author's block keeps its lines, each on a line of its own; an address
 // cut at its own hyphen ("…@mailbox.tu-" over "dresden.de") joins whole.
-function blockText(stack: Line[]): { text: string; runs: Run[] } {
+export function blockText(stack: Line[]): { text: string; runs: Run[] } {
   const builder = new TextBuilder();
   stack.forEach((line, k) => builder.append(lineAsPart(line), k > 0 && /\S-$/.test(stack[k - 1].text) ? "" : "\n"));
   return builder;

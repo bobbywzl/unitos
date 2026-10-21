@@ -28,6 +28,7 @@ import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragra
 import { embeddedGlyphNames, embeddedInkOfFace } from "@/lib/parse/pdf/programs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
+import { placeSidewaysNote, sidewaysNotes, type SidewaysItem, type SidewaysNote } from "@/lib/parse/pdf/sideways";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
 import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
@@ -96,6 +97,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const readHeights: number[] = [];
   const readPages: number[] = [];
   const readScans: boolean[] = [];
+  // Every read page's sideways notes (sideways.ts): one set sideways on two
+  // pages or more is furniture, read on none.
+  const readSideNotes: SidewaysNote[][] = [];
+  const pageSideNotes: SidewaysNote[][] = [];
 
   const pages: Line[][] = [];
   const pageHeights: number[] = [];
@@ -243,6 +248,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     };
     const items: Item[] = [];
     const rotated: Item[] = [];
+    const sideways: SidewaysItem[] = [];
     // The baseline of words under a hanging delimiter's origin: the first
     // text baseline at or under it, within two sizes, among the letters at
     // the delimiter's size or near it within twelve ems to either side (a
@@ -324,7 +330,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (Math.abs(t[1]) > size * 0.3) {
         const fontName = String(raw.fontName ?? "");
         const str = normalizeGlyphs(raw.str.replace(CONTROL_CHARS_RE, ""));
-        if (str.trim() !== "") rotated.push(uprightItem(str, t, raw.width, size, { ...flagsOf(fontName), href: null, font: fontName }));
+        if (str.trim() !== "") {
+          const item = uprightItem(str, t, raw.width, size, { ...flagsOf(fontName), href: null, font: fontName });
+          rotated.push(item);
+          // At a right angle: a sideways note's item (sideways.ts), its
+          // origin shifted with the page's box below (toPageBox).
+          if (Math.abs(t[0]) <= size * 0.1 && Math.abs(t[1]) >= size * 0.9) sideways.push({ item, x: t[4], y: t[5], len: raw.width, dir: t[1] > 0 ? 1 : -1 });
+        }
         continue;
       }
       // A math glyph reads as its code names it, and so does a text glyph a
@@ -513,7 +525,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
     // own coordinates, every crop sat 4.4% too high and 6.2% too far right,
     // and 19 lines at figures' feet were in neither the text nor a crop.
-    if (viewX1 !== 0 || viewY1 !== 0) toPageBox([...items, ...rotated], drawing, viewX1, viewY1);
+    if (viewX1 !== 0 || viewY1 !== 0) {
+      toPageBox([...items, ...rotated], drawing, viewX1, viewY1);
+      for (const s of sideways) {
+        s.x -= viewX1;
+        s.y -= viewY1;
+      }
+    }
     // The tables the page's rules draw leave the text flow before the column
     // split, and before the graphics: a table's shaded cells never read as a
     // drawing, its words never as a drawing's labels. Each table comes back
@@ -525,6 +543,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // A graphic's labels and caption leave the text before lines are built.
     const found = pageGraphics({ ...drawing, paths: drawing.paths.filter((b) => !inTable(b)) }, text, viewport.width, viewport.height);
     const inGraphics = new Set(found.flatMap((graphic) => [...graphic.labels, ...graphic.caption]));
+    // The page's sideways notes (sideways.ts): none in a graphic or a picture.
+    const sideNotes = sidewaysNotes(sideways.filter((s) => !tableItems.has(s.item)), text, viewport.width, pageNumber - 1, [...found.map((g) => g.box), ...drawing.images]);
     // A kept page's lines count their page among the kept pages; a page read
     // for the furniture's evidence alone counts none.
     // The frames the page draws (a listing's box): a third of the page wide
@@ -572,8 +592,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     readHeights.push(viewport.height);
     readPages.push(pageNumber - 1);
     readScans.push(ocr);
+    readSideNotes.push(sideNotes);
     if (!keep) continue;
     pages.push(lines);
+    pageSideNotes.push(sideNotes);
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);
     pageDrawings.push(drawing);
@@ -583,6 +605,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
 
   // The document's words and compounds, for its line-end hyphens.
   collectHyphenation(readLines);
+  // The pages each sideways note's words stand on.
+  const sideNotePages = new Map<string, number>();
+  for (const notes of readSideNotes) for (const key of new Set(notes.map((n) => n.text.toLowerCase().replace(/\s+/g, " ")))) sideNotePages.set(key, (sideNotePages.get(key) ?? 0) + 1);
 
   // Running heads, feet, and page numbers drop before anything is segmented,
   // on the evidence of every page read; then the kept pages go on alone.
@@ -704,6 +729,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const done = ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures;
     // The space after each text block, from the page's own gaps.
     measureSpacing(done, ctx, shown);
+    // The page's sideways notes, each beside the block it stands by; one
+    // printed on two pages or more is furniture.
+    for (const note of pageSideNotes[p]) if ((sideNotePages.get(note.text.toLowerCase().replace(/\s+/g, " ")) ?? 0) < 2) placeSidewaysNote(done, note, p);
     segments.push(...done);
   }
   // A FIGURE with a region and no caption is an embedded image; every other
