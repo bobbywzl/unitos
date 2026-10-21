@@ -882,6 +882,24 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
       return (isDense(l) && isDense(r)) || rowsShared(l, r) * 2 < Math.min(l.length, r.length);
     });
   if (band) return { bands: stacked(band, items, graphics, "columns", page) };
+  // A short band of two columns of prose, under a full-width figure or
+  // over the running foot: three lines or more on each side, each side
+  // prose set at the text's leading, the two sides of one width (a column
+  // each, two fifths of the region's width or more), their lines on
+  // shared baselines (parse loop finding: a Nature paper's p. 4 sets four
+  // lines of two columns under two figures; the band was too short for a
+  // column, and each line read across the page, the columns' words
+  // interleaved).
+  const shortColumns = (b: Band): boolean => {
+    const [l, r] = [buildLines(b.left.items, page), buildLines(b.right.items, page)];
+    if (l.length < 3 || r.length < 3 || !isProse(l, 3) || !isProse(r, 3) || !isDense(l) || !isDense(r)) return false;
+    const span = (lines: Line[]) => Math.max(...lines.map((x) => x.xEnd)) - Math.min(...lines.map((x) => x.x));
+    const [lw, rw] = [span(l), span(r)];
+    if (Math.abs(lw - rw) > Math.max(lw, rw) * 0.15 || Math.min(lw, rw) < width(items) * 0.35) return false;
+    return rowsShared(l, r) * 2 >= Math.min(l.length, r.length);
+  };
+  const short = twoSided.find(shortColumns);
+  if (short) return { bands: stacked(short, items, graphics, "columns", page) };
   // A note beside a column, a gutter apart (sideNote): the band it stands
   // in is columns, and the note reads beside the paragraph at its top.
   if (twoSided.length === 1 && isNoteBand(twoSided[0], page, margin)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
