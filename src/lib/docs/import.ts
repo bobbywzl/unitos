@@ -1,6 +1,6 @@
 import type { DocStyle } from "@/components/docs/extensions";
 import { listFormat, sameLevel } from "@/components/docs/toolbar/lists";
-import { DEFAULT_STYLES, importStyleBase, STYLE_ATTR, STYLE_BASE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
+import { baseStyles, importStyleBase, STYLE_BASE_ATTR, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
   CAPTION_STYLES,
   DEFAULT_PAGE_SETUP,
@@ -61,13 +61,17 @@ import type { Region } from "@/lib/video/types";
 //                                            a display equation's crop has
 //                                            none
 // Inside the words, the parse's styles become marks (a lowered or raised run
-// subscript or superscript; a color, a highlight, a face, and a size the
-// text style), and an inline formula becomes an inline equation of its TeX
-// in place of its readable characters. The page's look (a PDF's, a Word
-// file's: ParsedBlock.font, bodyFont, titleFont) sets the named styles —
-// Normal text the body's face and size, the Title and each heading level
-// theirs — and a block or a run set otherwise carries a mark only where it
-// differs from its style.
+// subscript or superscript; a color, a highlight, and a size the text
+// style), and an inline formula becomes an inline equation of its TeX in
+// place of its readable characters. Every import draws in the reader's look
+// (components/docs/toolbar/styles.ts READER_STYLES: Figtree 13 pt at a 1.75
+// line height, Caprasimo headings, a gap after each paragraph), never in
+// the page's faces: a PDF set in Times drew dense in Times. What the page's
+// look (ParsedBlock.font, bodyFont) still sets is relative: a block or a run
+// at another size than the body's keeps the ratio (a 8 pt note under a 10
+// pt body draws at 0.8 of Normal text), a paragraph at another line
+// spacing than the body's keeps that ratio too, and a run in a monospace
+// face keeps it.
 // A footnote (ParsedBlock.footnote) whose reference the parse found is the
 // page editor's own: its number in place of the label in the text, its words
 // in the footnotes at the document's end. One without a reference stays a
@@ -139,11 +143,12 @@ type Source = { text: string; spans: { start: number; end: number; mark: RichMar
     start..end whole: no mark and no page start falls inside it. */
 type Atom = { start: number; end: number; node: RichNode };
 
-/** The space after a paragraph of the body, in points: Google Docs' "Add
-    space after paragraph". Normal text has none, and an article without it
-    reads as one wall of words. A PDF's paragraphs take the page's own
-    (ParsedBlock.spaceAfter). */
-const PARAGRAPH_SPACE_PT = 10;
+/** How much more than Normal text's gap (READER_STYLES normal.spaceAfter)
+    a page's space after a paragraph must be, in points, before the
+    paragraph keeps it: a gap the page sets wider than the reader's (the
+    space before a new part) stays, one near it or under it is Normal
+    text's. */
+const SPACE_APART_PT = 2;
 /** The space over and under a display equation where the page gives
     none, in points (a Word file's display that sets none, a PDF whose
     displays the parse measured none of). A PDF's and a Word file's displays
@@ -167,8 +172,8 @@ const DISPLAY_UNDER_EM = 0.07;
     it keeps its own: 3%, the measure's noise and the spacing it keeps. */
 const PDF_LINES_APART = 0.03;
 /** A small line (the kicker, a label, a caption) and a display line, as
-    text sizes. */
-const SMALL_SIZE = "9pt";
+    text sizes: the reader's caption (13px) under its text (17px). */
+const SMALL_SIZE = "10pt";
 const DISPLAY_SIZE = "21pt";
 /** The size the page editor draws its footnotes in, in points
     (css/insert.css .docs-footnotes). */
@@ -395,19 +400,26 @@ function oneTextStyle(marks: RichMark[]): RichMark[] {
   return [...marks.filter((m) => m.type !== "textStyle"), { type: "textStyle", attrs }];
 }
 
+/** A face the import keeps a run in: a monospace one (a code run of a
+    page, a command in a manual). Any other face of the page is dropped:
+    the import draws in the reader's. */
+const MONO_FACE = /Mono|Courier|Consol|Menlo|Typewriter/i;
+
 /** The page editor's mark for a style of the parse: a plain style's mark,
     or the text style's face, size, color, or highlight. A run's face and
     size differ from its block's (the parse marks no other); a color the
-    block's named style gives already is none. */
-function styleMark(style: StyleSpan["style"], named: NamedStyle): RichMark | null {
+    block's named style gives already is none; a face other than a
+    monospace one is none. `scale` puts a page's size in the reader's
+    (sizeScale). */
+function styleMark(style: StyleSpan["style"], named: NamedStyle, scale: (pt: number) => number): RichMark | null {
   const plain = STYLE_MARKS[style];
   if (plain) return { type: plain };
   const at = style.indexOf(":");
   const [kind, value] = [style.slice(0, at), style.slice(at + 1)];
   if (kind === "color") return value === named.color ? null : { type: "textStyle", attrs: { color: value } };
   if (kind === "highlight") return { type: "textStyle", attrs: { backgroundColor: value } };
-  if (kind === "font") return { type: "textStyle", attrs: { fontFamily: value } };
-  if (kind === "size") return Number(value) > 0 ? { type: "textStyle", attrs: { fontSize: `${Number(value)}pt` } } : null;
+  if (kind === "font") return MONO_FACE.test(value) ? { type: "textStyle", attrs: { fontFamily: "Courier New" } } : null;
+  if (kind === "size") return Number(value) > 0 ? { type: "textStyle", attrs: { fontSize: `${scale(Number(value))}pt` } } : null;
   return null;
 }
 
@@ -438,55 +450,24 @@ function captionMathFor(block: ParsedBlock, caption: string): string | null {
   return formulas.length > 0 ? JSON.stringify(formulas.slice(0, 100)) : null;
 }
 
-/** The named styles an import's look sets, as "Update 'Heading 1' to match"
-    sets them (SPEC.md §29 Named styles): Normal text takes the body's face,
-    size, and color; the Title the title's look; each heading level the look
-    most of its headings' letters take (a document of 11 pt bold headings
-    drew them 20 pt regular). A face a style shares with Normal text is
-    Normal text's. The styles the page gives nothing keep Docs' defaults. */
-function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
-  const looks: Partial<Record<DocStyle, NamedStyle>> = {};
-  const body = input.bodyFont;
-  if (body) looks.normal = { ...DEFAULT_STYLES.normal, font: body.family, size: body.size, color: body.color ?? "#000000" };
-  const normalFace = looks.normal?.font ?? DEFAULT_STYLES.normal.font;
-  const lookOf = (style: DocStyle, font: TextFont): NamedStyle => ({
-    ...DEFAULT_STYLES[style],
-    font: font.family === normalFace ? null : font.family,
-    size: font.size,
-    color: font.color ?? "#000000",
-    bold: font.bold === true,
-    italic: font.italic === true,
-  });
-  // A Word file's and a PDF's lines at the spacing most of their
-  // paragraphs' letters take: Docs' 1.15 drew a single-spaced file's lines,
-  // and its table rows, a tenth taller than Word draws them, and a PDF's
-  // 15% farther apart than its page sets them.
-  const lines = input.kind === "docx" || input.kind === "pdf" ? bodyLineSpacing(input.blocks, input.kind) : null;
-  if (lines !== null) looks.normal = { ...(looks.normal ?? DEFAULT_STYLES.normal), lineSpacing: lines };
-  if (input.titleFont) looks.title = lookOf("title", input.titleFont);
-  const tally = new Map<DocStyle, Map<string, { font: TextFont; n: number }>>();
-  for (const b of input.blocks) {
-    if (b.type !== "HEADING" || !b.font) continue;
-    const style = `h${Math.min(6, Math.max(1, headingLevel(b.html)))}` as DocStyle;
-    const counts = tally.get(style) ?? new Map<string, { font: TextFont; n: number }>();
-    const key = JSON.stringify([b.font.family, b.font.size, b.font.color ?? "", b.font.bold === true, b.font.italic === true]);
-    counts.set(key, { font: b.font, n: (counts.get(key)?.n ?? 0) + b.text.length });
-    tally.set(style, counts);
-  }
-  // Where the page's spacing is measured, the gap before a heading is the
-  // space after the block above it (ParsedBlock.spaceAfter), no more.
-  const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
-  for (const [style, counts] of tally) {
-    const looksOf = [...counts.values()].sort((a, b) => b.n - a.n);
-    // Bold and italic only where every heading of the level is: no mark
-    // takes either off (a heading set upright or in regular weight drew as
-    // most of its level). A bold heading takes the bold mark (lookMarks);
-    // an italic one keeps its italic runs (ParsedBlock.styles).
-    const bold = looksOf.every((l) => l.font.bold === true);
-    const italic = looksOf.every((l) => l.font.italic === true);
-    looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
-  }
-  return looks;
+/** The import's named styles: the reader's (READER_STYLES), whatever the
+    page's look. */
+const STYLES = baseStyles("reader");
+
+/** How far a size or a line spacing stands from the body's before a block
+    or a run keeps its own: 8%, the page's noise (a 10 pt body with 9.5 pt
+    and 10.5 pt runs is one size). */
+const SIZE_APART = 0.08;
+
+/** The page's size put in the reader's: the body's size is Normal text's,
+    and a size within SIZE_APART of the body's is Normal text's too; the
+    rest keep their ratio to the body (a 20 pt line over a 10 pt body draws
+    at twice Normal text), to a half point. Without a body size (a web
+    page, a text file) a size stands as it is. */
+function sizeScale(bodySize: number | undefined): (pt: number) => number {
+  const normal = STYLES.normal.size;
+  if (!bodySize || !(bodySize > 0)) return (pt) => Math.round(pt * 2) / 2;
+  return (pt) => (Math.abs(pt / bodySize - 1) < SIZE_APART ? normal : Math.round((normal * pt) / bodySize * 2) / 2);
 }
 
 /** A paragraph's line spacing (ParsedBlock.lineSpacing, a multiple of
@@ -930,16 +911,13 @@ class Converter {
       mark it stands for (linkFootnotes). */
   private readonly titleNotes: RichNode[] = [];
   private titleMark = "";
-  /** The named styles the page's look sets (styleLooks). */
-  private readonly looks: Partial<Record<DocStyle, NamedStyle>>;
-  /** The page's most common space after a paragraph, for a paragraph whose
-      own it did not measure (a page's last); null where it measured none
-      (a web page, a text file), or where no two paragraphs share one: a
-      space that stands once is that paragraph's own, no page's (parse loop
-      finding: a slide deck measured two paragraphs, a title slide's 150 pt
-      and a slide's 59 pt, and every slide's last block took 59 pt after
-      it). */
-  private readonly spacing: number | null;
+  /** The page's size in the reader's (sizeScale), from the body's size
+      (ImportInput.bodyFont: a PDF's, a Word file's). */
+  private readonly scale: (pt: number) => number;
+  /** The line spacing most of the page's paragraphs take (a PDF's, a Word
+      file's), the one Normal text's stands for; null where the parse
+      measures none. */
+  private readonly bodyLines: number | null;
   /** The blocks right over a display equation: their space after is the
       space over the display. And the block right under each display. */
   private readonly overDisplay = new Set<ParsedBlock>();
@@ -950,7 +928,8 @@ class Converter {
   private readonly displaySpacing: { over: number | null; under: number | null };
 
   constructor(private readonly input: ImportInput) {
-    this.looks = styleLooks(input);
+    this.scale = sizeScale(input.bodyFont?.size);
+    this.bodyLines = input.kind === "docx" || input.kind === "pdf" ? bodyLineSpacing(input.blocks, input.kind) : null;
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
@@ -965,11 +944,6 @@ class Converter {
       if (above?.type === "EQUATION") this.underDisplay.set(above, block);
       above = block;
     });
-    // A space over a display is to its glyphs: no paragraph's space.
-    this.spacing = mostCommon(
-      input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter),
-      2,
-    );
     this.displaySpacing = {
       over: mostCommon([...this.overDisplay].map((b) => b.spaceAfter)),
       under: mostCommon(input.blocks.filter((b) => b.type === "EQUATION").map((b) => b.spaceAfter)),
@@ -1160,59 +1134,82 @@ class Converter {
     return block.type === "HEADING" ? (`h${Math.min(6, Math.max(1, headingLevel(block.html)))}` as DocStyle) : "normal";
   }
 
-  /** A named style as the import sets it, the face it leaves to Normal
+  /** A named style as the import draws it, the face it leaves to Normal
       text filled in. */
   private named(style: DocStyle): NamedStyle {
-    const look = this.looks[style] ?? DEFAULT_STYLES[style];
-    return look.font ? look : { ...look, font: this.looks.normal?.font ?? DEFAULT_STYLES.normal.font };
+    const look = STYLES[style];
+    return look.font ? look : { ...look, font: STYLES.normal.font };
   }
 
   /** The marks over all of a block's words where its look
-      (ParsedBlock.font) differs from its named style: its face and size (a
-      caption set small, a line in another face), and a heading's bold its
-      level's style lacks. Its color is its runs' own (a color span each). */
+      (ParsedBlock.font) stands apart from the body's: a paragraph's size at
+      its ratio to the body's (sizeScale; a note set small), and a block in
+      a monospace face. A heading draws in its level's style whatever the
+      page set it in. Its color is its runs' own (a color span each). */
   private lookMarks(block: ParsedBlock, style: DocStyle): RichMark[] {
     const font = block.font;
-    if (!font) return [];
-    const named = this.named(style);
+    if (!font || style !== "normal") return [];
     const attrs: Record<string, unknown> = {};
-    if (font.family !== named.font) attrs.fontFamily = font.family;
+    if (MONO_FACE.test(font.family)) attrs.fontFamily = "Courier New";
     // A kicker, a label, a caption, a footnote, and a display line keep
     // their role's size (paragraph): no named style draws them.
     const role = block.type === "PARAGRAPH" && ROLES.some((r) => r !== "meta" && r !== "quote" && tokensOf(block.html).includes(r));
-    if (font.size !== named.size && !role) attrs.fontSize = `${font.size}pt`;
-    const marks: RichMark[] = Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
-    if (block.type === "HEADING" && font.bold && !named.bold) marks.push({ type: "bold" });
-    return marks;
+    const size = this.scale(font.size);
+    if (size !== STYLES.normal.size && !role && this.input.bodyFont) attrs.fontSize = `${size}pt`;
+    return Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
   }
 
-  /** The space after a block in points: the page's (ParsedBlock.spaceAfter;
-      over a PDF's display, to its glyphs: displayGap, else the page's most
-      common over its displays), over a Word file's display TeX's skip, the
-      page's most common for a block it measured none for, or Docs' "Add
-      space after paragraph" where the parse measures no spacing. */
-  private spaceAfter(block: ParsedBlock): number {
+  /** The space after a block in points, where it is its own and not
+      Normal text's (null): over a PDF's display the page's, to its glyphs
+      (displayGap; the page's most common over its displays where the
+      block's own is not measured); over a Word file's display TeX's skip;
+      else the page's (ParsedBlock.spaceAfter), in the reader's measure
+      (pageSpace), where it is wider than Normal text's by SPACE_APART_PT.
+      Before a heading it is null: the heading's own space before is the
+      gap, as the reader draws it. */
+  private spaceAfter(block: ParsedBlock, index: number): number | null {
     const over = this.overDisplay.has(block);
     if (over && this.input.kind === "pdf") {
       const space = block.spaceAfter ?? this.displaySpacing.over;
       return space === null ? DISPLAY_SPACE_PT : this.displayGap(space, block, DISPLAY_OVER_EM);
     }
-    if (block.spaceAfter !== undefined) return block.spaceAfter;
     if (over && this.pageDisplays) return DISPLAY_SPACE_PT;
-    return this.spacing ?? PARAGRAPH_SPACE_PT;
+    if (block.spaceAfter === undefined || this.input.blocks[index + 1]?.type === "HEADING") return null;
+    const space = this.pageSpace(block.spaceAfter);
+    return space >= STYLES.normal.spaceAfter + SPACE_APART_PT ? space : null;
+  }
+
+  /** A space the page measured, in points, in the reader's measure: at
+      the body's ratio to Normal text's size (a 24 pt gap under a 10 pt
+      body is a 31 pt gap under the reader's 13 pt), to a half point. */
+  private pageSpace(space: number): number {
+    const body = this.input.bodyFont?.size;
+    const ratio = body && body > 0 ? STYLES.normal.size / body : 1;
+    return Math.round(space * ratio * 2) / 2;
+  }
+
+  /** A paragraph's line spacing as the reader draws it: Normal text's
+      (READER_STYLES, 1.52 × the editor's 1.15 = 1.75) at the paragraph's
+      ratio to the body's measured spacing (bodyLines), to a hundredth and
+      within what a page sets (0.8 to 3); null where the page measures
+      none, or the paragraph's is the body's. */
+  private lineSpacing(block: ParsedBlock, apart: number): number | null {
+    const own = this.input.kind === "docx" || this.input.kind === "pdf" ? lineSpacingOf(block, this.input.kind) : null;
+    if (own === null || this.bodyLines === null || Math.abs(own / this.bodyLines - 1) < apart - 1e-9) return null;
+    return Math.min(3, Math.max(0.8, Math.round((STYLES.normal.lineSpacing * own) / this.bodyLines * 100) / 100));
   }
 
   /** A PDF's display space measured to its glyphs, as the page editor
-      draws it: less `em` of the words' size beside it (DISPLAY_OVER_EM,
-      DISPLAY_UNDER_EM, at Docs' 1.15 line spacing), their line set closer
-      reaching past its baseline half its difference less, to a half point. */
+      draws it: in the reader's measure (pageSpace), less `em` of the
+      words' size beside it (DISPLAY_OVER_EM, DISPLAY_UNDER_EM, at the
+      editor's 1.15 line spacing), their line set wider reaching past its
+      baseline half its difference more, to a half point. */
   private displayGap(space: number, words: ParsedBlock | undefined, em: number): number {
-    const size = words?.font?.size ?? this.input.bodyFont?.size ?? DEFAULT_STYLES.normal.size;
-    const docs = DEFAULT_STYLES.normal.lineSpacing;
-    const own = words?.type === "PARAGRAPH" ? lineSpacingOf(words, this.input.kind) : null;
-    const lines = words?.type === "HEADING" ? docs : (own ?? this.looks.normal?.lineSpacing ?? docs);
+    const size = this.scale(words?.font?.size ?? this.input.bodyFont?.size ?? STYLES.normal.size);
+    const docs = 1.15;
+    const lines = words?.type === "HEADING" ? docs : (this.lineSpacing(words ?? { type: "PARAGRAPH", text: "", html: "" } as ParsedBlock, 0) ?? STYLES.normal.lineSpacing);
     const reach = em + ((lines - docs) * 1.15) / 2;
-    return Math.max(0, Math.round((space - reach * size) * 2) / 2);
+    return Math.max(0, Math.round((this.pageSpace(space) - reach * size) * 2) / 2);
   }
 
   /** A PDF's and a Word file's displays: the page editor draws them with
@@ -1222,11 +1219,11 @@ class Converter {
   }
 
   /** A list's last line takes the space after its block. */
-  private spaceLast(nodes: RichNode[], block: ParsedBlock) {
+  private spaceLast(nodes: RichNode[], block: ParsedBlock, index: number) {
     const last = lastParagraph(nodes);
     if (!last?.attrs) return;
-    const after = this.spaceAfter(block);
-    if (after > 0) last.attrs.spaceAfter = after;
+    const after = this.spaceAfter(block, index);
+    if (after !== null) last.attrs.spaceAfter = after;
     else delete last.attrs.spaceAfter;
   }
 
@@ -1266,7 +1263,7 @@ class Converter {
     const named = this.named(style);
     const caps = drawnSmallCaps(block);
     for (const s of block.styles ?? []) {
-      const mark = caps.includes(s) ? null : styleMark(s.style, named);
+      const mark = caps.includes(s) ? null : styleMark(s.style, named, this.scale);
       if (mark) spans.push({ start: s.start, end: s.end, mark });
     }
     for (const l of block.links ?? []) {
@@ -1346,16 +1343,14 @@ class Converter {
   }
 
   /** A footnote's words without its label (the page editor draws the
-      number), for the footnotes at the document's end, at the size a PDF
-      or a Word file sets them in: the page editor draws notes at 10 pt, and
-      a Word file's 8 pt notes drew larger than the page's. */
+      number), for the footnotes at the document's end, at the page
+      editor's size for notes (FOOTNOTE_PT). */
   private footnote(block: ParsedBlock, footnoteId: string) {
     const label = block.footnote?.label ?? "";
     const rest = block.text.startsWith(label) ? block.text.slice(label.length) : block.text;
     const from = block.text.length - rest.trimStart().length;
     const words = sliceSource(this.sourceOf(block, []), from, block.text.length);
-    const size = this.input.kind === "pdf" || this.input.kind === "docx" ? block.font?.size : undefined;
-    const extra: RichMark[] = size && size !== FOOTNOTE_PT ? [{ type: "textStyle", attrs: { fontSize: `${Math.round(size * 2) / 2}pt` } }] : [];
+    const extra: RichMark[] = [{ type: "textStyle", attrs: { fontSize: `${FOOTNOTE_PT}pt` } }];
     this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words, extra))] });
   }
 
@@ -1369,14 +1364,17 @@ class Converter {
     const align = role === "caption" && alignOf(tokens) !== "right" ? "center" : alignOf(tokens);
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
-    else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
-    // A paragraph set at another spacing than Normal text keeps its own: a
+    // A kicker stands on its title: no gap under it.
+    else if (role === "kicker") attrs.spaceAfter = 0;
+    else {
+      const after = this.spaceAfter(block, index);
+      if (after !== null) attrs.spaceAfter = after;
+    }
+    // A paragraph set at another spacing than the body keeps the ratio: a
     // Word file's exact to a hundredth, a PDF's measure past its noise
     // (baselines a quarter point off read 2.00 to 2.04 on one page).
-    const lines = this.input.kind === "docx" || this.input.kind === "pdf" ? lineSpacingOf(block, this.input.kind) : null;
-    const normalLines = this.looks.normal?.lineSpacing;
-    const apart = this.input.kind === "pdf" ? PDF_LINES_APART : 0.01;
-    if (lines !== null && normalLines !== undefined && Math.abs(lines - normalLines) >= apart - 1e-9) attrs.lineSpacing = lines;
+    const lines = this.lineSpacing(block, this.input.kind === "pdf" ? PDF_LINES_APART : 0.01);
+    if (lines !== null) attrs.lineSpacing = lines;
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
     // A bar at a side stands in its indent, its padding from the words:
@@ -1390,13 +1388,11 @@ class Converter {
     Object.assign(attrs, indentAttrs(within), borderAttrs(block));
     const tabStops = this.tabStops(block, attrs.indentRight);
     if (tabStops) attrs.tabStops = tabStops;
-    // A footnote no number cites stays a paragraph at the size a PDF or a
-    // Word file sets it in, as a footnote does (footnote()); a kicker, a
-    // label, and a caption are small.
-    const own = role === "footnote" && (this.input.kind === "pdf" || this.input.kind === "docx") ? block.font?.size : undefined;
-    const size = own
-      ? `${Math.round(own * 2) / 2}pt`
-      : role === "kicker" || role === "label" || role === "caption" || role === "footnote"
+    // A footnote no number cites stays a paragraph, small as a footnote is
+    // (footnote()); a kicker, a label, and a caption are small too.
+    const size = role === "footnote"
+      ? `${FOOTNOTE_PT}pt`
+      : role === "kicker" || role === "label" || role === "caption"
         ? SMALL_SIZE
         : role === "display"
           ? DISPLAY_SIZE
@@ -1422,8 +1418,6 @@ class Converter {
     // its line) is drawn as its paragraph's opening words (css/import.css),
     // at the page's indent: the first line's indent is the lead's.
     if (tokensOf(block.html).includes("run-in")) Object.assign(attrs, { runIn: true }, indentAttrs(block.indent));
-    // The page's own space after the heading, where it measured one.
-    else if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
@@ -1473,14 +1467,14 @@ class Converter {
         paragraphNode(inline(l.whole), indentAttrs(printedAt(l) ?? (l.indent > 0 ? { left: l.indent * INDENT_PT, first: 0 } : undefined))),
       );
       this.lineLook(nodes, block);
-      this.spaceLast(nodes, block);
+      this.spaceLast(nodes, block, index);
       this.place(index, nodes);
       this.lastList = null;
       return;
     }
     const nodes = this.lists(lines);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
-    this.spaceLast(nodes, block);
+    this.spaceLast(nodes, block, index);
     this.place(index, nodes);
     this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
   }
@@ -1561,7 +1555,7 @@ class Converter {
     this.out.splice(last.at);
     const nodes = this.lists(all);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
-    this.spaceLast(nodes, block);
+    this.spaceLast(nodes, block, index);
     // A link to the resumed block lands on its first line.
     const first = lines[0].node;
     if (first?.attrs) {
@@ -1612,10 +1606,9 @@ class Converter {
       const cell = built.rowStarts.slice(row).find((c) => c !== null) ?? built.rowStarts.find((c) => c !== null);
       if (cell) cell.content = [{ type: "pageStart", attrs: { page: p.page } }, ...(cell.content ?? [])];
     }
-    // A PDF's caption small: 9 pt, or the size the page sets it in when
-    // smaller. A Word file's keeps its own size, the body's where its words
-    // carry none.
-    const most = this.input.kind === "pdf" ? parseFloat(SMALL_SIZE) : (this.input.bodyFont?.size ?? parseFloat(SMALL_SIZE));
+    // A caption small (SMALL_SIZE), or the size the page sets it in when
+    // smaller still.
+    const most = parseFloat(SMALL_SIZE);
     const caption = built.caption ? paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, most))], { textAlign: "center" }) : null;
     // The caption over the table, or under it where the page sets it there.
     this.place(index, caption ? (below ? [built.table, caption] : [caption, built.table]) : [built.table]);
@@ -1633,11 +1626,6 @@ class Converter {
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
     const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
     const captionMath = this.input.kind === "pdf" ? captionMathFor(block, caption) : null;
-    // A PDF's caption at the size the page sets it in (the look of its
-    // words), where Normal text's is another: a newsletter's 8 pt captions
-    // drew at the body's 11.
-    const own = this.input.kind === "pdf" && caption ? block.font?.size : undefined;
-    const captionSize = own && Number.isFinite(own) && Math.abs(own - this.named("normal").size) >= 0.5 ? Math.round(own * 2) / 2 : null;
     this.place(index, [
       {
         type: "figure",
@@ -1647,7 +1635,6 @@ class Converter {
           caption,
           ...(captionStyles ? { captionStyles } : {}),
           ...(captionMath ? { captionMath } : {}),
-          ...(captionSize ? { captionSize } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,
@@ -1732,18 +1719,9 @@ class Converter {
     });
     const notes = [...numbered].flatMap((id) => this.footnotes.get(id) ?? []);
     if (notes.length > 0) content.push({ type: "footnotes", content: notes });
-    // The named styles the page's look set, stored as the page editor stores
-    // a style's changes (components/docs/toolbar/styles.ts).
-    // A web page and a Markdown or text file bring no look of their own:
-    // their import draws on the reader's (StyleBase).
-    const base = importStyleBase(this.input.kind);
-    const attrs: Record<string, unknown> = {};
-    if (base !== "docs") attrs[STYLE_BASE_ATTR] = base;
-    for (const [style, look] of Object.entries(this.looks) as [DocStyle, NamedStyle][]) {
-      const changes = styleChanges(style, look, base);
-      if (Object.keys(changes).length > 0) attrs[STYLE_ATTR[style]] = JSON.stringify(changes);
-    }
-    const doc: RichNode = Object.keys(attrs).length > 0 ? { type: "doc", attrs, content } : { type: "doc", content };
+    // Every import draws on the reader's base (components/docs/toolbar/
+    // styles.ts StyleBase) and changes no named style.
+    const doc: RichNode = { type: "doc", attrs: { [STYLE_BASE_ATTR]: importStyleBase(this.input.kind) }, content };
     dropLostLinks(doc);
     const richText = sanitizeRichText(doc) ?? doc;
     const kept = new Set<string>();

@@ -53,12 +53,12 @@ export const DEFAULT_STYLES: Record<DocStyle, NamedStyle> = {
   h6: { ...base, size: 11, color: "#666666", italic: true, spaceBefore: 12, spaceAfter: 4 },
 };
 
-/** The reader's look (SPEC.md §29 Named styles), the base of a web page's
-    and a Markdown file's import: the block reader's faces, sizes, line
-    height, and gaps — Figtree 17px (13 pt) at a 1.75 line height, a 16px
-    gap after a paragraph, the headings in Caprasimo at the reader's sizes
-    and margins (block-view.tsx HEADING_CLASSES, document-title.tsx). The
-    style lines multiply by 1.15 (namedStyleSheet), so 1.52 draws 1.75. */
+/** The reader's look (SPEC.md §29 Named styles), the base of every
+    import: the block reader's faces, sizes, line height, and gaps —
+    Figtree 17px (13 pt) at a 1.75 line height, a 16px gap after a
+    paragraph, the headings in Caprasimo at the reader's sizes and margins
+    (block-view.tsx HEADING_CLASSES, document-title.tsx). The style lines
+    multiply by 1.15 (namedStyleSheet), so 1.52 draws 1.75. */
 export const READER_STYLES: Record<DocStyle, NamedStyle> = {
   normal: { ...base, font: "Figtree", size: 13, lineSpacing: 1.52, spaceAfter: 12 },
   title: { ...base, font: "Caprasimo", size: 25, lineSpacing: 1, spaceAfter: 20 },
@@ -72,9 +72,8 @@ export const READER_STYLES: Record<DocStyle, NamedStyle> = {
 };
 
 /** Which defaults a document's named styles start from: Google Docs' (a
-    blank document, a Word file's and a PDF's import, which store their
-    file's own look) or the reader's (a web page's and a Markdown file's
-    import, which have no look of their own). Stored on the doc node as
+    blank document) or the reader's (every import: a PDF's, a web page's, a
+    Markdown or text file's, a Word file's). Stored on the doc node as
     STYLE_BASE_ATTR; a document without it is Docs'. */
 export type StyleBase = "docs" | "reader";
 export const STYLE_BASE_ATTR = "namedStyleBase";
@@ -83,10 +82,10 @@ export function styleBaseOf(doc: { attrs: Readonly<Record<string, unknown>> }): 
   return doc.attrs[STYLE_BASE_ATTR] === "reader" ? "reader" : "docs";
 }
 
-/** The base an import's kind gives it: the reader's for a web page's and a
-    Markdown or text file's import, Docs' for the rest. */
+/** The base an import's kind gives it: the reader's for every import,
+    Docs' for a blank document (no kind). */
 export function importStyleBase(kind: string | null | undefined): StyleBase {
-  return kind === "url" || kind === "markdown" ? "reader" : "docs";
+  return kind ? "reader" : "docs";
 }
 
 /** The rich text drawn on its base: a copy that names no base takes `base`.
@@ -95,6 +94,22 @@ export function importStyleBase(kind: string | null | undefined): StyleBase {
 export function withStyleBase<T extends { attrs?: Record<string, unknown> | null }>(doc: T, base: StyleBase): T {
   if (base === "docs" || doc.attrs?.[STYLE_BASE_ATTR]) return doc;
   return { ...doc, attrs: { ...doc.attrs, [STYLE_BASE_ATTR]: base } };
+}
+
+/** An import's rich text as the page editor opens it: on the reader's
+    base. A PDF's or a Word file's import made before every import took the
+    reader's base (no base stored) stored its page's look as its named
+    styles — Times New Roman 10 pt at the page's line pitch, dense beside
+    every other document; those styles go, and the import draws in the
+    reader's look as a new import does. Nothing is written by the open: the
+    base and the styles' absence are stored with the reader's next save of
+    their own edits. A document that names its base is left as it is. */
+export function importOnReaderBase<T extends { attrs?: Record<string, unknown> | null }>(doc: T, kind: string | null | undefined): T {
+  const base = importStyleBase(kind);
+  if (base === "docs" || doc.attrs?.[STYLE_BASE_ATTR] === "reader") return doc;
+  const attrs: Record<string, unknown> = { ...doc.attrs, [STYLE_BASE_ATTR]: base };
+  if (kind === "pdf" || kind === "docx") for (const style of STYLE_ORDER) delete attrs[STYLE_ATTR[style]];
+  return { ...doc, attrs };
 }
 
 /** The defaults a base starts from. */

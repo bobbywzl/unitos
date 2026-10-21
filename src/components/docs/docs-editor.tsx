@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { importLineParts } from "@/components/docs/import-line";
-import { importStyleBase, withStyleBase } from "@/components/docs/toolbar/styles";
+import { importOnReaderBase } from "@/components/docs/toolbar/styles";
 import { usePageStatusCarries } from "@/components/save-indicator";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
@@ -588,10 +588,9 @@ export function DocsEditor({
   const editor = useEditor(
     {
       extensions,
-      // A web page's or a Markdown file's import draws on the reader's look
-      // (toolbar/styles.ts StyleBase), whether it was made before the base
-      // existed or after.
-      content: withStyleBase(richText, importStyleBase(imported?.kind)) as JSONContent,
+      // An import draws on the reader's look (toolbar/styles.ts StyleBase),
+      // whether it was made before the base existed or after.
+      content: importOnReaderBase(richText, imported?.kind) as JSONContent,
       editable: writable && openedIn !== "viewing",
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
