@@ -119,6 +119,27 @@ const en = {
   usageColCost: "Cost",
   usageBackground: "Background jobs",
   usageDetail: "{tokens} tokens · {calls} calls",
+  // Provider bills (SPEC.md §7, lib/provider-bills.ts).
+  usageBills: "Provider bills — last 30 days",
+  usageBillsHint:
+    "Each provider's own bill beside this app's count. The bill is every use of the key, in this app and outside it, at what the provider charged; the count is this app's calls at list prices. The tables under this one are the count.",
+  usageBillCol: "Bill",
+  usageBillApp: "This app's count",
+  usageBillGap: "Gap",
+  usageBillCalls: "This app's calls",
+  usageBillNoApi: "No spend API. The console has the bill.",
+  usageBillSetKey: "Set ANTHROPIC_ADMIN_KEY (an Admin API key; the Admin API needs an Organization on the Console) to read the bill here.",
+  usageBillNoRows: "The bill is read from the balance's falls between readings, one an hour at most: it shows from the second reading.",
+  usageBillFromBalance: "Read from the balance's falls between readings; a recharge counts as nothing.",
+  usageBalance: "Balance",
+  usageBalanceOut: "Out of balance: the provider refuses every call until it is recharged.",
+  usageBalanceLow: "Low balance: recharge soon.",
+  usageBundle: "Prepaid token bundle: the console shows the tokens left. Money and tokens do not compare.",
+  usageOtherUses: "the bill against this app's count, by model",
+  usageOtherUsesHint:
+    "A model this app never calls is another use of the same key. A gap on a model this app calls is a price difference: a discount, the cache, or a wrong list price here.",
+  usageColModel: "Model",
+  usageConsole: "Open the console",
   // Clicks page. A function is a control that does AI, notes, or annotation
   // work; the three groups are its vocabulary (lib/clicks.ts). Control ids are
   // code and render as-is.
@@ -550,6 +571,25 @@ const zh: Record<keyof typeof en, string> = {
   usageColCost: "成本",
   usageBackground: "后台任务",
   usageDetail: "{tokens} token · {calls} 次调用",
+  usageBills: "提供商账单——最近 30 天",
+  usageBillsHint:
+    "每个提供商自己的账单与本应用的统计并列。账单是该密钥的全部用量，包括本应用之外的用量，按提供商实际收费计算；统计是本应用的调用，按官方定价计算。下面的表格是统计。",
+  usageBillCol: "账单",
+  usageBillApp: "本应用的统计",
+  usageBillGap: "差额",
+  usageBillCalls: "本应用的调用",
+  usageBillNoApi: "没有账单 API。账单见控制台。",
+  usageBillSetKey: "设置 ANTHROPIC_ADMIN_KEY（Admin API 密钥；Admin API 需要在控制台建立组织）后，这里读取账单。",
+  usageBillNoRows: "账单由余额的每次下降读出，每小时最多读一次：从第二次读取起显示。",
+  usageBillFromBalance: "由余额的每次下降读出；充值不计。",
+  usageBalance: "余额",
+  usageBalanceOut: "余额已用完：提供商拒绝所有调用，直到充值。",
+  usageBalanceLow: "余额不足：请尽快充值。",
+  usageBundle: "预付 token 套餐：控制台显示剩余 token。金额与 token 不可比较。",
+  usageOtherUses: "账单与本应用统计的逐模型对照",
+  usageOtherUsesHint: "本应用从未调用的模型是同一密钥的其他用途。本应用调用的模型上的差额是价格差异：折扣、缓存，或这里的官方定价有误。",
+  usageColModel: "模型",
+  usageConsole: "打开控制台",
   clicks: "点击",
   clicksDesc:
     "读者使用每项功能的频率：AI 工具、笔记功能，以及所做的批注。一般控件（导航、对话框、播放、编辑工具栏）不计入。每次点击一行，由阅读器分批上传。",
