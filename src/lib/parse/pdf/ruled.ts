@@ -722,7 +722,24 @@ function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, page
   // around a grid holds it and draws none of its rows (the invoice's order
   // grid inside the frame around the sample).
   const columns = drawing.rules.filter((r) => r.dir === "v");
-  const wide = ruleStacks(joinedRules(drawing.rules.filter((r) => r.dir === "h")), 40).flatMap((stack) =>
+  // A shaded band over a table's head stands for the rule the table draws
+  // none of: Nature sets a table's title in a tinted band, its column
+  // heads under it, and draws its first rule under the heads, so the heads
+  // stood outside the table and read as paragraphs, and a partial rule
+  // under a spanning head made a table of two heads (parse loop finding:
+  // s41467-018-04316-3's Table 1). The band's lower edge is a rule as wide
+  // as the rule under it, where that rule stands within five lines.
+  const shadedTops: Rule[] = [];
+  for (const f of drawing.fills) {
+    if (f.x2 - f.x1 < 40 || f.y2 - f.y1 > 40) continue;
+    const under = drawing.rules.find((r) => r.dir === "h" && r.y1 < f.y1 - 2 && f.y1 - r.y1 <= 60 && Math.abs(r.x1 - f.x1) <= 6 && Math.abs(r.x2 - f.x2) <= 6);
+    if (under && !drawing.rules.some((r) => r.dir === "h" && Math.abs(r.y1 - f.y1) <= 1 && r.x1 <= f.x1 + 6 && r.x2 >= f.x2 - 6)) shadedTops.push({ dir: "h", x1: under.x1, x2: under.x2, y1: f.y1, y2: f.y1, thickness: 0 });
+  }
+  // The band's outline leaves stubs at its corners on that edge, which
+  // would join the new rule into the band's own stack: dropped.
+  const stub = (r: Rule) => r.x2 - r.x1 < 10 && shadedTops.some((t) => Math.abs(t.y1 - r.y1) <= 1 && r.x2 >= t.x1 - 10 && r.x1 <= t.x2 + 10);
+  const horizontal = [...drawing.rules.filter((r) => r.dir === "h" && !stub(r)), ...shadedTops];
+  const wide = ruleStacks(joinedRules(horizontal), 40).flatMap((stack) =>
     stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
@@ -773,7 +790,7 @@ function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, page
     regions.push({ box, items: inside, lines: buildLines(inside, 0), grid, rules: [], drawing });
   }
   const free = (b: Box) => !regions.some((r) => b.x1 < r.box.x2 && b.x2 > r.box.x1 && b.y1 < r.box.y2 && b.y2 > r.box.y1);
-  const rules = joinedRules(drawing.rules.filter((r) => r.dir === "h" && free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
+  const rules = joinedRules(horizontal.filter((r) => free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
   for (const stack of ruleStacks(rules, 40)) {
     if (isCard(stack, drawing.rules)) continue;
     for (const box of stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns)) {
