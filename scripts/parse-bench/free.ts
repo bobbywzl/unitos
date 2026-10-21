@@ -123,9 +123,11 @@ type Sizes = Layout["sizes"];
 /** Fonts that draw symbols at the codes of letters: pdftotext reads a code
     as its letter where the font maps none (Wingdings' "u" for ◆, ZapfDingbats'
     "4" for ✔, MarVoSym's "B" for ✉, Advent's math symbols' "ð" and "Þ" for
-    the parentheses and "0" for the prime) or as a private-use character
-    U+F000 past it (Symbol's U+F061 for α). */
-const SYMBOL_FONT_RE = /^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS)|Wingdings(?:-Regular)?|(?:ITC)?(?:Zapf)?Dingbats|MarVoSym|AdvMacMthSy\w*)$/i;
+    the parentheses and "0" for the prime; lib/parse/pdf/glyphs.ts
+    ADVENT_FONTS) or as a private-use character U+F000 past it (Symbol's
+    U+F061 for α). */
+const SYMBOL_FONT_RE =
+  /^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS)|Wingdings(?:-Regular)?|(?:ITC)?(?:Zapf)?Dingbats|MarVoSym|Adv(?:MacMthSy\w*|P4C4E\w+|PSMP\d+|PSMPi\d+|PSSym|CORRESAST|Pi[12]|symbol|Greek_B))$/i;
 /** Adobe Symbol's letters: its codes of A–Z and a–z draw Greek. */
 const SYMBOL_GREEK: Record<string, string> = Object.fromEntries(
   [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"].map((ch, i) => [ch, [..."ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖαβχδεφγηιϕκλμνοπθρστυϖωξψζ"][i]]),

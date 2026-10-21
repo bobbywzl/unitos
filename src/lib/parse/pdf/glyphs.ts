@@ -93,28 +93,37 @@ export function fontFlags(name: string | null): FontFlags {
     // and neither is NotoSansSC (Simplified Chinese).
     smallCaps: /^CMCSC|^SFCC|^SFXC|SmallCaps|Caps(?![a-z])|-SC$|\.sc$/i.test(n),
     // Math fonts by name: TeX's math families, the other TeX math fonts, an
-    // OpenType math font ("Math" in its name), and Adobe's Symbol. The word
-    // "Symbol" alone says nothing: Segoe UI Symbol draws a Word form's
-    // checkboxes, and its lines read as equations (census class 12).
-    math: (family !== null && family !== "ot1") || /^(stmary|wasy)|Math|^Symbol(MT)?$/i.test(n),
+    // OpenType math font ("Math" in its name), Adobe's Symbol, and Advent
+    // 3B2's math symbol fonts (ADVENT_MATH_RE: an Elsevier paper's displays
+    // read as paragraphs of words). The word "Symbol" alone says nothing:
+    // Segoe UI Symbol draws a Word form's checkboxes, and its lines read as
+    // equations (census class 12).
+    math: (family !== null && family !== "ot1") || /^(stmary|wasy)|Math|^Symbol(MT)?$/i.test(n) || ADVENT_MATH_RE.test(n),
   };
 }
 
 // ── Symbol fonts ────────────────────────────────────────────────────────────
 // A symbol font with no Unicode map: pdf.js reads each code as the letter
 // of its number (a slide's Wingdings bullets ➢ and ✓ read "Ø" and "ü", and
-// their lists were lost; a paper's ✉ in MarVoSym read "B"; Nature's
-// "(v′ = 0)" in Advent's math symbols read "ðv0 = 0Þ") or as a private-use
-// character U+F000 past it (a newsletter's end mark ■ in Wingdings, a
-// report's α in Symbol). The code names the symbol each font draws.
+// their lists were lost; a paper's ✉ in MarVoSym read "B") or as a
+// private-use character U+F000 past it (a newsletter's end mark ■ in
+// Wingdings, a report's α in Symbol). The code names the symbol each font
+// draws. Advent 3B2's symbol fonts (ADVENT_FONTS) read by their codes too,
+// as named glyphs (namedGlyphs); here they count as symbol fonts for their
+// face: none of their own.
 
+// The Advent symbol fonts (ADVENT_FONTS), and among them the math ones (the
+// relations, operators, delimiters, and Greek of a formula; not the
+// corresponding author's mark, ©, or °).
+const ADVENT_MATH_RE = /^Adv(?:MacMthSy\w*|P4C4E\w+|PSMP\d+|PSMPi\d+|Pi[12])$/;
+const ADVENT_RE = /^Adv(?:MacMthSy\w*|P4C4E\w+|PSMP\d+|PSMPi\d+|PSSym|CORRESAST|Pi[12]|symbol|Greek_B)$/;
 type SymbolFont = "symbol" | "wingdings" | "dingbats" | "marvosym" | "advent";
 const SYMBOL_FONTS: [RegExp, SymbolFont][] = [
   [/^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS))$/i, "symbol"],
   [/^Wingdings(?:-Regular)?$/i, "wingdings"],
   [/^(?:ITC)?(?:Zapf)?Dingbats$/i, "dingbats"],
   [/^MarVoSym$/i, "marvosym"],
-  [/^AdvMacMthSy/i, "advent"],
+  [ADVENT_RE, "advent"],
 ];
 
 /** The symbol font a font's name (its subset prefix removed) names. */
@@ -141,9 +150,6 @@ const WINGDINGS_CHARS = Array.from(
 );
 // MarVoSym: \Letter.
 const MARVOSYM_CHARS: Record<number, string> = { 0x42: "✉" };
-// Advent 3B2's math symbols, the codes seen drawn: the prime, the angle
-// brackets, the bar, and the parentheses.
-const ADVENT_CHARS: Record<number, string> = { 0x30: "′", 0x68: "⟨", 0x69: "⟩", 0x6a: "|", 0xde: ")", 0xf0: "(" };
 // ZapfDingbats: runs of the Dingbats block, and the symbols Unicode had
 // coded before it.
 const DINGBATS_CHARS: Record<number, string> = {
@@ -167,7 +173,7 @@ function symbolChar(font: SymbolFont, code: number): string | undefined {
   if (font === "symbol") ch = code >= 0x20 && code <= 0x7e ? SYMBOL_CHARS[code - 0x20] : code >= 0xa0 ? SYMBOL_CHARS[code - 0xa0 + 95] : undefined;
   else if (font === "wingdings") ch = code >= 0x20 ? WINGDINGS_CHARS[code - 0x20] : undefined;
   else if (font === "dingbats") ch = dingbat(code);
-  else if (font === "advent") ch = ADVENT_CHARS[code];
+  else if (font === "advent") ch = undefined;
   else ch = MARVOSYM_CHARS[code];
   return ch && ch !== "\0" ? ch : undefined;
 }
@@ -226,8 +232,10 @@ const FAMILIES: [RegExp, MathFamily][] = [
   [/^(CMMIB?\d|LMMathItalic|MathDesign-.+-MathItalic-|rtxb?mi$)/i, "oml"],
   [/^(CMB?SY\d|LMMathSymbols|MathDesign-.+-Symbol-\d)/i, "oms"],
   [/^(CMEX\d|LMMathExtension|BLEX$|txb?ex$)/i, "omx"],
-  [/^MSAM\d/i, "msa"],
-  [/^MSBM\d/i, "msb"],
+  // Advent 3B2 embeds the AMS fonts under its own names (AdvPSMSAM10 sets
+  // ⩽ at MSAM10's code, which the text layer read as "6").
+  [/^(?:AdvPS)?MSAM\d/i, "msa"],
+  [/^(?:AdvPS)?MSBM\d/i, "msb"],
   [/^EUF[MB]\d/i, "euf"],
   [/^RSFS\d/i, "rsfs"],
   [/^LASYB?\d/i, "lasy"],
@@ -847,6 +855,58 @@ export function longArrowEnd(g: Glyph): number | undefined {
   return arrowEnd.get(g);
 }
 
+// Advent 3B2's symbol fonts (Elsevier's and Nature's typesetting: AdvP4C4E74
+// and its kin, AdvMacMthSy, AdvPi1, AdvPSMP10): each code draws one symbol,
+// whatever the PDF says of it. Their Unicode maps lie, naming each glyph by
+// the Latin-1 letter at its code ("(" and ")" read "ð" and "Þ", "=" read
+// "¼", "+" read "þ": an Elsevier paper's "g(x) = f(e^x)" read "gðxÞ ¼ f
+// ðex Þ"), and the codes under 0x20 carry no map at all, so ×, −, ≈, ≫, ±,
+// and ε read as control characters and dropped. One font's name is one
+// font program (the hex is its hash), so one table serves every paper set
+// in it. The tables hold the codes seen drawn in nine Elsevier and Nature
+// papers, each glyph read off the page; a code a table lacks reads as the
+// text layer reads it.
+const ADVENT_P4C4E74: Record<number, string> = {
+  0x02: "×", 0x03: "−", 0x04: "·", 0x05: "≈", 0x06: "≫", 0x07: "±", 0x21: "→", 0x22: "↑", 0x23: "↓", 0x2f: "∝",
+  0x30: "′", 0x31: "∞", 0x32: "∈", 0x58: "𝒳", 0x59: "𝒴", 0x66: "{", 0x67: "}", 0x6a: "|", 0x70: "√",
+  0x90: "≃", 0xbc: "=", 0xbd: "[", 0xde: ")", 0xf0: "(", 0xfe: "+",
+};
+const ADVENT_FONTS: [RegExp, Record<number, string>][] = [
+  [/^AdvP4C4E74$/, ADVENT_P4C4E74],
+  // The sized delimiters, radicals, and big operators: the tall bar, the
+  // parentheses and radicals at two sizes, ∑ and ∏ in text and display, ∫.
+  // Code 2 is the piece that extends a radical's bar, drawn once per em
+  // and read "ﬃ" (Elsevier's "pffiffiffiffi" for √): no text.
+  [/^AdvP4C4E46$/, { 0x01: "√", 0x02: "", 0x03: "(", 0x04: "|", 0x05: ")", 0x06: "(", 0x07: ")", 0x08: "|", 0x21: ")", 0x28: "(", 0x29: ")", 0x50: "∑", 0x51: "∏", 0x58: "∑", 0x5a: "∫", 0x70: "√", 0x72: "√" }],
+  // The small math punctuation: ε, the period and comma a formula sets,
+  // <, the slash, and ℓ.
+  [/^AdvP4C4E51$/, { 0x02: "ε", 0x3a: ".", 0x3b: ",", 0x3c: "<", 0x3d: "/", 0x2018: "ℓ" }],
+  [/^AdvP4C4E59$/, { 0x02: "ß" }],
+  // The Macintosh math symbols: the same layout as AdvP4C4E74 where seen.
+  [/^AdvMacMthSy/, { 0x02: "−", 0x30: "′", 0x68: "⟨", 0x69: "⟩", 0x6a: "|", 0xbc: "=", 0xde: ")", 0xf0: "(" }],
+  // Pi fonts: Greek letters and relations, each in its own layout (Pi 1
+  // sets κ at "k" as Symbol does; Pi 2 sets ψ at "c" and θ at "y").
+  [/^AdvPi1$/, { 0x34: ">", 0x44: "Δ", 0x62: "β", 0x67: "γ", 0x6b: "κ", 0x6c: "λ", 0x6d: "μ" }],
+  [/^AdvPi2$/, { 0x61: "α", 0x62: "β", 0x63: "ψ", 0x66: "ϕ", 0x6c: "λ", 0x6f: "ω", 0x70: "π", 0x79: "θ" }],
+  [/^AdvPSMP\d+$/, { 0x62: "β", 0x64: "δ", 0x68: "θ" }],
+  [/^AdvPSMPi\d+$/, { 0x85: "≠" }],
+  [/^AdvPSSym$/, { 0x02: "©" }],
+  [/^Advsymbol$/, { 0x02: "°" }],
+  [/^AdvGreek_B$/, { 0x6a: "κ" }],
+  // The corresponding author's mark: its map says ⇑, the page draws *.
+  [/^AdvCORRESAST$/, { 0x02: "*" }],
+];
+const adventCache = new Map<string, Map<number, string> | null>();
+function adventGlyphs(base: string): Map<number, string> | null {
+  let hit = adventCache.get(base);
+  if (hit === undefined) {
+    const table = ADVENT_FONTS.find(([re]) => re.test(base))?.[1];
+    hit = table ? new Map(Object.entries(table).map(([code, ch]) => [Number(code), ch])) : null;
+    adventCache.set(base, hit);
+  }
+  return hit;
+}
+
 // A font subset that names each glyph by its id in the whole font ("g131")
 // and carries no Unicode map: the text layer reads its codes as control
 // characters and stray letters. Word's PDFs set Cambria so (parse loop
@@ -882,10 +942,13 @@ for (let k = 0; k < 26; k++) {
 for (let k = 0; k < 10; k++) CAMBRIA_IDS[882 + k] = String.fromCharCode(48 + k);
 const CAMBRIA_RE = /^Cambria(?:-(?:Bold|Italic|BoldItalic))?$/;
 
-/** What each code of a font that names its glyphs by id draws, from the
-    font's encoding (its glyph name for each code); null for any other
-    font. */
+/** What each code of a font draws where the text layer cannot say: a
+    font that names its glyphs by id (Cambria), from the font's encoding
+    (its glyph name for each code), and an Advent symbol font (ADVENT_FONTS)
+    by its table; null for any other font. */
 export function namedGlyphs(base: string, names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  const advent = adventGlyphs(base);
+  if (advent) return advent;
   if (!names || !CAMBRIA_RE.test(base)) return null;
   const out = new Map<number, string>();
   for (let code = 0; code < names.length; code++) {
