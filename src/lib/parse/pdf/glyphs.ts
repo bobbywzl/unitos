@@ -873,50 +873,92 @@ export function longArrowEnd(g: Glyph): number | undefined {
 // "¼", "+" read "þ": an Elsevier paper's "g(x) = f(e^x)" read "gðxÞ ¼ f
 // ðex Þ"), and the codes under 0x20 carry no map at all, so ×, −, ≈, ≫, ±,
 // and ε read as control characters and dropped. One font's name is one
-// font program (the hex is its hash), so one table serves every paper set
-// in it. The tables hold the codes seen drawn in nine Elsevier and Nature
-// papers, each glyph read off the page; a code a table lacks reads as the
-// text layer reads it.
-const ADVENT_P4C4E74: Record<number, string> = {
-  0x02: "×", 0x03: "−", 0x04: "·", 0x05: "≈", 0x06: "≫", 0x07: "±", 0x21: "→", 0x22: "↑", 0x23: "↓", 0x2f: "∝",
-  0x30: "′", 0x31: "∞", 0x32: "∈", 0x58: "𝒳", 0x59: "𝒴", 0x66: "{", 0x67: "}", 0x6a: "|", 0x70: "√",
-  0x90: "≃", 0xbc: "=", 0xbd: "[", 0xde: ")", 0xf0: "(", 0xfe: "+",
+// font program (the hex is its hash), but each PDF subsets it anew and
+// gives the glyphs under 0x20 new codes: the PDF's Differences name each
+// of those by the glyph's own name, "C0", "C28", and the name is the
+// same in every paper (a Nature paper draws − at code 2 and ≪ at code 3,
+// an Elsevier paper − at code 3 and × at code 2: C0 is −, C2 is ×, C28 is
+// ≪). So a glyph named "C<n>" reads by n (names), and a glyph with a
+// standard name or none reads by its code (codes), which the papers set
+// alike from 0x20 up. The tables hold the glyphs seen drawn in ten
+// Elsevier and Nature papers, each read off the page; a glyph a table
+// lacks reads as the text layer reads it.
+type AdventTable = { codes: Record<number, string>; names?: Record<number, string> };
+const ADVENT_P4C4E74: AdventTable = {
+  codes: {
+    0x02: "×", 0x03: "−", 0x04: "·", 0x05: "≈", 0x06: "≫", 0x07: "±", 0x21: "→", 0x22: "↑", 0x23: "↓", 0x2f: "∝",
+    0x30: "′", 0x31: "∞", 0x32: "∈", 0x58: "𝒳", 0x59: "𝒴", 0x66: "{", 0x67: "}", 0x6a: "|", 0x70: "√",
+    0x90: "≃", 0xbc: "=", 0xbd: "[", 0xde: ")", 0xf0: "(", 0xfe: "+",
+  },
+  names: { 0: "−", 1: "·", 2: "×", 6: "±", 25: "≈", 28: "≪", 29: "≫" },
 };
-const ADVENT_FONTS: [RegExp, Record<number, string>][] = [
+const ADVENT_FONTS: [RegExp, AdventTable][] = [
   [/^AdvP4C4E74$/, ADVENT_P4C4E74],
   // The sized delimiters, radicals, and big operators: the tall bar, the
   // parentheses and radicals at two sizes, ∑ and ∏ in text and display, ∫.
   // Code 2 is the piece that extends a radical's bar, drawn once per em
-  // and read "ﬃ" (Elsevier's "pffiffiffiffi" for √): no text.
-  [/^AdvP4C4E46$/, { 0x01: "√", 0x02: "", 0x03: "(", 0x04: "|", 0x05: ")", 0x06: "(", 0x07: ")", 0x08: "|", 0x21: ")", 0x28: "(", 0x29: ")", 0x50: "∑", 0x51: "∏", 0x58: "∑", 0x5a: "∫", 0x70: "√", 0x72: "√" }],
+  // and read "ﬃ" (Elsevier's "pffiffiffiffi" for √): no text. By name: C2
+  // and C3 the tallest parentheses (a Nature paper's vector "(h1, h2, …,
+  // hn)"), C0 and C1 the parentheses one size down ("(nk + nk−1)"), C12
+  // the tall bar, C26 an Elsevier paper's opening parenthesis.
+  [
+    /^AdvP4C4E46$/,
+    {
+      codes: { 0x01: "(", 0x02: "", 0x03: ")", 0x04: "|", 0x05: ")", 0x06: "(", 0x07: ")", 0x08: "|", 0x10: "(", 0x11: ")", 0x21: ")", 0x28: "(", 0x29: ")", 0x50: "∑", 0x51: "∏", 0x58: "∑", 0x5a: "∫", 0x70: "√", 0x72: "√" },
+      names: { 0: "(", 1: ")", 2: "(", 3: ")", 12: "|", 26: "(" },
+    },
+  ],
   // The small math punctuation: ε, the period and comma a formula sets,
   // <, the slash, and ℓ.
-  [/^AdvP4C4E51$/, { 0x02: "ε", 0x3a: ".", 0x3b: ",", 0x3c: "<", 0x3d: "/", 0x2018: "ℓ" }],
-  [/^AdvP4C4E59$/, { 0x02: "ß" }],
+  [/^AdvP4C4E51$/, { codes: { 0x02: "ε", 0x3a: ".", 0x3b: ",", 0x3c: "<", 0x3d: "/", 0x2018: "ℓ" }, names: { 15: "ε" } }],
+  [/^AdvP4C4E59$/, { codes: { 0x02: "ß" }, names: { 25: "ß" } }],
   // The Macintosh math symbols: the same layout as AdvP4C4E74 where seen.
-  [/^AdvMacMthSy/, { 0x02: "−", 0x30: "′", 0x68: "⟨", 0x69: "⟩", 0x6a: "|", 0xbc: "=", 0xde: ")", 0xf0: "(" }],
+  [/^AdvMacMthSy/, { codes: { 0x02: "−", 0x30: "′", 0x68: "⟨", 0x69: "⟩", 0x6a: "|", 0xbc: "=", 0xde: ")", 0xf0: "(" } }],
   // Pi fonts: Greek letters and relations, each in its own layout (Pi 1
   // sets κ at "k" as Symbol does; Pi 2 sets ψ at "c" and θ at "y").
-  [/^AdvPi1$/, { 0x34: ">", 0x44: "Δ", 0x62: "β", 0x67: "γ", 0x6b: "κ", 0x6c: "λ", 0x6d: "μ" }],
-  [/^AdvPi2$/, { 0x61: "α", 0x62: "β", 0x63: "ψ", 0x66: "ϕ", 0x6c: "λ", 0x6f: "ω", 0x70: "π", 0x79: "θ" }],
-  [/^AdvPSMP\d+$/, { 0x62: "β", 0x64: "δ", 0x68: "θ" }],
-  [/^AdvPSMPi\d+$/, { 0x85: "≠" }],
-  [/^AdvPSSym$/, { 0x02: "©" }],
-  [/^Advsymbol$/, { 0x02: "°" }],
-  [/^AdvGreek_B$/, { 0x6a: "κ" }],
+  [/^AdvPi1$/, { codes: { 0x34: ">", 0x44: "Δ", 0x62: "β", 0x67: "γ", 0x6b: "κ", 0x6c: "λ", 0x6d: "μ" } }],
+  [/^AdvPi2$/, { codes: { 0x61: "α", 0x62: "β", 0x63: "ψ", 0x66: "ϕ", 0x6c: "λ", 0x6f: "ω", 0x70: "π", 0x79: "θ" } }],
+  [/^AdvPSMP\d+$/, { codes: { 0x62: "β", 0x64: "δ", 0x68: "θ" } }],
+  [/^AdvPSMPi\d+$/, { codes: { 0x85: "≠" } }],
+  [/^AdvPSSym$/, { codes: { 0x02: "©" }, names: { 211: "©" } }],
+  [/^Advsymbol$/, { codes: { 0x02: "°" }, names: { 176: "°" } }],
+  [/^AdvGreek_B$/, { codes: { 0x6a: "κ" } }],
   // The corresponding author's mark: its map says ⇑, the page draws *.
-  [/^AdvCORRESAST$/, { 0x02: "*" }],
+  [/^AdvCORRESAST$/, { codes: { 0x02: "*" } }],
+  // A TrueType symbol font whose Unicode map is Windows-1252: "¼" at the
+  // ellipsis, "´" at ×.
+  [/^AdvTT3f84ef53$/, { codes: { 0xb4: "×", 0xbc: "…" } }],
 ];
-const adventCache = new Map<string, Map<number, string> | null>();
-function adventGlyphs(base: string): Map<number, string> | null {
+const ADVENT_NAME_RE = /^C(\d+)$/;
+const adventCache = new Map<string, AdventTable | null>();
+function adventTable(base: string): AdventTable | null {
   let hit = adventCache.get(base);
   if (hit === undefined) {
-    const table = ADVENT_FONTS.find(([re]) => re.test(base))?.[1];
-    hit = table ? new Map(Object.entries(table).map(([code, ch]) => [Number(code), ch])) : null;
+    hit = ADVENT_FONTS.find(([re]) => re.test(base))?.[1] ?? null;
     adventCache.set(base, hit);
   }
   return hit;
 }
+
+/** What each code of an Advent symbol font draws: by the glyph's name
+    where the PDF names it "C<n>", else by the code. */
+function adventGlyphs(base: string, names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  const table = adventTable(base);
+  if (!table) return null;
+  const out = new Map<number, string>();
+  for (const [code, ch] of Object.entries(table.codes)) out.set(Number(code), ch);
+  if (names && table.names) {
+    for (let code = 0; code < names.length; code++) {
+      const m = ADVENT_NAME_RE.exec(names[code] ?? "");
+      if (!m) continue;
+      const ch = table.names[Number(m[1])];
+      if (ch !== undefined) out.set(code, ch);
+    }
+  }
+  return out.size > 0 ? out : null;
+}
+
+
 
 // A font subset that names each glyph by its id in the whole font ("g131")
 // and carries no Unicode map: the text layer reads its codes as control
@@ -958,7 +1000,7 @@ const CAMBRIA_RE = /^Cambria(?:-(?:Bold|Italic|BoldItalic))?$/;
     (its glyph name for each code), and an Advent symbol font (ADVENT_FONTS)
     by its table; null for any other font. */
 export function namedGlyphs(base: string, names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
-  const advent = adventGlyphs(base);
+  const advent = adventGlyphs(base, names);
   if (advent) return advent;
   if (!names || !CAMBRIA_RE.test(base)) return null;
   const out = new Map<number, string>();
