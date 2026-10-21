@@ -528,9 +528,20 @@ function sizeOf(runs: Run[]): number | undefined {
 // LONG-DOCUMENT BENCHMARKS").
 const IEEE_CAPTION_RE = /^TABLE\s+(?:\d+|[IVXL]+)\s+\p{Lu}/u;
 
+// Nature sets "Table 1 Datasets characteristics" in bold over the table, no
+// mark after the number: a short bold line that opens so is the caption
+// (parse loop finding: s41467-018-04316-3's title read as a paragraph
+// over its table). "Table 2 shows …" opens a sentence, in plain type.
+const BOLD_CAPTION_RE = /^Table\s+\d{1,3}\s+\p{Lu}/u;
+
 function isCaption(s: Segment): boolean {
   const text = s.text.trim();
-  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text));
+  if (s.footnote || s.text.length > 1200) return false;
+  // The bold line reads as a heading where it stands apart from the table.
+  if (s.type === "HEADING") return text.length <= 160 && BOLD_CAPTION_RE.test(text);
+  if (s.type !== "PARAGRAPH") return false;
+  if (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text)) return true;
+  return text.length <= 160 && BOLD_CAPTION_RE.test(text) && boldShare(s.runs ?? [], s.text.length) > 0.9;
 }
 
 // A CJK table's label and its title: "表 1 提供した学習・開発用データ".
