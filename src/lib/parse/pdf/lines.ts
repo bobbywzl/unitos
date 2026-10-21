@@ -757,7 +757,14 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   // so a sentence with inline math took the math's size and read as a
   // heading (synth-paper-html: seven invented headings). A glyph of a math
   // font set in Unicode counts only on a line with no other text.
+  // A math font's glyphs set no line's size: a symbol font is set at its
+  // design's size, not the words' (Advent 3B2 draws an 8 pt line's ε, ∈,
+  // and ± at 10.5 pt, and every line of prose with a symbol in it read a
+  // fourth larger than its paragraph's, so "for all h ∈ (−δ, 0)," and
+  // "slope −θ ± ε." broke off their paragraphs and went into the display
+  // crops beside them).
   const textSizes = merged.flatMap((i) => {
+    if (i.math) return [];
     const text = i.glyphs?.filter((g) => !isUnicodeMathFont(g.base));
     return !i.glyphs?.length || text?.length === i.glyphs.length ? [i.size] : (text ?? []).map((g) => g.size);
   });
