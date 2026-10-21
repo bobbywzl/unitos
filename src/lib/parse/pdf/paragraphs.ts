@@ -647,7 +647,11 @@ export function opensWithLabel(line: Line): boolean {
 const TERMINAL_RE = /[.!?:。！？：]["'”’」』)）]?$/;
 // A line that opens a sentence: a capital, a number, a CJK character, an
 // opening quote or bracket, or a note's symbol.
-const OPENS_SENTENCE_RE = /^[\p{Lu}\p{N}\p{Lo}“"'‘(\[*†‡§¶‖]/u;
+const OPENS_SENTENCE_RE = /^[\p{Lu}\p{N}\p{Lo}“"'‘(\[*†‡§¶‖©]/u;
+// A URL at a line's start: a line of its own where it would have fit on
+// the line before (parse loop finding: an ACM paper's "ACM ISBN …" over
+// "https://doi.org/…", two lines of its copyright block, read as one).
+const OPENS_URL_RE = /^(?:https?:\/\/|www\.)\S/i;
 
 // An OCR layer over a scan: most of the page's glyphs are invisible (text
 // render mode 3), and each line's size comes from the scan's letters, so it
@@ -907,7 +911,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       sentenceEdge > 0 &&
       (prevTerminal || roomy) &&
       prev.xEnd + prev.size * 0.28 + word <= sentenceEdge - 1 &&
-      OPENS_SENTENCE_RE.test(next.text);
+      (OPENS_SENTENCE_RE.test(next.text) || (roomy && OPENS_URL_RE.test(next.text)));
     // On a page set justified only a paragraph's last line stops short of
     // the edge its block's lines reach: after a sentence, a line that stops
     // short ends its paragraph when the next line opens a sentence, though
