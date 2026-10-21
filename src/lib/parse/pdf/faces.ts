@@ -45,9 +45,9 @@ const MENU = DOCS_FONTS.map((f) => ({ name: f.name, key: letters(f.name) })).sor
 // monospace: MS Gothic, and a Japanese journal's Ryumin body, read as
 // Courier New. Gothic, Hei, and Dotum faces are sans; Mincho, Song, Ming,
 // Kai, and Batang faces serif.
-const CJK_SANS =
+export const CJK_SANS =
   /Gothic|ShinGo|MidashiGo|FutoGo|KakuGo|KozGo|HiraKaku|HiraMaru|Jun\d|SimHei|YaHei|ZenHei|Heiti|STHei|DengXian|Meiryo|Malgun|Dotum|Gulim|SansCJK|SourceHanSans/i;
-const CJK_SERIF =
+export const CJK_SERIF =
   /Mincho|Ryumin|MidashiMin|FutoMin|HeiseiMin|KozMin|HiraMin|SimSun|STSong|SongTi|宋|MSung|KaiTi|FangSong|Ming(?:LiU|Std)|Batang|Gungsuh|Myeongjo|Myungjo|SerifCJK|SourceHanSerif/i;
 const MONO = /Mono|Courier|Consol|Typewriter|^CMTT/i;
 // Names that say sans come before those that say serif: MicrosoftSansSerif

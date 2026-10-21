@@ -4,7 +4,7 @@ import { pageLines } from "@/lib/parse/pdf/columns";
 import { fitOcrItems, placeMarks } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
-import { nameShape } from "@/lib/parse/pdf/faces";
+import { CJK_SANS, CJK_SERIF, nameShape } from "@/lib/parse/pdf/faces";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
 import { ABSTRACT_RE, cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
@@ -67,6 +67,8 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 // Advent 3B2's sized delimiters (AdvP4C4E46, glyphs.ts ADVENT_FONTS): the
 // parentheses and the tall bars hang from the line over the formula they
 // enclose.
+// A Chinese, Japanese, or Korean letter.
+const CJK_LETTER_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 const ADVENT_HANGING_RE = /^[()|]$/;
 
 // A font whose name says its weight: its name is believed over its glyphs.
@@ -112,6 +114,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const unnamedFonts = new Set<string>();
   const realNames = new Map<string, string>();
   const faceLetters = new Map<string, number>();
+  const cjkFaceLetters = new Map<string, number>();
   let layerChars = 0;
 
   for (const pageNumber of read) {
@@ -212,9 +215,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // math and code, is set apart by its face (Flags.faced).
     for (const raw of textItems) {
       const face = faceOf(String(raw.fontName ?? ""));
-      if (face) faceLetters.set(face, (faceLetters.get(face) ?? 0) + (raw.str.match(/\p{L}/gu)?.length ?? 0));
+      if (!face) continue;
+      faceLetters.set(face, (faceLetters.get(face) ?? 0) + (raw.str.match(/\p{L}/gu)?.length ?? 0));
+      cjkFaceLetters.set(face, (cjkFaceLetters.get(face) ?? 0) + (raw.str.match(CJK_LETTER_RE)?.length ?? 0));
     }
     const mainFace = [...faceLetters].sort((a, b) => b[1] - a[1])[0]?.[0];
+    // The face that sets the most Chinese, Japanese, or Korean letters.
+    const mainCjkFace = [...cjkFaceLetters].filter((e) => e[1] > 0).sort((a, b) => b[1] - a[1])[0]?.[0];
     // A face whose name says no weight is bold when its glyphs fill their
     // boxes well past the main face's (programs.ts embeddedInkOfFace):
     // Advent 3B2 names a bold face by a hash with no weight in it, and
@@ -235,6 +242,11 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         const face = faceOf(fontName);
         flags = { ...fontFlags(realName), ...(face ? { face } : {}) };
         if (!flags.bold && !flags.math && face !== undefined && heavyFace(face)) flags.bold = true;
+        // Japanese sets its bold in a gothic face over a mincho body
+        // (pLaTeX's \textbf is GothicBBB-Medium on Ryumin-Light), and the
+        // gothic face's name says no weight (parse loop finding: a journal's
+        // "一般論文" and "キーワード" read as plain).
+        if (!flags.bold && !flags.math && face !== undefined && mainCjkFace !== undefined && CJK_SANS.test(face) && CJK_SERIF.test(mainCjkFace)) flags.bold = true;
         flagsByFont.set(fontName, flags);
       }
       return flags;
