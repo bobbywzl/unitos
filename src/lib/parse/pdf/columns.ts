@@ -554,13 +554,26 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
     return apart && row.some((i) => /^\d+$/.test(i.str.trim())) ? row : [];
   };
   const edge = new Set([...edgeRow(Math.max(...ys)), ...edgeRow(Math.min(...ys))]);
+  // An entry's number and its words are one run: no gutter falls in the
+  // gap between them (parse loop finding: a Nature paper's references
+  // page found its one clear x between the right column's entry numbers
+  // "26." and their words, 0.8 em apart, the running foot crossing every
+  // x of the real gutter; the numbers joined the left column's lines, and
+  // "References" read after the entries beside it).
+  const reach = new Map<Item, number>();
+  for (const i of items) {
+    if (!/^\(?\d{1,3}[.)]$/.test(i.str.trim())) continue;
+    const next = items.find((o) => o !== i && o.x > i.x + i.w && o.x - (i.x + i.w) <= i.size * 1.5 && Math.abs(o.y - i.y) < i.size * 0.5 && /\p{L}/u.test(o.str));
+    if (next) reach.set(i, next.x + next.w);
+  }
+  const endOf = (i: Item) => reach.get(i) ?? i.x + i.w;
   let best: { g: number; cross: number; pictured: number } | null = null;
   let clear: { g: number; cross: number; pictured: number } | null = null;
   const middle = x0 + width / 2;
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
     let [cross, head] = [0, 0];
     for (const i of items) {
-      if (!(i.x < g && i.x + i.w > g)) continue;
+      if (!(i.x < g && endOf(i) > g)) continue;
       if (edge.has(i)) head += i.str.trim().length;
       else cross += i.str.trim().length;
     }
