@@ -899,13 +899,14 @@ const ADVENT_FONTS: [RegExp, AdventTable][] = [
   // Code 2 is the piece that extends a radical's bar, drawn once per em
   // and read "ﬃ" (Elsevier's "pffiffiffiffi" for √): no text. By name: C2
   // and C3 the tallest parentheses (a Nature paper's vector "(h1, h2, …,
-  // hn)"), C0 and C1 the parentheses one size down ("(nk + nk−1)"), C12
-  // the tall bar, C26 an Elsevier paper's opening parenthesis.
+  // hn)"), C0 and C1 the parentheses one size down ("(nk + nk−1)"), C16
+  // and C17 the next size down ("p(W)"), C12 the tall bar, C26 an
+  // Elsevier paper's opening parenthesis.
   [
     /^AdvP4C4E46$/,
     {
       codes: { 0x01: "(", 0x02: "", 0x03: ")", 0x04: "|", 0x05: ")", 0x06: "(", 0x07: ")", 0x08: "|", 0x10: "(", 0x11: ")", 0x21: ")", 0x28: "(", 0x29: ")", 0x50: "∑", 0x51: "∏", 0x58: "∑", 0x5a: "∫", 0x70: "√", 0x72: "√" },
-      names: { 0: "(", 1: ")", 2: "(", 3: ")", 12: "|", 26: "(" },
+      names: { 0: "(", 1: ")", 2: "(", 3: ")", 12: "|", 16: "(", 17: ")", 26: "(" },
     },
   ],
   // The small math punctuation: ε, the period and comma a formula sets,

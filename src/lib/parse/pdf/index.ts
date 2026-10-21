@@ -244,20 +244,30 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const items: Item[] = [];
     const rotated: Item[] = [];
     // The baseline of words under a hanging delimiter's origin: the first
-    // text baseline at or under it, within two sizes, among the words
-    // within twelve ems to either side (a formula at a line's end stands
-    // past its words); null where none is. A tall bar is drawn in pieces
+    // text baseline at or under it, within two sizes, among the letters at
+    // the delimiter's size or near it within twelve ems to either side (a
+    // formula at a line's end stands past its words); null where none is. A tall bar is drawn in pieces
     // stacked on one x, and the lower piece's origin sits just over the
     // formula's baseline.
     const wordBaselines = textItems
-      .filter((raw) => /\p{L}{2}/u.test(raw.str))
-      .map((raw) => ({ x: raw.transform[4], xEnd: raw.transform[4] + raw.width, y: raw.transform[5] }));
+      .filter((raw) => /\p{L}/u.test(raw.str))
+      .map((raw) => ({ x: raw.transform[4], xEnd: raw.transform[4] + raw.width, y: raw.transform[5], size: Math.hypot(raw.transform[2], raw.transform[3]) }));
+    // The letters the delimiter stands among come first (a line's words
+    // reach past the delimiter on one side or both): a formula's numerator
+    // set over its main line is no line for the main line's parentheses.
     const baselineUnder = (x: number, y: number, size: number): number | null => {
       let best: number | null = null;
+      let bestCovers = false;
       for (const b of wordBaselines) {
         const drop = y - b.y;
-        if (drop < -size * 0.1 || drop > size * 2 || x < b.x - size * 12 || x > b.xEnd + size * 12) continue;
-        if (best === null || b.y > best) best = b.y;
+        // A script's baseline is no line's: a subscript "ij" under a
+        // formula's numerator took the parentheses meant for the numerator.
+        if (b.size < size * 0.8 || drop < -size * 0.1 || drop > size * 2 || x < b.x - size * 12 || x > b.xEnd + size * 12) continue;
+        const covers = x >= b.x - size && x <= b.xEnd + size;
+        if (best === null || (covers && !bestCovers) || (covers === bestCovers && b.y > best)) {
+          best = b.y;
+          bestCovers = covers;
+        }
       }
       return best;
     };
