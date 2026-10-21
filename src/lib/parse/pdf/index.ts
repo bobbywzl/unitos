@@ -67,6 +67,8 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 // Advent 3B2's sized delimiters (AdvP4C4E46, glyphs.ts ADVENT_FONTS): the
 // parentheses and the tall bars hang from the line over the formula they
 // enclose.
+// A run of underscores set as a rule.
+const DECORATIVE_RULE_RE = /^\s*_{6,}\s*$/;
 // A Chinese, Japanese, or Korean letter.
 const CJK_LETTER_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 const ADVENT_HANGING_RE = /^[()|]$/;
@@ -367,6 +369,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       // save (Postgres rejects 0x00 in text).
       const str = normalizeGlyphs(read.str.replace(CONTROL_CHARS_RE, ""), glyphs);
       if (str.length === 0) continue;
+      // A short run of underscores alone on its baseline, centered on the
+      // page: a decorative rule, no words (a slip opinion's rules under
+      // the court's name and under the docket number; parse loop finding:
+      // "SUPREME COURT OF THE UNITED STATES______" and a paragraph of
+      // underscores). A form's fill-in line stands after its label, on
+      // the label's baseline, and stays.
+      if (DECORATIVE_RULE_RE.test(str) && read.w <= viewport.width * 0.25 && Math.abs(read.x + read.w / 2 - viewport.width / 2) <= size && !textItems.some((o) => o !== raw && Math.abs((o.transform as number[])[5] - t[5]) <= size * 0.5 && o.str.trim() !== "")) continue;
       // Word and Google Docs draw a font with no bold face in bold by
       // stroking its outline as well as filling it (text render mode 2):
       // the font's name says regular (census class 12: an arXiv paper's
