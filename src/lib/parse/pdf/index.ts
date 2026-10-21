@@ -550,6 +550,24 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     }
     // pdf.js keeps each page's operator list until the page is cleaned up.
     page.cleanup();
+    // The parse loop's view of a page's lines: UNITOS_DEBUG_LINES="<page>:<regex>[:items]"
+    // prints every line within 30 pt of a line the regex matches, with its
+    // cells (its items too with "items") and the horizontal rules there, to
+    // stderr.
+    if (process.env.UNITOS_DEBUG_LINES) {
+      const [dp, rx, withItems] = process.env.UNITOS_DEBUG_LINES.split(":");
+      if (Number(dp) === pageNumber) {
+        const re = new RegExp(rx ?? ".");
+        const ys = lines.filter((l) => re.test(l.text)).map((l) => l.y);
+        const [lo, hi] = [Math.min(...ys) - 30, Math.max(...ys) + 30];
+        lines.forEach((l, n) => {
+          if (l.y < lo || l.y > hi) return;
+          console.error("[line]", n, "x", l.x.toFixed(1), "xEnd", l.xEnd.toFixed(1), "y", l.y.toFixed(1), "size", l.size.toFixed(1), "cells", l.cells.map((c) => `${c.x.toFixed(0)}:${JSON.stringify(c.text.slice(0, 40))}`).join(" | "), l.table ? "T" : "", l.display ? "D" : "");
+          if (withItems === "items") console.error("[items]", l.items.map((it) => `${JSON.stringify(it.str)}@${it.x.toFixed(1)}+${it.w.toFixed(1)}/${it.size.toFixed(1)}${it.sup ? "^" : ""}${it.space ? "_" : ""}`).join(" "));
+        });
+        for (const r of drawing.rules) if (r.dir === "h" && r.y1 >= lo && r.y1 <= hi) console.error("[rule]", "y", r.y1.toFixed(1), "x", r.x1.toFixed(1), "-", r.x2.toFixed(1));
+      }
+    }
     readLines.push(lines);
     readHeights.push(viewport.height);
     readPages.push(pageNumber - 1);
