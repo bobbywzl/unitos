@@ -63,6 +63,11 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 
 /** pages: the PDF's pages the blocks come from, 1-based (the reader's
     choice at the add); absent or empty, every page. */
+// Advent 3B2's sized delimiters (AdvP4C4E46, glyphs.ts ADVENT_FONTS): the
+// parentheses and the tall bars hang from the line over the formula they
+// enclose.
+const ADVENT_HANGING_RE = /^[()|]$/;
+
 // A font whose name says its weight: its name is believed over its glyphs.
 const WEIGHT_WORD_RE = /bold|black|heavy|light|regular|roman|medium|book|semi|demi|thin|ultra|extra|^CM|^LM|^SF|KaTeX/i;
 
@@ -238,6 +243,24 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     };
     const items: Item[] = [];
     const rotated: Item[] = [];
+    // The baseline of words under a hanging delimiter's origin: the first
+    // text baseline at or under it, within two sizes, among the words
+    // within twelve ems to either side (a formula at a line's end stands
+    // past its words); null where none is. A tall bar is drawn in pieces
+    // stacked on one x, and the lower piece's origin sits just over the
+    // formula's baseline.
+    const wordBaselines = textItems
+      .filter((raw) => /\p{L}{2}/u.test(raw.str))
+      .map((raw) => ({ x: raw.transform[4], xEnd: raw.transform[4] + raw.width, y: raw.transform[5] }));
+    const baselineUnder = (x: number, y: number, size: number): number | null => {
+      let best: number | null = null;
+      for (const b of wordBaselines) {
+        const drop = y - b.y;
+        if (drop < -size * 0.1 || drop > size * 2 || x < b.x - size * 12 || x > b.xEnd + size * 12) continue;
+        if (best === null || b.y > best) best = b.y;
+      }
+      return best;
+    };
     // Text set in a vertical font on a page of horizontal text (a
     // chapter's tab at the page's edge, in a Japanese white paper) is no
     // line of the text: read as horizontal, its characters joined the body's
@@ -318,7 +341,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       // A sized delimiter hangs from its origin: it stands on the baseline
       // its box gives, with the formula it encloses.
       const hung = glyphs !== undefined && glyphs.length > 0 && glyphs.every((g) => g.family === "omx");
-      const y = hung ? t[5] + standingBaseline(glyphs[0], drawing.glyphs) - glyphs[0].y : t[5];
+      // Advent 3B2's sized delimiters hang too, from the baseline of the
+      // line over the formula, with no box to say how far: the delimiter
+      // stands on the nearest baseline of words under its origin (parse
+      // loop finding: a Nature paper's "(h1, h2, …, hn)" read "This( layer
+      // has) nk neurons" on the line above, and the bars of |W| likewise).
+      const adventHung = !hung && glyphs !== undefined && glyphs.length === 1 && ADVENT_HANGING_RE.test(str) && /AdvP4C4E46$/.test(realNameOf(fontName) ?? "");
+      const y = hung ? t[5] + standingBaseline(glyphs[0], drawing.glyphs) - glyphs[0].y : adventHung ? (baselineUnder(t[4], t[5], size) ?? t[5]) : t[5];
       // One item may hold stroked and filled glyphs (a Chinese paper's
       // "中图分类号：" stroked but for its colon, "文献标识码：Ａ" with a
       // regular "Ａ"): it is cut where the stroke starts or stops.
@@ -348,12 +377,22 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // takes for a space (Cambria's "o" at code 9, a tab).
     const read = new Set<Glyph>();
     for (const run of glyphRuns) for (const g of run ?? []) if ((g.family !== null && g.family !== "ot1") || g.named) read.add(g);
+    const hungSeen = new Set<string>();
     for (const run of unreadRuns(drawing.glyphs, read, glyphText)) {
       const first = run[0];
       if (run.every((g) => g.hidden)) continue;
       const text = itemText(run, glyphText);
-      const y = standingBaseline(first, drawing.glyphs);
+      // Advent's sized delimiters hang from the line over the formula
+      // (ADVENT_HANGING_RE, above).
+      const adventHung = run.length === 1 && ADVENT_HANGING_RE.test(text?.str ?? "") && /AdvP4C4E46$/.test(realNameOf(first.font) ?? "");
+      const y = adventHung ? (baselineUnder(first.x, first.y, first.size) ?? first.y) : standingBaseline(first, drawing.glyphs);
       if (!text || first.x < viewX1 || first.x > viewX2 || y < viewY1 || y > viewY2) continue;
+      // The pieces of one tall bar, stacked on one x, are one bar.
+      if (adventHung) {
+        const key = `${text.str}@${first.x.toFixed(0)}@${y.toFixed(0)}`;
+        if (hungSeen.has(key)) continue;
+        hungSeen.add(key);
+      }
       const flags = flagsOf(first.font);
       items.push({
         str: normalizeGlyphs(text.str, run),
