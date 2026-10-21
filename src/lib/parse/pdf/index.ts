@@ -1134,6 +1134,10 @@ function squash(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+// A journal banner's line: where the journal's contents list is, its home
+// page, or a web address alone.
+const BANNER_LINE_RE = /^\s*(?:contents?\s+lists?\s+available\s+at\b|journal\s*home\s*page\s*:|(?:https?:\/\/|www\.)\S+\s*$)/i;
+
 // The parts of a paper's front matter that its headings name.
 const FRONT_PART_RE =
   /^\s*(?:(?:abstract|author summary|lay summary|significance(?: statement)?|highlights|graphical abstract|key ?words|index terms|article info|ccs concepts)\b|摘\s*要|要\s*旨|关\s*键\s*词|キーワード)/i;
@@ -1164,6 +1168,13 @@ function mastheadOf(segments: Segment[], title: Segment, running: Set<string>, b
   const under = before.filter((s) => !drop.has(s) && s.type !== "FIGURE" && s.box !== undefined && s.box.y2 <= tb.y1 + 2);
   const deep = under.some((s) => s.box!.y1 < tb.y1 - bodySize * 6);
   const side = deep && under.every((s) => (s.lineSize ?? bodySize) < bodySize * 0.95) ? under : [];
+  // A journal's banner over the title says where its contents are and
+  // where its home page is ("Contents lists available at SciVerse
+  // ScienceDirect", "journal homepage: www.elsevier.com/locate/COGNIT"):
+  // the journal's furniture, no kicker of the paper (parse loop finding:
+  // an Elsevier paper opened with both lines over its title). The
+  // journal's name between them stays, a kicker.
+  for (const s of before) if (!drop.has(s) && s.type === "PARAGRAPH" && BANNER_LINE_RE.test(s.text)) drop.add(s);
   const over = before.filter((s) => !drop.has(s) && s.type !== "FIGURE" && s.type !== "SEPARATOR" && s.box !== undefined && s.box.y1 >= tb.y2 - 2);
   if (over.length <= 4 && over.every((s) => (s.type === "PARAGRAPH" || s.type === "HEADING") && [...s.text].length <= 150)) {
     for (const s of before) if (s.type === "SEPARATOR") drop.add(s);
