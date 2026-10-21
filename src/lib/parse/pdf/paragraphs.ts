@@ -375,6 +375,7 @@ function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
     /\p{Ll}/u.test(l.text) &&
     boldShare(l.runs, l.text.length) < 0.9;
   if (full(line)) return false;
+  if (centeredPage(lines, ctx)) return true;
   const column = lineColumn(line);
   const center = right > 0 ? (left + right) / 2 : column ? (column[0] + column[1]) / 2 : middle;
   const shared = pageMiddle(lines, ctx);
@@ -402,6 +403,31 @@ function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
     const size = Math.min(o.size, line.size);
     return o !== line && Math.abs((o.x + o.xEnd) / 2 - middle) <= size * 0.1 && Math.abs(o.x - line.x) > size * 0.1;
   });
+}
+
+// A page set centered: three lines or more, no table's, every one of
+// them sharing the page's lines' middle within half its size, their
+// starts at three places or more, two ems of the smallest line apart. A
+// title slide's title lines, its subtitle, its author line, and its
+// license line are its lines; the subtitle, nearly the width of the
+// column and 3.5 pt off the title's middle, read flush left (parse loop
+// finding: real-gslides-oer-5rs p2, "The Shortest Possible Introduction").
+const centeredPages = new WeakMap<Line[], boolean>();
+function centeredPage(lines: Line[], ctx: PageContext): boolean {
+  let found = centeredPages.get(lines);
+  if (found !== undefined) return found;
+  const own = lines.filter((l) => l.cells.length === 1 && !l.table && l.text.trim() !== "");
+  const middleOf = (l: Line) => (l.x + l.xEnd) / 2;
+  const least = own.length >= 3 ? Math.min(...own.map((l) => l.size)) : 0;
+  const middle = own.length >= 3 ? median(own.map(middleOf)) : 0;
+  found =
+    own.length >= 3 &&
+    own.length === lines.filter((l) => !l.table).length &&
+    own.every((l) => Math.abs(middleOf(l) - middle) <= l.size * 0.5 && !fillsColumn(lines, lines.indexOf(l), ctx)) &&
+    new Set(own.map((l) => Math.round(l.x))).size >= 3 &&
+    Math.max(...own.map((l) => l.x)) - Math.min(...own.map((l) => l.x)) > least * 2;
+  centeredPages.set(lines, found);
+  return found;
 }
 
 // The middle that three lines or more share on a page, set in from the
