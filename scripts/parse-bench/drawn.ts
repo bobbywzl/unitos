@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as listDrawing from "@/components/docs/toolbar/lists";
-import { readStyles, sizeInPt } from "@/components/docs/toolbar/styles";
+import { readStyles, sizeInPt, styleBaseOf } from "@/components/docs/toolbar/styles";
 import { fontStack } from "@/components/docs/fonts";
 import katex from "katex";
 import { KATEX_MACROS } from "@/lib/katex";
@@ -268,6 +268,8 @@ function formulaLineHeight(): number {
     box (paint.ts inkBands). */
 export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (page: number, box: Rect) => InkBand[]): DisplayGaps {
   const placed = parse.blocks.filter((b) => b.kind === "equation" && b.at);
+  const body = parse.fonts?.body.size;
+  const scale = styleBaseOf({ attrs: rich.attrs ?? {} }) === "reader" && body && body > 0 ? readStyles({ attrs: rich.attrs ?? {} }).normal.size / body : 1;
   let next = 0;
   let edges = 0;
   let right = 0;
@@ -319,8 +321,12 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (
     const line = (b: InkBand) => b.bottom - b.top >= 1.5 && (b.ink ?? Infinity) >= 1;
     const above = higher.filter((b) => b.bottom <= inkTop - 0.5 && line(b)).at(-1);
     const below = lower.find((b) => b.top >= inkBottom + 0.5 && line(b));
-    const judge = (page: number | null, drawnPt: number | null, what: string) => {
-      if (page === null || drawnPt === null || page > 36) return;
+    // An import on the reader's base draws the page's space in the
+    // reader's measure (lib/docs/import.ts pageSpace): the page's points at
+    // Normal text's size over the body's.
+    const judge = (pagePt: number | null, drawnPt: number | null, what: string) => {
+      if (pagePt === null || drawnPt === null || pagePt > 36) return;
+      const page = pagePt * scale;
       edges++;
       if (Math.abs(drawnPt - page) <= Math.max(2, 0.25 * page)) right++;
       else misses.push(`p${at.page}: ${what} ${Math.round(drawnPt)} pt, the page's ${Math.round(page)} pt`);
