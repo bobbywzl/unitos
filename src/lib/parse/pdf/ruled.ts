@@ -839,9 +839,12 @@ function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, page
   // A rotated item inside a table's rules is the table's: a column head
   // set aslant, upright at its drawn box (index.ts uprightItem), reads in
   // its column with the heads beside it. One outside every table stays off
-  // the page.
+  // the page, and so does one set far larger than the table's words: a
+  // watermark across the page, not a head (parse loop finding: a GOV.UK
+  // invoice's 100 pt "Sample", set diagonally, read in its Subtotal cell).
   for (const region of regions) {
-    const own = rotated.filter((it) => inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
+    const size = median(region.items.map((it) => it.size));
+    const own = rotated.filter((it) => it.size <= size * 2.5 && inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
     if (own.length === 0) continue;
     // A word set upright right after a rotated one is a word of its own:
     // the two share no letter spacing (parse loop finding: IRS Form 1040's
