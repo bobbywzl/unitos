@@ -1,0 +1,752 @@
+{
+ "id": "real-ncomms-04316-p9",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/real/ncomms-s41467-018-04316-3.pdf",
+  "url": "https://www.nature.com/articles/s41467-018-04316-3.pdf"
+ },
+ "pages": [
+  9,
+  10
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Mocanu, Mocanu, Stone, Nguyen, Gibescu, Liotta, 'Scalable training of artificial neural networks with adaptive sparse connectivity inspired by network science', Nature Communications 9:2383 (2018), CC BY 4.0; Advent 3B2 (fonts named by a hash, 'AdvOTcb88df00', with no weight in the name and StemV 0: the bold face reads bold only from its glyphs' ink, programs.ts). Scored: page 9: Fig. 7 (two plot panels, a and b) and its caption, the rest of the CNN paragraph that opened on page 8 (only its words on page 9 are here), the bold run-in lead 'Performance on CNNs.', two more paragraphs, the 'Discussion' heading and its first two paragraphs; page 10: the discussion's last paragraph, 'Methods' over paragraphs a size smaller with bold run-in leads ('Artificial neural networks.', 'Scale-free complex networks.', 'Data availability.'), the 'Received … Accepted …' line, 'References' and references 1–69 as one numbered list (each entry's journal in italics and its volume in bold, a hanging indent). Citation numbers are superscripts. The running head 'ARTICLE' and 'NATURE COMMUNICATIONS | DOI …', and the foot 'NATURE COMMUNICATIONS | (2018)9:2383 | DOI … | www.nature.com/naturecommunications' with the page number, are furniture. Text written by hand where the parse slipped: the CNN architecture joins at its hyphens (dropout(0.3), conv(64, (3,3))-pooling), 'overfitting', and the power law 'P(d) ~ d−γ' (the tilde is a relation, not an accent).",
+ "furniture": [
+  "ARTICLE",
+  "NATURE COMMUNICATIONS | DOI: 10.1038/s41467-018-04316-3",
+  "NATURE COMMUNICATIONS | (2018)9:2383 | DOI: 10.1038/s41467-018-04316-3 | www.nature.com/naturecommunications",
+  "9",
+  "10"
+ ],
+ "blocks": [
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 7",
+     "bold": true
+    },
+    {
+     "text": " Experiments with CNN variants on the CIFAR10 dataset. "
+    },
+    {
+     "text": "a",
+     "bold": true
+    },
+    {
+     "text": " Models performance in terms of classification accuracy (left "
+    },
+    {
+     "text": "y",
+     "italic": true
+    },
+    {
+     "text": " axes) over training epochs ("
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " axes). "
+    },
+    {
+     "text": "b",
+     "bold": true
+    },
+    {
+     "text": " The number of weights of the three models on each dataset. The convolutional layers of each model have in total 287,008 weights, while the fully connected (or the sparse) layers on top have 8,413,194, 184.842, and 184,842 weights for CNN, CNNFixProb, and SET-CNN, respectively"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "performing a small random search procedure with L1 and L2 levels between 0.01 and 0.0000001 to try maximizing the performance of all the three models. In all cases, we used SGD with 0.01 learning rate to train the models. The results depicted in Fig. 6 show that, in this specific scenario, SET-MLP achieves the best performance if no regularization or L2 regularization is used for the weights, while L1 regularization does not offer the same level of performance. To summarize, SET-MLP achieves the best results on the Fashion-MNIST dataset with the following settings: SReLU activation function, without Nesterov momentum, and without (or with L2) weights regularization. These being, in fact, the settings that we used in the MLP experiments discussed above. It is worth highlighting that independently on the specific setting, the general conclusion drawn up to now still holds. SET-MLP achieves a similar (or better) performance to that of MLP, while having a much smaller number of connections. Also, SET-MLP always clearly outperforms MLPFixProb."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Performance on CNNs.",
+     "bold": true
+    },
+    {
+     "text": " As one of the most used ANN models nowadays are CNNs"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": ", we have briefly studied how SET can be used in the CNN architectures to replace their fully connected layers with sparse evolutionary counterparts. We considered a standard small CNN architecture, i.e. conv(32,(3,3))-dropout(0.3)-conv(32,(3,3))-pooling-conv(64,(3,3))-dropout(0.3)-conv(64,(3,3))-pooling-conv(128,(3,3))-dropout(0.3)-conv(128,(3,3))-pooling), where the numbers in brackets for the convolutional layers mean (number of filters, (kernel size)), and for the dropout layers represent the dropout rate. Then, on top of the convolutional layers, we have used: (1) two fully connected layers to create a standard CNN, (2) two sparse layers with a fixed Erdős–Rényi topology to create a CNNFixProb, and (3) two evolutionary sparse layers to create a SET-CNN. For each model, each of the two layers on top was followed by a dropout(0.3) layer. On top of these, the CNN, CNNFixProb, and SET-CNN contained also a softmax layer. Even if SReLU seems to offer a slightly better performance, we used ReLU as activation function for the hidden neurons due to its wide utilization. We used SGD to train the models. The experiments were performed on the CIFAR10 dataset. The results are depicted in Fig. 7. They show, same as in the previous experiments with restricted Boltzmann machine and multi-layer perceptron, that SET-CNN can achieve a better accuracy than CNN, even if it has just about 4% of the CNN connections. To quantify this, we mention that in our experiments SET-CNN reaches a maximum of 90.02% accuracy, CNNFixProb achieves a maximum of 88.26% accuracy, while CNN achieves a maximum of 87.48% accuracy. Similar with the RBM experiments, we can observe that CNN is subject to a small overfitting behavior, while CNNFixProb and SET-CNN are very stable. Even if our goal was just to show that SET can be combined also with the widely used CNNs and not to optimize the CNN variants architectures to increase the performance, we highlight that, in fact, SET-CNN achieves a performance comparable with state-of-the-art results. The benefit of using SET in CNNs is two-fold: to reduce the total number of parameters in CNNs and to permit the use of larger CNN models."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Last but not least, during all the experiments performed, we observed that SET is quite stable with respect to the choice of meta-parameters ε and ζ. There is no way to say that our choices offered the best possible performance, even if we fine-tuned them just on one dataset, i.e. MNIST, and we evaluated their performance on all 15 datasets. Still, we can say that a ζ = 0.3 for both, SET-RBM and SET-MLP, and an ε specific for each model type, SET-RBM (ε = 11), SET-MLP (ε = 20), and SET-CNN (ε = 20) were good enough to outperform state-of-the-art."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Considering the different datasets under scrutiny, we stress that we have assessed both image-intensive and non-image sets. On image datasets, CNNs"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " typically outperform MLPs. However, CNNs are not viable on other types of high-dimensional data, such as biological data (e.g."
+    },
+    {
+     "text": "45",
+     "sup": true
+    },
+    {
+     "text": "), or theoretical physics data (e.g."
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": "). In those cases, MLPs will be a better choice. This is in fact the case of the HIGGS dataset (Fig. 5e, f), where SET-MLP achieves 78.47% classification accuracy and has about 90,000 parameters. Whereas, one of the best MLP models in the literature achieved a 78.54% accuracy, while having three times more parameters"
+    },
+    {
+     "text": "40",
+     "sup": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Discussion"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this paper, we have introduced SET, a simple and efficient procedure to replace ANNs’ fully-connected bipartite layers with sparse layers. We have validated our approach on 15 datasets (from different domains) and on three widely used ANN models, i.e. RBMs, MLPs, and CNNs. We have evaluated SET in combination with two different training methods, i.e. contrastive divergence and SGD, for unsupervised and supervised learning. We showed that SET is capable of quadratically reducing the number of parameters of bipartite neural networks layers from the ANN design phase, at no decrease in accuracy. In most of the cases, SET-RBMs, SET-MLPs, and SET-CNNs outperform their fully-connected counterparts. Moreover, they always outperform their non-evolutionary counterparts, i.e. RBMFixProb, MLPFixProb, and CNNFixProb."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We can conclude that the SET procedure is coherent with real-world complex networks, whereby nodes’ connections tend to evolve into scale-free topologies"
+    },
+    {
+     "text": "46",
+     "sup": true
+    },
+    {
+     "text": ". This feature has important implications in ANNs: we could envision a computational time reduction by reducing the number of training epochs, if we would use for instance preferential attachment algorithms"
+    },
+    {
+     "text": "47",
+     "sup": true
+    },
+    {
+     "text": " to evolve faster the topology of the bipartite ANN layers towards a scale-free one. Of course, this possible improvement has to be treated carefully, as forcing the model topology to evolve unnaturally faster into a scale-free topology may be prone to errors—for instance, the data distribution may not be perfectly matched. Another possible improvement would be to analyze how to remove the unimportant weights. In this article, we showed that it is efficient for SET to directly remove the connections with weights closest to zero. Note that we have tried also to remove connections randomly, and, as expected, this led to dramatic reductions in accuracy. Likewise, when we tried to remove the connections with the largest weights, the SET-MLP model was not able to learn at all, performing similarly to a random classifier. However, we do not exclude the possibility that there may be better, more sophisticated approaches to removing connections, e.g. using gradient methods"
+    },
+    {
+     "text": "25",
+     "sup": true
+    },
+    {
+     "text": ", or centrality metrics from network science"
+    },
+    {
+     "text": "48",
+     "sup": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "SET can be widely adopted to reduce the fully-connected layers into sparse topologies in other types of ANNs, e.g., recurrent neural networks"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": ", deep reinforcement learning networks"
+    },
+    {
+     "text": "2,49",
+     "sup": true
+    },
+    {
+     "text": ", and so on. For a large scale utilization of SET, from the academic environment to industry, one more step has to be achieved. Currently, all state-of-the-art deep learning implementations are based on very well-optimized dense matrix multiplications on graphics processing units (GPUs), while sparse matrix multiplications are extremely limited in performance"
+    },
+    {
+     "text": "50,51",
+     "sup": true
+    },
+    {
+     "text": ". Thus, until optimized hardware for SET-like operations will appear (e.g., sparse matrix multiplications), one would have to find some alternative solutions. E.g., low-level parallel computations of neurons activations based just on their incoming connections and data batches to still perform dense matrix multiplications and to have a low-memory footprint. If these software engineering challenges are solved, SET may prove to be the basis for much larger ANNs, perhaps on a billion-node scale, to run in supercomputers. Also, it may lead to the building of small but powerful ANNs, which could be directly trained on low-resource devices (e.g. wireless sensor nodes, mobile phones), without the need of first training them on supercomputers and then to move the trained models to low-resource devices, as is currently done by state-of-the-art approaches"
+    },
+    {
+     "text": "13",
+     "sup": true
+    },
+    {
+     "text": ". These powerful capabilities will be enabled by the linear relation between the number of neurons and the amount of connections between them yielded by SET. ANNs built with SET will have much more representational power, and better adaptive capabilities than the current state-of-the-art ANNs, and we hope that they will create a new research direction in artificial intelligence."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Methods"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Artificial neural networks.",
+     "bold": true
+    },
+    {
+     "text": " ANNs"
+    },
+    {
+     "text": "52",
+     "sup": true
+    },
+    {
+     "text": " are mathematical models, inspired by biological neural networks, which can be used in all three machine learning paradigms (i.e. supervised learning"
+    },
+    {
+     "text": "53",
+     "sup": true
+    },
+    {
+     "text": ", unsupervised learning"
+    },
+    {
+     "text": "53",
+     "sup": true
+    },
+    {
+     "text": ", and reinforcement learning"
+    },
+    {
+     "text": "54",
+     "sup": true
+    },
+    {
+     "text": "). These make them very versatile and powerful, as quantifiable by the remarkable success registered recently by the last generation of ANNs (also known as deep ANNs or deep learning"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": ") in many fields from computer vision"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " to gaming"
+    },
+    {
+     "text": "2,49",
+     "sup": true
+    },
+    {
+     "text": ". Just like their biological counterparts, ANNs are composed by neurons and weighted connections between these neurons. Based on their purposes and architectures, there are many models of ANNs, such as RBMs"
+    },
+    {
+     "text": "28",
+     "sup": true
+    },
+    {
+     "text": ", MLPs"
+    },
+    {
+     "text": "55",
+     "sup": true
+    },
+    {
+     "text": ", CNNs"
+    },
+    {
+     "text": "56",
+     "sup": true
+    },
+    {
+     "text": ", recurrent neural networks"
+    },
+    {
+     "text": "57",
+     "sup": true
+    },
+    {
+     "text": ", and so on. Many of these ANN models contain fully-connected layers. A fully-connected layer of neurons means that all its neurons are connected to all the neurons belonging to its adjacent layer in the ANN architecture. For the purpose of this paper, in this section we briefly describe three models that contain fully-connected layers, i.e. RBMs"
+    },
+    {
+     "text": "28",
+     "sup": true
+    },
+    {
+     "text": ", MLPs"
+    },
+    {
+     "text": "55",
+     "sup": true
+    },
+    {
+     "text": ", and CNNs"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A restricted Boltzmann machine is a two-layer, generative, stochastic neural network that is capable to learn a probability distribution over a set of inputs"
+    },
+    {
+     "text": "28",
+     "sup": true
+    },
+    {
+     "text": " in an unsupervised manner. From a topological perspective, it allows only interlayer connections. Its two layers are: the visible layer, in which the neurons represent the input data; and the hidden layer, in which the neurons represent the features automatically extracted by the RBM model from the input data. Each visible neuron is connected to all hidden neurons through a weighted undirected connection, leading to a fully-connected topology between the two layers. Thus, the flow of information is bidirectional in RBMs, from the visible layer to the hidden layer, and from the hidden layer to the visible layer, respectively. RBMs, beside being very successful in providing very good initialization weights to the supervised training of deep artificial neural network architectures"
+    },
+    {
+     "text": "42",
+     "sup": true
+    },
+    {
+     "text": ", are also very successful as stand alone models in a variety of tasks, such as density estimation to model human choice"
+    },
+    {
+     "text": "31",
+     "sup": true
+    },
+    {
+     "text": ", collaborative filtering"
+    },
+    {
+     "text": "58",
+     "sup": true
+    },
+    {
+     "text": ", information retrieval"
+    },
+    {
+     "text": "59",
+     "sup": true
+    },
+    {
+     "text": ", multi-class classification"
+    },
+    {
+     "text": "60",
+     "sup": true
+    },
+    {
+     "text": ", and so on."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Multi-Layer Perceptron"
+    },
+    {
+     "text": "55",
+     "sup": true
+    },
+    {
+     "text": " is a classical feed-forward ANN model that maps a set of input data to the corresponding set of output data. Thus, it is used for supervised learning. It is composed by an input layer in which the neurons represent the input data, an output layer in which the neurons represent the output data, and an arbitrary number of hidden layers in between, with neurons representing the hidden features of the input data (to be automatically discovered). The flow of information in MLPs is unidirectional, starting from the input layer towards the output layer. Thus, the connections are unidirectional and exist just between consecutive layers. Any two consecutive layers in MLPs are fully-connected. There are no connections between the neurons belonging to the same layer, or between the neurons belonging to layers which are not consecutive. In ref. "
+    },
+    {
+     "text": "61",
+     "sup": true
+    },
+    {
+     "text": ", it has been demonstrated that MLPs are universal function approximators, so they can be used to model any type of regression or classification problems."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "CNNs"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " are a class of feed-forward neural networks specialized for image recognition, representing the state-of-the-art on these type of problems. They typically contain an input layer, an output layers, and a number of hidden layers in between. From bottom to top, the first hidden layers are the convolutional layers, inspired by the biological visual cortex, in which each neuron receives information just from the previous layer neurons belonging to its receptive field. Then, the last hidden layers are fully connected ones."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In general, working with ANN models involves two phases: (1) training (or learning), in which the weighted connections between neurons are optimized using various algorithms (e.g. backpropagation procedure combined with SGD"
+    },
+    {
+     "text": "62,63",
+     "sup": true
+    },
+    {
+     "text": " used in MLPs or CNNs, contrastive divergence"
+    },
+    {
+     "text": "29",
+     "sup": true
+    },
+    {
+     "text": " used in RBMs) to minimize a loss function defined by their purpose; and (2) inference, in which the optimized ANN model is used to fulfill its purpose."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Scale-free complex networks.",
+     "bold": true
+    },
+    {
+     "text": " Complex networks (e.g. biological neural networks, actors and movies, power grids, transportation networks) are everywhere, in different forms, and different fields (from neurobiology to statistical physics"
+    },
+    {
+     "text": "4",
+     "sup": true
+    },
+    {
+     "text": "). Formally, a complex network is a graph with non-trivial topological features, human-made or nature-made. One of the most well-known and deeply studied type of topological features in complex networks is scale-freeness, due to the fact that a wide range of real-world complex networks have this topology. A network with a scale-free topology"
+    },
+    {
+     "text": "7",
+     "sup": true
+    },
+    {
+     "text": " is a sparse graph"
+    },
+    {
+     "text": "64",
+     "sup": true
+    },
+    {
+     "text": " that approximately has a power-law degree distribution "
+    },
+    {
+     "text": "P",
+     "italic": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "d",
+     "italic": true
+    },
+    {
+     "text": ") "
+    },
+    {
+     "text": "d̃ ~ "
+    },
+    {
+     "text": "d",
+     "italic": true
+    },
+    {
+     "text": "−γ",
+     "sup": true
+    },
+    {
+     "text": ", where the fraction "
+    },
+    {
+     "text": "P",
+     "italic": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "d",
+     "italic": true
+    },
+    {
+     "text": ") from the total nodes of the network has "
+    },
+    {
+     "text": "d",
+     "italic": true
+    },
+    {
+     "text": " connections to other nodes, and the parameter γ usually stays in the range γ ∈ (2, 3)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Data availability.",
+     "bold": true
+    },
+    {
+     "text": " The data used in this paper are public datasets, freely available online, as reflected by their corresponding citations from Table 1. Prototype software implementations of the models used in this study are freely available online at https://github.com/dcmocanu/sparse-evolutionary-artificial-neural-networks"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Received: 26 July 2017 Accepted: 20 April 2018"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "References"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "Baldi, P., Sadowski, P. & Whiteson, D. Searching for exotic particles in high-energy physics with deep learning. "
+      },
+      {
+       "text": "Nat. Commun.",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "5",
+       "bold": true
+      },
+      {
+       "text": ", 4308 (2014)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "Mnih, V. et al. Human-level control through deep reinforcement learning. "
+      },
+      {
+       "text": "Nature",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "518",
+       "bold": true
+      },
+      {
+       "text": ", 529–533 (2015)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "LeCun, Y., Bengio, Y. & Hinton, G. Deep learning. "
+      },
+      {
+       "text": "Nature",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "521",
+       "bold": true
+      },
+      {
+       "text": ", 436–444 (2015)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "Strogatz, S. H. Exploring complex networks. "
+      },
+      {
+       "text": "Nature",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "410",
+       "bold": true
+      },
+      {
+       "text": ", 268–276 (2001)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5.",
+     "spans": [
+      {
+       "text": "Pessoa, L. Understanding brain networks and brain organization. "
+      },
+      {
+       "text": "Phys. Life Rev.",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "11",
+       "bold": true
+      },
+      {
+       "text": ", 400–435 (2014)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "6.",
+     "spans": [
+      {
+       "text": "Bullmore, E. & Sporns, O. Complex brain networks: graph theoretical analysis of structural and functional systems. "
+      },
+      {
+       "text": "Nat. Rev. Neurosci.",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "10",
+       "bold": true
+      },
+      {
+       "text": ", 186–198 (2009)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "7.",
+     "spans": [
+      {
+       "text": "Barabási, A.-L. & Albert, R. Emergence of scaling in random networks. "
+      },
+      {
+       "text": "Science",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "286",
+       "bold": true
+      },
+      {
+       "text": ", 509–512 (1999)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "8.",
+     "spans": [
+      {
+       "text": "Watts, D. J. & Strogatz, S. H. Collective dynamics of ‘small-world’ networks. "
+      },
+      {
+       "text": "Nature",
+       "italic": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "393",
+       "bold": true
+      },
+      {
+       "text": ", 440–442 (1998)."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
