@@ -1883,6 +1883,93 @@ function delimiterFoot(line: Line, glyphs: Glyph[]): number {
     check (or the page has no TeX math fonts to read it by). With missed, a
     TeX page's second pass, once the figures took their own words: each
     display the display lines missed becomes a crop. */
+// A display crop's text: its glyphs read in their layout, not line by
+// line. A fraction bar (a short horizontal rule with glyphs over and under
+// it) reads as "(over)/(under)", one piece at the bar's place; the rest
+// falls into rows by the baselines its full-size glyphs stand on, and each
+// row reads left to right, a glyph set small over the row's baseline as a
+// superscript ("^k"), one set small under it as a subscript ("_ij"), the
+// glyphs of one word run together; the rows join on new lines. The text
+// is what the paragraph index and the AI tools read of a formula the
+// LaTeX reader could not read (parse loop finding: a Nature paper's
+// p(W^k_ij) = ε(n^k + n^{k−1})/(n^k n^{k−1}) read "( k k−1) ϵ n + n p
+// Wijk = (1) nknk−1", its lines in order from the top, and an Elsevier
+// paper's three stacked equalities read as one line of their glyphs
+// shuffled by x).
+type CropPiece = { x: number; w: number; y: number; size: number; str: string };
+function cropText(items: Item[], bars: Rule[]): string {
+  if (items.length === 0) return "";
+  // The size of the text: the largest size a third of the glyphs or more
+  // take (a ∑ set large is no measure for the rest; a denominator's two
+  // letters under their four script glyphs are the text).
+  const sizes = new Map<number, number>();
+  let all = 0;
+  for (const it of items) {
+    const n = it.str.trim().length;
+    sizes.set(it.size, (sizes.get(it.size) ?? 0) + n);
+    all += n;
+  }
+  const main = [...sizes].sort((a, b) => b[0] - a[0]).find(([, n]) => n * 3 >= all)?.[0] ?? Math.max(...items.map((it) => it.size));
+  const overlaps = (it: Item, bar: Rule) => it.x + it.w > bar.x1 + 0.5 && it.x < bar.x2 - 0.5;
+  // The fractions: each bar with glyphs over and under it within a line
+  // and a quarter, the widest first, takes them as one piece.
+  let rest = items;
+  const pieces: CropPiece[] = [];
+  for (const bar of [...bars].sort((a, b) => b.x2 - b.x1 - (a.x2 - a.x1))) {
+    const over = rest.filter((it) => overlaps(it, bar) && it.y > bar.y1 && it.y - bar.y1 <= main * 1.25);
+    const under = rest.filter((it) => overlaps(it, bar) && it.y < bar.y1 && bar.y1 - it.y <= main * 1.25);
+    if (over.length === 0 || under.length === 0) continue;
+    const others = bars.filter((b) => b !== bar);
+    pieces.push({ x: bar.x1, w: bar.x2 - bar.x1, y: bar.y1, size: main, str: `(${cropText(over, others)})/(${cropText(under, others)})` });
+    rest = rest.filter((it) => !over.includes(it) && !under.includes(it));
+  }
+  pieces.push(...rest.map((it) => ({ x: it.x, w: it.w, y: it.y, size: it.size, str: it.str.trim() })));
+  // The rows: the baselines the full-size pieces stand on, half a size
+  // apart or more, each piece on the nearest.
+  const baselines = [...new Set(pieces.filter((p) => p.size >= main * 0.85).map((p) => p.y))].sort((a, b) => b - a);
+  const rows: number[] = [];
+  for (const y of baselines) if (rows.length === 0 || rows[rows.length - 1] - y > main * 0.5) rows.push(y);
+  if (rows.length === 0) rows.push(pieces[0].y);
+  const nearest = (y: number) => rows.reduce((best, r) => (Math.abs(r - y) < Math.abs(best - y) ? r : best), rows[0]);
+  const byRow = new Map<number, CropPiece[]>(rows.map((r) => [r, []]));
+  for (const p of pieces) byRow.get(nearest(p.y))!.push(p);
+  const readRow = (baseline: number, row: CropPiece[]): string => {
+    const scriptOf = (p: CropPiece) => (p.size < main * 0.85 && Math.abs(p.y - baseline) > main * 0.15 ? (p.y > baseline ? "^" : "_") : "");
+    // A script over or under a full-size piece (a limit of lim or ∑)
+    // reads after it, not where its x falls among the piece's glyphs
+    // ("lim_{k→∞}", not "_klim_→∞").
+    const bases = row.filter((p) => scriptOf(p) === "").sort((a, b) => a.x - b.x);
+    const after = new Map<CropPiece, CropPiece[]>();
+    const loose: CropPiece[] = [];
+    for (const p of row) {
+      if (scriptOf(p) === "") continue;
+      const base = bases.find((b) => p.x + p.w / 2 >= b.x && p.x + p.w / 2 <= b.x + b.w && b.w >= main * 0.8);
+      if (base) (after.get(base) ?? after.set(base, []).get(base)!).push(p);
+      else loose.push(p);
+    }
+    const sorted = [...bases, ...loose].sort((a, b) => a.x - b.x || b.y - a.y).flatMap((p) => [p, ...(after.get(p) ?? []).sort((a, b) => b.y - a.y || a.x - b.x)]);
+    let text = "";
+    let end = -Infinity;
+    let last = "";
+    for (const p of sorted) {
+      const script = scriptOf(p);
+      // The glyphs of one script run under one mark: "n^{k−1}", not "n^k^−^1".
+      const close = p.x - end < main * 0.2;
+      const piece = script !== "" && script === last && close ? p.str : `${script}${p.str}`;
+      if (text === "") text = piece;
+      else if (close || script !== "") text += piece;
+      else text += ` ${piece}`;
+      end = Math.max(end, p.x + p.w);
+      last = script;
+    }
+    return text.replace(/[ \t]+/g, " ").trim();
+  };
+  return rows
+    .map((r) => readRow(r, byRow.get(r)!))
+    .filter((t) => t !== "")
+    .join("\n");
+}
+
 export function displayEquations(
   segments: Segment[],
   lines: Line[],
@@ -2130,15 +2217,20 @@ export function displayEquations(
         ...(equation.left ? { html: '<p class="leqno"></p>' } : {}),
       });
     } else {
-      // Its text is the display's glyphs as the text layer reads them, often
-      // garbled: the import shows the crop with no caption (mathCrop).
+      // Its text is the display's glyphs read in their layout (cropText):
+      // the import shows the crop with no caption (mathCrop).
+      const inside = lines.flatMap((l) => l.items).filter((it) => it.x >= crop.x1 - 1 && it.x + it.w <= crop.x2 + 1 && it.y >= crop.y1 - 1 && it.y <= crop.y2 + 1 && it.str.trim() !== "");
+      const bars = ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= crop.x1 - 1 && r.x2 <= crop.x2 + 1 && r.y1 >= crop.y1 && r.y1 <= crop.y2 && r.x2 - r.x1 >= size * 0.5);
+      const read = inside.length > 0 ? cropText(inside, bars) : "";
       out.push({
         type: "FIGURE",
-        text: group
-          .map((g) => g.text.replace(/[\t\n]+/g, " "))
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim(),
+        text:
+          read ||
+          group
+            .map((g) => g.text.replace(/[\t\n]+/g, " "))
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim(),
         page: group[0].page,
         box: crop,
         region: regionOf(crop, pageWidth, pageHeight),
