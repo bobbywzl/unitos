@@ -13,9 +13,11 @@ import { useT } from "@/components/lang-provider";
 //
 // Every video of a rendered figure gets its place: while it loads, a spinner
 // and "Loading the video…"; when it does not load, the film icon, "This
-// figure is a video. It is not loading." and Try again. The place is
-// [data-anchor-skip], so the block's DOM text stays exactly the caption
-// (SPEC.md §5).
+// figure is a video. It is not loading." and Try again, over the video's
+// poster where the page gave one (the parse keeps the poster attribute):
+// the reader sees the clip's first frame, as the page shows before play,
+// in place of nothing. The place is [data-anchor-skip], so the block's DOM
+// text stays exactly the caption (SPEC.md §5).
 
 // A video that loads at once shows no place: the place waits this long
 // first, so the common case never flickers. The wait starts when the video
@@ -214,8 +216,9 @@ function useVideoPlaces(
   return { places, retry };
 }
 
-/** The video's place: what it is, and what it is doing. */
-function VideoPlace({ state, onRetry }: { state: "loading" | "failed"; onRetry: () => void }) {
+/** The video's place: what it is, and what it is doing. A video that does
+    not load shows its poster, when the page gave one, over the line. */
+function VideoPlace({ state, poster, onRetry }: { state: "loading" | "failed"; poster: string | null; onRetry: () => void }) {
   const t = useT();
   const shell = "figure-place my-2 flex items-center gap-3 rounded-2xl px-4 py-3 text-[13px] leading-snug";
   if (state === "loading") {
@@ -227,18 +230,23 @@ function VideoPlace({ state, onRetry }: { state: "loading" | "failed"; onRetry: 
     );
   }
   return (
-    <span role="alert" className={`${shell} bg-sand-100 text-sand-700`}>
-      <FilmIcon size={18} className="shrink-0 text-sand-500" />
-      <span className="min-w-0 flex-1">{t("panes.videoNotLoading")}</span>
-      <button
-        type="button"
-        data-track="video-retry"
-        onClick={onRetry}
-        className="shrink-0 rounded-full bg-card px-2.5 py-1 text-[12px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
-      >
-        {t("panes.figureTryAgain")}
-      </button>
-    </span>
+    <>
+      {/* The page's own poster, as its <video> carries it: no loader of ours. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {poster && <img src={poster} alt="" className="video-poster block w-full rounded-2xl" loading="lazy" decoding="async" />}
+      <span role="alert" className={`${shell} bg-sand-100 text-sand-700`}>
+        <FilmIcon size={18} className="shrink-0 text-sand-500" />
+        <span className="min-w-0 flex-1">{t("panes.videoNotLoading")}</span>
+        <button
+          type="button"
+          data-track="video-retry"
+          onClick={onRetry}
+          className="shrink-0 rounded-full bg-card px-2.5 py-1 text-[12px] font-semibold text-sand-700 shadow-soft hover:text-clay-800"
+        >
+          {t("panes.figureTryAgain")}
+        </button>
+      </span>
+    </>
   );
 }
 
@@ -269,7 +277,7 @@ export function MediaHtml({
       {places.map((place) =>
         place.state === "loading" || place.state === "failed"
           ? createPortal(
-              <VideoPlace state={place.state} onRetry={() => retry(place)} />,
+              <VideoPlace state={place.state} poster={place.video.getAttribute("poster")} onRetry={() => retry(place)} />,
               place.host,
               String(place.index),
             )
