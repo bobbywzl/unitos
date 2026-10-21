@@ -913,8 +913,11 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // (parse loop finding: a statistics book's "95% confidence and
   // prediction intervals for cars.lm" over its plot made its own face the
   // body's, and read as a heading).
+  // The running head and foot are no body (parse loop finding: a Nature
+  // paper's head and foot, two long lines in Arial, made Arial a body
+  // face, and its charts' axis titles "Time p.i." in Arial were no titles).
   const faceLines = new Map<string, number>();
-  for (const r of runs) {
+  for (const r of body) {
     const face = faceOf(r);
     if (face !== undefined && r.chars >= 40 && !r.items.every((i) => i.mono)) faceLines.set(face, (faceLines.get(face) ?? 0) + 1);
   }
@@ -945,7 +948,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       const face = faceOf(r);
       if (face === undefined || !faces.has(face) || bodyFaces.has(face)) return false;
-      if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
+      // A title ends in no stop; an abbreviation's period in a title of
+      // three words or fewer is no stop ("Time p.i.").
+      const text = textOf(r).trim();
+      if (/[!?;:,]$/.test(text) || (/\.$/.test(text) && text.split(/\s+/).length > 3)) return false;
       const reach = Math.max(r.size, textSize) * 3;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const centered = (Math.abs(cx - mid) <= r.size && r.box.x1 >= plot.x1 - r.size && r.box.x2 <= plot.x2 + r.size) || (Math.abs(cx - wideMid) <= r.size && r.box.x1 >= wide.x1 - r.size && r.box.x2 <= wide.x2 + r.size);
@@ -974,10 +980,31 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // left its ticks "−2 −1 0 1 2" out of the crop, read its axis title "t
     // Quantiles" as a heading, and its caption, under the heading, stood
     // apart as a paragraph).
-    const axis = drawn ? axisOf(plot).filter((r) => !onBar(r)) : [];
-    const titles = drawn ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
-    for (const r of [...axis, ...titles]) taken.add(r);
-    let box = [...axis, ...titles].reduce((b, r) => unionBox(b, r.box), plot);
+    // A picture with ticks along its edge is a chart printed as a picture
+    // (a Nature paper's bar charts): it takes its ticks and its axis
+    // titles as a drawn chart does (parse loop finding: the charts' time
+    // ticks "8 h 12 h 16 h 24 h" and "Time p.i." under four panels read as
+    // a paragraph, the panels' y ticks as debris).
+    const chart = drawn || (pictures.length > 0 && ticked(plot));
+    const axis = chart ? axisOf(plot).filter((r) => !onBar(r)) : [];
+    // Panels side by side set an axis title under each: a title centered
+    // on a panel is the figure's too.
+    const titles = chart ? [...new Set([...titlesOf(plot, axis), ...(pictures.length > 1 ? pictures.flatMap((p) => titlesOf(p, axis)) : [])])].filter((r) => !onBar(r)) : [];
+    // A panel's letter: one letter alone at the top left corner of a
+    // picture, within two lines over it (Nature's "a", "b" over each
+    // panel; parse loop finding: the letters of a page-wide figure read
+    // as a paragraph and a table's cells).
+    const letters = runs.filter(
+      (r) =>
+        !taken.has(r) &&
+        /^[a-z]$/i.test(textOf(r).trim()) &&
+        r.box.y1 >= plot.y2 - r.size &&
+        r.box.y1 <= plot.y2 + r.size * 2 &&
+        r.box.x1 >= plot.x1 - r.size * 4 &&
+        r.box.x1 <= plot.x1 + r.size * 2,
+    );
+    for (const r of [...axis, ...titles, ...letters]) taken.add(r);
+    let box = [...axis, ...titles, ...letters].reduce((b, r) => unionBox(b, r.box), plot);
     // Arrows drawn by the drawing's labels are the drawing's, and so are
     // the short labels by those arrows: an arrow is a line with a small
     // head at one end, a cluster of its own a line or two off the drawing,
@@ -1031,7 +1058,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     }
     const caption = corner ?? captionOf(box);
     for (const r of caption) taken.add(r);
-    const labels = [...axis, ...titles, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
+    const labels = [...axis, ...titles, ...letters, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
     // Page text that reaches over one side of the graphic (a slide's
     // quotation over the dark half of its photo) leaves that side out of
     // the crop, when at least half the graphic is left.
