@@ -26,6 +26,7 @@ import {
   LINK_LINE_RE,
   NUMERIC_CELL_RE,
   rowsOf,
+  runsOn,
   tableSegment,
   withoutSignColumns,
   type CellParagraph,
@@ -306,6 +307,34 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
 
 const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z][‐–-]?\d+)\b/i;
 
+// A paragraph wrapped down one side of the region: four lines or more
+// whose cell on that side starts at one x, holds prose on most of them,
+// and runs on from line to line (tables.ts runsOn) on most of the pairs.
+// Beside it the other side holds labels or nothing: the region is a
+// column of prose beside a column of labels, no table (parse loop finding:
+// an Elsevier paper's front matter, "ARTICLE INFO" with its dates and
+// keywords beside "ABSTRACT", ruled above and below, read as a table of
+// the abstract's lines).
+function proseBeside(lines: Line[]): boolean {
+  if (lines.length < 4) return false;
+  for (const side of ["left", "right"] as const) {
+    const cells = lines.map((l) => (side === "left" ? l.cells[0] : l.cells[l.cells.length - 1]));
+    const x = median(cells.map((c) => c.x));
+    const own = cells.map((c, k) => (Math.abs(c.x - x) <= lines[k].size * 0.5 ? c : null));
+    const held = own.filter((c) => c !== null);
+    if (held.length < 4 || held.filter((c) => proseCell(c!.text)).length * 3 < held.length * 2) continue;
+    let pairs = 0;
+    let on = 0;
+    for (let k = 1; k < own.length; k++) {
+      if (!own[k - 1] || !own[k]) continue;
+      pairs++;
+      if (runsOn(own[k - 1]!.text, own[k]!.text)) on++;
+    }
+    if (pairs >= 3 && on * 3 >= pairs * 2) return true;
+  }
+  return false;
+}
+
 // A column of labels beside a column of prose: the lines leave a gutter
 // open in the left third, a label stands left of it on the first line, and
 // two lines or more hold words there. A line of prose whose words stand on
@@ -360,7 +389,8 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
     const breaks =
       lines.some((l) => (isProseLine(l, x2 - x1, columns) && !besideGutter(l, gutter)) || CAPTION_START_RE.test(l.text)) ||
       isProseColumns(lines.filter((l) => l.cells.length >= 2), false) ||
-      proseHalves(lines, x1, x2, items, band);
+      proseHalves(lines, x1, x2, items, band) ||
+      proseBeside(lines);
     if (breaks) {
       close();
       continue;
@@ -496,6 +526,7 @@ function isTableRegion(lines: Line[], width: number, columns: Rule[], rules: Rul
   if (!headed && lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
   const gutter = labelGutter(lines, Math.min(...lines.map((l) => l.x)), width);
   if (lines.some((l) => isProseLine(l, width, columns) && !besideGutter(l, gutter))) return false;
+  if (proseBeside(lines)) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
   const multi = lines.filter((l) => new Set(l.items.map((it) => columnAt(it.x + it.w / 2, separators))).size >= 2);

@@ -906,7 +906,7 @@ export function isProseColumns(lines: Line[], ocr: boolean): boolean {
 
 // Words that run on into the next line's: the first ends mid-sentence and
 // the next opens in lower case.
-const runsOn = (upper: string, lower: string) => !/[.!?:;]["'”’)\]]*$/.test(upper.trim()) && /^\p{Ll}/u.test(lower.trim());
+export const runsOn = (upper: string, lower: string) => !/[.!?:;]["'”’)\]]*$/.test(upper.trim()) && /^\p{Ll}/u.test(lower.trim());
 
 // A paragraph down the first column: its cells run on from line to line, a
 // sentence among them. A table's first column holds its rows' labels (two
