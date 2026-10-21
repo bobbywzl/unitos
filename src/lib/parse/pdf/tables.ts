@@ -370,6 +370,15 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
     const next = segments[k + 1];
     if (!next || next.type !== "PARAGRAPH" || next.footnote || taken.has(next) || next.page !== (caption.breaks?.at(-1)?.page ?? caption.page)) continue;
     const tail = next.text.trim();
+    // A bare label's title is the short paragraph under it, at its size.
+    if (BARE_LABEL_RE.test(caption.text.trim())) {
+      if (tail.length > 200 || (next.lineSize !== undefined && caption.lineSize !== undefined && Math.abs(next.lineSize - caption.lineSize) > 0.5)) continue;
+      const at = caption.text.length + 1;
+      caption.text = `${caption.text} ${next.text}`;
+      caption.runs = [...(caption.runs ?? []), ...(next.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
+      taken.add(next);
+      continue;
+    }
     if (tail.includes("\n") || tail.length > 80 || tail !== tail.toUpperCase() || !/\p{Lu}/u.test(tail) || /[.:]$/.test(caption.text.trim())) continue;
     // Small capitals are set at four fifths of the size.
     if (next.lineSize !== undefined && caption.lineSize !== undefined && (next.lineSize < caption.lineSize * 0.75 || next.lineSize > caption.lineSize + 0.5)) continue;
@@ -533,6 +542,11 @@ const IEEE_CAPTION_RE = /^TABLE\s+(?:\d+|[IVXL]+)\s+\p{Lu}/u;
 // (parse loop finding: s41467-018-04316-3's title read as a paragraph
 // over its table). "Table 2 shows …" opens a sentence, in plain type.
 const BOLD_CAPTION_RE = /^Table\s+\d{1,3}\s+\p{Lu}/u;
+// Elsevier sets a table's label alone on a line, "Table 3", its title on
+// the line under it, both over the table (parse loop finding: an Applied
+// Energy paper's three tables took no caption, and each label and title
+// read as two paragraphs).
+const BARE_LABEL_RE = /^(?:table|tab\.|tabelle)\s*(?:\d{1,3}|[IVXL]+)$/i;
 
 function isCaption(s: Segment): boolean {
   const text = s.text.trim();
@@ -540,7 +554,7 @@ function isCaption(s: Segment): boolean {
   // The bold line reads as a heading where it stands apart from the table.
   if (s.type === "HEADING") return text.length <= 160 && BOLD_CAPTION_RE.test(text);
   if (s.type !== "PARAGRAPH") return false;
-  if (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text)) return true;
+  if (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text) || BARE_LABEL_RE.test(text)) return true;
   return text.length <= 160 && BOLD_CAPTION_RE.test(text) && boldShare(s.runs ?? [], s.text.length) > 0.9;
 }
 
