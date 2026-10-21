@@ -11,6 +11,8 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
 export const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
+// A footnote's mark set after a word.
+const NOTE_MARK_RE = /^[*†‡§¶‖]{1,3}$/;
 // A decimal fraction set a space after the word before it opens a number
 // of its own, never punctuation that attaches left (parse loop finding: a
 // NACA report's OCR'd tables set ".597" after "18.8", a space apart, and
@@ -816,6 +818,11 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
     const wide = rtl ? rtl.opens.has(item) : prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
     const crossed = !rtl && prevItem !== null && crossesBack(prevItem, item);
+    // A note mark never opens a word: the word after it takes a space
+    // however close it is set (parse loop finding: MMWR's "higher-volume*
+    // and lower-volume† prescribers" read "higher-volume*and lower-volume†
+    // prescribers", the marks' gaps a hair under the space's).
+    const afterMark = prevItem !== null && NOTE_MARK_RE.test(prevItem.str.trim()) && /^\p{L}/u.test(item.str) && gap >= 0;
     // A space the page draws stands at an item's left (markSpaces): read
     // right to left, it comes after the item, before the next one read.
     const drawnSpace = rtl ? prevItem?.spaced === true : item.spaced === true;
@@ -824,7 +831,7 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if ((gap > least || crossed || (drawnSpace && gap >= 0)) && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed || afterMark || (drawnSpace && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
