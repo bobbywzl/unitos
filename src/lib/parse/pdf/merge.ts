@@ -408,11 +408,14 @@ function joinBreaks(target: Segment, source: Segment, offset: number, shift = 0)
 
 // A float (figure, table, its caption, and the labels its figure left)
 // between the two halves of a paragraph cut by the page break: the halves
-// join, and a float atop the next page follows the paragraph, one at the
-// foot of the first page comes before it (each block after the page it
-// stands on has begun). Pages of floats between the halves keep them
-// apart: after the paragraph, those floats would stand past the next
-// page's start, and an import's page starts only rise (lib/docs/import.ts).
+// join, and the floats follow the paragraph, those at the foot of the
+// first page first, then those atop the next (parse loop finding: MMWR
+// p. 3's Table 1, at the foot of the page under the Discussion's first
+// paragraph, stood between the Discussion heading and that paragraph; a
+// reader takes the paragraph through, then the table). Pages of floats
+// between the halves keep them apart: after the paragraph, those floats
+// would stand past the next page's start, and an import's page starts
+// only rise (lib/docs/import.ts).
 function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting, body: Map<number, number>): Segment[] {
   const out = [...segments];
   const smaller = (s: Segment) => s.type === "PARAGRAPH" && s.lineSize !== undefined && s.lineSize < (body.get(s.page) ?? 0) * 0.95;
@@ -486,8 +489,7 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     if (k > b && over.box && tail.box && over.page === tail.page && tail.box.y2 <= over.box.y1 + 1 && tail.box.x1 < over.box.x2 && tail.box.x2 > over.box.x1) delete over.spaceAfter;
     const joined = out.splice(k, lift);
     const floats = out.splice(a + 1, b - a - 1);
-    out.splice(a, 0, ...floats);
-    out.splice(a + floats.length + 1, 0, ...joined);
+    out.splice(a + 1, 0, ...joined, ...floats);
   }
   return out;
 }
