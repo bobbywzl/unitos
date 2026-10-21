@@ -133,6 +133,9 @@ const TRACKING_PIXEL_RX = /^(?:https?:)?\/\/(?:[^/]*\.)?(?:scorecardresearch\.co
 // icon, an inline data-URL placeholder with no words (a gray box a script
 // swaps for the picture), or a tracking pixel.
 export function isContentImage(img: Element): boolean {
+  // A picture of the page's interactive figure (capture-interactive.ts)
+  // is content whatever its size or alt.
+  if (img.hasAttribute("data-captured")) return true;
   const width = Number(img.getAttribute("width") ?? 0);
   const height = Number(img.getAttribute("height") ?? 0);
   // Icons and avatars: a declared size of 48px or less (a byline's 40px
@@ -479,9 +482,45 @@ function linkedAway(img: Element, el: Element): boolean {
   return !/(?:^|\s)attachment(?:$|\s)/i.test(a.getAttribute("rel") ?? "");
 }
 
+// The line under a pictured figure (capture-interactive.ts): what the
+// picture stands for, and the page to open for the original. One wording
+// per kind; the link's words are the page's host.
+const CAPTURED_NOTE: Record<string, string> = {
+  interactive: "A picture of the page's interactive figure. The original works on the page:",
+  frame: "A picture of the page's embedded frame. The original works on the page:",
+  video: "A picture of the page's video. It plays on the page:",
+};
+
+/** The note under a pictured figure, appended to the clone: a paragraph
+    with the note's words and a link to the page. Returns the note's words,
+    which the block's text holds after its caption (the figure's DOM text
+    stays the block's text, SPEC.md §5); "" for a figure not pictured. */
+function figureNote(clone: Element, url: string | undefined): string {
+  const pictured = clone.querySelector("img[data-captured]");
+  if (!pictured) return "";
+  const kind = pictured.getAttribute("data-captured") ?? "interactive";
+  const doc = clone.ownerDocument;
+  const p = doc.createElement("p");
+  p.setAttribute("class", "figure-note");
+  p.textContent = `${CAPTURED_NOTE[kind] ?? CAPTURED_NOTE.interactive} `;
+  if (url) {
+    const a = doc.createElement("a");
+    a.setAttribute("href", url);
+    try {
+      a.textContent = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      a.textContent = url;
+    }
+    p.append(a);
+  }
+  clone.append(p);
+  return normalizeText(p.textContent ?? "");
+}
+
 export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   const clone = el.cloneNode(true) as Element;
   dedupeFigureMedia(clone);
+  const note = figureNote(clone, ctx.url);
   // Charts render as themselves; icon svgs and decorative images are noise.
   for (const svg of [...clone.querySelectorAll("svg")]) {
     if (!isChartSvg(svg)) svg.remove();
@@ -573,7 +612,7 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   for (const key of keys) ctx.seenMedia.add(key);
   consumeMedia(el, ctx);
 
-  return { type: "FIGURE", text: caption || alt || "Figure", html };
+  return { type: "FIGURE", text: [caption || alt || "Figure", note].filter(Boolean).join("\n"), html };
 }
 
 export function svgBlock(svg: Element, ctx?: WalkCtx): ParsedBlock | null {

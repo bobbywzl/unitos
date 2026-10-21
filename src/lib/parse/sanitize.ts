@@ -24,7 +24,9 @@ import { stripCitationTokens } from "@/lib/parse/references";
 // and keeps it: it is never resolved against the page.
 const ALLOWED: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "width", "height", "data-backdrop"]),
+  // data-captured: a picture of the page's interactive figure, stored by
+  // the browser render (lib/parse/capture-interactive.ts).
+  img: new Set(["src", "alt", "width", "height", "data-backdrop", "data-captured"]),
   table: new Set([]),
   thead: new Set([]),
   tbody: new Set([]),
@@ -239,6 +241,7 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
       const rootFigure = tag === "figure" && node === document.body;
       const widthStyle = widthDeclaration(child, rootFigure ? 200 : 100);
       const centered = child.getAttribute("data-align") === "center" || child.classList.contains("center");
+      const note = child.classList.contains("figure-note");
       // The figure's words keep the page's look; a boxed figure keeps the
       // box's (lib/parse/figure-style.ts). Read before the allowlist strips them.
       const wordStyle =
@@ -306,6 +309,9 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         if (!allowed.has(attr.name) && !(inlineMath && INLINE_MATH_ATTRS.has(attr.name))) child.removeAttribute(attr.name);
       }
       if ((tag === "p" || tag === "figcaption") && centered && child.closest("figure")) child.setAttribute("class", "center");
+      // The line under a pictured figure that says it is a picture
+      // (lib/parse/figures.ts figureNote).
+      if (tag === "p" && note && child.closest("figure")) child.setAttribute("class", "figure-note");
       if (wordStyle) child.setAttribute("style", wordStyle);
       if (tag === "figure" && (boxStyle || widthStyle)) child.setAttribute("style", [boxStyle, widthStyle].filter(Boolean).join(";"));
       if (tag === "video" && widthStyle) child.setAttribute("style", widthStyle);

@@ -1147,6 +1147,13 @@ ellipse.anchor-flash {
 .reader-figure .center {
   text-align: center;
 }
+/* The line under a pictured figure (lib/parse/figures.ts figureNote): a
+   picture of the page's interactive figure, and the page to open. */
+.reader-figure .figure-note {
+  font-size: 0.75rem;
+  font-style: italic;
+  text-align: center;
+}
 /* A figure the page set wider than its text column (lib/parse/figures.ts:
    width past 100% on the figure): centered on the column and drawn past its
    edges, as wide as the pane allows — the frame (reader.tsx .reader-frame)

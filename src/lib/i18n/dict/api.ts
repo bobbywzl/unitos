@@ -400,6 +400,7 @@ const en = {
   renderingOpening: "Rendering the page: opening it",
   renderingScrolling: "Rendering the page: scrolling through it",
   renderingChart: "Rendering the page: settling chart {n} of {total}",
+  renderingPictures: "Rendering the page: picturing its interactive figures",
   // The vision check (lib/parse/vision-check.ts): its three phases.
   checkingPagePictures: "Checking: picturing the page",
   checkingReaderPictures: "Checking: picturing the reader's rendering",
@@ -764,6 +765,7 @@ const zh: Record<keyof typeof en, string> = {
   renderingOpening: "渲染页面：正在打开",
   renderingScrolling: "渲染页面：正在滚动浏览",
   renderingChart: "渲染页面：正在稳定第 {n}/{total} 个图表",
+  renderingPictures: "渲染页面：正在为交互图表截图",
   checkingPagePictures: "检查：为页面截图",
   checkingReaderPictures: "检查：为阅读器的渲染截图",
   checkingComparing: "检查：对比截图",

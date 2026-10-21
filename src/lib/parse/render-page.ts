@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { captureAnimatedCharts, type CaptureResult, type CaptureStore } from "@/lib/parse/capture-animation";
+import { captureInteractiveFigures, type CaptureInteractiveResult } from "@/lib/parse/capture-interactive";
 import type { FetchedPage } from "@/lib/parse/fetch-page";
 import { isEmptyChart } from "@/lib/parse/figures";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
@@ -22,6 +23,13 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 // its end, and a loop — when the render stores images — is recorded as a
 // GIF, stored as an ImageAsset, and takes the svg's place as an <img> of the
 // reader's own /api/images/<id> path.
+//
+// A figure with no media the parse can keep — a canvas, a box the page
+// labels as a picture and draws by script, a frame from a host the
+// sanitizer refuses, a video that plays on a click — is pictured in its
+// place (lib/parse/capture-interactive.ts), stored the same way, and takes
+// the element's place as an <img data-captured>: the figure then says it is
+// a picture of the page's interactive figure (lib/parse/figures.ts).
 
 const RENDER_TIMEOUT_MS = 180_000;
 const NAVIGATION_TIMEOUT_MS = 30_000;
@@ -33,9 +41,14 @@ const SCROLL_WAIT_MS = 150;
 const SETTLE_MS = 500;
 // The charts get this much of the render's time — less when the browser's
 // session ends sooner (lib/browser.ts sessionLengthOf): the capture must be
-// stored before the service closes the page, with this much to spare.
+// stored before the service closes the page, with this much to spare. The
+// pictures of the interactive figures get their own share first, and both
+// end before the render's own time is up (RENDER_MARGIN_MS to spare for
+// the page's serialization).
 const CAPTURE_BUDGET_MS = 110_000;
+const PICTURES_BUDGET_MS = 60_000;
 const SESSION_MARGIN_MS = 6_000;
+const RENDER_MARGIN_MS = 12_000;
 
 // What the render did, saved with the document (Document.figureRenderAt,
 // figureRenderError) and reported with the save stage, so the reader can
@@ -47,6 +60,8 @@ export type RenderReport = {
   // refused, the time up, a loop not found — or null when nothing failed.
   error: string | null;
   charts: CaptureResult | null;
+  // The interactive figures pictured in their place, and those not.
+  pictures?: CaptureInteractiveResult | null;
 };
 
 export type RenderResult = { page: FetchedPage; render: RenderReport };
@@ -70,16 +85,38 @@ function isEmptyFigure(figure: Element): boolean {
   return !words.textContent?.trim();
 }
 
-/** Does the static HTML show figures its scripts draw later? An empty chart
-    svg, a canvas, or an empty figure outside the page's chrome. */
+// Players the sanitizer embeds (sanitize.ts EMBED_HOSTS): a frame from one
+// of them needs no picture.
+const EMBED_HOST_RE = /^(?:www\.youtube\.com|www\.youtube-nocookie\.com|youtube\.com|player\.vimeo\.com)$/i;
+
+/** Does the static HTML show figures its scripts draw later, or figures
+    only a picture can keep (lib/parse/capture-interactive.ts)? An empty
+    chart svg, a canvas, an empty figure, a box labeled as a picture with
+    nothing in it, a frame from a host the sanitizer refuses or with no
+    source, or a play button around a poster, outside the page's chrome. */
 export function needsBrowserRender(html: string): boolean {
-  if (!/<(?:svg|canvas|figure)\b/i.test(html)) return false;
+  if (!/<(?:svg|canvas|figure|iframe|button|a)\b|role="img"/i.test(html)) return false;
   try {
     const dom = new JSDOM(html, { virtualConsole: new VirtualConsole() });
     const { document } = dom.window;
     const inContent = (el: Element) => el.closest("nav, header, footer") === null;
     if ([...document.querySelectorAll("canvas")].some(inContent)) return true;
     if ([...document.querySelectorAll("figure")].some((figure) => isEmptyFigure(figure) && inContent(figure))) return true;
+    if ([...document.querySelectorAll("[role='img']")].some((el) => inContent(el) && !el.querySelector("img, picture, svg, video, canvas"))) return true;
+    const frameHost = (el: Element) => {
+      try {
+        return new URL(el.getAttribute("src") ?? "", "https://x/").hostname;
+      } catch {
+        return "";
+      }
+    };
+    if ([...document.querySelectorAll("iframe")].some((el) => inContent(el) && !isEmptyFigure(el) && (!el.hasAttribute("src") || !EMBED_HOST_RE.test(frameHost(el))))) return true;
+    if (
+      [...document.querySelectorAll("button, a, [role='button']")].some(
+        (el) => inContent(el) && /\b(?:play|video)\b/i.test(`${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("title") ?? ""}`) && el.querySelector("img[src]") && !el.querySelector("video"),
+      )
+    )
+      return true;
     return [...document.querySelectorAll("svg[viewBox]")].some(
       (svg) => isEmptyChart(svg) && inContent(svg) && svg.parentElement?.closest("svg") === null,
     );
@@ -114,7 +151,7 @@ export async function renderIfNeeded(
       RENDER_TIMEOUT_MS,
       "the browser ran out of time",
     );
-    const render: RenderReport = { attempted: true, error: rendered.error, charts: rendered.charts };
+    const render: RenderReport = { attempted: true, error: rendered.error, charts: rendered.charts, pictures: rendered.pictures };
     return { page: rendered.html.trim() ? { kind: "html", html: rendered.html } : page, render };
   } catch (err) {
     // The static page stands; the report says why the figures did not render.
@@ -132,24 +169,24 @@ function reasonOf(err: unknown): string {
   return line.trim().slice(0, REASON_MAX);
 }
 
-/** A captured GIF as an ImageAsset row; the document it belongs to is set
-    once the document is saved (lib/parse/ingest.ts). */
+/** A captured GIF or picture as an ImageAsset row; the document it belongs
+    to is set once the document is saved (lib/parse/ingest.ts). */
 function imageStore(userId: string | null): CaptureStore {
-  return async (gif) => {
+  return async (bytes, mimeType) => {
     try {
       const image = await db.imageAsset.create({
-        data: { mimeType: "image/gif", size: gif.length, data: Buffer.from(gif), userId },
+        data: { mimeType, size: bytes.length, data: Buffer.from(bytes), userId },
         select: { id: true },
       });
       return `/api/images/${image.id}`;
     } catch (err) {
-      console.warn("[render] captured chart not stored:", err);
+      console.warn("[render] captured figure not stored:", err);
       return null;
     }
   };
 }
 
-type Rendered = { html: string; error: string | null; charts: CaptureResult | null };
+type Rendered = { html: string; error: string | null; charts: CaptureResult | null; pictures: CaptureInteractiveResult | null };
 
 // One line for the ingest card, sent as the render enters each phase.
 type RenderProgress = (detail: string) => void;
@@ -160,18 +197,28 @@ async function renderInBrowser(
   t: TFunc,
   report: RenderProgress,
 ): Promise<Rendered> {
+  const startedAt = Date.now();
   const browser = await launchBrowser("parse");
   const connectedAt = Date.now();
   const sessionMs = sessionLengthOf(browser);
   const sessionEnd = sessionMs === null ? Infinity : connectedAt + sessionMs - SESSION_MARGIN_MS;
+  // The render's own end, whatever the session's: every phase stops there.
+  const renderEnd = startedAt + RENDER_TIMEOUT_MS - RENDER_MARGIN_MS;
+  const phases: string[] = [];
+  let phaseAt = Date.now();
+  const phase = (name: string) => {
+    phases.push(`${name} ${((Date.now() - phaseAt) / 1000).toFixed(1)}s`);
+    phaseAt = Date.now();
+  };
   try {
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
     try {
-      // Scripts and stylesheets draw the figures; media, images, and fonts
-      // never load.
+      // Scripts and stylesheets draw the figures, and the pictures of the
+      // interactive figures need the page's images and fonts; media (a
+      // video's file) never loads.
       await context.route("**/*", (route) => {
         const type = route.request().resourceType();
-        if (type === "media" || type === "image" || type === "font") return route.abort();
+        if (type === "media") return route.abort();
         return route.continue();
       });
       const page = await context.newPage();
@@ -192,6 +239,7 @@ async function renderInBrowser(
       report(t("api.renderingOpening"));
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
       await page.waitForLoadState("networkidle", { timeout: IDLE_TIMEOUT_MS }).catch(() => {});
+      phase("open");
       report(t("api.renderingScrolling"));
       for (let i = 0; i < SCROLL_STEPS; i++) {
         const atBottom = await page.evaluate(() => {
@@ -204,14 +252,25 @@ async function renderInBrowser(
       }
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(SETTLE_MS);
+      phase("scroll");
+      // The interactive figures, pictured in their place while the page
+      // runs with real time (a 3D viewer draws on its own clock). A
+      // picture that fails leaves its element as it is.
+      let pictures: CaptureInteractiveResult | null = null;
+      if (store) {
+        report(t("api.renderingPictures"));
+        pictures = await captureInteractiveFigures(page, { store, deadline: Math.min(Date.now() + PICTURES_BUDGET_MS, sessionEnd, renderEnd) });
+        if (pictures.found > 0) console.info(`[render] interactive figures: ${pictures.pictured} pictured, ${pictures.failed} not, of ${pictures.found}`);
+        phase("pictures");
+      }
       // The page as the scroll left it is the render; the capture improves
       // on it. A capture that fails or runs out of time never costs the
       // render — the figures stay as they are.
       const serialize = async () => `<!DOCTYPE html>\n${await page.evaluate(() => document.documentElement.outerHTML)}`;
       let html = await serialize();
-      if (!clock) return { html, error: clockError, charts: null };
+      if (!clock) return { html, error: clockError, charts: null, pictures };
       try {
-        const deadline = Math.min(Date.now() + CAPTURE_BUDGET_MS, sessionEnd);
+        const deadline = Math.min(Date.now() + CAPTURE_BUDGET_MS, sessionEnd, renderEnd);
         if (deadline <= Date.now()) throw new Error("the browser's session is over before the charts");
         const capture = captureAnimatedCharts(page, {
           store,
@@ -221,8 +280,9 @@ async function renderInBrowser(
         // Past the time limit the capture keeps failing against a closing
         // page; nobody is waiting for it then.
         capture.catch(() => {});
-        const charts = await withTimeout(capture, CAPTURE_BUDGET_MS + 10_000, "the chart capture ran out of time");
-        console.info(`[render] charts: ${charts.still} still, ${charts.settled} settled, ${charts.looped} looped, ${charts.undecided} undecided`);
+        const charts = await withTimeout(capture, Math.max(1_000, deadline - Date.now() + 10_000), "the chart capture ran out of time");
+        phase("charts");
+        console.info(`[render] charts: ${charts.still} still, ${charts.settled} settled, ${charts.looped} looped, ${charts.undecided} undecided; ${phases.join(", ")}`);
         html = await serialize();
         // A chart that neither held still nor repeated in the time sampled
         // stands as the scroll left it: the reason a caption may still
@@ -231,10 +291,10 @@ async function renderInBrowser(
           charts.undecided > 0
             ? `${charts.undecided} animated chart${charts.undecided === 1 ? "" : "s"} neither settled nor looped in the time sampled`
             : null;
-        return { html, error, charts };
+        return { html, error, charts, pictures };
       } catch (err) {
         console.warn("[render] chart capture failed; the scrolled page stands:", err);
-        return { html, error: `the chart capture failed: ${reasonOf(err)}`, charts: null };
+        return { html, error: `the chart capture failed: ${reasonOf(err)}`, charts: null, pictures };
       }
     } finally {
       await context.close().catch(() => {});

@@ -68,7 +68,7 @@ const MARK = "data-unitos-chart";
 
 /** Stores one GIF and answers the src the page's <img> gets; null when it
     cannot be stored. */
-export type CaptureStore = (gif: Uint8Array) => Promise<string | null>;
+export type CaptureStore = (bytes: Uint8Array, mimeType: "image/gif" | "image/png") => Promise<string | null>;
 
 export type CaptureResult = {
   // Charts the page draws, by what their motion turned out to be.
@@ -293,7 +293,10 @@ export async function captureAnimatedCharts(
   if (count === 0) return result;
   try {
     // Time stands still from here: the clock moves only by the steps below.
-    await page.clock.pauseAt(Date.now() + 1000);
+    // The page's clock may stand past the server's (the render ran it with
+    // real time; a pause behind it is refused as the past).
+    const pageNow = await page.evaluate(() => Date.now()).catch(() => Date.now());
+    await page.clock.pauseAt(Math.max(Date.now(), pageNow) + 1000);
     const stillSamples = Math.ceil(STILL_MS / STEP_MS);
     const settleSamples = Math.ceil(SETTLE_MS / STEP_MS);
     for (let n = 0; n < count; n++) {
@@ -347,7 +350,7 @@ export async function captureAnimatedCharts(
           if (opts.store && result.looped < MAX_CHARTS) {
             const loop = await recordLoop(page, chart, period, opts.deadline);
             const gif = loop ? encodeWithinCap(loop.width, loop.height, loop.frames) : null;
-            const src = gif ? await opts.store(gif) : null;
+            const src = gif ? await opts.store(gif, "image/gif") : null;
             if (loop && src) {
               await replaceWithImage(chart, src, loop.width, loop.height);
               kind = "looped";
