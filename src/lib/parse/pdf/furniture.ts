@@ -496,12 +496,17 @@ function measures(pages: Line[][], rows: Row[][]): { lead: number; bodySize: num
 // its head in two ("2 TRUMP v. ANDERSON", then "Per Curiam").
 // A row of two cells or more over a row of as many cells: the first cells
 // start within two ems of each other, each later cell of the head within
-// an em left and six ems right of the cell under it.
+// an em left and six ems right of the cell under it. A table's row holds
+// values, never a line of prose: a running head of two parts over a
+// two-column page's first lines stood over two cells of prose, one a
+// column (parse loop finding: Nature Communications' "ARTICLE" and its
+// DOI line stayed on every odd page as a heading).
 function headsTable(row: Row, next: Row | undefined): boolean {
   if (next === undefined) return false;
   const cellsOf = (r: Row) => r.lines.flatMap((l) => l.cells).sort((a, b) => a.x - b.x);
   const [head, under] = [cellsOf(row), cellsOf(next)];
   if (head.length < 2 || head.length !== under.length) return false;
+  if (under.some((c) => c.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6)) return false;
   const em = row.size;
   return head.every((cell, k) => {
     const dx = cell.x - under[k].x;
