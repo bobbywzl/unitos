@@ -42,7 +42,7 @@ type Side = "head" | "foot";
 // notice 18.5 pt under "Per Curiam").
 type Candidate = { row: Row; side: Side; strong: boolean };
 
-export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" | "mark" };
+export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" | "mark" | "imprint" };
 
 // A period may close the number: the 10-K prints "53." at each foot, and
 // its 97 page numbers stayed in the text.
@@ -57,6 +57,9 @@ const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|delib
 const JOB_MARK_RE = /^\d{3,6}\s*[°º*]\s*[—–-]{1,2}\s*\d{2}(?:\s*[—–-]{1,3}\s*\d{1,3})?$/;
 // A long table's foot on each page it breaks at (LaTeX longtable, Word).
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
+// A journal's imprint at its first page's foot: the ISSN, the copyright
+// line, the publisher, the license, the DOI.
+const IMPRINT_RE = /^\d{4}-\d{3}[\dX]\b|©|\(c\)\s*\d{4}|\bdoi\.org\/|\bdoi:\s*10\.|\bpublished by\b|all rights reserved|open access under/i;
 
 // pageNumbers: each page's 0-based number in the PDF, where the pages are
 // not all of it (a parse of the pages the reader chose, parsePdf); a page
@@ -346,6 +349,18 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
       if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92) || fenced(line, lines)) continue;
       drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
+  }
+  // 7. A journal's imprint at the first page's foot: its last rows, set
+  // small, that give the ISSN, the copyright, the publisher, the license,
+  // or the DOI (IMPRINT_RE). It stands on one page only, so no repeat
+  // drops it (parse loop finding: an Elsevier paper's "0010-0277 © 2013
+  // The Authors. Published by Elsevier B.V. … http://dx.doi.org/…" read
+  // as the first page's last paragraph).
+  const first = rows[0] ?? [];
+  for (let k = first.length - 1, n = 0; k >= 0 && n < 2; k--, n++) {
+    const row = first[k];
+    if (dropped.has(row) || row.size > bodySize * 0.9 || !IMPRINT_RE.test(row.text)) break;
+    for (const line of row.lines) if (!gone.has(line)) drops.push({ page: row.page, line, why: "imprint" });
   }
   return drops;
 }
