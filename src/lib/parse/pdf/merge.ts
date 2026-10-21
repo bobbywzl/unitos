@@ -559,9 +559,17 @@ function setAlike(a: Segment, b: Segment, body: Map<number, number>): boolean {
 
 // The face most of a part's characters are set in, as the page editor
 // names it; none when its runs carry no look.
+// The face of a part is its plain words' where it has any: a paragraph
+// that opens with a bold run-in head in another face ("K-mers motif
+// evolution across species. The InParanoid database was used to", the head
+// and the words a character apart) is set in its words' face (parse loop
+// finding: Nature's Methods paragraphs joined or split by which of the two
+// won the count).
 function faceOf(s: Segment): string | undefined {
+  const runs = (s.runs ?? []).filter((r) => r.look);
+  const plain = runs.filter((r) => !r.bold && !r.faced);
   const chars = new Map<string, number>();
-  for (const r of s.runs ?? []) if (r.look) chars.set(r.look.face, (chars.get(r.look.face) ?? 0) + r.end - r.start);
+  for (const r of plain.length > 0 ? plain : runs) chars.set(r.look!.face, (chars.get(r.look!.face) ?? 0) + r.end - r.start);
   return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 

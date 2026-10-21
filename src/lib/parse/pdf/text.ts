@@ -788,7 +788,13 @@ function blockFont(text: string, runs: Run[]): TextFont | undefined {
     return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
   };
   const prose = counted.some(({ r, n }) => n > 0 && !r.mono && r.look?.face);
-  const family = top((r) => (r.look?.face && (!prose || !r.mono) ? r.look.face : undefined));
+  // The face is the plain words' where the block has any: a paragraph
+  // that opens with a bold run-in head in another face ("K-mers motif
+  // evolution across species. The InParanoid database was used to") is
+  // set in its words' face, and joins the paragraph under it by that face
+  // (merge.ts otherText), not by a count of letters the head may win.
+  const plain = counted.some(({ r, n }) => n > 0 && !r.bold && !r.faced && !r.mono && r.look?.face);
+  const family = top((r) => (r.look?.face && (!prose || !r.mono) && (!plain || (!r.bold && !r.faced)) ? r.look.face : undefined));
   // Small capitals count at their capitals' size (look.ts drawnSmallCaps).
   const size = top((r) => (r.sup || r.sub ? undefined : (r.look?.capitals ?? r.look?.size)));
   if (!family || size === undefined) return undefined;
