@@ -724,13 +724,21 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[], front?
       !used.get(host)?.has(start) && (endnote ? pageAt(host, start) <= page : pageAt(host, start) === page);
     const places = label && !tableNotes.has(note) ? referencesTo(endnote ? hosts : (onPage.get(page) ?? []), label, free) : [];
     let found = endnote ? (places.length === 1 ? places[0] : null) : (places[0] ?? null);
+    // A table's own note ("*", "†"): the table holds its reference, at the
+    // first cell or caption word that sets its label level after it (parse
+    // loop finding: MMWR's seven table notes linked to nothing).
+    if (!found && label && tableNotes.has(note)) {
+      const cells = (tablesOn.get(page) ?? []).flatMap((t) =>
+        [...t.text.matchAll(levelLabel(label))].flatMap((m) => (m.index !== undefined && free(t, m.index) ? [{ host: t, start: m.index, end: m.index + label.length }] : [])),
+      );
+      if (cells.length > 0) found = cells[0];
+    }
     // A footnote cited in a table's cell ("renewal2" in a Word table): the
     // table holds its reference, set level after a word, so the import puts
     // the number in the cell (synth-report-docx). A table stands apart from
     // its page's lines, so a note on the last page that the table cites
     // counts as an endnote: it takes the table's place when that is the one
-    // place that reads its label. A table's own notes ("*", "a") link to
-    // none: a table cites them from many cells.
+    // place that reads its label.
     if (!found && label && !tableNotes.has(note) && !(endnote && places.length > 0)) {
       const tables = endnote ? segments.filter((s) => s.type === "TABLE") : (tablesOn.get(page) ?? []);
       const cells = tables.flatMap((t) =>
