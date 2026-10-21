@@ -800,6 +800,23 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     (i < 2 || lines[i - 2].y - above.y > above.size * ctx.leading * 1.3);
   const headingBelow = title && below !== undefined && titleLike(below) && Math.abs(below.size - last.size) > 0.5;
   const bodyBelow = below !== undefined && styledShare(below) < 0.5;
+  // A paragraph's bold lead under the title counts as the paragraph's
+  // first line: a run-in subhead that fills its line, the paragraph's
+  // regular type on the line under it, at its edge, one pitch down (parse
+  // loop finding: Nature's "Results" over "The mRNA interactomes of yeast
+  // and human HuH-7 cells." read as a paragraph in five papers of ten,
+  // where "Results" over "Spatial separation of spins. Figure 1a …" read
+  // as a heading).
+  const leadBelow =
+    title &&
+    run.length === 1 &&
+    below !== undefined &&
+    !bodyBelow &&
+    styledShare(below) >= 0.9 &&
+    lines[j + 1] !== undefined &&
+    styledShare(lines[j + 1]) < 0.5 &&
+    Math.abs(lines[j + 1].x - below.x) <= below.size &&
+    below.y - lines[j + 1].y <= below.size * ctx.leading * 1.3;
   // Over a paragraph's first line set in, a title set apart above needs no
   // gap under it: MMWR sets its subheads a size under the body, over the
   // indented first line ("Prescribers" read as a paragraph).
@@ -818,7 +835,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const flushBelow =
     (title || capsLabel) &&
     run.length === 1 &&
-    bodyBelow &&
+    (bodyBelow || leadBelow) &&
     Math.abs(below.x - last.x) <= last.size * 0.5 &&
     below.size - last.size <= 0.5 &&
     edge !== undefined &&
