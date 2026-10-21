@@ -366,7 +366,21 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
       !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
       fillsMargin(prev, next, columnEdges(lines, j - 1, ctx).right);
     const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
-    if (under || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
+    // Under a hanging marker, an unmarked line at the item's words one
+    // line's pitch under the item's last line goes on with it, whatever
+    // the line above's end: a reference list set ragged stops each line
+    // where its words end, and the indent alone says the line is the
+    // item's (parse loop finding: Nature's "2. Mnih, V. et al. Human-level
+    // control through deep reinforcement learning." over "Nature 518,
+    // 529–533 (2015)." read as an item and a paragraph, and the list as
+    // two lists).
+    const hanging =
+      mark === null &&
+      !next.display &&
+      item.bodyX > item.markerX + next.size * 0.5 &&
+      Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
+      prev.y - next.y <= next.size * ctx.leading * 1.3;
+    if (under || hanging || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
       item.lines.push(next);
       j++;
       continue;
