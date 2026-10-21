@@ -847,8 +847,9 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
     where no line of pdftotext's is, and whose words no line of the page
     holds (a CID font whose map this sandbox's poppler lacks: a report's
     headings in a Japanese font read as nothing). Vertical writing in the
-    margin and an item that stands at one place on several pages are the
-    page's furniture, as pdftotext's own are. */
+    margin, an item set aslant (a watermark), and an item that stands at
+    one place on several pages are the page's furniture, as pdftotext's own
+    are. */
 export function blindText(pdf: PdfText, paint: PagePaint[]): { page: number; text: string }[] {
   const found: { page: number; text: string; key: string }[] = [];
   const furniture = new Set(pdf.furniture);
@@ -861,7 +862,7 @@ export function blindText(pdf: PdfText, paint: PagePaint[]): { page: number; tex
     // Words the page's furniture holds are no words to cover: a title the margin's tab repeats is the page's own.
     const held = heldBy(lines.filter((l) => !furniture.has(l)).map((l) => wordsOf(l.text).map((w) => w.w)));
     for (const item of painted.items) {
-      if (item.vertical || wordsOf(item.text).length === 0) continue;
+      if (item.vertical || item.aslant || wordsOf(item.text).length === 0) continue;
       const [x, y] = [(item.x1 + item.x2) / 2, (item.y1 + item.y2) / 2];
       if (lines.some((l) => x >= l.left - 2 && x <= l.right + 2 && y >= l.top - 2 && y <= l.bottom + 2) || held(item.text)) continue;
       const place = `${Math.round(item.y1 / (0.03 * painted.height))} ${Math.round(item.x1 / (0.02 * painted.width))}`;

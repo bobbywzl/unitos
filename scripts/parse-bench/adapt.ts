@@ -490,13 +490,18 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
       const into = spansOf();
       if (!into.hasText) return null;
       if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...bordered, ...breaks(into) };
-      const indent = tokens.includes("indent-first") ? "first" : tokens.includes("indent-hanging") ? "hanging" : tokens.includes("indent-block") ? "block" : undefined;
+      // A block begun on a page before the scored ones: its scored lines are a
+      // continuation, with no first line to set in (a paragraph wrapped from
+      // p. 14 onto p. 15 kept its first-line indent: nasa-tm-20220005496).
+      const first = tokens.includes("indent-first") && whole;
+      const indent = first ? "first" : tokens.includes("indent-hanging") ? "hanging" : tokens.includes("indent-block") ? "block" : undefined;
+      const indentPt = block.indent && (whole || block.indent.left > 0) ? { left: block.indent.left, first: whole ? block.indent.first : 0 } : undefined;
       return {
         kind: "paragraph",
         spans: into.spans,
         ...(align ? { align } : {}),
         ...(indent ? { indent } : {}),
-        ...(block.indent ? { indentPt: { left: block.indent.left, first: block.indent.first } } : {}),
+        ...(indentPt ? { indentPt } : {}),
         ...spaced,
         ...bordered,
         ...(tokens.includes("caption") ? { role: "caption" as const } : {}),

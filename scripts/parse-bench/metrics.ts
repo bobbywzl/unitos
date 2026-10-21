@@ -468,6 +468,14 @@ export function align(ref: Flat, cand: Flat): Alignment {
     let hi = cand.blocks.length;
     for (let p = rb - 1; p >= 0; p--) if (owner[p] >= 0) { lo = owner[p]; break; }
     for (let n = rb + 1; n < ref.blocks.length; n++) if (owner[n] >= 0 && hasWords(ref, n)) { hi = owner[n]; break; }
+    // The parse sets its title first whatever the page sets over it (a logo
+    // over a form's title): a word-less reference block before the title
+    // pairs with a candidate block right after the candidate's title.
+    if (lo === -1 && hi < cand.blocks.length && cand.blocks[hi].kind === "title") {
+      lo = hi;
+      hi = cand.blocks.length;
+      for (let n = rb + 1; n < ref.blocks.length; n++) if (owner[n] >= 0 && hasWords(ref, n) && owner[n] > lo) { hi = owner[n]; break; }
+    }
     if (hi <= lo) hi = Math.min(cand.blocks.length, lo + 8);
     let best = -1;
     let bestFit = 0;

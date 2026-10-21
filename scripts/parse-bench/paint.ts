@@ -17,7 +17,7 @@ import { ROOT } from "./load";
 export type Rect = { x1: number; y1: number; x2: number; y2: number };
 /** A run of text as pdf.js's text layer reads it: its box (from its baseline, 0.8 of its size above and 0.2
     below; a column of vertical writing, its width about its origin) and its words. */
-export type TextItem = Rect & { text: string; vertical?: true };
+export type TextItem = Rect & { text: string; vertical?: true; aslant?: true };
 /** A ligature's glyph in a right-to-left script: its box, as a TextItem's, and its letters as the font's map
     gives them, in reading order ("في", "تي", "لا"). */
 export type Ligature = Rect & { text: string };
@@ -31,7 +31,7 @@ export type PagePaint = { width: number; height: number; images: Rect[]; items: 
 const DISK = join(ROOT, ".bench", "cache", "paint");
 const WALK_CODE = join(ROOT, "src", "lib", "parse", "pdf", "drawing.ts");
 /** This file's own reading of the walk: a change to it reads every PDF anew. */
-const FORMAT = "4";
+const FORMAT = "6";
 
 /** Letters of a right-to-left script only, no marks. */
 const RTL_LETTERS_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
@@ -100,11 +100,15 @@ export function pdfPaint(path: string): Promise<PagePaint[]> {
             if (!text || !item.transform) continue;
             const [a, b, , , e, f] = item.transform;
             const size = Math.hypot(a, b) || item.height || 0;
+            // An item set aslant (a watermark across the page): the parse
+            // reads none of it (index.ts). One at a right angle is a
+            // sideways note (sideways.ts), words to cover.
+            const aslant = Math.abs(b) > size * 0.3 && Math.abs(a) > size * 0.1;
             const [x, y] = at(e, f);
             const width = item.width ?? 0;
             const rect =
               item.dir === "ttb" ? { x1: x - size / 2, y1: y, x2: x + size / 2, y2: y + width } : { x1: Math.min(x, x + width), y1: y - 0.8 * size, x2: Math.max(x, x + width), y2: y + 0.2 * size };
-            out.items.push({ ...rect, text, ...(item.dir === "ttb" ? { vertical: true as const } : {}) });
+            out.items.push({ ...rect, text, ...(item.dir === "ttb" ? { vertical: true as const } : {}), ...(aslant ? { aslant: true as const } : {}) });
           }
         } catch {
           // A page whose resources pdf.js cannot read paints nothing here.
@@ -127,10 +131,14 @@ export function pdfPaint(path: string): Promise<PagePaint[]> {
 
 /** Pixels a point where the page is drawn to read its ink. */
 const SCALE = 4;
+/** A pixel darker than this (of 255) is ink: a title slide's author line in
+    gray 153 is ink the reader sees (parse bench finding: its subtitle's
+    space after read as "no ink under it" at a cutoff of 150). */
+const INK = 200;
 const inkMemo = new Map<string, { counts: Uint16Array; top: number } | null>();
 
 /** The ink in a box of a page (1-based): each pixel row's count of dark
-    pixels (under 150 of 255), poppler drawing the page at SCALE pixels a
+    pixels (under INK of 255), poppler drawing the page at SCALE pixels a
     point; the rows start at `top` (points). pdftoppm writes the picture to
     its output only (no file). A fill's inside is no ink: rows of one gray
     across the box, three points tall or more, count none (parse bench
@@ -162,7 +170,7 @@ export function inkRows(path: string, page: number, box: Rect): { counts: Uint16
           let [lo, hi] = [255, 0];
           for (let c = 0; c < width; c++) {
             const v = pgm[start + r * width + c];
-            if (v < 150) n++;
+            if (v < INK) n++;
             if (v < lo) lo = v;
             if (v > hi) hi = v;
           }
@@ -203,7 +211,7 @@ export function inkRight(path: string, page: number, box: Rect): number | null {
     if (!head) return null;
     const [width, height] = [Number(head[1]), Number(head[2])];
     const start = head[0].length;
-    for (let c = width - 1; c >= 0; c--) for (let r = 0; r < height; r++) if (pgm[start + r * width + c] < 150) return (x + c + 1) / SCALE;
+    for (let c = width - 1; c >= 0; c--) for (let r = 0; r < height; r++) if (pgm[start + r * width + c] < INK) return (x + c + 1) / SCALE;
     return null;
   } catch {
     return null;
