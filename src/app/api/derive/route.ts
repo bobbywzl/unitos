@@ -16,7 +16,9 @@ import {
   VISUALIZE_CHECK_MAX_SVG,
   VISUALIZE_EFFORT,
 } from "@/lib/derive/config";
-import { derivationFeature, featureCall, featureConfigured, featureModelId } from "@/lib/feature-models";
+import { derivationFeature, fallbackCall, featureCall, featureConfigured, featureModelId } from "@/lib/feature-models";
+import type { ModelCall } from "@/lib/model-call";
+import { modelErrorMessage } from "@/lib/derive/json-call";
 import {
   annotationsSection,
   corpusSection,
@@ -1181,65 +1183,71 @@ async function handle(req: Request, t: TFunc) {
     data.type === "DEFINE"
   ) {
     const searchUsd = web ? webSearchUsd(usageMeta.model) : 0;
-    const result = streamText({
-      model,
-      maxOutputTokens,
-      providerOptions,
-      headers: gatewayHeaders(usageMeta),
-      allowSystemInMessages: true,
-      messages,
-      ...(web
-        ? {
-            tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
-            stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
+    // The stream on one model: the call's own, or the fallback's when the
+    // first failed before any text came (below).
+    const startStream = (call: ModelCall) => {
+      usageMeta.model = call.modelId;
+      return streamText({
+        model: call.model,
+        maxOutputTokens,
+        providerOptions: call.providerOptions,
+        headers: gatewayHeaders(usageMeta),
+        allowSystemInMessages: true,
+        messages,
+        ...(web
+          ? {
+              tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+              stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
+            }
+          : {}),
+        // Stop aborts the model call too (SPEC.md §6), not just the response.
+        abortSignal: req.signal,
+        // Stopped: the steps that finished were billed, so they are recorded.
+        // A step cut off mid-answer reports no usage at all.
+        onAbort: ({ steps }) => {
+          const tokens = steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {});
+          const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
+          recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
+        },
+        onEnd: async ({ text, usage, steps }) => {
+          console.log(
+            `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+              `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
+              `output=${usage.outputTokens ?? 0}`,
+          );
+          const tokens = sdkTokens(usage);
+          const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
+          recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
+          // SUMMARIZE persists per notebook+document+depth, so reopening the
+          // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
+          if (data.type === "SUMMARIZE" && text.trim()) {
+            const where = {
+              notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
+            };
+            const nd = await db.notebookDocument.findUnique({ where, select: { summaries: true } });
+            const current = (nd?.summaries ?? {}) as SummaryLevels;
+            await db.notebookDocument.update({
+              where,
+              data: { summaries: { ...current, [depth]: text } },
+            });
+            await bumpNotebook(data.notebookId);
+            void checkOutput({
+              tool: "summarize",
+              input: `${document.title} · ${depth}`,
+              output: text,
+              lang: await currentLang(),
+              userId: user.id,
+              notebookId: data.notebookId,
+              documentId,
+            });
           }
-        : {}),
-      // Stop aborts the model call too (SPEC.md §6), not just the response.
-      abortSignal: req.signal,
-      // Stopped: the steps that finished were billed, so they are recorded.
-      // A step cut off mid-answer reports no usage at all.
-      onAbort: ({ steps }) => {
-        const tokens = steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {});
-        const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
-        recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
-      },
-      onEnd: async ({ text, usage, steps }) => {
-        console.log(
-          `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
-            `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
-            `output=${usage.outputTokens ?? 0}`,
-        );
-        const tokens = sdkTokens(usage);
-        const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
-        recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
-        // SUMMARIZE persists per notebook+document+depth, so reopening the
-        // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
-        if (data.type === "SUMMARIZE" && text.trim()) {
-          const where = {
-            notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
-          };
-          const nd = await db.notebookDocument.findUnique({ where, select: { summaries: true } });
-          const current = (nd?.summaries ?? {}) as SummaryLevels;
-          await db.notebookDocument.update({
-            where,
-            data: { summaries: { ...current, [depth]: text } },
-          });
-          await bumpNotebook(data.notebookId);
-          void checkOutput({
-            tool: "summarize",
-            input: `${document.title} · ${depth}`,
-            output: text,
-            lang: await currentLang(),
-            userId: user.id,
-            notebookId: data.notebookId,
-            documentId,
-          });
-        }
-      },
-      onError: (err) => {
-        console.error("[derive] stream error:", err);
-      },
-    });
+        },
+        onError: (err) => {
+          console.error("[derive] stream error:", err);
+        },
+      });
+    };
+    const result = startStream(chat);
     // The stream commits HTTP 200 when it opens, so a failure after that
     // reports in-band: the stream ends with STREAM_ERROR_TOKEN + the reason,
     // and the client shows it (lib/derive/text-stream.ts: heartbeat spaces
@@ -1264,14 +1272,41 @@ async function handle(req: Request, t: TFunc) {
           }
         };
         let text = "";
+        let failure: unknown = null;
+        // Whether any of the answer reached the reader (the heartbeat's
+        // spaces do not count).
+        let sent = 0;
+        const sendCounted = (chunk: string) => {
+          if (chunk.trim() !== "") sent += chunk.length;
+          send(chunk);
+        };
         try {
-          text = await streamTextTo(result, send, { t });
+          text = await streamTextTo(result, sendCounted, { t });
         } catch (err) {
+          failure = err;
+        }
+        // The model failed before any text came (a provider's outage, its
+        // balance spent): the call runs again on the fallback model, once
+        // (lib/feature-models.ts fallbackCall). With web search on, the
+        // search is the model's provider's, so the call stays on its model.
+        if (failure !== null && !req.signal.aborted && sent === 0 && !web) {
+          const fallback = await fallbackCall(chat.modelId, DERIVATION_EFFORT[data.type], attachedImages.length > 0);
+          if (fallback) {
+            console.error(`[derive stream] ${chat.modelId} failed, running again on ${fallback.modelId}:`, modelErrorMessage(failure));
+            failure = null;
+            try {
+              text = await streamTextTo(startStream(fallback), send, { t });
+            } catch (err) {
+              failure = err;
+            }
+          }
+        }
+        if (failure !== null) {
           // Stopped by the reader: nobody is listening, and nothing persists.
           if (req.signal.aborted) return;
           try {
             // The plain line for the reader; the reason goes to the log.
-            send(`${STREAM_ERROR_TOKEN}${failureLine(t, err, "derive stream")}`);
+            send(`${STREAM_ERROR_TOKEN}${failureLine(t, failure, "derive stream")}`);
             controller.close();
           } catch {
             // The reader left before the reason could be sent.
