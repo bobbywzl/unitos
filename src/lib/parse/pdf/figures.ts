@@ -350,6 +350,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   };
 
   type Part = { box: Box; image: boolean; thin: boolean };
+  const figureSized = (b: Box) => b.x2 - b.x1 >= pageWidth * 0.12 && b.y2 - b.y1 >= pageHeight * 0.04;
   const parts: Part[] = [];
   // The boxes that hold the page's text: backgrounds, or a chart's panel
   // (below).
@@ -464,6 +465,22 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       if (cell.length > 200) break;
     }
   }
+  // Two pictures side by side at one height, a few ems apart, one of them
+  // under a figure's size: panels of one figure, the ticks between them
+  // its own (parse loop finding: a Nature paper's two bar charts, each
+  // 71 pt wide on a 595 pt page, a point under a figure's width, 33 pt
+  // apart: no figure, and their ticks read as debris and their
+  // significance stars as paragraphs). Two figures of their own size
+  // stand apart.
+  const panelSized = (b: Box) => b.x2 - b.x1 >= pageWidth * 0.06 && b.y2 - b.y1 >= pageHeight * 0.04;
+  const beside = (a: Box, b: Box) => {
+    if ((figureSized(a) && figureSized(b)) || !panelSized(a) || !panelSized(b)) return false;
+    const over = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+    const gap = Math.max(a.x1 - b.x2, b.x1 - a.x2);
+    return over >= Math.min(a.y2 - a.y1, b.y2 - b.y1) * 0.8 && gap > 0 && gap <= textSize * 6;
+  };
+  const pictures = parts.flatMap((part, i) => (part.image ? [i] : []));
+  for (let a = 0; a < pictures.length; a++) for (let b = a + 1; b < pictures.length; b++) if (beside(parts[pictures[a]].box, parts[pictures[b]].box)) parent[find(pictures[a])] = find(pictures[b]);
   const clusters = new Map<number, Part[]>();
   parts.forEach((part, i) => {
     const root = find(i);
@@ -574,7 +591,6 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // A caption set apart from the text: smaller than it, or italic.
   const setApart = (r: TextRun) => r.size < textSize * 0.95 || r.italic >= r.chars * 0.6;
   const touch = (a: Box, b: Box) => b.x1 <= a.x2 + 6 && a.x1 <= b.x2 + 6 && b.y1 <= a.y2 + 6 && a.y1 <= b.y2 + 6;
-  const figureSized = (b: Box) => b.x2 - b.x1 >= pageWidth * 0.12 && b.y2 - b.y1 >= pageHeight * 0.04;
   // The pictures of a cluster whose box takes in the page's text, one by one:
   // a line over no picture is not over the picture. A slide's title bar
   // joined its screenshot, and the title made the screenshot a background
