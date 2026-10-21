@@ -13,6 +13,8 @@ import {
 } from "@/lib/gateway-admin";
 import { FIXED_COSTS, MONTHS_PER_YEAR, fixedCostsPerMonth } from "@/lib/fixed-costs";
 import { providerOf } from "@/lib/usage";
+import { anthropicAdminConfigured, anthropicBill, moonshotBalance, moonshotSpend, snapshotBalances, type ProviderBill } from "@/lib/provider-bills";
+import { ProviderBills, type ProviderCard } from "@/components/admin/provider-bills";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
@@ -92,7 +94,10 @@ export default async function AdminUsagePage() {
     }),
   );
 
-  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users, byModel30, byFeature30, spend, tags] = await Promise.all([
+  // The providers' balances, kept before the bills are read (one row an hour at most).
+  await snapshotBalances();
+
+  const [totals, cost30, byFeature, byModel, byUser, byDayRaw, users, byModel30, byFeature30, spend, tags, anthropic, balance, moonshot] = await Promise.all([
     // All time: the app's records are never deleted (SPEC.md §7).
     db.usageEvent.aggregate({
       _count: true,
@@ -131,7 +136,8 @@ export default async function AdminUsagePage() {
     db.usageEvent.groupBy({
       by: ["model"],
       where: { createdAt: { gte: since30 } },
-      _sum: { costUsd: true },
+      _count: true,
+      _sum: { inputTokens: true, outputTokens: true, costUsd: true },
     }),
     db.usageEvent.groupBy({
       by: ["feature", "model"],
@@ -141,7 +147,54 @@ export default async function AdminUsagePage() {
     }),
     gateway ? fetched<GatewaySpend>(() => gatewaySpend(30)) : null,
     gateway ? fetched<GatewayTagSpend>(() => gatewayTagSpend(30)) : null,
+    anthropicAdminConfigured() ? fetched<ProviderBill>(() => anthropicBill(30)) : null,
+    moonshotBalance(),
+    moonshotSpend(30),
   ]);
+  // Provider bills (components/admin/provider-bills.tsx): each provider's
+  // bill for the last 30 days beside the app's count of the same days.
+  const appOf = (provider: string) => {
+    const rows = byModel30.filter((r) => providerOf(r.model) === provider);
+    return {
+      costUsd: rows.reduce((sum, r) => sum + (r._sum.costUsd ?? 0), 0),
+      tokens: rows.reduce((sum, r) => sum + (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0), 0),
+      calls: rows.reduce((sum, r) => sum + r._count, 0),
+      byModel: rows.map((r) => ({ label: r.model, costUsd: r._sum.costUsd ?? 0 })).sort((a, b) => b.costUsd - a.costUsd),
+    };
+  };
+  const cards: ProviderCard[] = [
+    {
+      provider: "anthropic",
+      name: "Anthropic",
+      console: "https://platform.claude.com/cost",
+      app: appOf("anthropic"),
+      bill: anthropic,
+      noApi: anthropic ? null : "setKey",
+      balance: null,
+      fromBalance: false,
+    },
+    {
+      provider: "moonshot",
+      name: "Moonshot AI",
+      console: "https://platform.kimi.ai/console/account",
+      app: appOf("moonshot"),
+      bill: moonshot ? { ok: true, data: moonshot } : null,
+      noApi: moonshot ? null : "noRows",
+      balance,
+      fromBalance: true,
+    },
+    {
+      provider: "zai",
+      name: "Z.ai",
+      console: "https://z.ai/manage-apikey/usage-bundles",
+      app: appOf("zai"),
+      bill: null,
+      noApi: "bundle",
+      balance: null,
+      fromBalance: false,
+    },
+    { provider: "google", name: "Google", console: null, app: appOf("google"), bill: null, noApi: "none", balance: null, fromBalance: false },
+  ];
   // The app's own count over 30 days, split by whether the gateway prices
   // the model: the gateway providers' part is the cross-check tile; the
   // rest is the "outside the gateway" figure and its by-function rows.
@@ -215,6 +268,8 @@ export default async function AdminUsagePage() {
         <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerYear")} value={fmtUsd(spendingPerMonth * MONTHS_PER_YEAR)} />
       </div>
       <SpendingTable t={t} aiPerMonth={aiPerMonth} />
+
+      <ProviderBills t={t} cards={cards} />
 
       {gateway && spend && !spend.ok && <p className="mb-4 text-xs text-red-600">{spend.error}</p>}
       {gateway && spend?.ok ? (

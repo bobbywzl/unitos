@@ -960,6 +960,21 @@ model UsageEvent {
   @@index([userId, createdAt])
 }
 
+// A provider's balance as read at one moment (lib/provider-bills.ts): the
+// admin usage page and the daily cleanup write one row per provider per
+// hour at most. Moonshot has no spend API, so its spend is read as the
+// balance's falls between rows; a rise is a recharge and counts as nothing.
+model ProviderBalance {
+  id           String   @id @default(cuid())
+  provider     String // "moonshot"
+  availableUsd Float
+  voucherUsd   Float
+  cashUsd      Float
+  at           DateTime @default(now())
+
+  @@index([provider, at])
+}
+
 // Click telemetry (SPEC.md §7): one row per click on a reader control.
 // surface is where the control lives (topbar | sidebar | ai-toolbar |
 // article-menu | reader | tray, src/lib/clicks.ts); control is the control's
