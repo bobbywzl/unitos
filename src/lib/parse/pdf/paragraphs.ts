@@ -681,14 +681,27 @@ const EQ_NUMBER_RE = /^\(\d{1,3}[a-z]?\)$/;
 const LEADERS_RE = /(?:\s*\.){3,}\s*\d{1,4}\s*$/;
 
 // A display equation's line: mostly math glyphs, set in from the column edge,
-// or its number in the first cell. A numbered display at the column's edge
-// read as a line of prose, and a formula sheet's sentences and displays as
-// one paragraph.
-function isDisplayMathLine(line: Line, ctx: PageContext): boolean {
+// or its number in its first or its last cell. A numbered display at the
+// column's edge read as a line of prose, and a formula sheet's sentences
+// and displays as one paragraph. A display set flush at the column's edge
+// (Elsevier's) is one too when its line is half math, holds no word of
+// four letters, and ends short of the column's middle (`colEdge`, the
+// column's right edge from the prose around it): a sentence's last line
+// with a symbol in it, "slope −θ ± ε.", holds words (parse loop finding:
+// an Elsevier paper's |g(h)/h − (−θ)| < ε, set flush left under "for all
+// h ∈ (−δ, 0),", read as the paragraph's lines).
+function isDisplayMathLine(line: Line, ctx: PageContext, colEdge = 0): boolean {
   // A display the math reader joined (math/display.ts).
   if (line.display) return true;
-  if (line.cells.length >= 2 && EQ_NUMBER_RE.test(line.cells[0].text.trim())) return true;
-  return lineMathShare(line) >= 0.4 && line.x > ctx.columnLeft + line.size * 2;
+  if (line.cells.length >= 2 && (EQ_NUMBER_RE.test(line.cells[0].text.trim()) || EQ_NUMBER_RE.test(line.cells[line.cells.length - 1].text.trim()))) return true;
+  if (lineMathShare(line) >= 0.4 && line.x > ctx.columnLeft + line.size * 2) return true;
+  return isFlushDisplayLine(line, colEdge);
+}
+
+// A display's line set flush at the column's edge: half math, no word of
+// four letters, ending short of the column's middle.
+function isFlushDisplayLine(line: Line, colEdge: number): boolean {
+  return colEdge > 0 && lineMathShare(line) >= 0.5 && line.xEnd < (line.x + colEdge) / 2 && !/\p{L}{4}/u.test(line.text);
 }
 
 // A line of math at its own column's edge, where the line of prose next to
@@ -696,10 +709,14 @@ function isDisplayMathLine(line: Line, ctx: PageContext): boolean {
 // stands far left of a margin note (parse loop finding: the MML book's
 // margin caption "Figure 2.12 Kernel and image of a linear mapping" ends
 // "Φ : V → W." on a line of its own, p. 65, and read as two paragraphs).
-function mathOfProse(prev: Line, next: Line, ctx: PageContext): boolean {
-  const math = isDisplayMathLine(next, ctx) ? next : prev;
+// Two flush display lines in a row are a display's (a fraction's rows, a
+// relation under another), never a caption's end: the line after `next`
+// (`after`) tells.
+function mathOfProse(prev: Line, next: Line, ctx: PageContext, colEdge = 0, after?: Line): boolean {
+  const math = isDisplayMathLine(next, ctx, colEdge) ? next : prev;
   const prose = math === next ? prev : next;
   if (math.display || (math.cells.length >= 2 && EQ_NUMBER_RE.test(math.cells[0].text.trim()))) return false;
+  if (math === next && after !== undefined && isFlushDisplayLine(next, colEdge) && isFlushDisplayLine(after, colEdge)) return false;
   return Math.abs(math.x - prose.x) <= math.size * 0.5 && math.x <= leftEdge(math, ctx) + math.size * 2;
 }
 
@@ -981,7 +998,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // An equation's line and a text line never share a paragraph: the
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).
-      (isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) && !mathOfProse(prev, next, ctx)) ||
+      (isDisplayMathLine(prev, ctx, colEdge) !== isDisplayMathLine(next, ctx, colEdge) && !mathOfProse(prev, next, ctx, colEdge, lines[j + 1])) ||
       // A line of code under a line of prose that introduces it (a colon,
       // not a link's scheme, or a line short of the column's edge) opens a
       // listing (parse loop finding: ThinkDSP's "Here's an updated version
