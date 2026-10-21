@@ -76,7 +76,15 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
   if (label === undefined || !runs?.some((r) => r.start === 0)) return false;
   const styled = (r: Run) => r.bold || r.smallCaps;
   const words = runs.filter((r) => r.end > label && /\p{L}/u.test(text.slice(Math.max(r.start, label), r.end)));
-  return runs.filter((r) => r.start < label).every(styled) && words.length > 0 && !styled(words[0]);
+  if (words.length === 0) return false;
+  const labels = runs.filter((r) => r.start < label);
+  if (labels.every(styled) && !styled(words[0])) return true;
+  // A label in another face than its words, upright: Nature sets "Fig. 2"
+  // in a bold sans whose name says no weight (Flags.face; parse loop
+  // finding: every caption of a Nature Communications paper read as a
+  // paragraph, and its figures' labels as paragraphs and tables).
+  const face = words[0].face;
+  return face !== undefined && labels.every((r) => r.face !== undefined && r.face !== face && !r.italic) && !styled(words[0]);
 }
 
 // ── Panel captions ──────────────────────────────────────────────────────────

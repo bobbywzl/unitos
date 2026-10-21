@@ -56,12 +56,21 @@ function italicLeadEnd(line: Line): number {
   return end;
 }
 
-// Share of a line's characters set bold or in small caps: a heading's look.
+// Share of a line's characters set bold, in small caps, or in another face
+// than the page's main text face (Flags.faced): a heading's look. A font
+// whose name says no weight (Advent 3B2's hashed names) sets a Nature
+// paper's "Results" apart by its face alone (parse loop finding: it read
+// as a paragraph).
 function styledShare(line: Line): number {
   if (line.text.length === 0) return 0;
   let styled = 0;
-  for (const r of line.runs) if (r.bold || r.smallCaps) styled += r.end - r.start;
+  for (const r of line.runs) if (r.bold || r.smallCaps || r.faced) styled += r.end - r.start;
   return styled / line.text.length;
+}
+
+// A line set apart by its face alone, with no bold and no small caps in it.
+function facedOnly(line: Line): boolean {
+  return line.runs.some((r) => r.faced) && !line.runs.some((r) => r.bold || r.smallCaps);
 }
 
 function capsShare(text: string): number {
@@ -594,17 +603,26 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   )
     return null;
   // A heading wrapped to a second bold line at the same size and leading.
+  // Or to a second italic line that stops short of the column's edge, where
+  // the heading is italic (Elsevier sets "5.3. The Bayesian Reader versus
+  // the incremental processing" over "account", and the two read as a
+  // paragraph).
+  const lineItalic = !lineBold && textShare(line, (item) => item.italic) > 0.9;
+  const wrapsItalic = (l: Line) => {
+    const edge = lineColumn(l)?.[1];
+    return textShare(l, (item) => item.italic) > 0.9 && edge !== undefined && edge - l.xEnd > l.size * 3;
+  };
   const run: Line[] = [line];
   let j = i + 1;
   while (
     j < lines.length &&
     run.length < 3 &&
-    lineBold &&
+    (lineBold || lineItalic) &&
     runOf[j] === -1 &&
     lines[j].cells.length === 1 &&
     Math.abs(lines[j].size - line.size) <= 0.5 &&
     run[run.length - 1].y - lines[j].y <= line.size * ctx.leading * 1.3 &&
-    boldShare(lines[j].runs, lines[j].text.length) > 0.6 &&
+    (lineBold ? boldShare(lines[j].runs, lines[j].text.length) > 0.6 : wrapsItalic(lines[j])) &&
     !HEADING_NUM_STRICT_RE.test(lines[j].text)
   ) {
     run.push(lines[j]);
@@ -658,7 +676,7 @@ function scanMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
 // regular footnote mark after a title has no letters.
 function endsStyled(line: Line): boolean {
   const last = line.runs.findLast((r) => /\p{L}/u.test(line.text.slice(r.start, r.end)));
-  return last !== undefined && (last.bold || last.smallCaps);
+  return last !== undefined && (last.bold || last.smallCaps || last.faced === true);
 }
 
 // A short line set wholly bold or in small caps, with no sentence end: a
@@ -688,6 +706,10 @@ function titleLike(line: Line): boolean {
 function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (line.cells.length !== 1 || line.size > ctx.bodySize * 1.14) return null;
+  // A line set apart by its face alone is a heading at the body's size or
+  // near it: a figure's labels, set small in the figure's own face, are no
+  // headings.
+  if (facedOnly(line) && line.size < ctx.bodySize * 0.95) return null;
   const text = line.text.trim();
   // The lead is a label: it ends with a colon or a period ("Problem 3:").
   const lead = line.text.slice(line.runs[0].start, line.runs[0].end);
@@ -790,14 +812,15 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // and Entropy" and TAM Review's "Introduction" sit one line's pitch over
   // their paragraphs and read as paragraphs. The title stops well short of
   // its column's edge (a bold sentence wrapped fills it), and the line
-  // under it is regular type at its size.
+  // under it is regular type at its size, or smaller (Nature sets
+  // "Methods" at the body's size right over its 7.5 pt paragraphs).
   const edge = lineColumn(last)?.[1];
   const flushBelow =
     (title || capsLabel) &&
     run.length === 1 &&
     bodyBelow &&
     Math.abs(below.x - last.x) <= last.size * 0.5 &&
-    Math.abs(below.size - last.size) <= 0.5 &&
+    below.size - last.size <= 0.5 &&
     edge !== undefined &&
     edge - last.xEnd > last.size * 4 &&
     below.xEnd - below.x > (edge - below.x) * 0.6;

@@ -69,6 +69,14 @@ export type FontFlags = Omit<Flags, "href"> & { math: boolean };
 // letters read as plain.
 const ADOBE_BOLD_RE = /(?:^|[-a-z])(?:Bd|Blk)(?:Cn|SemiCn|It|Obl)*$/;
 const ADOBE_ITALIC_RE = /(?:^|[-a-z])(?:It|Obl)$/;
+// Advent 3B2 names a face's weight and shape by one letter after a period
+// or a hyphen: "AdvTTda6f6cb8.B" bold, "AdvOT23e3f5cb.I" italic,
+// "AdvGulliv-B", "AdvGulliv-I", ".BI" both (parse loop finding: a Nature
+// Communications paper's bold "Results" read as a paragraph, and "Fig. 2
+// Experiments …", its label bold with no stop, as no caption, so the
+// figure's plot labels read as paragraphs and a table).
+const ADVENT_BOLD_RE = /^Adv.*[-.]BI?$/;
+const ADVENT_ITALIC_RE = /^Adv.*[-.](?:I|BI)$/;
 
 export function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
@@ -81,9 +89,12 @@ export function fontFlags(name: string | null): FontFlags {
     // read as plain), and Adobe's.
     bold:
       /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n) ||
-      ADOBE_BOLD_RE.test(n),
+      ADOBE_BOLD_RE.test(n) ||
+      ADVENT_BOLD_RE.test(n),
     italic:
-      /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n) || ADOBE_ITALIC_RE.test(n),
+      /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n) ||
+      ADOBE_ITALIC_RE.test(n) ||
+      ADVENT_ITALIC_RE.test(n),
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     // A small-caps font draws lowercase letters as small capitals; the text
     // layer gives them lowercase. Computer Modern's CMCSC, its T1 twins SFCC
@@ -1305,6 +1316,8 @@ export function sameFlags(a: Flags, b: Flags): boolean {
     Boolean(a.sup) === Boolean(b.sup) &&
     Boolean(a.sub) === Boolean(b.sub) &&
     a.zone === b.zone &&
+    a.face === b.face &&
+    Boolean(a.faced) === Boolean(b.faced) &&
     // A formula's glyphs are one run whatever their look: its face and size
     // are the equation's (a heading's bold lead lost its formula when an
     // upright Ω and a math ℱ read as two runs).

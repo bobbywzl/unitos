@@ -18,6 +18,15 @@ export type Flags = {
   sub?: boolean;
   zone?: MathZone;
   look?: Look;
+  // The font's name without its subset prefix and a cut's suffix
+  // ("AdvOTcb88df00"; index.ts): a run in another face than its line's
+  // other runs is set apart (a caption's label, figures.ts isCaption).
+  face?: string;
+  // The run is set in another face than the page's main text face, upright
+  // and outside math and code: emphasis by a change of face, which reads
+  // as bold does where a font's name says no weight (Advent 3B2's hashed
+  // names; headings.ts styledShare).
+  faced?: boolean;
 };
 // What the drawing shows of a run beyond its font's flags (look.ts): the
 // face as the page editor names it, the size in points to a half point, its

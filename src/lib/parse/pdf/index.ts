@@ -185,13 +185,27 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         } catch {
           realName = null;
         }
-        flags = fontFlags(realName);
+        // The face: the name without its subset prefix and a cut's suffix
+        // (Advent's "AdvOTea1a7398+fb" is AdvOTea1a7398's ligatures).
+        const face = realName === null ? undefined : realName.replace(/^[A-Z]{6}\+/, "").replace(/\+[0-9a-f]{2}$/i, "") || undefined;
+        flags = { ...fontFlags(realName), ...(face ? { face } : {}) };
         flagsByFont.set(fontName, flags);
         if (realName !== null) realNames.set(fontName, realName);
         if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
       }
       return flags;
     };
+    // The page's main text face: the face that sets the most letters. A
+    // run upright in another face, outside math and code, is set apart by
+    // its face (Flags.faced).
+    const letters = new Map<string, number>();
+    for (const raw of textItems) {
+      const face = flagsOf(String(raw.fontName ?? "")).face;
+      if (face) letters.set(face, (letters.get(face) ?? 0) + (raw.str.match(/\p{L}/gu)?.length ?? 0));
+    }
+    const mainFace = [...letters].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const facedBy = (flags: FontFlags): boolean =>
+      flags.face !== undefined && mainFace !== undefined && flags.face !== mainFace && !flags.math && !flags.mono && !flags.italic;
     const hrefAt = (x: number, y: number, w: number, size: number) => {
       const cx = x + w / 2;
       const cy = y + size * 0.3;
@@ -292,6 +306,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
           size,
           ...flags,
           bold: flags.bold || part.stroked,
+          ...(facedBy(flags) ? { faced: true } : {}),
           href: hrefAt(part.x, y, part.w, size),
           font: fontName,
           glyphs: part.glyphs,

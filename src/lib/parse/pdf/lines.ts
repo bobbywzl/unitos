@@ -842,6 +842,8 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
         mono: item.mono,
         smallCaps: item.smallCaps,
         href: item.href,
+        face: item.face,
+        faced: item.faced,
         sup: item.sup,
         sub: item.sub,
         zone: item.zone,
