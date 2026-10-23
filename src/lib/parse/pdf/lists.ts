@@ -820,8 +820,16 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   // step deeper than 10–21). PDF benchmark finding: ieee-elixpo-caching's
   // Algorithm 1 broke at its line 15 into paragraphs, and Algorithm 2 at
   // its line 9.
+  // A comment set off at the line's right ("⊳ Iterate through each
+  // house") is the line's third cell (parse loop finding: an Applied
+  // Energy paper's Algorithm 1 broke at each commented line into
+  // paragraphs and tables).
   const NUMBER_RE = /^\d{1,3}:$/;
-  const numbered = (l: Line) => l.cells.length === 2 && NUMBER_RE.test(l.cells[0].text.trim());
+  const COMMENT_RE = /^(?:[⊳▷►▹]|\/\/|#|%)/;
+  const commented = (l: Line) => l.cells.length >= 2 && COMMENT_RE.test(l.cells[l.cells.length - 1].text.trim());
+  // A number in its column opens the line whatever its words' cells (a
+  // formula's gap, a comment at the right).
+  const numbered = (l: Line) => (l.cells.length >= 2 && NUMBER_RE.test(l.cells[0].text.trim())) || (l.cells.length === 2 && commented(l) && /^\d{1,3}:\s/.test(l.cells[0].text.trim()));
   const wordsX = (l: Line) => {
     const items = [...l.items].filter((it) => it.str.trim() !== "").sort((a, b) => a.x - b.x);
     const first = items.findIndex((it) => !NUMBER_RE.test(it.str.trim()));
@@ -832,13 +840,17 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
     const next = lines[j];
     const prev = run[run.length - 1];
     const gap = prev.y - next.y;
-    if (runOf[j] !== -1 || (next.cells.length !== 1 && !numbered(next)) || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
+    // A numbered line a table run took (its number, words, and comment
+    // in columns) is the algorithm's still.
+    if ((runOf[j] !== -1 && !numbered(next)) || (next.cells.length !== 1 && !numbered(next)) || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
     if (gap <= 0 || gap > size * ctx.leading * 1.6) break;
     run.push(next);
   }
   if (run.length < 2) return null;
+  // A line's words end before its comment, set off at the right.
+  const wordsEnd = (l: Line) => (numbered(l) && commented(l) ? l.cells[l.cells.length - 1].x - size : l.xEnd);
   const right = Math.max(proseEdge(lines, i, i + run.length), lineColumn(line)?.[1] ?? 0);
-  if (right > 0 && run.slice(0, -1).filter((l) => l.xEnd >= right - size * 1.5).length * 3 > run.length - 1) return null;
+  if (right > 0 && run.slice(0, -1).filter((l) => wordsEnd(l) >= right - size * 1.5).length * 3 > run.length - 1) return null;
   const head = (l: Line) => ALGORITHM_HEAD_RE.test(l.text.trim());
   const levels: number[] = [];
   for (const x of run.filter((l) => !head(l)).map(wordsX).sort((a, b) => a - b)) {
@@ -848,7 +860,7 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   const builder = new TextBuilder();
   run.forEach((l, k) => {
     const lead = "  ".repeat(depths[k]);
-    const text = numbered(l) ? l.text.replace(/\t/, " ") : l.text;
+    const text = numbered(l) ? l.text.replace(/\t/g, " ") : l.text;
     builder.append({ text: lead + text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
   });
   const edge = leftEdge(line, ctx);
