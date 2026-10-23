@@ -142,6 +142,14 @@ function joinRightRuns(lines: Line[], page: number): Line[] {
     const row = out.filter((l) => l !== run && Math.abs(l.y - run.y) <= Math.min(l.size, run.size) * 0.2);
     const owner = row.filter((l) => l.xEnd < run.x - run.size * 2).sort((a, b) => b.xEnd - a.xEnd)[0];
     if (!owner || row.some((l) => l !== owner && l.x < run.x && l.xEnd > owner.xEnd)) continue;
+    // A line of another column is no owner: a display's label at the right
+    // column's edge, level with a line of the left column, is the right
+    // column's (parse loop finding: arXiv 2411.19946 p. 4, "(7)" beside a
+    // pictured display joined "as images become easier to predict with
+    // more updates by" across the gutter, and the paragraph lost its join
+    // to "mization process" atop the right column).
+    const [ownerColumn, runColumn] = [columns.get(owner), columns.get(run)];
+    if (ownerColumn && runColumn && (ownerColumn[1] <= runColumn[0] || runColumn[1] <= ownerColumn[0])) continue;
     const joined = buildLines([...owner.items, ...run.items], page);
     if (joined.length !== 1) continue;
     const [line] = joined;
