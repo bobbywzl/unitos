@@ -645,6 +645,19 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
   const out: Segment[] = [];
   for (const [index, segment] of segments.entries()) {
     const prev = out[out.length - 1];
+    // A table that opens the page with the head row of a table on the page
+    // before, the page's words between them, goes on with that table: the
+    // head row set again says so (parse loop finding: arXiv 2609.29669's
+    // Table 3, its head row over each page's rows, read as two tables; the
+    // page's paragraphs lifted off the break put the second after them).
+    if (segment.type === "TABLE" && segment.html && (segment.text.split("\n")[0] ?? "").includes("\t")) {
+      const head = segment.text.split("\n")[0];
+      const into = out.findLast((s) => s.type === "TABLE" && s.html && lastPageOf(s) === firstPageOf(segment) - 1 && tableHeader(s.text) === head);
+      if (into && !out.slice(out.indexOf(into) + 1).some((s) => s.type === "TABLE")) {
+        appendTableRows(into, segment, segment.text.split("\n").slice(1), (segment.html.match(/<tr>[\s\S]*?<\/tr>/g) ?? []).slice(1));
+        continue;
+      }
+    }
     if (!prev || segment.page === prev.page) {
       out.push(segment);
       continue;
@@ -801,28 +814,21 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     // repeated header row drops. The html takes the rows the text takes: one
     // <tr> per text row, the header row first. (A cell gap holds "\n", so a
     // "." pattern over the rows matched nothing and the html kept only the
-    // first page's rows while the text had them all.)
+    // first page's rows while the text had them all.) The first page's
+    // table holds its caption before its rows: its header is its first row
+    // with cells (parse loop finding: arXiv 2609.29669's Table 3, its head
+    // row set again atop the next page, read as two tables).
     if (segment.type === "TABLE" && prev.type === "TABLE" && prev.html && segment.html) {
-      const cols = (t: string) => t.split("\n")[0]?.split("\t").length ?? 0;
-      if (cols(prev.text) === cols(segment.text)) {
-        const prevHeader = prev.text.split("\n")[0];
+      const cols = (row: string) => row.split("\t").length;
+      const prevHeader = tableHeader(prev.text);
+      if (cols(prevHeader) === cols(segment.text.split("\n")[0] ?? "")) {
         let rows = segment.text.split("\n");
         let rowsHtml: string[] = segment.html.match(/<tr>[\s\S]*?<\/tr>/g) ?? [];
         if (rows[0] === prevHeader) {
           rows = rows.slice(1);
           rowsHtml = rowsHtml.slice(1);
         }
-        if (rows.length > 0) {
-          prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
-          prev.text = prev.text + "\n" + rows.join("\n");
-          prev.spaceAfter = segment.spaceAfter;
-          // The first page's last row ended the table: it takes the row gap
-          // now, so the table's DOM text stays its text (SPEC.md §5).
-          prev.html = prev.html.replace(
-            /<\/td><\/tr><\/tbody><\/table>$/,
-            () => `<span class="cell-gap">\n</span></td></tr>${rowsHtml.join("")}</tbody></table>`,
-          );
-        }
+        appendTableRows(prev, segment, rows, rowsHtml);
         continue;
       }
     }
@@ -830,4 +836,21 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     out.push(segment);
   }
   return out;
+}
+
+/** A table's head row: its first row with cells (its caption, when it
+    holds one, comes before). */
+function tableHeader(text: string): string {
+  return text.split("\n").find((row) => row.includes("\t")) ?? text.split("\n")[0] ?? "";
+}
+
+/** The rows of a table's later part appended to its first: the text's rows
+    and the html's. The first part's last row ended the table: it takes the
+    row gap now, so the table's DOM text stays its text (SPEC.md §5). */
+function appendTableRows(into: Segment, part: Segment, rows: string[], rowsHtml: string[]): void {
+  if (rows.length === 0 || !into.html) return;
+  into.breaks = joinBreaks(into, part, into.text.length + 1);
+  into.text = into.text + "\n" + rows.join("\n");
+  into.spaceAfter = part.spaceAfter;
+  into.html = into.html.replace(/<\/td><\/tr><\/tbody><\/table>$/, () => `<span class="cell-gap">\n</span></td></tr>${rowsHtml.join("")}</tbody></table>`);
 }
