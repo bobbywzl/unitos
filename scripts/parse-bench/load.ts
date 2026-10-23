@@ -133,6 +133,10 @@ const entrySchema = z.object({
   ref: z.string().optional(),
   license: z.enum(LICENSES),
   pages: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
+  // The pages of the download the file keeps, when the url is a whole
+  // book and the file is a chapter cut from it (fetch.mts): the entry's
+  // pages and its reference's count from the cut's first page.
+  cut: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
   // In the quick run (--quick): one document for each kind of fault, the fast ones.
   quick: z.boolean().optional(),
   // A whole document read without a reference, every page parsed and checked
