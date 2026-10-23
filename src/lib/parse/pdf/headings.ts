@@ -286,6 +286,24 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   // A quotation set large, in its quote marks, is a quote (a slide's 20 pt
   // quotation read as a heading).
   const quoted = /^[“"‘]/.test(flat.trim()) && /(?:[”"’][.!?]?|[.!?][”"’])$/.test(flat.trim());
+  // The prose keeps its paragraphs: a line set in by the page's indent
+  // after a sentence opens one, as the paragraph reader says (parse loop
+  // finding: arXiv 2609.29669's 9 pt text over its 7 pt tables, "…under
+  // one protocol and compared." over the indented "Because the full corpus
+  // is large, we split it.", read as one paragraph).
+  if (prose && !quoted) {
+    const parts: Segment[] = [];
+    for (let k = i; k < j; ) {
+      const step = readParagraph(lines, k, ctx, runOf);
+      if (step.next <= k || step.next > j) {
+        parts.length = 0;
+        break;
+      }
+      parts.push(...step.segments);
+      k = step.next;
+    }
+    if (parts.length > 1) return { segments: parts, next: j };
+  }
   if (prose || quoted || [...flat.trim()].length <= 1 || DATE_RE.test(flat.trim())) {
     const tokens = [quoted ? "quote" : "", lineAlign(lines, i, j, ctx) === "center" ? "center" : ""].filter(Boolean);
     const html = tokens.length > 0 ? { html: `<p class="${tokens.join(" ")}"></p>` } : {};
