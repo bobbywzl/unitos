@@ -20,7 +20,7 @@ import {
   stopsShort,
 } from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, boldShare, fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import type { Box, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
 // The line inside a framed box: the frame's left edge sits within three ems
@@ -569,7 +569,14 @@ function listSegment(items: Item[], depths: number[]): Segment {
 // within twice each other (a brace KaTeX draws in pieces has slivers).
 export function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9, square = false): number | null {
   const s = line.size;
-  const shape = [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades].find(
+  const drawn = [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades];
+  // A bullet stands alone: a logo drawn in many small shapes within six
+  // ems left of the line (a Creative Commons mark before "Open Access
+  // This article is licensed …") is no bullet (parse loop finding:
+  // Nature's license paragraph read as a list of one item).
+  const crowd = drawn.filter((b) => b.x2 <= line.x + s * 0.1 && b.x1 >= line.x - s * 6 && b.y2 >= line.y - s * 0.3 && b.y1 <= line.y + s).length;
+  if (crowd > 2) return null;
+  const shape = drawn.find(
     (b) =>
       b.x2 <= line.x + s * 0.1 &&
       b.x1 >= line.x - s * 3 &&
@@ -586,6 +593,18 @@ export function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9, square =
 
 function drawnBullet(line: Line, ctx: PageContext): boolean {
   return drawnBulletAt(line, ctx) !== null;
+}
+
+// A logo left of the line, in the space the line is set in by: a picture,
+// or three drawn shapes or more, within six ems left of the line at its
+// height (a Creative Commons mark before a license paragraph's first
+// line; parse loop finding: Nature's "Open Access This article is
+// licensed …", set in by the mark's width, read as a list of one item).
+function logoAtLeft(line: Line, ctx: PageContext): boolean {
+  const s = line.size;
+  const at = (b: Box) => b.x2 <= line.x + s * 0.1 && b.x1 >= line.x - s * 6 && b.y2 >= line.y - s * 0.3 && b.y1 <= line.y + s;
+  if (ctx.drawing.images.some(at)) return true;
+  return [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades].filter(at).length >= 3;
 }
 
 // A drawn bullet's marker: "•", no characters of the line.
@@ -617,6 +636,7 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     line.size >= body * 0.8 &&
     !isBoxedLine(line, ctx) &&
     !opensWithLabel(line) &&
+    !logoAtLeft(line, ctx) &&
     // A centered line is set in from both edges, not indented: a court's
     // caption and a paper's author lines read as lists.
     !isCentered(lines, i, ctx);
