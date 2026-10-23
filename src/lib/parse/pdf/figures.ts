@@ -2250,3 +2250,23 @@ function placeOf(segments: Segment[], graphic: Graphic, own: Set<Segment>): numb
   while (k < segments.length && own.has(segments[k])) k++;
   return k;
 }
+
+/** A page that is one figure: a portrait page of three figures or more
+    with no caption, every other block a label set under the text's size,
+    the blocks together over half the page tall. The
+    page reads as one FIGURE, its labels inside (parse loop finding: a
+    Nature paper sets Figure 1 on a page of its own, its caption at the
+    foot of the page before; the page read as six figures, two tables, two
+    lists, and twenty label paragraphs). null for any other page. */
+export function figurePage(segments: Segment[], bodySize: number, pageWidth: number, pageHeight: number): Segment[] | null {
+  if (pageWidth > pageHeight || segments.length === 0) return null;
+  const figures = segments.filter((s) => s.type === "FIGURE");
+  if (figures.length < 3 || figures.some((s) => s.text.trim() !== "" || s.box === undefined)) return null;
+  const rest = segments.filter((s) => s.type !== "FIGURE");
+  const label = (s: Segment) => s.type !== "HEADING" && !s.footnote && s.box !== undefined && (s.lineSize === undefined ? s.type === "TABLE" : s.lineSize < bodySize * 0.9);
+  if (!rest.every(label)) return null;
+  const box = segments.map((s) => s.box!).reduce((a, b) => unionBox(a, b));
+  if (box.y2 - box.y1 < pageHeight * 0.5) return null;
+  const page = figures[0].page;
+  return [{ type: "FIGURE", text: "", page, runs: [], box, region: regionOf(box, pageWidth, pageHeight), lineSize: figures[0].lineSize, mathShare: 0 }];
+}

@@ -5,7 +5,7 @@ import { fitOcrItems, placeMarks } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
 import { CJK_SANS, CJK_SERIF, nameShape } from "@/lib/parse/pdf/faces";
-import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
+import { attachFigureRegions, figurePage, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
 import { ABSTRACT_RE, cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
 import { median, unionBox } from "@/lib/parse/pdf/geometry";
@@ -670,6 +670,14 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const footnotes = cutFootnotes(cleaned, pageDrawings.map((d) => d.rules), bodySize, pageFlags.map((f) => f.ocr));
 
   let segments: Segment[] = [];
+  // The text's size on the pages that hold prose: the median of their
+  // bodies (a Nature paper's references, 7.5 pt, outnumber its 9.5 pt
+  // text and set the document's body; a page of figure labels measures
+  // its labels against the text, not the references).
+  const proseBody = (() => {
+    const bodies = cleaned.map((lines) => lines.filter((l) => !l.table && l.cells.length === 1 && l.text.length > 40).map((l) => l.size)).filter((sizes) => sizes.length >= 5).map(median);
+    return bodies.length > 0 ? Math.max(bodySize, median(bodies)) : bodySize;
+  })();
   for (const lines of cleaned) {
     // The column's left edge: the smallest x that body lines regularly start
     // at. The mode is wrong on list-heavy pages, where indented item lines
@@ -753,7 +761,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // The page's sideways notes, each beside the block it stands by; one
     // printed on two pages or more is furniture.
     for (const note of pageSideNotes[p]) if ((sideNotePages.get(note.text.toLowerCase().replace(/\s+/g, " ")) ?? 0) < 2) placeSidewaysNote(done, note, p);
-    segments.push(...done);
+    // A page that is one figure reads as one (figures.ts figurePage).
+    segments.push(...(figurePage(done, proseBody, pageWidths[p], pageHeights[p]) ?? done));
   }
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
