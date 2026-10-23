@@ -840,7 +840,10 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     below.size - last.size <= 0.5 &&
     edge !== undefined &&
     edge - last.xEnd > last.size * 4 &&
-    below.xEnd - below.x > (edge - below.x) * 0.6;
+    // A one-line paragraph set smaller than the title needs no width
+    // (parse loop finding: Nature's "Competing interests" over its 7 pt
+    // "The authors declare no competing interests." read as a paragraph).
+    (below.xEnd - below.x > (edge - below.x) * 0.6 || below.size <= last.size - 1);
   const small = line.size < ctx.bodySize * 0.98;
   // A title in capitals set a size under the body, apart above, over a
   // paragraph flush with it, is a subhead: a Frontiers article sets "CASE
