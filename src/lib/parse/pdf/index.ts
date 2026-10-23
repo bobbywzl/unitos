@@ -29,7 +29,7 @@ import { embeddedGlyphNames, embeddedInkOfFace } from "@/lib/parse/pdf/programs"
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
 import { placeSidewaysNote, sidewaysNotes, type SidewaysItem, type SidewaysNote } from "@/lib/parse/pdf/sideways";
-import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
+import { attachTableCaptions, isWrappedRowLine, orderLetteredParts } from "@/lib/parse/pdf/tables";
 import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
@@ -808,7 +808,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // between) and across pages, but never across pages the choice left out.
   segments = runsOfPages(notesAfterDisplays(joinOnPage(segments)), chosen).flatMap(mergeAcrossPages);
   // A table's caption is the table's, once its rows joined across pages.
-  segments = attachTableCaptions(segments);
+  segments = orderLetteredParts(attachTableCaptions(segments));
 
   // A long title wraps across layout lines: consecutive equal-size HEADING
   // segments at the top of page 0 are one title, not several headings. A

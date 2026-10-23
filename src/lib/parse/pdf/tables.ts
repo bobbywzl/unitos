@@ -533,6 +533,40 @@ function prependCaption(table: Segment, caption: Segment, below: boolean, taken:
   table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }
 
+/** The letter of a float's part ("(a) Number of patches."): its caption's
+    opening letter, at the start of its text, or after the float's own
+    caption's sentence where that caption joined it. */
+function partLetter(s: Segment): string | null {
+  if (s.type !== "TABLE" && s.type !== "FIGURE") return null;
+  const first = s.text.split("\n")[0]?.trim() ?? "";
+  const m = /^\(([a-h])\)\s+\S/.exec(first) ?? (CAPTION_RE.test(first) ? /[.!?]\s+\(([a-h])\)\s+\S/.exec(first) : null);
+  return m ? m[1] : null;
+}
+
+/** A float's lettered parts in their letters' order: a run of parts read
+    one after the other on one page, each with a letter and no letter
+    twice, sorts by letter. The page sets the parts in rows, (a) beside
+    (b), (c) beside (d); the columns read (a), (c), (b), (d) (parse loop
+    finding: arXiv 2411.19946 p. 7, Table 4's five sub-tables). */
+export function orderLetteredParts(segments: Segment[]): Segment[] {
+  const out = [...segments];
+  let k = 0;
+  while (k < out.length) {
+    const letter = partLetter(out[k]);
+    if (!letter) {
+      k++;
+      continue;
+    }
+    let end = k + 1;
+    while (end < out.length && out[end].page === out[k].page && partLetter(out[end])) end++;
+    const run = out.slice(k, end);
+    const letters = run.map((s) => partLetter(s)!);
+    if (run.length >= 2 && new Set(letters).size === run.length) out.splice(k, run.length, ...run.map((s, i) => ({ s, l: letters[i] })).sort((a, b) => (a.l < b.l ? -1 : a.l > b.l ? 1 : 0)).map((x) => x.s));
+    k = end;
+  }
+  return out;
+}
+
 // A link alone on its line: a URL or a DOI.
 export const LINK_LINE_RE = /^(?:https?:\/\/|doi:\s*|www\.)\S+$/i;
 
