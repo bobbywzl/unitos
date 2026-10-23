@@ -26,6 +26,12 @@ export type SidewaysNote = { lines: Line[]; box: Box; size: number; text: string
 
 const LETTERS_RE = /\p{L}/gu;
 
+/** arXiv's stamp up the first page's left margin: the identifier, the
+    subject class, and the date ("arXiv:2411.19946v2 [cs.CV] 6 Jun 2025").
+    Furniture, on its one page (the stamp read as the page's first
+    paragraph: arXiv 2411.19946 and 2609.29669). */
+const ARXIV_STAMP_RE = /^arXiv:[\w./-]+\s+\[[\w.-]+\]\s+\d{1,2}\s+\p{Lu}\p{Ll}{2}\s+\d{4}$/u;
+
 /** The sideways notes of a page: its rotated items no table took, in the
     margin, grouped into notes by their turn and their place. */
 export function sidewaysNotes(items: SidewaysItem[], upright: Item[], pageWidth: number, page: number, pictures: Box[]): SidewaysNote[] {
@@ -59,6 +65,7 @@ export function sidewaysNotes(items: SidewaysItem[], upright: Item[], pageWidth:
     const text = built.map((l) => l.text).join(" ");
     const words = text.split(/\s+/).filter((w) => LETTERS_RE.test(w));
     if (words.length < 3 || words.length > 60 || (text.match(LETTERS_RE) ?? []).length < 12) continue;
+    if (ARXIV_STAMP_RE.test(text.trim())) continue;
     out.push({ lines: built, box, size, text });
   }
   return out;
