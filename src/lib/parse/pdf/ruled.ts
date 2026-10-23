@@ -311,6 +311,15 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
 
 const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z][‐–-]?\d+)\b/i;
 
+// A head that spans columns, underlined by a rule narrower than the table
+// (booktabs' \cmidrule): no prose, whatever its words (parse loop finding:
+// arXiv 2411.19946's Table 6 sets "Dataset (hours) under same 4K
+// iterations for all methods" over three columns, and the head rows stood
+// outside the table as paragraphs).
+function spanningHead(line: Line, rules: Rule[], width: number): boolean {
+  return rules.some((r) => r.dir === "h" && r.y1 < line.y && line.y - r.y1 <= line.size * 1.5 && r.x2 - r.x1 < width - 10 && r.x1 <= line.x + line.size && r.x2 >= line.xEnd - line.size);
+}
+
 // A paragraph wrapped down one side of the region: four lines or more
 // whose cell on that side starts at one x, holds prose on most of them,
 // and runs on from line to line (tables.ts runsOn) on most of the pairs.
@@ -373,8 +382,9 @@ const besideGutter = (line: Line, gutter: number | null): boolean => gutter !== 
 // rule around its text, two columns of text between a form's signature
 // rule and the page's foot rule: the IRS W-9's instructions). columns: the
 // page's vertical rules, which part a band's lines in cells.
-function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], columns: Rule[]): Box[] {
+function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], columns: Rule[], horizontal: Rule[] = []): Box[] {
   const sorted = [...rules].sort((a, b) => b.y1 - a.y1);
+  const underlined = (l: Line, band: Box) => spanningHead(l, horizontal.filter((r) => r.y1 > band.y1), x2 - x1);
   const regions: Box[] = [];
   let top: number | null = null;
   let bottom: number | null = null;
@@ -391,7 +401,7 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
     const inset = Math.min(...lines.map((l) => l.x));
     const gutter = labelGutter(lines, x1, x2 - x1) ?? (inset >= x1 + (x2 - x1) * 0.15 && inset <= x1 + (x2 - x1) * 0.35 ? inset - 1 : null);
     const breaks =
-      lines.some((l) => (isProseLine(l, x2 - x1, columns) && !besideGutter(l, gutter)) || CAPTION_START_RE.test(l.text)) ||
+      lines.some((l) => (isProseLine(l, x2 - x1, columns) && !besideGutter(l, gutter) && !underlined(l, band)) || CAPTION_START_RE.test(l.text)) ||
       isProseColumns(lines.filter((l) => l.cells.length >= 2), false) ||
       proseHalves(lines, x1, x2, items, band) ||
       proseBeside(lines);
@@ -529,7 +539,7 @@ function isTableRegion(lines: Line[], width: number, columns: Rule[], rules: Rul
     rules.some((r) => r.y1 < head.yMin && r.y1 > next.yMax && r.x1 <= head.x + 2 && r.x2 >= head.xEnd - 2);
   if (!headed && lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
   const gutter = labelGutter(lines, Math.min(...lines.map((l) => l.x)), width);
-  if (lines.some((l) => isProseLine(l, width, columns) && !besideGutter(l, gutter))) return false;
+  if (lines.some((l) => isProseLine(l, width, columns) && !besideGutter(l, gutter) && !spanningHead(l, rules, width))) return false;
   if (proseBeside(lines)) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
@@ -744,7 +754,7 @@ function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, page
   const stub = (r: Rule) => r.x2 - r.x1 < 10 && shadedTops.some((t) => Math.abs(t.y1 - r.y1) <= 1 && r.x2 >= t.x1 - 10 && r.x1 <= t.x2 + 10);
   const horizontal = [...drawing.rules.filter((r) => r.dir === "h" && !stub(r)), ...shadedTops];
   const wide = ruleStacks(joinedRules(horizontal), 40).flatMap((stack) =>
-    stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
+    stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns, horizontal).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
@@ -797,7 +807,7 @@ function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, page
   const rules = joinedRules(horizontal.filter((r) => free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
   for (const stack of ruleStacks(rules, 40)) {
     if (isCard(stack, drawing.rules)) continue;
-    for (const box of stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns)) {
+    for (const box of stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns, horizontal)) {
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
