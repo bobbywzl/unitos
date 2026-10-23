@@ -344,9 +344,13 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     !runs.some((o) => o !== r && Math.abs(o.box.y1 - r.box.y1) < r.size * 0.5 && /\d/.test(textOf(o)));
   // A box that holds the page's text (a panel behind a quotation, a banner
   // behind a paragraph): a background, never a graphic.
+  // Lines set smaller than the text are a picture's own labels, no text
+  // it stands behind (parse loop finding: a Nature paper's heat map, its
+  // gene names in 7 pt along it, read as a background, and its panel
+  // letter and labels as a paragraph).
   const holdsText = (box: Box) => {
     const inside = runsIn(box);
-    return inside.some(isPageText) || inside.filter((r) => r.chars >= 20).length >= 3;
+    return inside.some(isPageText) || inside.filter((r) => r.chars >= 20 && r.size >= textSize * 0.9).length >= 3;
   };
 
   type Part = { box: Box; image: boolean; thin: boolean };
@@ -1020,18 +1024,20 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // Panels side by side set an axis title under each: a title centered
     // on a panel is the figure's too.
     const titles = chart ? [...new Set([...titlesOf(plot, axis), ...(pictures.length > 1 ? pictures.flatMap((p) => titlesOf(p, axis)) : [])])].filter((r) => !onBar(r)) : [];
-    // A panel's letter: one letter alone at the top left corner of a
-    // picture, within two lines over it (Nature's "a", "b" over each
-    // panel; parse loop finding: the letters of a page-wide figure read
-    // as a paragraph and a table's cells).
+    // A panel's letter: one letter alone over a picture's top, within two
+    // and a half lines over it or a line and a half under its top edge, from
+    // four ems left of the picture to its right edge (Nature's "a", "b"
+    // over each panel, the inner panels' too; parse loop finding: the
+    // letters of a page-wide figure read as a paragraph and a table's
+    // cells).
     const letters = runs.filter(
       (r) =>
         !taken.has(r) &&
         /^[a-z]$/i.test(textOf(r).trim()) &&
-        r.box.y1 >= plot.y2 - r.size &&
-        r.box.y1 <= plot.y2 + r.size * 2 &&
+        r.box.y1 >= plot.y2 - r.size * 1.5 &&
+        r.box.y1 <= plot.y2 + r.size * 2.5 &&
         r.box.x1 >= plot.x1 - r.size * 4 &&
-        r.box.x1 <= plot.x1 + r.size * 2,
+        r.box.x2 <= plot.x2,
     );
     for (const r of [...axis, ...titles, ...letters]) taken.add(r);
     let box = [...axis, ...titles, ...letters].reduce((b, r) => unionBox(b, r.box), plot);
