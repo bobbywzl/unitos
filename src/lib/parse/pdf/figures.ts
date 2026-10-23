@@ -584,6 +584,36 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
+  // Drawn charts in a grid, each under a figure's size: a chart's panel
+  // (ten shapes or more, its ticks along it) beside or over another, a
+  // few ems apart, is one figure with it (parse loop finding: a Nature
+  // paper's four scatter plots, 56 pt square each, in two rows: no
+  // figure, their ticks read as lines of the page). The merge runs after
+  // the groups are formed: the grid's panels are clusters of their own.
+  const chartLike = (g: Part[]) => {
+    const b = boxOf(g);
+    return g.every((m) => !m.image) && g.filter((m) => !m.thin).length >= 10 && panelSized(b) && !figureSized(b) && ticked(b) && !meetsText(b);
+  };
+  const stacked = (a: Box, b: Box) => {
+    const over = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+    const gap = Math.max(a.y1 - b.y2, b.y1 - a.y2);
+    return over >= Math.min(a.x2 - a.x1, b.x2 - b.x1) * 0.8 && gap > 0 && gap <= textSize * 6;
+  };
+  const charts = groups.map((g, i) => ({ g, i, box: boxOf(g), ok: chartLike(g) })).filter((c) => c.ok);
+  if (charts.length >= 2) {
+    const up = charts.map((_, i) => i);
+    const top = (i: number): number => {
+      while (up[i] !== i) i = up[i] = up[up[i]];
+      return i;
+    };
+    for (let a = 0; a < charts.length; a++) for (let b = a + 1; b < charts.length; b++) if (beside(charts[a].box, charts[b].box) || stacked(charts[a].box, charts[b].box)) up[top(a)] = top(b);
+    const sets = new Map<number, Part[][]>();
+    charts.forEach((c, i) => sets.set(top(i), [...(sets.get(top(i)) ?? []), c.g]));
+    const merged = [...sets.values()].filter((set) => set.length > 1);
+    const gone = new Set(merged.flat());
+    groups.splice(0, groups.length, ...groups.filter((g) => !gone.has(g)), ...merged.map((set) => set.flat()));
+  }
+
   // caption: the lines in a picture grid's empty corner (picturesOf).
   // panel: a box around a chart and its words (below), whose words are all its own.
   type Found = { box: Box; drawn: boolean; pictures: Box[]; caption?: TextRun[]; panel?: boolean };
