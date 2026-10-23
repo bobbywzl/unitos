@@ -1255,6 +1255,21 @@ function linesOf(items: Item[], page: number): Line[] {
     }
     return { x1, x2 };
   };
+  // A radical goes where its radicand went: the glyph set against its
+  // right edge, within its height, is the radicand's first, and the line
+  // that holds it (after pass 1 moved it) holds the radical (parse loop
+  // finding: arXiv 2506.08494 p. 4 opens a text line with
+  // \frac{\sqrt{p_{λmin}−1}}{p_{λmin}}; the numerator's glyphs joined the
+  // text line, which read as no prose by its own few words, and the
+  // radical joined the theorem's line over it).
+  const attachedLine = (op: Item): number | undefined => {
+    const box = boxes.get(op);
+    if (!box || op.str.trim() !== "√") return undefined;
+    const radicand = all.find((i) => i !== op && !hangs(i) && touches(op, i) && i.y > box.bottom - op.size * 0.5 && i.y < box.top + op.size * 0.5);
+    if (!radicand) return undefined;
+    const n = kept.findIndex((g, k) => g.includes(radicand) || moved[k].includes(radicand));
+    return n >= 0 && kept[n].length > 0 ? n : undefined;
+  };
   const pending = [...operators];
   for (let placed = true; placed; ) {
     placed = false;
@@ -1282,7 +1297,7 @@ function linesOf(items: Item[], page: number): Line[] {
       const onAxis = box
         ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
         : [];
-      const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
+      const target = attachedLine(op) ?? onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
       if (target === undefined) continue;
       moved[target].push(op, ...(inlineLimits.get(op) ?? []));
       stats[target].x1 = Math.min(stats[target].x1, extent.x1);
