@@ -1474,6 +1474,7 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   if (labeled) return labeled;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
+  const rowGap = Math.max(0, ...gaps);
   const starts = [0];
   // Two lines that each hold a label and values are two rows however close:
   // a statement's blank rows between its groups doubled the median gap (the
@@ -1506,7 +1507,28 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
       cells.some((c, j) => c.text.length === 0 && (above[j]?.text.trim().length ?? 0) > 0) &&
       cells.every((c, j) => c.text.length === 0 || ((above[j]?.text.trim().length ?? 0) > 0 && !/[.!?:;]["'”’)\]]?$/.test(above[j].text.trim()))) &&
       cells.some((c, j) => c.text.length > 0 && /\s|[-‐]$/.test(above[j]?.text.trim() ?? ""));
-    const wrap = gap <= pitch * 1.3 && lower && (cells[0].text.length === 0 || goesOn);
+    // A line whose every filled cell goes on with the cell over it, under
+    // a row with a cell of prose, at a gap under the table's row gap: the
+    // cell over it is unfinished (no end mark) and this one opens
+    // lowercase, after a hyphen that broke a word, or with a parenthesis
+    // (parse loop finding: arXiv 2609.29669's Table 2 wraps "Native
+    // VLA-vs-WM con-" | "trast (γ)" beside "Vision-Language-" | "Action
+    // policy", and "Advantage-of-prediction" | "(δ)"; each second line
+    // read as a row). A table whose lines stand at one gap wraps none: its
+    // lines are its rows (arXiv 2506.06752's table of variables, "Sw(p)t"
+    // over "sttp", each its own row).
+    const prose = above.some((c) => c.text.trim().split(/\s+/).length >= 5);
+    const goesOnInCells =
+      prose &&
+      gap * 1.15 <= rowGap &&
+      filled.length >= 1 &&
+      cells.every((c, j) => {
+        if (c.text.length === 0) return true;
+        const over = above[j]?.text.trim() ?? "";
+        if (!over || /[.!?]["'”’)\]]?$/.test(over)) return false;
+        return /[-‐]$/.test(over) || /^\p{Ll}/u.test(c.text) || /^\(/.test(c.text);
+      });
+    const wrap = gap <= pitch * 1.3 && ((lower && (cells[0].text.length === 0 || goesOn)) || goesOnInCells);
     if (!wrap) starts.push(k);
   }
   return starts;
