@@ -432,6 +432,19 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   join(labeled);
   const pages = new Set([...taken].map((s) => s.page));
   join(segments.flatMap((s, k) => (pages.has(s.page) && isSubCaption(s) ? [k] : [])));
+  // A float's caption under its lettered parts (or over them), each part
+  // with a caption of its own, is the float's: it joins the part it stands
+  // by, on the document's side, as a line before that part's own (parse
+  // loop finding: arXiv 2411.19946 p. 7 sets "Table 4. Ablation
+  // experiments …" under five sub-tables, "(e) Comparison …" the nearest,
+  // and the caption stood apart as a paragraph).
+  if (side) {
+    for (const k of labeled) {
+      if (taken.has(segments[k])) continue;
+      const table = tableBy(k, side === "below", true);
+      if (table && SUB_CAPTION_RE.test(table.text.trim())) prependCaption(table, segments[k], side === "below", taken);
+    }
+  }
   // A caption a figure's label opens that no figure took, right under a
   // table or right over it, is the table's: ACM's style labels a table
   // "Figure" (parse loop finding: TraceMonkey's "Figure 13. Detailed trace
@@ -505,6 +518,19 @@ function captionOf(table: Segment, caption: Segment | { text: string; runs: Run[
   } else captionTable(table, text, sized, below);
   // The caption's formulas, where the table's text opens with them.
   if (math.length > 0) table.math = math;
+}
+
+// A float's caption before a part's own caption, on one line with it: the
+// words go first in the <caption>, on the part's caption's side, and the
+// table's text opens with them.
+function prependCaption(table: Segment, caption: Segment, below: boolean, taken: Set<Segment>) {
+  taken.add(caption);
+  const runs = caption.runs ?? [];
+  const text = caption.text.replace(/[\t\n]/g, " ");
+  const words = wordsHtml(text, runs, mathSpans(text, runs), 0, text.length);
+  table.html = (table.html ?? "").replace(/^(<table[^>]*>)<caption[^>]*>/, `$1${below ? BELOW_CAPTION : "<caption>"}${words} `);
+  table.text = `${text} ${table.text}`;
+  table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }
 
 // A link alone on its line: a URL or a DOI.
