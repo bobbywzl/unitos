@@ -849,6 +849,12 @@ const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.|abbildung|abb\.|tabelle)\s
 // A hanging indent (a reference entry, a glossary term) indents every
 // line after the first: the second line may step in by up to three ems
 // when the first line breaks mid-sentence.
+/** A line of email addresses, each a name or a brace group of names at a
+    domain ("{zhiqiang.shen, zeyuan.yin}@mbzuai.ac.ae"), set in typewriter
+    under a paper's authors: a paragraph, no code (parse loop finding:
+    arXiv 2411.19946's authors' emails read as a code block). */
+export const EMAIL_LINE_RE = /^(?:\{[^{}]*\}|[\w.+-]+)@[\w-]+(?:\.[\w-]+)+(?:[,;\s]+(?:\{[^{}]*\}|[\w.+-]+)@[\w-]+(?:\.[\w-]+)+)*[.,]?$/;
+
 export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step {
   const line = lines[i];
   const body = ctx.bodySize;
@@ -1079,7 +1085,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const align = lineAlign(lines, i, j, ctx);
   const { text, runs } = joinGroup(group, true, align === "center" || align === "right" ? 0 : sentenceEdge);
   const monoChars = runs.filter((r) => r.mono).reduce((n, r) => n + (r.end - r.start), 0);
-  if (text.length > 0 && monoChars / text.length > 0.85) {
+  if (text.length > 0 && monoChars / text.length > 0.85 && !group.every((l) => EMAIL_LINE_RE.test(l.text.trim()))) {
     return { segments: [{ type: "CODE", text, page: line.page, runs, ...geom(group) }], next: j };
   }
   const { tokens, indent } = layout(lines, i, j, ctx, text);

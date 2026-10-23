@@ -12,7 +12,7 @@ import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, liftTallMarkers, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
 import { type Mirror, mirrorPage, readsRightToLeft, unmirror } from "@/lib/parse/pdf/mirror";
-import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { leftEdge, markEdges, readParagraph, EMAIL_LINE_RE } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
 import { TextBuilder, appendProofBox, boldShare, fillLines, isFillRule, isMonoLine, lineAsPart, markTabs } from "@/lib/parse/pdf/text";
@@ -502,6 +502,7 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
     run.push(next);
     j++;
   }
+  if (run.every((l) => EMAIL_LINE_RE.test(l.text.trim()))) return null;
   const advances = run.flatMap((l) => l.items.filter((it) => it.mono && it.str.length > 0).map((it) => it.w / it.str.length));
   const advance = median(advances) || line.size * 0.6;
   const left = Math.min(...run.map((l) => l.x));
