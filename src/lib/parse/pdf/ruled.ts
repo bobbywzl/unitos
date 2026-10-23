@@ -41,6 +41,10 @@ import type { Box, Cell, Item, Line, MathZone, Run, Segment, TableRegion } from 
 type TableDrawing = Pick<PageDrawing, "rules" | "fills" | "images" | "paths">;
 
 // An item's center: its glyphs sit from the baseline up.
+/** A measured value in a cell: a number, with its ± spread, or a dash
+    for none. */
+const MEASURED_RE = /^(?:[-−–+]?\d+(?:[.,]\d+)?(?:\s*[±]\s*\d+(?:[.,]\d+)?)?%?|[-−–—])$/;
+
 const centerOf = (it: Item) => ({ x: it.x + it.w / 2, y: it.y + it.size * 0.3 });
 const inBox = (it: Item, b: Box) => {
   const c = centerOf(it);
@@ -1210,11 +1214,32 @@ function fractionCells(body: Line[], separators: number[], rules: Rule[]) {
 function stackedFormulas(body: Line[], starts: number[], separators: number[], stacked: Map<Item, MathZone | undefined>): number[] {
   const mathOnly = (it: Item) => it.math || !/\p{L}{2,}/u.test(it.str);
   const rowOf = (r: number, list: number[]) => body.slice(list[r], list[r + 1] ?? body.length);
+  // A line of measured values, a value in two columns or more past the
+  // label column and a decimal or a ± among them, under a line of the
+  // same: a row of its own, its label column empty under a label that
+  // spans its rows (parse loop finding: arXiv 2411.19946's Table 1 sets
+  // "CIFAR-10" beside its IPC 10 row, and the IPC 50 row under it, "45.0
+  // ± 0.7" in every column, read as a formula stacked under "29.3 ± 0.5").
+  // A formula's stacked parts (a binomial's n over k, a fraction's parts)
+  // stand in one column, and are no decimals.
+  const columnTexts = (l: Line): string[] => {
+    const texts: string[] = [];
+    for (const it of l.items) {
+      const j = columnAt(it.x + it.w / 2, separators);
+      texts[j] = ((texts[j] ?? "") + (it.space ? " " : "") + it.str).trim();
+    }
+    return texts;
+  };
+  const valueLine = (l: Line): boolean => {
+    const texts = columnTexts(l).slice(1).filter((t) => t);
+    return texts.length >= 2 && texts.every((t) => MEASURED_RE.test(t)) && texts.some((t) => /[.±]/.test(t));
+  };
   const merged = starts.filter((k, r) => {
     if (r === 0) return true;
     const lines = rowOf(r, starts);
     const above = body[k - 1];
     const labelEmpty = lines.every((l) => l.items.every((it) => columnAt(it.x + it.w / 2, separators) > 0));
+    if (lines.every(valueLine) && valueLine(above)) return true;
     return !(labelEmpty && lines.every((l) => l.items.every(mathOnly)) && above.y - body[k].y < above.size * 1.6);
   });
   let changed = merged.length !== starts.length;
