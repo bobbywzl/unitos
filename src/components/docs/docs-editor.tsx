@@ -13,7 +13,8 @@ import { importLineParts } from "@/components/docs/import-line";
 import { importOnReaderBase } from "@/components/docs/toolbar/styles";
 import { usePageStatusCarries } from "@/components/save-indicator";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
-import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
+import { annotationMarksKey, openMarkAt, PAINTED, type MarksMeta } from "@/components/docs/annotation-marks";
+import { anchorMarksTransaction } from "@/components/docs/ext/anchor-mark";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
 import { docsExtensions, type FigureMediaView } from "@/components/docs/extensions";
 import { docsFontsUrl } from "@/components/docs/fonts";
@@ -818,7 +819,13 @@ export function DocsEditor({
     paintedRef.current = { editor, signature: marksSignature, rev, editing: marksEditing };
     const meta: MarksMeta = { highlights: highlightsByBlock, t, editing: marksEditing };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
-  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
+    // The anchor marks (ext/anchor-mark.ts): every painted annotation's
+    // mark on its words, so a cut carries it and a paste brings it back.
+    if (writable) {
+      const marks = anchorMarksTransaction(editor, highlightsByBlock, (h) => PAINTED.has(h.kind));
+      if (marks) editor.view.dispatch(marks);
+    }
+  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing, writable]);
 
   // A whole-document replace (a version restored, or its undo) takes every
   // mark with the old text: paint them again on the new text at once from

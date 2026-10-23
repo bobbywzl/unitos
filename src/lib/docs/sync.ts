@@ -372,6 +372,29 @@ function orphanedAt(anchor: Anchor): Placed {
   };
 }
 
+/** Each annotation's anchor marks in the rich text (lib/docs/schema.ts,
+    the anchor mark; blocks.ts anchors), by its Source's id. */
+function anchorSpansOf(derived: DerivedBlock[]): Map<string, Span[]> {
+  const out = new Map<string, Span[]>();
+  for (const d of derived) {
+    for (const a of d.anchors) {
+      const spans = out.get(a.id) ?? [];
+      spans.push({ blockId: d.id, start: a.start, end: a.end });
+      out.set(a.id, spans);
+    }
+  }
+  return out;
+}
+
+/** Where an anchor's mark puts it, as a comment's anchor in Google Docs
+    goes with its words: on the longest of its marks' spans (a cut that
+    took part of the words leaves the rest with the annotation; Enter in
+    the words keeps the larger part), the first of equals. */
+function placeByMark(spans: Span[], newById: Map<string, DerivedBlock>): Placed {
+  const span = spans.reduce((best, s) => (s.end - s.start > best.end - best.start ? s : best));
+  return placedAt(span, newById.get(span.blockId)?.text ?? "");
+}
+
 /** Whether the anchor sits on a figure: its row was a FIGURE row, or is one. */
 function onFigure(m: Moves, blockId: string): boolean {
   const i = m.oldIndex.get(blockId);
@@ -549,8 +572,13 @@ export async function syncRichText({
     const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
     const returned = [...textChanged.map((k) => k.d.id), ...created.map(({ d }) => d.id)];
     const moves = movesOf(old, derived, newById, bulk);
+    // The annotations the rich text anchors by a mark (SPEC.md §5): each
+    // goes where its mark is, whatever its paragraph did, and orphans only
+    // when its mark went with its words.
+    const markSpans = anchorSpansOf(derived);
+    const markedIds = [...markSpans.keys()].slice(0, 5000);
     let marksChanged = false;
-    if (affected.length > 0 || returned.length > 0) {
+    if (affected.length > 0 || returned.length > 0 || markedIds.length > 0) {
       // An orphan that covered its whole block (a figure's anchor, a whole
       // paragraph) comes back when a block with exactly its words is added
       // or rewritten: a figure cut in one save and pasted in the next.
@@ -570,6 +598,7 @@ export async function syncRichText({
             OR: [
               { blockId: { in: affected }, orphaned: false },
               { blockId: { in: returned }, orphaned: true },
+              { id: { in: markedIds } },
             ],
           },
         }),
@@ -623,9 +652,13 @@ export async function syncRichText({
           prefix: src.prefix,
           suffix: src.suffix,
         };
-        const placed = src.orphaned ? refind(anchor, moves) : relocate(anchor, moves);
+        const spans = markSpans.get(src.id);
+        const placed = spans ? placeByMark(spans, newById) : src.orphaned ? refind(anchor, moves) : relocate(anchor, moves);
         if (placed.orphaned && src.orphaned) continue;
         if (placed.orphaned !== src.orphaned) marksChanged = true;
+        // An anchor that went with its words to another paragraph: the
+        // page paints it there once it knows.
+        if (spans && (placed.blockId !== src.blockId || placed.startOffset !== src.startOffset || placed.endOffset !== src.endOffset)) marksChanged = true;
         await tx.source.update({
           where: { id: src.id },
           data: placed.orphaned

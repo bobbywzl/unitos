@@ -433,7 +433,11 @@ export default async function NotebookPage(props: {
 
     for (const r of resolved) {
       resolutionById.set(r.id, { orphaned: r.orphaned });
-      if (r.orphaned || !noteById.has(r.noteId)) continue;
+      if (!noteById.has(r.noteId)) continue;
+      // An orphan goes to the page editor with its flag: a paste that brings
+      // its words and their anchor mark back paints it at once. The reader
+      // paints no orphan.
+      if (r.orphaned && document.richText === null) continue;
       if (sourceById.get(r.id)?.startTime != null) continue;
       // Page anchors are drawn regions, not text spans: they paint on the
       // page through pageMarksByBlock, never as text highlights (SPEC.md §16).
@@ -455,6 +459,7 @@ export default async function NotebookPage(props: {
           annotationNoteIds.has(r.noteId) && note?.derivationType == null && note?.color == null,
         figureLabel: figureLabelBySource.get(r.id) ?? null,
         noteId: r.noteId,
+        ...(r.orphaned ? { orphaned: true } : {}),
       });
       anchorHighlights[r.blockId] = list;
     }

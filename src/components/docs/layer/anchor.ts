@@ -28,7 +28,7 @@ function inlineLength(node: PMNode): number {
 
 /** The offset in its paragraph's words of a position in the paragraph
     (blockPos is the position before it). */
-function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
+export function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
   let offset = 0;
   let at = blockPos + 1;
   for (let i = 0; i < block.childCount && at < pos; i++) {

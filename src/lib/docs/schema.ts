@@ -87,7 +87,17 @@ export const RICH_MARK_TYPES = [
   "modification",
   // An import's in-text citation: refId names its entry in Document.references.
   "citation",
+  // An annotation's anchor (SPEC.md §5): id names the Source whose words
+  // the mark covers. The mark travels with the words through a cut and a
+  // paste, as a comment's anchor does in Google Docs, and the save places
+  // the Source by it (lib/docs/sync.ts). It draws nothing: the Unitos
+  // layer paints the annotation.
+  "anchor",
 ] as const;
+
+/** The anchor mark's name, and the attribute its span carries. */
+export const ANCHOR_MARK = "anchor";
+export const ANCHOR_ID_ATTR = "data-anchor-id";
 
 /** A suggestion's marks: formatting tools leave them alone. */
 export const SUGGESTION_MARK_TYPES: ReadonlySet<string> = new Set(["insertion", "deletion", "modification"]);
@@ -541,6 +551,11 @@ const isMarkJson = (value: unknown): value is RichMark =>
 function cleanMark(mark: RichMark): RichMark | null {
   if (!MARK_TYPES.has(mark.type)) return null;
   if (SUGGESTION_MARK_TYPES.has(mark.type)) return cleanSuggestion(mark);
+  // An anchor keeps its Source's id and nothing else.
+  if (mark.type === ANCHOR_MARK) {
+    const id = mark.attrs?.id;
+    return typeof id === "string" && BLOCK_ID.test(id) ? { type: ANCHOR_MARK, attrs: { id } } : null;
+  }
   const attrs = cleanAttrs(mark.attrs, mark.type);
   if (mark.type === "link" && !attrs?.href) return null;
   if (mark.type === "citation" && !attrs?.refId) return null;

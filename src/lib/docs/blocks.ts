@@ -1,5 +1,6 @@
 import { isAssistantSuggestion } from "@/lib/docs/assistant-suggestions";
 import {
+  ANCHOR_MARK,
   CHIP_NODE_TYPES,
   INDEXED_NODE_TYPES,
   newBlockId,
@@ -24,6 +25,9 @@ import {
 export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGURE" | "SEPARATOR" | "EQUATION";
 
 export type StyleSpan = { start: number; end: number; style: string; quotedText: string };
+/** An annotation's anchor mark over the row's words: the Source's id and the
+    words it covers (lib/docs/schema.ts, the anchor mark). */
+export type AnchorSpan = { id: string; start: number; end: number };
 export type LinkSpan = { start: number; end: number; quotedText: string; href: string };
 /** An in-text citation: words of the row and their entry in Document.references. */
 export type CitationSpan = { start: number; end: number; refId: string; quotedText: string };
@@ -46,6 +50,8 @@ export type DerivedBlock = {
   /** A figure object's FigureMedia row. */
   mediaId: string | null;
   citations: CitationSpan[];
+  /** The annotations anchored by a mark on the row's words. */
+  anchors: AnchorSpan[];
   /** Where a row inside a table cell sits. */
   cell: CellPlace | null;
 };
@@ -182,6 +188,7 @@ type Runs = {
   styles: StyleSpan[];
   links: LinkSpan[];
   citations: CitationSpan[];
+  anchors: AnchorSpan[];
   /** The page starts inside the node: the words before each, and its page. */
   starts: { at: number; page: number }[];
   /** The footnote numbers inside the node: the words before each, and its
@@ -195,6 +202,11 @@ function textblockRuns(node: RichNode): Runs {
   const styles: StyleSpan[] = [];
   const links: LinkSpan[] = [];
   const citations: CitationSpan[] = [];
+  const anchors: AnchorSpan[] = [];
+  // The anchor marks open over the words so far: an anchor stays open over
+  // a chip or an inline equation (a save keeps no mark on them) and closes
+  // at the first text without it.
+  const openAnchors = new Map<string, number>();
   const starts: Runs["starts"] = [];
   const numbers: Runs["numbers"] = [];
   let link: { href: string; start: number } | null = null;
@@ -235,6 +247,13 @@ function textblockRuns(node: RichNode): Runs {
       text += piece;
       return;
     }
+    const ids = new Set((child.marks ?? []).flatMap((m) => (m.type === ANCHOR_MARK && typeof m.attrs?.id === "string" ? [m.attrs.id] : [])));
+    for (const [id, start] of [...openAnchors]) {
+      if (ids.has(id)) continue;
+      if (text.length > start) anchors.push({ id, start, end: text.length });
+      openAnchors.delete(id);
+    }
+    for (const id of ids) if (!openAnchors.has(id)) openAnchors.set(id, text.length);
     const here = new Set(runStyles(child.marks));
     for (const [style, start] of [...open]) {
       if (!here.has(style)) {
@@ -269,7 +288,8 @@ function textblockRuns(node: RichNode): Runs {
   }
   closeLink(text.length);
   closeCitation(text.length);
-  return { text, styles, links, citations, starts, numbers };
+  for (const [id, start] of openAnchors) if (text.length > start) anchors.push({ id, start, end: text.length });
+  return { text, styles, links, citations, anchors, starts, numbers };
 }
 
 /** The last page that begins inside a node: its page starts, and the pages
@@ -341,6 +361,7 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
       region: row.region ?? null,
       mediaId: row.mediaId ?? null,
       citations: row.citations ?? [],
+      anchors: row.anchors ?? [],
       cell: ctx.cell,
     });
   };
@@ -398,7 +419,7 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
         push(ctx, { id, type: "EQUATION", text: latex });
         return;
       }
-      const { text, styles, links, citations, starts, numbers } = textblockRuns(node);
+      const { text, styles, links, citations, anchors, starts, numbers } = textblockRuns(node);
       // The row starts on the page of a page start before its first word.
       const first = starts[0];
       const startsOn = begins ?? (first && !text.slice(0, first.at).trim() ? first.page : null);
@@ -408,18 +429,18 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
       }
       page = starts.at(-1)?.page ?? begins ?? page;
       if (node.type === "codeBlock") {
-        push(ctx, { id, type: "CODE", text, page: rowPage });
+        push(ctx, { id, type: "CODE", text, anchors, page: rowPage });
         return;
       }
       if (node.type === "heading") {
         const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1));
-        push(ctx, { id, type: "HEADING", text, html: `<h${level}${tokens(node, ctx)}>`, styles, links, citations, page: rowPage });
+        push(ctx, { id, type: "HEADING", text, html: `<h${level}${tokens(node, ctx)}>`, styles, links, citations, anchors, page: rowPage });
         return;
       }
       // A paragraph: the Title style reads as the document's first heading,
       // a list item's paragraph as a list line.
       if (node.attrs?.docStyle === "title") {
-        push(ctx, { id, type: "HEADING", text, html: `<h1${tokens(node, ctx)}>`, styles, links, citations, page: rowPage });
+        push(ctx, { id, type: "HEADING", text, html: `<h1${tokens(node, ctx)}>`, styles, links, citations, anchors, page: rowPage });
         return;
       }
       const html = tokens(node, ctx);
@@ -431,6 +452,7 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
         styles,
         links,
         citations,
+        anchors,
         page: rowPage,
       });
       return;

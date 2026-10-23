@@ -12,6 +12,7 @@ import Image from "@tiptap/extension-image";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
+import { AnchorMark } from "@/components/docs/ext/anchor-mark";
 import { Citation } from "@/components/docs/insert/citation";
 import { Figure, type ImportedEditor } from "@/components/docs/insert/figure";
 import { PageStart, PageStartKeys } from "@/components/docs/insert/page-start";
@@ -549,6 +550,9 @@ export function docsExtensions(imported?: ImportedEditor) {
     PageStart,
     PageStartKeys,
     Citation,
+    // An annotation's anchor: its mark goes with its words through a cut
+    // and a paste (SPEC.md §5).
+    AnchorMark,
     DocsKeymap,
     ...toolbarExtensions,
     ...pageExtensions,

@@ -150,6 +150,10 @@ export type Highlight = {
   referenceText?: string; // the reference text, shown on hover, kind "citation" only
   targetBlockId?: string; // Contents entry target: click scrolls to the block, kind "toc" only
   figureLabel?: string | null; // "A1"… label on an annotated figure/table/equation anchor
+  // The anchor's words are gone (Source.orphaned): the page editor paints it
+  // only where its anchor mark stands, the words pasted back
+  // (components/docs/ext/anchor-mark.ts); the reader never paints it.
+  orphaned?: boolean;
   // kind "extract": the extraction this span belongs to. The span and its
   // label chip both open the match card.
   extractId?: string;

@@ -19,6 +19,7 @@ import {
   type Highlight,
 } from "@/components/reader/block-view";
 import { keys } from "@/components/docs/keys";
+import { followMarks, insertsAnchorMarks } from "@/components/docs/ext/anchor-mark";
 import { aroundPageStarts, FIGURE, findIndexed, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
@@ -403,8 +404,13 @@ function passageEnds(doc: PMNode, highlights: Record<string, Highlight[]>): Map<
   return ends;
 }
 
-function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, editing: boolean): DecorationSet {
+/** The last highlights painted, for a repaint the marks ask for. */
+const lastMetaKey = new PluginKey<MarksMeta | null>("docsAnnotationMarksMeta");
+
+function build(doc: PMNode, given: Record<string, Highlight[]>, t: TFunc, editing: boolean): DecorationSet {
   const decorations: Decoration[] = [];
+  // An annotation with an anchor mark paints at the mark (ext/anchor-mark.ts).
+  const highlights = followMarks(doc, given);
   const ends = passageEnds(doc, highlights);
   doc.descendants((node, pos) => {
     if (WHOLE.has(node.type.name)) {
@@ -627,15 +633,30 @@ export const AnnotationMarks = Extension.create({
   name: "docsAnnotationMarks",
   addProseMirrorPlugins() {
     return [
+      new Plugin<MarksMeta | null>({
+        key: lastMetaKey,
+        state: {
+          init: () => null,
+          apply(tr, last) {
+            const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
+            return meta && !meta.add ? meta : last;
+          },
+        },
+      }),
       new Plugin<DecorationSet>({
         key: annotationMarksKey,
         state: {
           init: () => DecorationSet.empty,
-          apply(tr, set) {
+          apply(tr, set, _old, state) {
             const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
             if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t, meta.editing ?? false).find());
             if (meta) return build(tr.doc, meta.highlights, meta.t, meta.editing ?? false);
-            return tr.docChanged ? keepMoved(tr, set, set.map(tr.mapping, tr.doc)) : set;
+            if (!tr.docChanged) return set;
+            // Marked words put in (a paste, a drop, an undo of a cut): their
+            // annotations paint again, at the marks.
+            const last = lastMetaKey.getState(state);
+            if (last && insertsAnchorMarks(tr)) return build(tr.doc, last.highlights, last.t, last.editing ?? false);
+            return keepMoved(tr, set, set.map(tr.mapping, tr.doc));
           },
         },
         props: {
