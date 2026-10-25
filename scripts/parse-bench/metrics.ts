@@ -895,23 +895,30 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     else why.set(ru, { cand: cu, why: !other ? "not found" : other.kind !== "list" ? `in a ${other.kind}` : "merged" });
   });
   // An item of math alone: the candidate item right after its found
-  // neighbor before, or right before its found neighbor after.
+  // neighbor before, or right before its found neighbor after. A run of
+  // such items ("(a) E = {HHH, HHT}" to "(d) …", Grinstead p. 35) is placed
+  // from its found ends inward, one item a pass, until no pass places one.
   const claimed = new Set(itemTo.values());
-  ref.units.forEach((unit, ru) => {
-    if (ref.blocks[unit.block].kind !== "list" || unit.end > unit.first) return;
-    const before = itemTo.get(ru - 1);
-    const after = itemTo.get(ru + 1);
-    const guess =
-      before !== undefined && isItem(before + 1) && cand.units[before + 1].block === cand.units[before].block ? before + 1
-      : after !== undefined && isItem(after - 1) && cand.units[after - 1].block === cand.units[after].block ? after - 1
-      : -1;
-    if (guess >= 0 && !claimed.has(guess)) {
-      itemTo.set(ru, guess);
-      claimed.add(guess);
-    } else {
-      why.set(ru, { cand: -1, why: "not found (math alone)" });
+  const mathAlone = ref.units.map((unit, ru) => ru).filter((ru) => ref.blocks[ref.units[ru].block].kind === "list" && ref.units[ru].end <= ref.units[ru].first);
+  const pending = new Set(mathAlone);
+  for (let placed = true; placed; ) {
+    placed = false;
+    for (const ru of [...pending]) {
+      const before = itemTo.get(ru - 1);
+      const after = itemTo.get(ru + 1);
+      const guess =
+        before !== undefined && isItem(before + 1) && cand.units[before + 1].block === cand.units[before].block ? before + 1
+        : after !== undefined && isItem(after - 1) && cand.units[after - 1].block === cand.units[after].block ? after - 1
+        : -1;
+      if (guess >= 0 && !claimed.has(guess)) {
+        itemTo.set(ru, guess);
+        claimed.add(guess);
+        pending.delete(ru);
+        placed = true;
+      }
     }
-  });
+  }
+  for (const ru of pending) why.set(ru, { cand: -1, why: "not found (math alone)" });
   let items = 0;
   let atDepth = 0;
   let marked = 0;
@@ -1272,10 +1279,22 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       miss(true, m, got, sim);
       continue;
     }
-    // Inline: the matched words just before and after the formula.
+    // Inline: the matched words just before and after the formula. A
+    // formula alone in a list item has no words of its own (an exercise's
+    // "(a) E = {HHH, HHT}"): the matched words nearest it outside the item
+    // bound the gap instead, and the candidate formula most like it in that
+    // gap stands for it.
     const unit = ref.units[m.unit];
-    const prev = m.at - 1 >= unit.first ? al.aTo[m.at - 1] : -1;
-    const next = m.at < unit.end ? al.aTo[m.at] : -1;
+    let prev = m.at - 1 >= unit.first ? al.aTo[m.at - 1] : -1;
+    let next = m.at < unit.end ? al.aTo[m.at] : -1;
+    if (unit.end <= unit.first && ref.blocks[unit.block].kind === "list") {
+      let p = unit.first - 1;
+      while (p >= 0 && al.aTo[p] < 0) p--;
+      let n = unit.end;
+      while (n < al.aTo.length && al.aTo[n] < 0) n++;
+      prev = p >= 0 ? al.aTo[p] : -1;
+      next = n < al.aTo.length ? al.aTo[n] : -1;
+    }
     // Candidate formulas in the same gap; the one most like it stands for it.
     const hits = cand.math.filter(
       (c) => !c.display && ((prev >= 0 && next >= 0 && c.at > prev && c.at <= next) || (prev >= 0 && next < 0 && c.at === prev + 1) || (next >= 0 && prev < 0 && c.at === next)),

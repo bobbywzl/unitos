@@ -739,6 +739,10 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
   // parts, the brace open in the first and closed in the last, when the
   // few words between them are all that stands between.
   const out: MathSpan[] = [];
+  // The parse loop's view of a block's formulas: UNITOS_DEBUG_SPANS="<text>"
+  // prints the runs, the parts, and the spans kept of every block whose
+  // text holds it, to stderr.
+  if (process.env.UNITOS_DEBUG_SPANS && text.includes(process.env.UNITOS_DEBUG_SPANS)) console.error("[spans]", JSON.stringify(text.slice(0, 60)), "runs", (runs ?? []).map((r) => `${r.start}-${r.end}${r.zone ? ":" + r.zone.latex + (r.zone.ok ? "" : "!") : ""}`).join(" "), "parts", parts.map((q) => `${q.start}-${q.end}:${q.latex}`).join(" | "));
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
     // A set of names set in the text's font ("E = {HHH,HHT,HTT}"): one
@@ -772,6 +776,7 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
     }
     if (balanced(p.latex)) out.push(p);
   }
+  if (process.env.UNITOS_DEBUG_SPANS && text.includes(process.env.UNITOS_DEBUG_SPANS)) console.error("[spans-out]", out.map((q) => `${q.start}-${q.end}:${q.latex}`).join(" | "));
   return out;
 }
 

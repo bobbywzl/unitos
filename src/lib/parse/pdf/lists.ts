@@ -205,7 +205,14 @@ function joinsList(items: Item[], line: Line, marker: Marker, markerX = line.x):
   const here = { markerX, bodyX: bodyXOf(line, marker) };
   let at = items.length - 1;
   while (at >= 0 && !sameLevel(items[at], here, line.size)) at--;
-  if (at < 0) return markerX > items[items.length - 1].markerX + line.size * 0.5 && opensSequence(marker);
+  if (at < 0) {
+    if (markerX > items[items.length - 1].markerX + line.size * 0.5 && opensSequence(marker)) return true;
+    // The next number at an outer level the list last read left open: an
+    // exercise's "4" over its display and the words under it, then its
+    // "(a)" to "(d)" read anew one level in, then "5" at the "4"'s level
+    // (parse loop finding: Grinstead p. 35 read "5" to "7" as a third list).
+    return (openLevels(line.page) ?? []).some((level) => sameLevel(level, here, line.size) && follows(level.marker, marker));
+  }
   if (follows(items[at].marker, marker)) return true;
   // An item of an outer level after the sibling ("2." after "1.3") opens
   // this level again: "2.1" starts it anew.
