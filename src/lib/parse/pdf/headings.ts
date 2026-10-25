@@ -146,7 +146,16 @@ const SIGNATURE_RE = /^\s*[—–―]/;
 // Panel letters stand apart: "H.V.", letters set close, are initials.
 const PANEL_LETTERS_RE = /^\s*(?:\(\p{L}\)|\p{L}[.)])(?:\s+(?:\(\p{L}\)|\p{L}[.)]))*\s*$/u;
 function wordless(text: string): boolean {
-  return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
+  return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text) || noWord(text);
+}
+
+// A line of Latin letters with no vowel among them, one run of seven or
+// more: no word, however it is set (parse loop finding: Grinstead–Snell
+// centers a coin-toss record, "THTTTHTTTTHTTTTTHHTT.", at the body's size
+// in capitals, and it read as a heading; an acronym is shorter).
+function noWord(text: string): boolean {
+  const runs = text.match(/\p{L}+/gu) ?? [];
+  return runs.length > 0 && runs.every((r) => /^[A-Za-z]+$/.test(r) && !/[aeiouy]/i.test(r)) && runs.some((r) => r.length >= 7);
 }
 
 // A heading on a scan's text layer holds a word of three letters, and
