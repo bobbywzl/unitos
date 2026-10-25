@@ -40,10 +40,14 @@ const PARTS_SHARE = 0.75;
     answer covers every part and not the parts the words happen to match. */
 const SKETCH_SHARE = 0.5;
 const SKETCH_BLOCK_MAX = 1_200;
-/** A gap of this many blocks or fewer between two picked blocks is read
-    too: an argument runs through the blocks between the ones its words
-    matched (a letter's steps between its opening and its conclusion). */
+/** A gap between two picked blocks inside one part is read too when it is
+    this many blocks or fewer, or twice as many when they are short (this
+    many characters or fewer in all): an argument runs through the blocks
+    between the ones its words matched (Pascal's letter's steps between
+    its opening and its conclusion, six short blocks that name neither
+    Pascal nor Fermat). */
 const BRIDGE_MAX = 3;
+const BRIDGE_CHARS = 3_000;
 const OVERVIEW_RE = /\b(summar(y|i[sz]e)|overview|outline|synopsis|main (argument|points|ideas|claims|themes)|key (points|ideas|takeaways)|structure[d]?|how is (it|the \w+) organi[sz]ed|what (is|are) (this|the) (book|document|paper|article|text|report|thesis|chapters?) about|table of contents|each chapter|every chapter|all the chapters|chapter by chapter|section by section|the (whole|entire) (book|document|paper|article|text))\b|总结|概括|概述|大纲|主要观点|每一?章|整本|全文/i;
 
 /** Whether the message reads over the whole document. */
@@ -273,7 +277,9 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
   let last = -1;
   for (let k = 0; k < blocks.length; k++) {
     if (!picked.has(blocks[k].id)) continue;
-    if (last >= 0 && k - last - 1 <= BRIDGE_MAX && !blocks.slice(last + 1, k).some((b) => b.type === "HEADING")) {
+    const between = blocks.slice(last + 1, k);
+    const short = between.length <= BRIDGE_MAX || (between.length <= BRIDGE_MAX * 2 && between.reduce((n, b) => n + b.text.length, 0) <= BRIDGE_CHARS);
+    if (last >= 0 && short && !between.some((b) => b.type === "HEADING")) {
       for (let j = last + 1; j < k; j++) take(j);
     }
     last = k;

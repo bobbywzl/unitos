@@ -1935,7 +1935,7 @@ export const CASES: AssistantCase[] = [
     profile: STUDENT,
     history: [
       { role: "user", content: "What is the problem of points?" },
-      { role: "assistant", content: "The problem of points asks how to divide the stakes of an interrupted game of chance fairly between two players who have won different numbers of the plays needed, as the book's historical remarks in section 1.2 recount [block book-probability-294]." },
+      { role: "assistant", content: "The problem of points asks how to divide the stakes of an interrupted game of chance fairly between two players who have won different numbers of the plays needed, as the book's historical remarks in section 1.2 recount [block book-probability-b312]." },
     ],
     question: "And how did Pascal's way of solving it differ from Fermat's?",
     expect: { change: false, answer: { includes: ["Pascal", "Fermat"], cites: true } },
