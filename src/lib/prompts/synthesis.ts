@@ -47,6 +47,11 @@ export function synthesisAskPrompt(params: {
   // edits: how the document changes (lib/assistant/plan.ts); caretBlockId:
   // the block the caret stands in.
   act?: PageActions;
+  // How the material was read: whole (the default), or the passages picked
+  // for this message out of a document too long to read whole
+  // (lib/assistant/document-reading.ts): a count or an "every X" then
+  // comes from the passages shown, and says so.
+  read?: "whole" | "picked";
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -87,7 +92,9 @@ export function synthesisAskPrompt(params: {
     "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them as one answer: passages that make the same point are one point with each cited. A passage that disagrees with the others is named as disagreeing, never dropped.",
     "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
     "3a. Cite with the tags alone: [block <id>] and [note <id>] render as links. Never write an id in your own words (\"note cmuo…\"), and never write a tag where you mean the words: name the note by what it says. Each tag goes right after the claim it supports. A claim that rests on several blocks takes each block's tag, side by side: tags side by side render as one chip with their count.",
-    "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance. When the document never states the count itself, the answer says so in two words (\"by my count, three\"), and nothing more on how it was counted. Figures that look like the ones counted but are left out (a price beside a total) are named in one short sentence that says why they do not count.",
+    params.read === "picked"
+      ? "4. A question about counts, spread, or absence (how many, where, does it ever): the passages shown were picked for this message out of the whole document, so count what they show, cite each instance, and say in a few words that the count is from the passages read; when the contents name a part that holds the rest, name it. Figures that look like the ones counted but are left out (a price beside a total) are named as left out."
+      : "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance. When the document never states the count itself, the answer says so in two words (\"by my count, three\"), and nothing more on how it was counted. Figures that look like the ones counted but are left out (a price beside a total) are named in one short sentence that says why they do not count.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
     "6. Stop at the answer. After the sentences that answer and the reasoning they rest on, nothing follows: no aside on a passage that neither answers nor contradicts, no context the question did not ask for, no figure derived from the document's figures, no mistake the reader might make, no advice, no closing lesson or verdict, and at most one sentence that ties the answer to the reader's purpose. A point is made once, never restated in other words. Never say how the answer was found (the blocks read, the checks made): say what is so. A lookup ends with its one to three sentences, in one paragraph. Every sentence holds one claim and stays under 25 words: a second claim starts a new sentence.",
     ANSWER_LENGTH,

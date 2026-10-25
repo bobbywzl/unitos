@@ -119,8 +119,9 @@ function documentText(doc: DigestDocument, budget: RenderBudget): string {
 }
 
 // Only the picked blocks of a document's text, in reading order, a gap
-// between two shown blocks declared, under the document's gist.
-function pickedText(doc: DigestDocument, pick: DocumentPick, budget: RenderBudget): string {
+// between two shown blocks declared, under the document's gist (headed:
+// the gist and the count; the This page reading writes its own head).
+function pickedText(doc: DigestDocument, pick: DocumentPick, budget: RenderBudget, headed = true): string {
   const segments = doc.text ? doc.text.split(/\n\n(?=\[block )/) : [];
   const idOf = (segment: string) => /^\[block ([^\]]+)\]/.exec(segment)?.[1] ?? null;
   const total = segments.filter((segment) => idOf(segment) !== null).length;
@@ -139,10 +140,9 @@ function pickedText(doc: DigestDocument, pick: DocumentPick, budget: RenderBudge
     kept.push(segment);
     shown++;
   }
-  const head = [
-    ...(pick.gist ? [`Gist: ${pick.gist}`] : []),
-    `(${shown} of ${total} blocks shown: the blocks a first read picked for this message)`,
-  ];
+  const head = headed
+    ? [...(pick.gist ? [`Gist: ${pick.gist}`] : []), `(${shown} of ${total} blocks shown: the blocks a first read picked for this message)`]
+    : [`(${shown} of ${total} blocks shown: the blocks a first read picked for this message; a gap between two is declared)`];
   return [...head, ...kept].join("\n\n");
 }
 
@@ -350,6 +350,7 @@ export function renderDocumentDigest(
   parts: DigestParts,
   documentId: string,
   budget: RenderBudget = unlimitedBudget(),
+  reading?: DocumentReadingView,
 ): string | null {
   const doc = parts.documents.find((d) => d.id === documentId);
   if (!doc) return null;
@@ -359,7 +360,7 @@ export function renderDocumentDigest(
       `Sections: ${parts.sections.join("; ") || "(none)"}`,
       `This is one document of the project. The project holds ${parts.documents.length} document${parts.documents.length === 1 ? "" : "s"}.`,
     ].join("\n"),
-    renderDocument(doc, budget, new Map(), parts.corpusTitle),
+    reading ? renderDocumentHead(doc, budget, reading) : renderDocument(doc, budget, new Map(), parts.corpusTitle),
   ];
   const cites = (n: DigestNote) => n.sources.some((s) => s.documentId === documentId);
   const citing = parts.notes.filter(cites);
@@ -378,7 +379,55 @@ export function renderDocumentDigest(
   if (others.length > 0) {
     chunks.push(["## The reader's other notes in this project", others.join("\n\n")].join("\n\n"));
   }
+  // The passages picked for this message come last: everything before them
+  // is the same for every message on this document, so the prefix caches.
+  if (reading) chunks.push(["## Passages of the document read for this message", pickedText(doc, reading.pick, budget, false)].join("\n\n"));
   return chunks.join("\n\n");
+}
+
+/** What of a long document a message reads (lib/assistant/document-reading.ts):
+    the picked blocks, how they were picked, the document's contents, and
+    its block count. */
+export type DocumentReadingView = { pick: DocumentPick; method: "skeleton" | "lexical"; contents: string[]; total: number };
+
+// A long document's head for a message that reads it in part: its title,
+// its gist, its contents (every heading, each with its block tag), and its
+// layers; its passages come after the notes (renderDocumentDigest).
+function renderDocumentHead(doc: DigestDocument, budget: RenderBudget, reading: DocumentReadingView): string {
+  const chunks: string[] = [`## Document: ${doc.title} [document ${doc.id}]${documentMeta(doc)}`];
+  chunks.push(
+    [
+      `The document holds ${reading.total} blocks, too many to read whole for each message; the passages this message reads are at the end.`,
+      ...(reading.pick.gist ? [`Gist: ${reading.pick.gist}`] : []),
+    ].join("\n"),
+  );
+  if (reading.contents.length > 0) chunks.push(["Contents (every heading of the document, with its block tag):", ...reading.contents].join("\n"));
+  const layers = spend(layerItems(doc), budget, "lines of this document's notes and layers");
+  if (layers.length > 0) chunks.push(layers.join("\n"));
+  return chunks.join("\n\n");
+}
+
+// The assistant's system prefix at This page scope over a long document
+// (lib/assistant/document-reading.ts): the document's gist, contents, and
+// layers, the notes, and the passages picked for this message. Null = the
+// document is not in the digest.
+export function documentPickedSystem(
+  parts: DigestParts,
+  documentId: string,
+  reading: DocumentReadingView,
+  budget: RenderBudget = corpusBudget(),
+): string | null {
+  const rendered = renderDocumentDigest(parts, documentId, budget, reading);
+  if (rendered === null) return null;
+  return [
+    "You assist a reader working through one document of their project: the document, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
+    "The document is too long to read whole for each message. It shows its gist, its contents (every heading), its notes and layers whole, and, at the end, the passages a first read of the whole document picked for this message, in reading order; a gap between two shown passages is declared.",
+    "Every document block starts with its id in the form [block <id>]; every note with [note <id>]. A heading in the contents is a block too: cite it when you name a part.",
+    "When you answer from a document, cite the block tag exactly as written ([block <id>]) and quote the exact words — precise recall over paraphrase.",
+    "A question about counts, spread, or absence in the document's text may need blocks that are not shown: answer from the passages shown and say in a few words that the rest of the text was not read for this message. When the passages do not answer the question but the contents name a part that would, say which part, so the reader can ask about it by name. Say plainly when the material does not answer the question.",
+    "",
+    rendered,
+  ].join("\n");
 }
 
 // The assistant's system prefix at This page scope (SPEC.md §7):

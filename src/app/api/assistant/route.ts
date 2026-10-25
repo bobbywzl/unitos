@@ -36,7 +36,8 @@ import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
-import { corpusPickedSystem, corpusSystem, documentSystem } from "@/lib/digest/render";
+import { corpusPickedSystem, corpusSystem, documentPickedSystem, documentSystem } from "@/lib/digest/render";
+import { documentPicks } from "@/lib/assistant/document-reading";
 import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -151,18 +152,41 @@ async function handle(req: Request, t: TFunc) {
   // so the prompt prefix caches across questions (SPEC.md §2).
   let system: string;
   let scopeLabel: string;
+  // How the message read the document at This page scope: whole, or the
+  // passages picked for it (the answer's rules on counts follow it).
+  let read: "whole" | "picked" = "whole";
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   if (data.scope === "document") {
     // This page: the open document from the project's digest, whole, with
-    // its layers and the notes that cite it.
-    const rendered = documentSystem(digest.parts, data.documentId!);
+    // its layers and the notes that cite it. Past the whole threshold the
+    // message reads the blocks it needs (lib/assistant/document-reading.ts).
+    const document = digest.parts.documents.find((d) => d.id === data.documentId);
+    if (!document) {
+      return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+    }
+    const reading = await documentPicks({
+      notebookId: data.notebookId,
+      document,
+      question,
+      history: data.history ?? [],
+      profile,
+      userId: access.user.id,
+      signal: req.signal,
+    }).catch((err: unknown) => {
+      // A reading that fails reads the document whole, as before.
+      console.warn("[assistant] document reading failed, reading the document whole:", err);
+      return null;
+    });
+    const rendered = reading ? documentPickedSystem(digest.parts, document.id, reading) : documentSystem(digest.parts, document.id);
     if (rendered === null) {
       return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
     }
     system = rendered;
-    scopeLabel =
-      "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
+    read = reading ? "picked" : "whole";
+    scopeLabel = reading
+      ? "this page: the open document's contents and the passages picked for this message, and every note, annotation, distillation, extraction, and summary on it"
+      : "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
     // Past the whole threshold, the message reads the blocks it needs, found
     // from the documents' skeletons (lib/assistant/project-reading.ts).
@@ -289,6 +313,7 @@ async function handle(req: Request, t: TFunc) {
       lang,
       scopeLabel,
       question,
+      read,
       web: data.web,
       continued: history.length > 0,
       files,
