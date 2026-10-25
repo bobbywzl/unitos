@@ -38,7 +38,7 @@ import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesi
 import type { AssistantAction } from "@/lib/types";
 import { blockTags, cjkShare, loadFixtures, wordCount, type Fixture } from "../lib";
 import { CASES, type ActionExpect, type AssistantCase, type Family } from "./cases";
-import { caseBlocks, fixtureParts, fixtureSections, fixtureSystem, fixtureText, fixtureTranscript, videoBlockId } from "./digest";
+import { caseBlocks, fixtureParts, fixtureReading, fixtureSections, fixtureText, fixtureTranscript, videoBlockId } from "./digest";
 import { fixtureRichText } from "./richtext";
 import { applyOps, runSuggestAction, type Landed } from "./suggest-run";
 import { FAMILY_RUBRIC, SHARED } from "./rubric";
@@ -61,6 +61,8 @@ const USER = "=====[USER]=====";
 const ASSISTANT = "=====[ASSISTANT]=====";
 
 const DOCUMENT_SCOPE_LABEL = "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
+const DOCUMENT_PICKED_SCOPE_LABEL =
+  "this page: the open document's contents and the passages picked for this message, and every note, annotation, distillation, extraction, and summary on it";
 const PROJECT_SCOPE_LABEL = "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
 
 function cases(): AssistantCase[] {
@@ -106,12 +108,14 @@ function prepare(): void {
             figureBlockId: null,
           })
         : null;
-    const system = actUser !== null ? documentPrefix(f.title, blocks as never, null, null) : scope === "document" ? fixtureSystem(f, notes, blocks) : corpusSystem(fixtureParts(f, notes, blocks));
+    const reading = scope === "document" && actUser === null ? fixtureReading(f, notes, blocks, c.question, history) : null;
+    const system = actUser !== null ? documentPrefix(f.title, blocks as never, null, null) : reading ? reading.system : corpusSystem(fixtureParts(f, notes, blocks));
     const prompt = actUser ?? synthesisAskPrompt({
       profile: c.profile,
       lang: c.lang,
-      scopeLabel: scope === "document" ? DOCUMENT_SCOPE_LABEL : PROJECT_SCOPE_LABEL,
+      scopeLabel: scope === "document" ? (reading?.read === "picked" ? DOCUMENT_PICKED_SCOPE_LABEL : DOCUMENT_SCOPE_LABEL) : PROJECT_SCOPE_LABEL,
       question: c.question,
+      read: reading?.read ?? "whole",
       continued: history.length > 0,
       act:
         scope === "document"

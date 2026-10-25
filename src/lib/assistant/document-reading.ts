@@ -3,6 +3,7 @@ import { ASSISTANT_WHOLE_THRESHOLD, STITCH_SELECTED_BUDGET } from "@/lib/derive/
 import type { loadProfile } from "@/lib/derive/context";
 import type { DocumentPick } from "@/lib/digest/render";
 import type { DigestDocument } from "@/lib/digest/types";
+import { chooseDepth } from "@/lib/assistant/depth";
 import { db } from "@/lib/db";
 import { rank, tokenize } from "@/lib/graph/rank";
 import { readSkeleton, refreshSkeleton, skeletonStale } from "@/lib/graph/skeleton";
@@ -33,6 +34,22 @@ const OPENING_CHARS = 3_000;
     shuffling") is read whole, the smallest named part first, to this share
     of the budget: a count or a list over a part needs every block of it. */
 const PARTS_SHARE = 0.75;
+/** A message over the whole document (a summary, its structure, its main
+    argument, "every chapter") reads a sketch of it: each part's heading
+    and the first block under it, to this share of the budget, so the
+    answer covers every part and not the parts the words happen to match. */
+const SKETCH_SHARE = 0.5;
+const SKETCH_BLOCK_MAX = 1_200;
+/** A gap of this many blocks or fewer between two picked blocks is read
+    too: an argument runs through the blocks between the ones its words
+    matched (a letter's steps between its opening and its conclusion). */
+const BRIDGE_MAX = 3;
+const OVERVIEW_RE = /\b(summar(y|i[sz]e)|overview|outline|synopsis|main (argument|points|ideas|claims|themes)|key (points|ideas|takeaways)|structure[d]?|how is (it|the \w+) organi[sz]ed|what (is|are) (this|the) (book|document|paper|article|text|report|thesis|chapters?) about|table of contents|each chapter|every chapter|all the chapters|chapter by chapter|section by section|the (whole|entire) (book|document|paper|article|text))\b|总结|概括|概述|大纲|主要观点|每一?章|整本|全文/i;
+
+/** Whether the message reads over the whole document. */
+export function wantsOverview(message: string): boolean {
+  return OVERVIEW_RE.test(message) || chooseDepth({ message }).signals.includes("across the document");
+}
 /** The contents: every heading of the document, so the model knows the
     document's shape and names a part the passages do not cover. */
 const CONTENTS_MAX = 400;
@@ -222,6 +239,18 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     if (spent + part.size > partsLimit) continue;
     for (let k = part.start; k < part.end; k++) take(k);
   }
+  // A message over the whole document: the sketch, every heading and the
+  // first block under it.
+  const message = query.split("\n").filter((l) => l.trim()).at(-1) ?? query;
+  if (wantsOverview(message)) {
+    const sketchLimit = Math.floor(budget * SKETCH_SHARE);
+    for (let k = 0; k < blocks.length; k++) {
+      if (blocks[k].type !== "HEADING") continue;
+      if (!take(k, sketchLimit)) break;
+      const next = blocks[k + 1];
+      if (next && next.type !== "HEADING" && next.text.length <= SKETCH_BLOCK_MAX) take(k + 1, sketchLimit);
+    }
+  }
   const ranked = rank(
     blocks.map((b, k) => k),
     (k) => blocks[k].text,
@@ -239,6 +268,15 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
       take(j);
       break;
     }
+  }
+  // The short gaps between picked blocks.
+  let last = -1;
+  for (let k = 0; k < blocks.length; k++) {
+    if (!picked.has(blocks[k].id)) continue;
+    if (last >= 0 && k - last - 1 <= BRIDGE_MAX && !blocks.slice(last + 1, k).some((b) => b.type === "HEADING")) {
+      for (let j = last + 1; j < k; j++) take(j);
+    }
+    last = k;
   }
   return picked;
 }

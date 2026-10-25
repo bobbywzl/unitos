@@ -7,7 +7,9 @@ import { renderBlockLines } from "@/lib/derive/context";
 import { suggestionRows } from "./richtext";
 import type { PlanContext } from "@/lib/assistant/plan";
 import type { TranscriptContext } from "@/lib/assistant/transcript";
-import { documentSystem } from "@/lib/digest/render";
+import { lexicalPicks } from "@/lib/assistant/document-reading";
+import { ASSISTANT_WHOLE_THRESHOLD } from "@/lib/derive/config";
+import { documentPickedSystem, documentSystem } from "@/lib/digest/render";
 import type { DigestNote, DigestParts } from "@/lib/digest/types";
 import type { Fixture, FixtureBlock } from "../lib";
 
@@ -152,7 +154,34 @@ export function fixtureParts(f: Fixture, notes: CaseNote[] = [], blocks?: PlanCo
 
 /** The This page system prefix for the fixture, as the route renders it. */
 export function fixtureSystem(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"]): string {
-  const system = documentSystem(fixtureParts(f, notes, blocks), f.name);
+  return fixtureReading(f, notes, blocks).system;
+}
+
+/** The This page system prefix as the route builds it, and how the
+    document was read: whole under the whole threshold, else by the passages
+    the lexical pass picks for the question (lib/assistant/document-reading.ts,
+    the reading a document with no skeleton gets), the opening and the parts
+    the question names among them. */
+export function fixtureReading(
+  f: Fixture,
+  notes: CaseNote[] = [],
+  blocks?: PlanContext["blocks"],
+  question?: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+): { system: string; read: "whole" | "picked" } {
+  const parts = fixtureParts(f, notes, blocks);
+  const doc = parts.documents[0];
+  if (question?.trim() && doc.chars > ASSISTANT_WHOLE_THRESHOLD) {
+    const read = (blocks ?? planBlocks(f)).filter((b) => b.type !== "VIDEO" && b.text.trim());
+    const earlier = history.filter((t) => t.role === "user" && t.content.trim()).slice(-2).map((t) => t.content);
+    const depthById = new Map(read.filter((b) => b.type === "HEADING").map((b) => [b.id, Number(/<h([1-6])/i.exec(b.html ?? "")?.[1] ?? 2)]));
+    const blockIds = lexicalPicks(read, [...earlier, question].join("\n"), { depthById });
+    const contents = read.filter((b) => b.type === "HEADING").map((b) => `[block ${b.id}] ${b.text.trim().replace(/\s+/g, " ")}`);
+    const system = documentPickedSystem(parts, f.name, { pick: { blockIds, gist: "" }, method: "lexical", contents, total: read.length });
+    if (system === null) throw new Error(`${f.name} did not render`);
+    return { system, read: "picked" };
+  }
+  const system = documentSystem(parts, f.name);
   if (system === null) throw new Error(`${f.name} did not render`);
-  return system;
+  return { system, read: "whole" };
 }
