@@ -9,7 +9,7 @@
 // message's content words, so it costs nothing and names the same blocks
 // for the same message.
 
-import { contentWords, summaryAsk } from "@/lib/assistant/document-reading";
+import { contentWords } from "@/lib/assistant/document-reading";
 import type { ReadBlock } from "@/lib/assistant/citations";
 import { rank } from "@/lib/graph/rank";
 
@@ -18,13 +18,8 @@ const HINT_MIN_CHARS = 40;
 
 /** The ids of the blocks whose words match the question, most first: up
     to HINTS_MAX, none when the question has no content words or no block
-    matches, and none for a message over the whole document. A block under
-    HINT_MIN_CHARS (a heading, a label) is skipped. */
+    matches. A block under HINT_MIN_CHARS (a heading, a label) is skipped. */
 export function passageHints(blocks: ReadBlock[], question: string, max = HINTS_MAX): string[] {
-  // A message that asks for a summary or the document's structure reads
-  // the whole and its sketch; a list of the blocks that match its words
-  // pulls the answer into detail.
-  if (summaryAsk(question)) return [];
   const query = contentWords(question);
   if (!query.trim()) return [];
   const candidates = blocks.filter((b) => b.text.length >= HINT_MIN_CHARS);

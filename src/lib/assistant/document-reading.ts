@@ -96,12 +96,7 @@ const OVERVIEW_RE = /\b(summar(y|i[sz]e)|overview|outline|synopsis|main (argumen
 
 /** Whether the message reads over the whole document. */
 export function wantsOverview(message: string): boolean {
-  return summaryAsk(message) || chooseDepth({ message }).signals.includes("across the document");
-}
-/** A message that asks for a summary, an outline, or the document's
-    structure, by its words alone. */
-export function summaryAsk(message: string): boolean {
-  return OVERVIEW_RE.test(message);
+  return OVERVIEW_RE.test(message) || chooseDepth({ message }).signals.includes("across the document");
 }
 /** The contents: every heading of the document, so the model knows the
     document's shape and names a part the passages do not cover. */

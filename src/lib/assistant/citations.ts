@@ -16,7 +16,11 @@
 // its claim, kept.
 
 const BLOCK_TAG = /\[block ([a-zA-Z0-9-]+)\]/g;
-const FIGURE = /\d[\d,]*(?:\.\d+)?%?/g;
+// A figure keeps its leading point (".325" is not "325") and its decimals.
+const FIGURE = /(?<![\d.,])\.?\d[\d,]*(?:\.\d+)?%?/g;
+// A bare integer ("325") matches a page number in a contents line or a
+// label on a line of its own: the block that holds it must be a passage.
+const INTEGER_BLOCK_MIN = 80;
 // A number after a label names a place, not a figure of the text: "section
 // 1.2", "Exercise 11", "Table 2.1", "page 304".
 const LABELED = /\b(?:sections?|sec\.|chapters?|ch\.|parts?|exercises?|examples?|figures?|fig\.|tables?|pages?|p\.|pp\.|items?|steps?|equations?|eq\.|theorems?|lemmas?|definitions?|problems?|questions?|notes?|lines?|verses?|articles?|§)\s*$/i;
@@ -55,6 +59,7 @@ export function blocksOfTaggedText(text: string): ReadBlock[] {
 function holds(text: string, figure: string): boolean {
   const plain = text.replace(/(\d),(?=\d{3}\b)/g, "$1");
   const rx = new RegExp(`(?<![\\d.,])${figure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|\\.\\d)`);
+  if (figure.startsWith(".")) return new RegExp(`(?<![\\d])${figure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d])`).test(plain);
   return rx.test(plain);
 }
 
@@ -119,7 +124,8 @@ export function retagFigures(text: string, read: ReadBlock[], shown?: Set<string
       // tag on already this sentence: nothing to add.
       if (tagged.length > 0 && holds(taggedText, figure.replace(/,/g, ""))) continue;
       const bare = figure.replace(/,/g, "");
-      const holders = blocks.filter((b) => !tagged.includes(b.id) && holds(b.text, bare));
+      const integer = /^\d+$/.test(bare);
+      const holders = blocks.filter((b) => !tagged.includes(b.id) && (!integer || b.text.length >= INTEGER_BLOCK_MIN) && holds(b.text, bare));
       let pick: ReadBlock | null = null;
       if (holders.length === 1) pick = holders[0];
       else if (holders.length > 1 && tagged.length > 0) {
