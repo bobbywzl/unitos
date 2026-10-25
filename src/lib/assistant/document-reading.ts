@@ -278,9 +278,6 @@ export function namesHeading(heading: string, query: QueryTerms): boolean {
 export type QueryTerms = { tokens: Set<string>; chapters: Set<string>; headingCounts: Map<string, number> };
 const queryTokens = (q: QueryTerms) => q.tokens;
 
-/** A block that names a part of the document: a cross-reference. */
-const CROSS_REF = /\b(?:chapters?|sections?|parts?|appendi(?:x|ces))\s+\d+(?:\.\d+)*\b|第[一二三四五六七八九十\d]+[章节]/i;
-
 const LABEL_WORDS = new Set(["chapter", "section", "part", "appendix", "unit", "lecture", "week"].map((w) => tokenize(w)[0] ?? w));
 
 export function queryTerms(query: string, headings: string[]): QueryTerms {
@@ -351,15 +348,6 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
       if (next && next.type !== "HEADING" && next.text.length <= SKETCH_BLOCK_MAX) take(k + 1, limit);
     }
   };
-  // After the sketch, the blocks that name another part ("see Chapter 2",
-  // "as in Section 1.2"): how the parts fit together stands in them.
-  const crossRefs = (from: number, to: number, limit: number) => {
-    for (let k = from; k < to; k++) {
-      const b = blocks[k];
-      if (b.type === "HEADING" || b.text.length > SKETCH_BLOCK_MAX || !CROSS_REF.test(b.text)) continue;
-      if (!take(k, limit)) break;
-    }
-  };
   const sketchLimit = Math.floor(budget * SKETCH_SHARE);
   for (const part of named) {
     if (overview) {
@@ -370,10 +358,6 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     for (let k = part.start; k < part.end; k++) take(k);
   }
   if (named.length === 0 && overview) sketch(0, blocks.length, sketchLimit);
-  if (overview) {
-    if (named.length === 0) crossRefs(0, blocks.length, sketchLimit);
-    else for (const part of named) crossRefs(part.start, part.end, sketchLimit);
-  }
   const ranked = rank(
     blocks.map((b, k) => k),
     (k) => blocks[k].text,
