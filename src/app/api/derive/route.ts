@@ -14,7 +14,9 @@ import {
   STREAM_NOTE_TOKEN,
   VISUALIZE_CHECK,
   VISUALIZE_CHECK_MAX_SVG,
+  VISUALIZE_CHECK_MIN_MS,
   VISUALIZE_EFFORT,
+  VISUALIZE_TIME_BUDGET_MS,
 } from "@/lib/derive/config";
 import { derivationFeature, fallbackCall, featureCall, featureConfigured, featureModelId } from "@/lib/feature-models";
 import type { ModelCall } from "@/lib/model-call";
@@ -1058,20 +1060,37 @@ async function handle(req: Request, t: TFunc) {
         const visualCall = await featureCall("visualize", VISUALIZE_EFFORT);
         const visualModel = visualCall.model;
         const visualUsage = { ...usageMeta, model: visualCall.modelId };
-        const result = await callForJson({
-          model: visualModel,
-          messages,
-          maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
-          providerOptions: visualCall.providerOptions,
-          // Confirmed: a null visual fails validation, so the model is asked
-          // again for the picture it owes.
-          schema: ctx.confirmed ? visualizeOutputSchema.extend({ visual: visualSchema }) : visualizeOutputSchema,
-          label: "VISUALIZE",
-          usage: visualUsage,
-          abortSignal: req.signal,
-        });
-        if (!result.ok) throw new DeriveFailure(result.error);
+        // The time budget (VISUALIZE_TIME_BUDGET_MS): the draw stops at it
+        // with a worded failure, and the check runs only while
+        // VISUALIZE_CHECK_MIN_MS remain. The log says where the time went.
+        const started = Date.now();
+        const elapsed = () => Math.round((Date.now() - started) / 1000);
+        const deadline = AbortSignal.timeout(VISUALIZE_TIME_BUDGET_MS);
+        const signal = AbortSignal.any([req.signal, deadline]);
+        let result: Awaited<ReturnType<typeof callForJson<typeof visualizeOutputSchema>>>;
+        try {
+          result = await callForJson({
+            model: visualModel,
+            messages,
+            maxOutputTokens: MAX_OUTPUT_TOKENS.VISUALIZE,
+            providerOptions: visualCall.providerOptions,
+            // Confirmed: a null visual fails validation, so the model is asked
+            // again for the picture it owes.
+            schema: ctx.confirmed ? visualizeOutputSchema.extend({ visual: visualSchema }) : visualizeOutputSchema,
+            label: "VISUALIZE",
+            usage: visualUsage,
+            abortSignal: signal,
+          });
+        } catch (err) {
+          if (deadline.aborted) throw new DeriveFailure(t("api.visualizeRanOutOfTime"));
+          throw err;
+        }
+        if (!result.ok) {
+          console.warn(`[derive] VISUALIZE draw failed after ${elapsed()} s:`, result.error);
+          throw new DeriveFailure(deadline.aborted ? t("api.visualizeRanOutOfTime") : result.error);
+        }
         const { judgment, visual: drawn } = result.data;
+        console.info(`[derive] VISUALIZE drew in ${elapsed()} s: ${drawn ? drawn.kind : "no picture"}, certain ${judgment.certain}`);
         if (!drawn || (!judgment.certain && !ctx.confirmed)) {
           return { ok: true, unsure: true, reason: judgment.reason.trim() };
         }
@@ -1087,7 +1106,9 @@ async function handle(req: Request, t: TFunc) {
         // be the worse outcome. A simulation is checked on its spec — its
         // frames are the server's, and too long to read back.
         const simulation = drawn.kind === "simulation";
-        if (VISUALIZE_CHECK && (simulation || rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG)) {
+        const timeForCheck = Date.now() - started <= VISUALIZE_TIME_BUDGET_MS - VISUALIZE_CHECK_MIN_MS;
+        if (VISUALIZE_CHECK && !timeForCheck) console.warn(`[derive] VISUALIZE:check skipped after ${elapsed()} s: the picture stands as drawn`);
+        if (VISUALIZE_CHECK && timeForCheck && (simulation || rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG)) {
           const checked = await callForJson({
             model: visualModel,
             // The document prefix again, so the cache holds; the draft is
@@ -1116,8 +1137,9 @@ async function handle(req: Request, t: TFunc) {
             schema: visualizeCheckSchema,
             label: "VISUALIZE:check",
             usage: visualUsage,
-            abortSignal: req.signal,
+            abortSignal: signal,
           });
+          console.info(`[derive] VISUALIZE:check done at ${elapsed()} s: ${checked.ok ? (checked.data.keep ? "kept" : checked.data.visual ? "replaced" : "withdrawn") : "failed"}`);
           if (checked.ok && !checked.data.keep) {
             if (!checked.data.visual) {
               if (!ctx.confirmed) return { ok: true, unsure: true, reason: checked.data.reason.trim() };

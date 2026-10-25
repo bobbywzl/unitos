@@ -177,6 +177,15 @@ export const VISUALIZE_CHECK = true;
 // simulation is checked on its spec whatever its size — its frames are the
 // server's.
 export const VISUALIZE_CHECK_MAX_SVG = 40_000;
+// The run's time budget (SPEC.md §20). The route's function runs 300 s at
+// most (maxDuration, api/derive/route.ts); a run the platform cuts off
+// answers nothing, and the card read that as an empty response. The first
+// call stops at the budget with a worded failure, and the check runs only
+// while VISUALIZE_CHECK_MIN_MS remain (the picture stands as drawn
+// otherwise). VISUALIZE_TIME_BUDGET_MS in the environment overrides the
+// budget: a plan whose functions run 60 s sets 50000.
+export const VISUALIZE_TIME_BUDGET_MS = Number(process.env.VISUALIZE_TIME_BUDGET_MS) || 270_000;
+export const VISUALIZE_CHECK_MIN_MS = 75_000;
 
 // Kimi K3 counts its reasoning tokens against this ceiling too (Moonshot asks
 // for 16000 or more), so every budget leaves room for the model to think

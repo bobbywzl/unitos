@@ -6900,7 +6900,9 @@ export function ReaderInteractions({
         noteId?: string;
         content?: string;
       } | null;
-      if (!payload) throw new Error(t("reader.emptyResponse"));
+      // Heartbeat spaces and then nothing: the function ended before the
+      // run did (the platform's limit), and the card says so.
+      if (!payload) throw new Error(t("reader.visualizeCutOff"));
       if (payload.unsure && !payload.content) {
         const reason = payload.reason ?? "";
         // A Regenerate that comes back unsure keeps the picture that stands

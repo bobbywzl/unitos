@@ -173,6 +173,7 @@ const en = {
   visualizeUnsure: "This picture may not be accurate.",
   // A Regenerate that came back unsure: the line under the picture that stands.
   visualizeRegenUnsure: "The new picture may not be accurate.",
+  visualizeCutOff: "The picture did not come back: the request ended before it finished. Try again, or try a shorter passage.",
   visualizeConfirm: "Confirm",
   visualizeConfirmTitle: "Draw the picture anyway",
   deleteVisualizeTitle: "Delete this visualization and its mark",
@@ -474,6 +475,7 @@ const zh: Record<keyof typeof en, string> = {
   visualization: "可视化图",
   visualizeUnsure: "这幅图可能不准确。",
   visualizeRegenUnsure: "新的图可能不准确。",
+  visualizeCutOff: "图没有返回：请求在完成前结束了。请重试，或试试更短的段落。",
   visualizeConfirm: "确认",
   visualizeConfirmTitle: "仍然画出这幅图",
   deleteVisualizeTitle: "删除此可视化图及其标记",
