@@ -894,8 +894,12 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
     // of it, but the scripts of a neighbor (parse loop finding: Springer's
     // (17) stacks \overline{A}_{K-1} over \overline{A}_K, and the K of the
     // upper entry's subscript stood over the lower entry's bar, which read
-    // \frac{K}{A}).
-    const standing = (list: Atom[]) => list.filter((a) => !hangingFamily(a.fam));
+    // \frac{K}{A}). A radical's sign is sized by its radicand's height,
+    // not by the part's style: it says nothing of the part's size (parse
+    // loop finding: arXiv 2506.08494 p. 4 sets a 9 pt radical in the 6 pt
+    // numerator of \frac{\sqrt{p_{λmin}−1}}{p_{λmin}}, and the fraction
+    // failed, its bar read as an underline).
+    const standing = (list: Atom[]) => list.filter((a) => !hangingFamily(a.fam) && a.cls !== "radical");
     if (above.length && below.length && standing(above).length && standing(below).length) {
       const [up, down] = [maxSize(standing(above)), maxSize(standing(below))];
       if (up < down * 0.85) above = [];
@@ -939,7 +943,7 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // part's letters: the part's size is theirs (the CS 229 refresher's
       // Bayes rule, a ∑ under its bar, made the fraction larger than the
       // "P(A_k|B) =" before it, which then read as its prescript).
-      const partSize = (list: Atom[]) => maxSize(list.some((a) => !hangingFamily(a.fam)) ? list.filter((a) => !hangingFamily(a.fam)) : list);
+      const partSize = (list: Atom[]) => maxSize(standing(list).length > 0 ? standing(list) : list);
       const part = Math.max(partSize(above), partSize(below));
       const script = pool.some(
         (a) =>
