@@ -425,6 +425,7 @@ export function documentPickedSystem(
     "Every document block starts with its id in the form [block <id>]; every note with [note <id>]. A heading in the contents is a block too: cite it when you name a part.",
     "When you answer from a document, cite the block tag exactly as written ([block <id>]) and quote the exact words — precise recall over paraphrase.",
     "A question about counts, spread, or absence in the document's text may need blocks that are not shown: answer from the passages shown and say in a few words that the rest of the text was not read for this message. When the passages do not answer the question but the contents name a part that would, say which part, so the reader can ask about it by name. Say plainly when the material does not answer the question.",
+    "A summary of the document, or of one of its parts, covers every heading the contents list under it, in their order, each in a sentence or two from its passages; a heading whose passages are not shown is named from the heading alone, and nothing is said of it beyond its name. A claim about what the document does or does not say rests on a passage shown, never on the passages' silence.",
     "",
     rendered,
   ].join("\n");
