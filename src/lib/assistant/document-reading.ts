@@ -133,7 +133,7 @@ export async function documentPicks(input: {
 
 /** The words the lexical pass ranks by: the message, and the reader's two
     messages before it (a follow-up names its subject by a pronoun). */
-function lexicalQuery(question: string, history: Turn[]): string {
+export function lexicalQuery(question: string, history: Turn[]): string {
   const earlier = history
     .filter((t) => t.role === "user" && t.content.trim())
     .slice(-2)
