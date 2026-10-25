@@ -125,7 +125,10 @@ export async function documentPicks(input: {
       const block = reading.blockByRef.get(alias);
       if (block) blockIds.add(block.id);
     }
-    withOpening(read.blocks, blockIds);
+    // What the lexical pass reads whatever the skeleton says: the opening,
+    // the blocks the last answers cited, and the parts the message names
+    // whole, to the budget.
+    supplementPicks(read.blocks, blockIds, lexicalQuery(input.question, input.history), { depthById, cited: citedBlocks(input.history), budget: input.budget });
     return { pick: { blockIds, gist }, method: "skeleton", contents, total };
   }
   void refreshSkeleton(doc.id, input.userId).catch((err: unknown) => {
@@ -316,6 +319,43 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     last = k;
   }
   return picked;
+}
+
+/** The skeleton's picks supplemented with what every reading holds: the
+    opening, the blocks the last answers cited with their neighbours, and
+    the parts the message names whole, each taken while the picks stay
+    under the budget (the skeleton's picks were cut to it already, so a
+    named part fits only where they left room). */
+export function supplementPicks(blocks: Block[], picked: Set<string>, query: string, opts: { depthById?: Map<string, number>; budget?: number; cited?: string[] }): void {
+  const budget = opts.budget ?? STITCH_SELECTED_BUDGET;
+  let spent = blocks.reduce((n, b) => n + (picked.has(b.id) ? b.text.length + 40 : 0), 0);
+  const take = (k: number): boolean => {
+    const b = blocks[k];
+    if (!b || picked.has(b.id)) return true;
+    const cost = b.text.length + 40;
+    if (spent + cost > budget * 1.25) return false;
+    spent += cost;
+    picked.add(b.id);
+    return true;
+  };
+  withOpening(blocks, picked, (k) => take(k));
+  const index = new Map(blocks.map((b, k) => [b.id, k]));
+  for (const id of opts.cited ?? []) {
+    const k = index.get(id);
+    if (k === undefined) continue;
+    take(k);
+    take(k - 1);
+    take(k + 1);
+  }
+  const terms = queryTerms(query, blocks.filter((b) => b.type === "HEADING").map((b) => b.text));
+  const named = partsOf(blocks, opts.depthById ?? new Map())
+    .filter((p) => namesHeading(blocks[p.start].text, terms))
+    .map((p) => ({ ...p, size: blocks.slice(p.start, p.end).reduce((n, b) => n + (picked.has(b.id) ? 0 : b.text.length + 40), 0) }))
+    .sort((a, b) => a.size - b.size);
+  for (const part of named) {
+    if (spent + part.size > budget * 1.25) continue;
+    for (let k = part.start; k < part.end; k++) take(k);
+  }
 }
 
 /** The document's opening added to a pick: its first blocks to
