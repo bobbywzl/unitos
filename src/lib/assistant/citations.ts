@@ -17,7 +17,21 @@
 
 const BLOCK_TAG = /\[block ([a-zA-Z0-9-]+)\]/g;
 const FIGURE = /\d[\d,]*(?:\.\d+)?%?/g;
+// A number after a label names a place, not a figure of the text: "section
+// 1.2", "Exercise 11", "Table 2.1", "page 304".
+const LABELED = /\b(?:sections?|sec\.|chapters?|ch\.|parts?|exercises?|examples?|figures?|fig\.|tables?|pages?|p\.|pp\.|items?|steps?|equations?|eq\.|theorems?|lemmas?|definitions?|problems?|questions?|notes?|lines?|verses?|articles?|§)\s*$/i;
 const NEAR = 3;
+
+/** The figures of a sentence (tags blanked): each with its offset. */
+function figuresOf(plain: string): { figure: string; index: number }[] {
+  const out: { figure: string; index: number }[] = [];
+  for (const m of plain.matchAll(FIGURE)) {
+    const figure = m[0].replace(/[,.]$/, "");
+    if (!matchable(figure) || LABELED.test(plain.slice(0, m.index ?? 0))) continue;
+    out.push({ figure, index: m.index ?? 0 });
+  }
+  return out;
+}
 
 export type ReadBlock = { id: string; text: string };
 
@@ -66,6 +80,25 @@ function sentences(text: string): [number, number][] {
   return out;
 }
 
+/** The figures of `text` that stand in a sentence with tags and in none of
+    the blocks the sentence tags: what the check reports, after the pass
+    ran, as the citations still out of place. */
+export function figureMisses(text: string, read: ReadBlock[]): { figure: string; tagged: string[] }[] {
+  const byId = new Map(read.map((b) => [b.id, b]));
+  const plain = text.replace(BLOCK_TAG, (tag) => " ".repeat(tag.length));
+  const out: { figure: string; tagged: string[] }[] = [];
+  for (const [start, end] of sentences(text)) {
+    const tagged = [...text.slice(start, end).matchAll(BLOCK_TAG)].map((m) => m[1]).filter((id) => byId.has(id));
+    if (tagged.length === 0) continue;
+    const taggedText = tagged.map((id) => byId.get(id)!.text).join("\n");
+    for (const { figure } of figuresOf(plain.slice(start, end))) {
+      if (holds(taggedText, figure.replace(/,/g, ""))) continue;
+      out.push({ figure, tagged });
+    }
+  }
+  return out;
+}
+
 /** `text` with a tag added after each figure that no tagged block of its
     sentence holds, when one block of `read` holds it (see the file's head).
     `shown`, when given, limits the blocks to the ones the model read. */
@@ -81,9 +114,7 @@ export function retagFigures(text: string, read: ReadBlock[], shown?: Set<string
     const sentence = text.slice(start, end);
     const tagged = [...sentence.matchAll(BLOCK_TAG)].map((m) => m[1]).filter((id) => byId.has(id));
     const taggedText = tagged.map((id) => byId.get(id)!.text).join("\n");
-    for (const m of plain.slice(start, end).matchAll(FIGURE)) {
-      const figure = m[0].replace(/[,.]$/, "");
-      if (!matchable(figure)) continue;
+    for (const { figure, index } of figuresOf(plain.slice(start, end))) {
       // The figure stands in a tagged block, or in the text the pass put a
       // tag on already this sentence: nothing to add.
       if (tagged.length > 0 && holds(taggedText, figure.replace(/,/g, ""))) continue;
@@ -99,7 +130,7 @@ export function retagFigures(text: string, read: ReadBlock[], shown?: Set<string
         if (near.length > 0 && (near.length === 1 || near[0].d < near[1].d)) pick = near[0].b;
       }
       if (!pick) continue;
-      const at = start + (m.index ?? 0) + figure.length;
+      const at = start + index + figure.length;
       // The tag goes after the figure's unit when one follows ("40,000
       // dollars", "15 percent"), so the chip does not split the amount.
       const unit = /^((?:\s+|-)(?:percent|per cent|dollars?|euros?|pounds?|yuan|million|billion|thousand|trillion|points?|years?|months?|weeks?|days?|hours?|minutes?|seconds?|people|cases|pages|words|times)\b)/i.exec(text.slice(at));

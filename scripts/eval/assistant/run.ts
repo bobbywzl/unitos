@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { z } from "zod";
-import { blocksOfTaggedText, retagFigures } from "@/lib/assistant/citations";
+import { blocksOfTaggedText, figureMisses, retagFigures } from "@/lib/assistant/citations";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
 import { parseJson } from "@/lib/derive/json";
@@ -412,6 +412,10 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
   const ids = new Set(ctx.blocks.map((b) => b.id));
   const bad = blockTags(answer).filter((id) => !ids.has(id));
   checks.push({ name: "block tags resolve", ok: bad.length === 0, detail: bad.length > 0 ? `unknown: ${bad.join(", ")}` : `${blockTags(answer).length} tags` });
+  // A figure in a tagged sentence stands in a block the sentence tags
+  // (lib/assistant/citations.ts): the chip lands where the number is.
+  const misses = figureMisses(answer, ctx.blocks.map((b) => ({ id: b.id, text: b.text })));
+  checks.push({ name: "figures stand in their tagged blocks", ok: misses.length === 0, detail: misses.map((m) => `${m.figure} not in ${m.tagged.map(short).join(", ")}`).join("; ") });
   // The tags are ids, not words of the answer: a Chinese answer full of
   // [block …] tags is still Chinese.
   const share = cjkShare(answer.replace(/\[(?:block|note) [^\]]+\]/g, ""));
