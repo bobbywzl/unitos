@@ -1972,6 +1972,16 @@ export const CASES: AssistantCase[] = [
     good: "Chapter 1: simulation of discrete probabilities, then discrete distribution functions (sample spaces, uniform distribution, odds, infinite sample spaces, historical remarks); chapter 2: simulation of continuous probabilities (Buffon's needle, Monte Carlo), then continuous density functions; the second carries the first's ideas from countable to continuous sample spaces. Every part cited by a heading or a block of it; no part invented. No actions block.",
   },
   {
+    id: "book-dice-notes",
+    family: "section",
+    fixture: "book-probability",
+    lang: "en",
+    profile: STUDENT,
+    question: "Add a note for each exercise of section 1.2 that is about dice, each quoting the exercise.",
+    expect: { change: true, only: ["add_note", "add_section"], touch: [], notes: [{ min: 3, sourced: true }] },
+    good: "One add_note per dice exercise of section 1.2 (6, 11(c), 22, and 17(c) if counted), each stating the exercise in plain words and quoting its words from its block as the source; nothing else; one-sentence answer.",
+  },
+  {
     id: "book-not-covered",
     family: "answer",
     fixture: "book-probability",

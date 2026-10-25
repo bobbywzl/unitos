@@ -278,9 +278,10 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     for (let k = part.start; k < part.end; k++) take(k);
   }
   // A message over the whole document: the sketch, every heading and the
-  // first block under it.
+  // first block under it. A message that names a part is bounded to it
+  // ("each exercise of section 1.2"): no sketch.
   const message = query.split("\n").filter((l) => l.trim()).at(-1) ?? query;
-  if (wantsOverview(message)) {
+  if (named.length === 0 && wantsOverview(message)) {
     const sketchLimit = Math.floor(budget * SKETCH_SHARE);
     for (let k = 0; k < blocks.length; k++) {
       if (blocks[k].type !== "HEADING") continue;

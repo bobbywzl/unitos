@@ -155,6 +155,8 @@ async function handle(req: Request, t: TFunc) {
   // How the message read the document at This page scope: whole, or the
   // passages picked for it (the answer's rules on counts follow it).
   let read: "whole" | "picked" = "whole";
+  // For the usage log: how the document was read, by what, and how many blocks.
+  let readNote = "";
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   if (data.scope === "document") {
@@ -187,6 +189,7 @@ async function handle(req: Request, t: TFunc) {
     }
     system = rendered;
     read = reading ? "picked" : "whole";
+    if (reading) readNote = `:${reading.method}:${reading.pick.blockIds.size}/${reading.total}`;
     scopeLabel = reading
       ? "this page: the open document's contents and the passages picked for this message, and every note, annotation, distillation, extraction, and summary on it"
       : "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
@@ -388,7 +391,7 @@ async function handle(req: Request, t: TFunc) {
       abortSignal: req.signal,
       onEnd: ({ usage }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} read=${read}${readNote} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
         const tokens = sdkTokens(usage);
