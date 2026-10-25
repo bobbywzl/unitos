@@ -44,6 +44,46 @@ const PARTS_SHARE = 0.75;
     answer covers every part and not the parts the words happen to match. */
 const SKETCH_SHARE = 0.5;
 const SKETCH_BLOCK_MAX = 1_200;
+/** The parts the query points at, read whole as the skeleton's route pass
+    reads parts: among the leaf parts (no part inside them) of three blocks
+    or more, the share of blocks that match a query word, weighted by how
+    many; the best one or two, each at half the best's score or more. A
+    question's answer sits in a part more often than in the blocks whose
+    words match it one by one (the book's section on simulating coin
+    tosses, where every block says "toss" a little). */
+const ROUTE_PARTS = 2;
+const ROUTE_MIN_SHARE = 0.5;
+const ROUTE_MIN_BLOCKS = 3;
+
+/** The words of a message that point at nothing in a document: the
+    message's own frame ("what does the book say about"), left out of the
+    ranking so the blocks that hold its subject stand out. */
+const STOPWORDS = new Set(
+  "a an the this that these those it its is are was were be been being am do does did doing have has had having of in on at to for from by with about into over under between through during before after above below up down out off again further then once here there when where why how all any both each few more most other some such no nor not only own same so than too very can will just should would could may might must shall and but or if because as until while what which who whom whose book document paper article text chapter section page say says said tell tells mean means explain explains describe describes discuss discusses about regarding concerning please me my our we you your i they them their he she his her".split(
+    " ",
+  ),
+);
+
+/** A query with its stopwords left out, for the ranking; the query whole
+    when nothing else is left. */
+export function contentWords(query: string): string {
+  const words = query.split(/\s+/).filter((w) => w && !STOPWORDS.has(w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")));
+  return words.length > 0 ? words.join(" ") : query;
+}
+
+/** The parts the ranked blocks point at: leaf parts, scored by the share
+    of their blocks that match, times the log of how many match. */
+export function routeParts(blocks: Block[], parts: { start: number; end: number }[], scoreOf: Map<number, number>): { start: number; end: number; score: number }[] {
+  const leaf = parts.filter((p) => p.end - p.start >= ROUTE_MIN_BLOCKS && !parts.some((o) => o !== p && o.start > p.start && o.end <= p.end));
+  return leaf
+    .map((p) => {
+      let hits = 0;
+      for (let k = p.start; k < p.end; k++) if ((scoreOf.get(k) ?? 0) > 0) hits++;
+      return { start: p.start, end: p.end, score: (hits / (p.end - p.start)) * Math.log2(1 + hits) };
+    })
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
 /** A gap between two picked blocks inside one part is read too when it is
     this many blocks or fewer, or twice as many when they are short (this
     many characters or fewer in all): an argument runs through the blocks
@@ -297,8 +337,20 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
   const ranked = rank(
     blocks.map((b, k) => k),
     (k) => blocks[k].text,
-    query,
+    contentWords(query),
   ).filter((r) => r.score > 0);
+  // The parts the query points at, whole (the named parts aside, which
+  // are read already).
+  if (named.length === 0) {
+    const scoreOf = new Map(ranked.map((r) => [r.item, r.score]));
+    const routed = routeParts(blocks, partsOf(blocks, opts.depthById ?? new Map()), scoreOf);
+    const best = routed[0]?.score ?? 0;
+    for (const part of routed.slice(0, ROUTE_PARTS)) {
+      const size = blocks.slice(part.start, part.end).reduce((n, b) => n + (picked.has(b.id) ? 0 : b.text.length + 40), 0);
+      if (part.score < best * ROUTE_MIN_SHARE || spent + size > partsLimit) continue;
+      for (let k = part.start; k < part.end; k++) take(k);
+    }
+  }
   const inNamed = (k: number) => named.some((p) => k >= p.start && k < p.end);
   let outside = 0;
   for (const { item: k } of ranked.slice(0, LEXICAL_SEEDS)) {

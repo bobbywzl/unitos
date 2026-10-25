@@ -18,7 +18,7 @@ export function tokenize(text: string): string[] {
   for (const m of text.toLowerCase().matchAll(WORD)) {
     const word = m[0];
     if (!CJK.test(word)) {
-      if (word.length >= 2) out.push(word);
+      if (word.length >= 2) out.push(stem(word));
       continue;
     }
     const chars = [...word];
@@ -29,6 +29,43 @@ export function tokenize(text: string): string[] {
   }
   return out;
 }
+
+/** A Latin word's stem, lightly and consistently: one ending taken off
+    (the plural, the verb's, the noun's -ation) when four letters or more
+    remain, then a final y or e, so "simulating", "simulation", and
+    "simulate" all rank as "simulat", "tosses" and "tossing" as "toss",
+    "probabilities" and "probability" as "probabilit" (the assistant's
+    reading of a long document, SPEC.md §7). A word under five letters, of
+    digits, or with a capital's letters beyond a–z keeps its letters. */
+export function stem(word: string): string {
+  if (!/^[a-z]+$/.test(word) || word.length < 5) return word;
+  let base = word;
+  for (const [ending, keep, after] of ENDINGS) {
+    if (!base.endsWith(ending) || (after && !after.test(base.slice(0, -ending.length)))) continue;
+    const cut = base.slice(0, base.length - ending.length) + keep;
+    if (cut.length >= 4) base = cut;
+    break;
+  }
+  if (base.length >= 5 && /[ey]$/.test(base)) base = base.slice(0, -1);
+  return base;
+}
+
+// The endings, longest first; what stays in their place; what must stand
+// before them ("es" after a hiss: tosses, boxes, matches; else the e stays).
+const ENDINGS: [string, string, RegExp | null][] = [
+  ["ations", "at", null],
+  ["ation", "at", null],
+  ["ities", "it", null],
+  ["ity", "it", null],
+  ["ness", "", null],
+  ["ings", "", null],
+  ["ing", "", null],
+  ["ies", "i", null],
+  ["es", "", /(?:s|x|z|ch|sh)$/],
+  ["ed", "", null],
+  ["ly", "", null],
+  ["s", "", /[^s]$/],
+];
 
 /** Every item scored against the query, highest first. An item with no
     term in common scores 0 and sorts last, in the given order. */
