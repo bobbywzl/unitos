@@ -26,6 +26,10 @@ import { loadDocuments, pickBlocks, readingOf } from "@/lib/graph/stitch";
     neighbours, and how far around each (a passage runs over a block's
     edge; a table's or a list's rows stand in blocks of their own). */
 const LEXICAL_SEEDS = 60;
+/** When the message names a part, the ranked blocks outside the named
+    parts are the message's reach beyond them ("compare 1.2 with chapter
+    2"): fewer, since the part itself is read whole. */
+const LEXICAL_SEEDS_OUTSIDE = 15;
 const LEXICAL_AROUND = 1;
 /** The document's opening (its title, abstract, or first page): read for
     every message, so the model knows what the document is. */
@@ -295,7 +299,10 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     (k) => blocks[k].text,
     query,
   ).filter((r) => r.score > 0);
+  const inNamed = (k: number) => named.some((p) => k >= p.start && k < p.end);
+  let outside = 0;
   for (const { item: k } of ranked.slice(0, LEXICAL_SEEDS)) {
+    if (named.length > 0 && !inNamed(k) && ++outside > LEXICAL_SEEDS_OUTSIDE) continue;
     if (!take(k)) break;
     for (let d = 1; d <= LEXICAL_AROUND; d++) {
       take(k - d);
