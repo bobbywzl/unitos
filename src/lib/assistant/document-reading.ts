@@ -89,10 +89,12 @@ export async function documentPicks(input: {
   const { length, ...reading } = readingOf(docs);
   if (length <= ASSISTANT_WHOLE_THRESHOLD || reading.read.length === 0) return null;
   const read = reading.read[0];
-  const contents = read.blocks
-    .filter((b) => b.type === "HEADING" && b.text.trim())
-    .slice(0, CONTENTS_MAX)
-    .map((b) => `[block ${b.id}] ${b.text.trim().replace(/\s+/g, " ")}`);
+  // The headings' levels, from their html: the contents indent a heading
+  // under the heading over it, and a part runs to the next heading at its
+  // level or over it.
+  const headings = await db.block.findMany({ where: { documentId: doc.id, type: "HEADING" }, select: { id: true, html: true } });
+  const depthById = new Map(headings.map((h) => [h.id, Number(/<h([1-6])/i.exec(h.html ?? "")?.[1] ?? 2)]));
+  const contents = contentsOf(read.blocks, depthById);
   const total = read.blocks.length;
   const skeleton = readSkeleton(doc.skeleton);
   const gist = skeleton?.gist ?? "";
@@ -125,10 +127,6 @@ export async function documentPicks(input: {
   void refreshSkeleton(doc.id, input.userId).catch((err: unknown) => {
     console.warn("[assistant] skeleton refresh failed:", err);
   });
-  // The headings' levels, from their html: a part runs to the next heading
-  // at its level or over it.
-  const headings = await db.block.findMany({ where: { documentId: doc.id, type: "HEADING" }, select: { id: true, html: true } });
-  const depthById = new Map(headings.map((h) => [h.id, Number(/<h([1-6])/i.exec(h.html ?? "")?.[1] ?? 2)]));
   const blockIds = lexicalPicks(read.blocks, lexicalQuery(input.question, input.history), { depthById });
   return { pick: { blockIds, gist }, method: "lexical", contents, total };
 }
@@ -144,6 +142,16 @@ function lexicalQuery(question: string, history: Turn[]): string {
 }
 
 type Block = { id: string; type: string; text: string };
+
+/** The document's contents as the prompt lists them: every heading with
+    its block tag, indented two spaces per level under the shallowest
+    heading, so a summary tells a chapter from its sections. */
+export function contentsOf(blocks: Block[], depthById: Map<string, number>): string[] {
+  const heads = blocks.filter((b) => b.type === "HEADING" && b.text.trim()).slice(0, CONTENTS_MAX);
+  const depths = heads.map((b) => depthById.get(b.id) ?? 2);
+  const top = Math.min(...depths, 6);
+  return heads.map((b, i) => `${"  ".repeat(Math.max(0, depths[i] - top))}[block ${b.id}] ${b.text.trim().replace(/\s+/g, " ")}`);
+}
 
 /** A part of the document: its heading's index and the index its blocks
     end before. A numbered heading ("1.2 …", "Chapter 3") runs to the next

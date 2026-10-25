@@ -7,11 +7,11 @@ import { renderBlockLines } from "@/lib/derive/context";
 import { suggestionRows } from "./richtext";
 import type { PlanContext } from "@/lib/assistant/plan";
 import type { TranscriptContext } from "@/lib/assistant/transcript";
-import { lexicalPicks } from "@/lib/assistant/document-reading";
+import { contentsOf, lexicalPicks } from "@/lib/assistant/document-reading";
 import { ASSISTANT_WHOLE_THRESHOLD } from "@/lib/derive/config";
 import { documentPickedSystem, documentSystem } from "@/lib/digest/render";
 import type { DigestNote, DigestParts } from "@/lib/digest/types";
-import type { Fixture, FixtureBlock } from "../lib";
+import type { Fixture } from "../lib";
 
 export const PROJECT_ID = "eval-project";
 export const PROJECT_TITLE = "Reading project";
@@ -176,7 +176,7 @@ export function fixtureReading(
     const earlier = history.filter((t) => t.role === "user" && t.content.trim()).slice(-2).map((t) => t.content);
     const depthById = new Map(read.filter((b) => b.type === "HEADING").map((b) => [b.id, Number(/<h([1-6])/i.exec(b.html ?? "")?.[1] ?? 2)]));
     const blockIds = lexicalPicks(read, [...earlier, question].join("\n"), { depthById });
-    const contents = read.filter((b) => b.type === "HEADING").map((b) => `[block ${b.id}] ${b.text.trim().replace(/\s+/g, " ")}`);
+    const contents = contentsOf(read, depthById);
     const system = documentPickedSystem(parts, f.name, { pick: { blockIds, gist: "" }, method: "lexical", contents, total: read.length });
     if (system === null) throw new Error(`${f.name} did not render`);
     return { system, read: "picked" };

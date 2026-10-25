@@ -104,7 +104,13 @@ export function parseFixture(path: string): Fixture {
     if (chunk.startsWith("```")) {
       return { id, type: "CODE", text: chunk.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "") };
     }
-    if (/^#{2,6} /.test(chunk)) return { id, type: "HEADING", text: chunk.replace(/^#{2,6} /, "").trim() };
+    if (/^#{2,6} /.test(chunk)) {
+      // The heading's level rides as its html, as Block.html carries it
+      // (richtext.ts reads it; the document reading indents the contents by it).
+      const level = /^(#{2,6}) /.exec(chunk)![1].length;
+      const text = chunk.replace(/^#{2,6} /, "").trim();
+      return { id, type: "HEADING", text, html: `<h${level}>${text}</h${level}>` };
+    }
     if (chunk.split("\n").every((l) => l.startsWith("- "))) return { id, type: "LIST", text: chunk };
     if (chunk.split("\n").every((l) => l.startsWith("|"))) {
       const rows = chunk
