@@ -127,8 +127,18 @@ export async function documentPicks(input: {
   void refreshSkeleton(doc.id, input.userId).catch((err: unknown) => {
     console.warn("[assistant] skeleton refresh failed:", err);
   });
-  const blockIds = lexicalPicks(read.blocks, lexicalQuery(input.question, input.history), { depthById });
+  const blockIds = lexicalPicks(read.blocks, lexicalQuery(input.question, input.history), { depthById, cited: citedBlocks(input.history) });
   return { pick: { blockIds, gist }, method: "lexical", contents, total };
+}
+
+/** The blocks the assistant's last two answers cited: a follow-up asks
+    about them ("and how did his way differ?"), so the message reads them
+    again whatever words it uses. */
+export function citedBlocks(history: Turn[]): string[] {
+  return history
+    .filter((t) => t.role === "assistant")
+    .slice(-2)
+    .flatMap((t) => [...t.content.matchAll(/\[block ([^\]\s]+)\]/g)].map((m) => m[1]));
 }
 
 /** The words the lexical pass ranks by: the message, and the reader's two
@@ -223,7 +233,7 @@ export function queryTerms(query: string, headings: string[]): QueryTerms {
     then the blocks ranked highest against the query with the blocks around
     each and the heading over each, in reading order, to the selected
     budget. */
-export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?: Map<string, number>; budget?: number } = {}): Set<string> {
+export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?: Map<string, number>; budget?: number; cited?: string[] } = {}): Set<string> {
   const budget = opts.budget ?? STITCH_SELECTED_BUDGET;
   const picked = new Set<string>();
   let spent = 0;
@@ -237,6 +247,15 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     return true;
   };
   withOpening(blocks, picked, (k) => take(k));
+  // The blocks the last answers cited, with the block on either side.
+  const index = new Map(blocks.map((b, k) => [b.id, k]));
+  for (const id of opts.cited ?? []) {
+    const k = index.get(id);
+    if (k === undefined) continue;
+    take(k);
+    take(k - 1);
+    take(k + 1);
+  }
   // The parts the message names, whole.
   const terms = queryTerms(
     query,
