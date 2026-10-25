@@ -10,6 +10,7 @@ import {
   MAX_IMAGES_PER_CONVERSATION,
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
+import { blocksOfTaggedText, retagFigures, type ReadBlock } from "@/lib/assistant/citations";
 import { depthNote, resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -157,6 +158,11 @@ async function handle(req: Request, t: TFunc) {
   let read: "whole" | "picked" = "whole";
   // For the usage log: how the document was read, by what, and how many blocks.
   let readNote = "";
+  // The blocks the message read, for the figure check on the answer
+  // (lib/assistant/citations.ts): every block of the scope, and the ids of
+  // the ones shown when the reading was picked.
+  let readBlocks: ReadBlock[] = [];
+  let shownIds: Set<string> | null = null;
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   if (data.scope === "document") {
@@ -189,6 +195,8 @@ async function handle(req: Request, t: TFunc) {
     }
     system = rendered;
     read = reading ? "picked" : "whole";
+    readBlocks = blocksOfTaggedText(document.text);
+    shownIds = reading ? reading.pick.blockIds : null;
     if (reading) readNote = `:${reading.method}:${reading.pick.blockIds.size}/${reading.total}`;
     scopeLabel = reading
       ? "this page: the open document's contents and the passages picked for this message, and every note, annotation, distillation, extraction, and summary on it"
@@ -209,8 +217,10 @@ async function handle(req: Request, t: TFunc) {
       console.warn("[assistant] project reading failed, reading the digest whole:", err);
       return null;
     });
+    readBlocks = digest.parts.documents.flatMap((d) => blocksOfTaggedText(d.text));
     if (picks) {
       system = corpusPickedSystem(digest.parts, picks);
+      shownIds = new Set([...picks.values()].flatMap((p) => [...p.blockIds]));
       scopeLabel =
         "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
     } else {
@@ -532,8 +542,14 @@ async function handle(req: Request, t: TFunc) {
           // The text before the fence, whole: the relay held back what could
           // have been the fence's start.
           flush();
-          if (act && content !== null) {
-            send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
+          // The figure check (lib/assistant/citations.ts): a figure tagged
+          // to a block without it gets the tag of the block that holds it.
+          // The answer streamed already, so the fixed text rides with the
+          // plan, and the client shows it in place of what streamed.
+          const fixed = retagFigures(text, readBlocks, shownIds);
+          const plan = act && content !== null ? await planFrom(text, content, send) : null;
+          if (plan || fixed !== text) {
+            send(`${STREAM_PLAN_TOKEN}${JSON.stringify({ actions: plan?.actions ?? [], warnings: plan?.warnings ?? [], ...(fixed !== text ? { text: fixed } : {}) })}`);
           }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.
@@ -541,7 +557,7 @@ async function handle(req: Request, t: TFunc) {
             void checkOutput({
               tool: "assistant",
               input: question,
-              output: text,
+              output: fixed,
               lang,
               userId: access.user.id,
               notebookId: data.notebookId,

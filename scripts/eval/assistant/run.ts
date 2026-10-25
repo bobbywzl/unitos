@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { z } from "zod";
+import { blocksOfTaggedText, retagFigures } from "@/lib/assistant/citations";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
 import { parseJson } from "@/lib/derive/json";
@@ -533,7 +534,10 @@ async function score(): Promise<void> {
       fence = parsed && read.actions.length + read.unreadable.length > 0 ? "json" : null;
     } else {
       const split = splitActionsFence(answerRaw.trim());
-      text = split.text;
+      // The route's figure check over the blocks the prompt showed.
+      const prompt = readText(join(dir, "prompt.md")) ?? "";
+      const shownBlocks = blocksOfTaggedText(prompt.split("=====[USER]=====")[0]).filter((b) => b.text.length > 0);
+      text = retagFigures(split.text, shownBlocks, new Set(shownBlocks.map((b) => b.id)));
       fence = scope === "document" ? split.content : null;
       read = fence !== null ? parseActionsFence(fence, text, edits) : null;
     }

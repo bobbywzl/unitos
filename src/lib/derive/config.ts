@@ -430,22 +430,28 @@ export const STREAM_NOTE_TOKEN = "\u0000note\u0000";
 
 // The sidebar assistant's plan (SPEC.md §7): the answer streams, then the
 // token, then the plan as JSON — the actions the reader approves in the
-// plan card, and the warnings for the ones that did not validate.
+// plan card, and the warnings for the ones that did not validate. `text`,
+// when present, is the answer after the figure check
+// (lib/assistant/citations.ts): the client shows it in place of what
+// streamed.
 export const STREAM_PLAN_TOKEN = "\u0000plan\u0000";
+
+export type StreamPlan = { actions: AssistantAction[]; warnings: string[]; text?: string };
 
 export function splitStreamPlan(text: string): {
   text: string;
-  plan: { actions: AssistantAction[]; warnings: string[] } | null;
+  plan: StreamPlan | null;
 } {
   const at = text.indexOf(STREAM_PLAN_TOKEN);
   if (at === -1) return { text, plan: null };
-  let plan: { actions: AssistantAction[]; warnings: string[] } | null = null;
+  let plan: StreamPlan | null = null;
   try {
     const parsed = JSON.parse(text.slice(at + STREAM_PLAN_TOKEN.length)) as {
       actions?: AssistantAction[];
       warnings?: string[];
+      text?: string;
     };
-    plan = { actions: parsed.actions ?? [], warnings: parsed.warnings ?? [] };
+    plan = { actions: parsed.actions ?? [], warnings: parsed.warnings ?? [], ...(typeof parsed.text === "string" ? { text: parsed.text } : {}) };
   } catch {
     // Still streaming, or cut off: no plan yet.
   }

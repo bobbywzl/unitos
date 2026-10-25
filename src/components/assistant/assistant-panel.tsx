@@ -1504,7 +1504,9 @@ export function AssistantPanel({
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text: answered, error: streamError } = splitStreamError(streamed);
-      const { text: written, plan } = splitStreamPlan(answered);
+      const { text: streamedText, plan } = splitStreamPlan(answered);
+      // The answer after the server's figure check, when it changed a tag.
+      const written = plan?.text ?? streamedText;
       if (streamError || (!written.trim() && !plan?.actions.length)) {
         setAnswer("");
         throw new Error(streamError ?? t("assistant.emptyResponse"));
@@ -1516,7 +1518,7 @@ export function AssistantPanel({
       // wait for approval, and Undo follows them.
       const suggest = plan?.actions.find((a): a is SuggestAction => a.type === "suggest");
       const actions = plan?.actions.filter((a) => a.type !== "suggest") ?? [];
-      const shown = plan ? { actions, warnings: plan.warnings } : undefined;
+      const shown = plan && (actions.length > 0 || plan.warnings.length > 0 || suggest) ? { actions, warnings: plan.warnings } : undefined;
       setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
       if (shown && actions.length > 0) proposePlan(shown);
       void saveConversation(() => savedWith(text), sideChatKey).then(
