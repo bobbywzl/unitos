@@ -18,7 +18,7 @@ import {
   STREAM_ERROR_TOKEN,
   STREAM_PLAN_TOKEN,
   SUGGEST_DEADLINE_MS,
-} from "@/lib/derive/config";
+ STITCH_SELECTED_BUDGET } from "@/lib/derive/config";
 import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
 import {
   scanActionsFence,
@@ -173,6 +173,9 @@ async function handle(req: Request, t: TFunc) {
       profile,
       userId: access.user.id,
       signal: req.signal,
+      // A message at low effort (a lookup) reads half the budget: what it
+      // needs ranks first, and the rest is cost.
+      budget: effort === "low" ? Math.floor(STITCH_SELECTED_BUDGET / 2) : STITCH_SELECTED_BUDGET,
     }).catch((err: unknown) => {
       // A reading that fails reads the document whole, as before.
       console.warn("[assistant] document reading failed, reading the document whole:", err);

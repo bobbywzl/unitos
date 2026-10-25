@@ -81,6 +81,10 @@ export async function documentPicks(input: {
   profile: Awaited<ReturnType<typeof loadProfile>>;
   userId: string;
   signal?: AbortSignal;
+  /** The characters of block text the lexical pass reads for this message:
+      the selected budget, or half of it for a message at low effort (a
+      lookup, a one-place change: the passage it needs ranks first). */
+  budget?: number;
 }): Promise<DocumentReading | null> {
   if (input.document.chars <= ASSISTANT_WHOLE_THRESHOLD || !input.question.trim()) return null;
   const docs = await loadDocuments(input.notebookId, [input.document.id]);
@@ -127,7 +131,7 @@ export async function documentPicks(input: {
   void refreshSkeleton(doc.id, input.userId).catch((err: unknown) => {
     console.warn("[assistant] skeleton refresh failed:", err);
   });
-  const blockIds = lexicalPicks(read.blocks, lexicalQuery(input.question, input.history), { depthById, cited: citedBlocks(input.history) });
+  const blockIds = lexicalPicks(read.blocks, lexicalQuery(input.question, input.history), { depthById, cited: citedBlocks(input.history), budget: input.budget });
   return { pick: { blockIds, gist }, method: "lexical", contents, total };
 }
 
