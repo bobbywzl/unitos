@@ -108,6 +108,93 @@ export function figureMisses(text: string, read: ReadBlock[]): { figure: string;
   return out;
 }
 
+// A quoted phrase of four words or more: "…" or “…”, the words the answer
+// takes from a passage. A shorter quote (a term, "if and only if") is a
+// connective or a name, not a citation to place.
+const QUOTE = /["“]([^"“”\n]{8,}?)["”]/g;
+const QUOTE_MIN_WORDS = 4;
+
+/** Whether `text` holds the quoted words, with any run of whitespace and
+    any style of quote or apostrophe read as one. */
+function holdsQuote(text: string, quote: string): boolean {
+  return fold(text).includes(fold(quote));
+}
+function fold(s: string): string {
+  return s.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim().toLowerCase();
+}
+function quotesOf(plain: string): { quote: string; index: number; length: number }[] {
+  const out: { quote: string; index: number; length: number }[] = [];
+  for (const m of plain.matchAll(QUOTE)) {
+    const quote = m[1].trim().replace(/[.,;:]$/, "");
+    if (quote.split(/\s+/).length < QUOTE_MIN_WORDS) continue;
+    out.push({ quote, index: m.index ?? 0, length: m[0].length });
+  }
+  return out;
+}
+
+/** The quotes of `text` that stand in a sentence with tags and in none of
+    the blocks the sentence tags. */
+export function quoteMisses(text: string, read: ReadBlock[]): { quote: string; tagged: string[] }[] {
+  const byId = new Map(read.map((b) => [b.id, b]));
+  const plain = text.replace(BLOCK_TAG, (tag) => " ".repeat(tag.length));
+  const out: { quote: string; tagged: string[] }[] = [];
+  for (const [start, end] of sentences(text)) {
+    const tagged = [...text.slice(start, end).matchAll(BLOCK_TAG)].map((m) => m[1]).filter((id) => byId.has(id));
+    if (tagged.length === 0) continue;
+    const taggedText = tagged.map((id) => byId.get(id)!.text).join("\n");
+    for (const { quote } of quotesOf(plain.slice(start, end))) {
+      if (holdsQuote(taggedText, quote)) continue;
+      // A quote no block of the reading holds is the model's own words in
+      // quotes (a term, a paraphrase): not a citation to check.
+      if (!read.some((b) => holdsQuote(b.text, quote))) continue;
+      out.push({ quote, tagged });
+    }
+  }
+  return out;
+}
+
+/** `text` with a tag added after each quote that no tagged block of its
+    sentence holds, when one block of `read` holds it, by the figure
+    pass's rule for which block. */
+export function retagQuotes(text: string, read: ReadBlock[], shown?: Set<string> | null): string {
+  const blocks = shown ? read.filter((b) => shown.has(b.id)) : read;
+  if (blocks.length === 0) return text;
+  const order = new Map(blocks.map((b, k) => [b.id, k]));
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const plain = text.replace(BLOCK_TAG, (tag) => " ".repeat(tag.length));
+  const inserts: { at: number; tag: string }[] = [];
+  for (const [start, end] of sentences(text)) {
+    const tagged = [...text.slice(start, end).matchAll(BLOCK_TAG)].map((m) => m[1]).filter((id) => byId.has(id));
+    const taggedText = tagged.map((id) => byId.get(id)!.text).join("\n");
+    for (const { quote, index, length } of quotesOf(plain.slice(start, end))) {
+      if (tagged.length > 0 && holdsQuote(taggedText, quote)) continue;
+      const holders = blocks.filter((b) => !tagged.includes(b.id) && holdsQuote(b.text, quote));
+      const pick = pickHolder(holders, tagged, order);
+      if (!pick) continue;
+      inserts.push({ at: start + index + length, tag: ` [block ${pick.id}]` });
+      tagged.push(pick.id);
+    }
+  }
+  if (inserts.length === 0) return text;
+  let out = text;
+  for (const ins of inserts.sort((a, b) => b.at - a.at)) out = out.slice(0, ins.at) + ins.tag + out.slice(ins.at);
+  return out;
+}
+
+/** Which of the blocks that hold the words gets the tag: the one, or, of
+    several, the one nearest a tagged block within NEAR, when it is alone
+    at that distance. */
+function pickHolder(holders: ReadBlock[], tagged: string[], order: Map<string, number>): ReadBlock | null {
+  if (holders.length === 1) return holders[0];
+  if (holders.length === 0 || tagged.length === 0) return null;
+  const near = holders
+    .map((b) => ({ b, d: Math.min(...tagged.map((id) => Math.abs((order.get(id) ?? 0) - (order.get(b.id) ?? 0)))) }))
+    .filter((x) => x.d <= NEAR)
+    .sort((a, b) => a.d - b.d);
+  if (near.length > 0 && (near.length === 1 || near[0].d < near[1].d)) return near[0].b;
+  return null;
+}
+
 /** `text` with a tag added after each figure that no tagged block of its
     sentence holds, when one block of `read` holds it (see the file's head).
     `shown`, when given, limits the blocks to the ones the model read. */
@@ -130,15 +217,7 @@ export function retagFigures(text: string, read: ReadBlock[], shown?: Set<string
       const bare = figure.replace(/,/g, "");
       const integer = /^\d+$/.test(bare);
       const holders = blocks.filter((b) => !tagged.includes(b.id) && (!integer || b.text.length >= INTEGER_BLOCK_MIN) && holds(b.text, bare));
-      let pick: ReadBlock | null = null;
-      if (holders.length === 1) pick = holders[0];
-      else if (holders.length > 1 && tagged.length > 0) {
-        const near = holders
-          .map((b) => ({ b, d: Math.min(...tagged.map((id) => Math.abs((order.get(id) ?? 0) - (order.get(b.id) ?? 0)))) }))
-          .filter((x) => x.d <= NEAR)
-          .sort((a, b) => a.d - b.d);
-        if (near.length > 0 && (near.length === 1 || near[0].d < near[1].d)) pick = near[0].b;
-      }
+      const pick = pickHolder(holders, tagged, order);
       if (!pick) continue;
       const at = start + index + figure.length;
       // The tag goes after the figure's unit when one follows ("40,000

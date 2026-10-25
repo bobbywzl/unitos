@@ -10,7 +10,7 @@ import {
   MAX_IMAGES_PER_CONVERSATION,
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
-import { blocksOfTaggedText, retagFigures, type ReadBlock } from "@/lib/assistant/citations";
+import { blocksOfTaggedText, retagFigures, retagQuotes, type ReadBlock } from "@/lib/assistant/citations";
 import { cutRepeatedClosing } from "@/lib/assistant/closing";
 import { passageHints } from "@/lib/assistant/hints";
 import { depthNote, resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
@@ -550,7 +550,7 @@ async function handle(req: Request, t: TFunc) {
           // The answer streamed already, so the fixed text rides with the
           // plan, and the client shows it in place of what streamed.
           // The figure check and the closing cut (lib/assistant/closing.ts).
-          const fixed = cutRepeatedClosing(retagFigures(text, readBlocks, shownIds));
+          const fixed = cutRepeatedClosing(retagQuotes(retagFigures(text, readBlocks, shownIds), readBlocks, shownIds));
           const plan = act && content !== null ? await planFrom(text, content, send) : null;
           if (plan || fixed !== text) {
             send(`${STREAM_PLAN_TOKEN}${JSON.stringify({ actions: plan?.actions ?? [], warnings: plan?.warnings ?? [], ...(fixed !== text ? { text: fixed } : {}) })}`);

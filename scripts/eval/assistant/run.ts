@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { z } from "zod";
-import { blocksOfTaggedText, figureMisses, retagFigures } from "@/lib/assistant/citations";
+import { blocksOfTaggedText, figureMisses, quoteMisses, retagFigures, retagQuotes } from "@/lib/assistant/citations";
 import { cutRepeatedClosing } from "@/lib/assistant/closing";
 import { passageHints } from "@/lib/assistant/hints";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
@@ -419,6 +419,8 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
   // (lib/assistant/citations.ts): the chip lands where the number is.
   const misses = figureMisses(answer, ctx.blocks.map((b) => ({ id: b.id, text: b.text })));
   checks.push({ name: "figures stand in their tagged blocks", ok: misses.length === 0, detail: misses.map((m) => `${m.figure} not in ${m.tagged.map(short).join(", ")}`).join("; ") });
+  const quoteMiss = quoteMisses(answer, ctx.blocks.map((b) => ({ id: b.id, text: b.text })));
+  checks.push({ name: "quotes stand in their tagged blocks", ok: quoteMiss.length === 0, detail: quoteMiss.map((m) => `"${m.quote.slice(0, 40)}" not in ${m.tagged.map(short).join(", ")}`).join("; ") });
   // The tags are ids, not words of the answer: a Chinese answer full of
   // [block …] tags is still Chinese.
   const share = cjkShare(answer.replace(/\[(?:block|note) [^\]]+\]/g, ""));
@@ -544,7 +546,8 @@ async function score(): Promise<void> {
       // The route's figure check over the blocks the prompt showed.
       const prompt = readText(join(dir, "prompt.md")) ?? "";
       const shownBlocks = blocksOfTaggedText(prompt.split("=====[USER]=====")[0]).filter((b) => b.text.length > 0);
-      text = cutRepeatedClosing(retagFigures(split.text, shownBlocks, new Set(shownBlocks.map((b) => b.id))));
+      const shownIds = new Set(shownBlocks.map((b) => b.id));
+      text = cutRepeatedClosing(retagQuotes(retagFigures(split.text, shownBlocks, shownIds), shownBlocks, shownIds));
       fence = scope === "document" ? split.content : null;
       read = fence !== null ? parseActionsFence(fence, text, edits) : null;
     }
