@@ -52,6 +52,9 @@ export function synthesisAskPrompt(params: {
   // (lib/assistant/document-reading.ts): a count or an "every X" then
   // comes from the passages shown, and says so.
   read?: "whole" | "picked";
+  // The passages to check (lib/assistant/hints.ts): the ids of the blocks
+  // whose words match the message, most first.
+  hints?: string[];
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -88,6 +91,11 @@ export function synthesisAskPrompt(params: {
       : "The reader sent the attachments without a question. Say what they contain and how they relate to the material.",
     "",
     "Answer from the material above.",
+    ...(params.hints && params.hints.length > 0
+      ? [
+          `Passages whose words match the message, most first: ${params.hints.map((id) => `[block ${id}]`).join(" ")}. Read each before you write. The answer uses each that bears on the question, with its tag, and leaves one out only when it does not bear on it. The list is a place to start, not the whole material: a passage that bears on the question and is not in it counts the same.`,
+        ]
+      : []),
     "1. Start with the answer, in one or two sentences: the core. A lookup (rule 6) ends there: no reasoning, no limit, no warning, and no sentence on the reader's purpose. A question of who, which, when, where, how many, or whether that the material answers in its own words is a lookup, however it is worded: the passage that answers it, with its block, and the reason that passage gives, in a clause, never a paragraph of reasons unless the message asks why. Any other question then gives the reasoning that earns it, each step on the passage it rests on, cited as [block <id>]; quote the exact words only where the wording carries the point. For such a question, find before you write the passage that limits the answer itself or cuts against it (an exception to it, a condition on it, a risk to it, what happened next): the answer names it in one sentence with its block. A passage that only frames the topic (why it matters, what the author thinks of it) is not a limit. A number keeps what the material attaches to it, with that passage's block: what it measures, the condition it was measured under, its qualifier (on average, at most), and an exception the material states for it (a cap that can be raised). A condition or a test keeps the material's own word for it, never a near word that changes the test.",
     "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them as one answer: passages that make the same point are one point with each cited. A passage that disagrees with the others is named as disagreeing, never dropped.",
     "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",

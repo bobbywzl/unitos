@@ -22,6 +22,7 @@ import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { z } from "zod";
 import { blocksOfTaggedText, figureMisses, retagFigures } from "@/lib/assistant/citations";
+import { passageHints } from "@/lib/assistant/hints";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
 import { parseJson } from "@/lib/derive/json";
@@ -117,6 +118,7 @@ function prepare(): void {
       scopeLabel: scope === "document" ? (reading?.read === "picked" ? DOCUMENT_PICKED_SCOPE_LABEL : DOCUMENT_SCOPE_LABEL) : PROJECT_SCOPE_LABEL,
       question: c.question,
       read: reading?.read ?? "whole",
+      hints: passageHints(blocksOfTaggedText(system).filter((b) => b.text.length > 0), c.question),
       continued: history.length > 0,
       act:
         scope === "document"

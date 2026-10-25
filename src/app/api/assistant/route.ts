@@ -11,6 +11,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
 } from "@/lib/assistant/attachments";
 import { blocksOfTaggedText, retagFigures, type ReadBlock } from "@/lib/assistant/citations";
+import { passageHints } from "@/lib/assistant/hints";
 import { depthNote, resolvedThinking, thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -330,6 +331,7 @@ async function handle(req: Request, t: TFunc) {
       scopeLabel,
       question,
       read,
+      hints: passageHints(shownIds ? readBlocks.filter((b) => shownIds.has(b.id)) : readBlocks, question),
       web: data.web,
       continued: history.length > 0,
       files,
