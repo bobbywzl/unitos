@@ -220,8 +220,17 @@ export function contentsOf(blocks: Block[], depthById: Map<string, number>): str
     next heading at its level or over it. */
 export function partsOf(blocks: Block[], depthById: Map<string, number>): { start: number; end: number }[] {
   const heads = blocks.flatMap((b, k) => (b.type === "HEADING" ? [k] : []));
-  const depth = (k: number) => depthById.get(blocks[k].id) ?? 2;
   const numberOf = (k: number) => HEADING_NUMBER_RE.exec(blocks[k].text.trim())?.[1] ?? null;
+  // A bare label ("Chapter 1") with its title as the heading right after it
+  // ("Discrete Probability Distributions") is one heading in two blocks, at
+  // the title's depth: a book's chapter label is often set smaller than
+  // the chapter's title.
+  const isLabel = (k: number) => /^(?:chapter|part|section|appendix|unit|lecture|week)\s+\d+(?:\.\d+)*\.?$/i.test(blocks[k].text.trim());
+  const depth = (k: number): number => {
+    const next = blocks[k + 1];
+    if (next && next.type === "HEADING" && isLabel(k) && numberOf(k + 1) === null) return depthById.get(next.id) ?? 2;
+    return depthById.get(blocks[k].id) ?? 2;
+  };
   return heads.map((k, i) => {
     const own = numberOf(k);
     let end = blocks.length;
@@ -252,9 +261,10 @@ const HEADING_NUMBER_RE = /^(?:(?:chapter|part|section|appendix|unit|lecture|wee
 export function namesHeading(heading: string, query: QueryTerms): boolean {
   const title = heading.trim();
   const number = /^(?:(?:chapter|part|section|appendix|unit|lecture|week)\s+)?(\d+(?:\.\d+)*)/i.exec(title)?.[1];
-  if (number && number.includes(".") && query.tokens.has(number)) return true;
-  if (number && !number.includes(".") && query.chapters.has(number)) return true;
-  const words = tokenize(title).filter((w) => w.length >= 4 && !/^\d/.test(w));
+  if (number && (query.chapters.has(number) || (number.includes(".") && query.tokens.has(number)))) return true;
+  // The label words of a numbered heading ("Chapter 1", "Section 1.2")
+  // name nothing of their own: the number does.
+  const words = tokenize(title).filter((w) => w.length >= 4 && !/^\d/.test(w) && !LABEL_WORDS.has(w));
   if (words.length === 1) return words[0].length >= 6 && query.tokens.has(words[0]) && (query.headingCounts.get(title.toLowerCase()) ?? 0) === 1;
   if (words.length < 2) return false;
   const hit = words.filter((w) => queryTokens(query).has(w)).length;
@@ -268,9 +278,16 @@ export function namesHeading(heading: string, query: QueryTerms): boolean {
 export type QueryTerms = { tokens: Set<string>; chapters: Set<string>; headingCounts: Map<string, number> };
 const queryTokens = (q: QueryTerms) => q.tokens;
 
+const LABEL_WORDS = new Set(["chapter", "section", "part", "appendix", "unit", "lecture", "week"].map((w) => tokenize(w)[0] ?? w));
+
 export function queryTerms(query: string, headings: string[]): QueryTerms {
   const tokens = new Set([...tokenize(query), ...(query.match(/\d+(?:\.\d+)+/g) ?? [])]);
-  const chapters = new Set([...query.matchAll(/\b(?:chapter|part|section|appendix|unit|lecture|week|ch\.?|sec\.?)\s+(\d+)\b/gi)].map((m) => m[1]));
+  // "chapter 3", "chapters 1 and 2", "sections 1.2, 1.3 and 2.1": every
+  // number after the label.
+  const chapters = new Set<string>();
+  for (const m of query.matchAll(/\b(?:chapters?|parts?|sections?|appendi(?:x|ces)|units?|lectures?|weeks?|ch\.?|secs?\.?)\s+(\d+(?:\.\d+)*(?:\s*(?:,|and|&|to|–|-)\s*\d+(?:\.\d+)*)*)/gi)) {
+    for (const n of m[1].match(/\d+(?:\.\d+)*/g) ?? []) chapters.add(n);
+  }
   const headingCounts = new Map<string, number>();
   for (const h of headings) {
     const key = h.trim().toLowerCase();
@@ -317,23 +334,29 @@ export function lexicalPicks(blocks: Block[], query: string, opts: { depthById?:
     .map((p) => ({ ...p, size: blocks.slice(p.start, p.end).reduce((n, b) => n + b.text.length + 40, 0) }))
     .sort((a, b) => a.size - b.size);
   const partsLimit = Math.floor(budget * PARTS_SHARE);
+  // A message over the whole document, or over the parts it names ("summarize
+  // chapters 1 and 2"): a sketch, every heading and the first block under it,
+  // of the named parts, else of the document. Any other message that names a
+  // part reads it whole ("each exercise of section 1.2") and no sketch.
+  const message = query.split("\n").filter((l) => l.trim()).at(-1) ?? query;
+  const overview = wantsOverview(message);
+  const sketch = (from: number, to: number, limit: number) => {
+    for (let k = from; k < to; k++) {
+      if (blocks[k].type !== "HEADING") continue;
+      if (!take(k, limit)) break;
+      const next = blocks[k + 1];
+      if (next && next.type !== "HEADING" && next.text.length <= SKETCH_BLOCK_MAX) take(k + 1, limit);
+    }
+  };
   for (const part of named) {
+    if (overview) {
+      sketch(part.start, part.end, Math.floor(budget * SKETCH_SHARE));
+      continue;
+    }
     if (spent + part.size > partsLimit) continue;
     for (let k = part.start; k < part.end; k++) take(k);
   }
-  // A message over the whole document: the sketch, every heading and the
-  // first block under it. A message that names a part is bounded to it
-  // ("each exercise of section 1.2"): no sketch.
-  const message = query.split("\n").filter((l) => l.trim()).at(-1) ?? query;
-  if (named.length === 0 && wantsOverview(message)) {
-    const sketchLimit = Math.floor(budget * SKETCH_SHARE);
-    for (let k = 0; k < blocks.length; k++) {
-      if (blocks[k].type !== "HEADING") continue;
-      if (!take(k, sketchLimit)) break;
-      const next = blocks[k + 1];
-      if (next && next.type !== "HEADING" && next.text.length <= SKETCH_BLOCK_MAX) take(k + 1, sketchLimit);
-    }
-  }
+  if (named.length === 0 && overview) sketch(0, blocks.length, Math.floor(budget * SKETCH_SHARE));
   const ranked = rank(
     blocks.map((b, k) => k),
     (k) => blocks[k].text,

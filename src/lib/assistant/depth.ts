@@ -41,9 +41,10 @@ const ONE_PLACE = /\b(highlight|bold|italici[sz]e|underline|rename|delete the (p
 const WHOLE = /\b(whole|entire|throughout|across the|everywhere|document-wide|reorgani[sz]e|restructure|reorder|organi[sz]e|group by|put in order|proofread|translate the (whole|document|essay|article)|make the whole|rewrite the (whole|essay|document|article)|contradict|inconsisten|compare|contrast|versus|vs\.?|differ|relationship between|synthesi[sz]e|summari[sz]e the (whole|document|lecture|meeting|interview|essay|article|paper)|study guide|action items|new document|a document)\b|整篇|全文|所有|每个|每一|全部|重新组织|重排|对比|比较|矛盾|总结整|新文档|学习指南/i;
 
 // "Every", "all", "each": across the document unless the message names a
-// bounded part (the two paragraphs, this section, the list).
+// bounded part (the two paragraphs, this section, the list, section 1.2,
+// chapter 3).
 const EVERY = /\b(every|all the|all of|each)\b|所有|每个|每一|全部/i;
-const BOUNDED = /\b(the|this|that|these|those|its|my) (\w+ )?(paragraph|paragraphs|sentence|sentences|line|lines|section|heading|list|table|block|quote|note|part)\b|\bunder ["“]|这[一两三]?[段句行节]|那[一两三]?[段句行节]/i;
+const BOUNDED = /\b(the|this|that|these|those|its|my) (\w+ )?(paragraph|paragraphs|sentence|sentences|line|lines|section|heading|list|table|block|quote|note|part)\b|\b(section|chapter|part|appendix|unit|lecture|week|ch\.|secs?\.)\s+\d|\bunder ["“]|这[一两三]?[段句行节]|那[一两三]?[段句行节]|第[一二三四五六七八九十\d]+[章节部分]/i;
 
 // A question of meaning: why, how, explain, what does it mean, evaluate, argue.
 const MEANING = /\b(why|how (does|do|did|would|could|can|is|are)|explain|what does .* mean|mean by|evaluate|assess|argue|argument|implication|interpret|significan|trade-?off|should i|should we|is (it|this|that|the .{1,40}) (true|real|right|sound|fair|justified|correct|worth)|does (it|this|that|the .{1,40}) (hold|work|follow|matter)|can i (trust|rely)|does the (document|paper|memo|article|author) (say|claim|show)|in what way)\b|为什么|怎么|如何|解释|意味着|评价|论证|含义|应该|是否|靠谱|站得住/i;
