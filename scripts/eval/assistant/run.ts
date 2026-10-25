@@ -22,6 +22,7 @@ import { join } from "node:path";
 import type { BlockType } from "@prisma/client";
 import { z } from "zod";
 import { blocksOfTaggedText, figureMisses, retagFigures } from "@/lib/assistant/citations";
+import { cutRepeatedClosing } from "@/lib/assistant/closing";
 import { passageHints } from "@/lib/assistant/hints";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
@@ -543,7 +544,7 @@ async function score(): Promise<void> {
       // The route's figure check over the blocks the prompt showed.
       const prompt = readText(join(dir, "prompt.md")) ?? "";
       const shownBlocks = blocksOfTaggedText(prompt.split("=====[USER]=====")[0]).filter((b) => b.text.length > 0);
-      text = retagFigures(split.text, shownBlocks, new Set(shownBlocks.map((b) => b.id)));
+      text = cutRepeatedClosing(retagFigures(split.text, shownBlocks, new Set(shownBlocks.map((b) => b.id))));
       fence = scope === "document" ? split.content : null;
       read = fence !== null ? parseActionsFence(fence, text, edits) : null;
     }
