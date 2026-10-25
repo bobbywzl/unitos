@@ -31,8 +31,12 @@ function figuresOf(plain: string): { figure: string; index: number }[] {
   const out: { figure: string; index: number }[] = [];
   for (const m of plain.matchAll(FIGURE)) {
     const figure = m[0].replace(/[,.]$/, "");
-    if (!matchable(figure) || LABELED.test(plain.slice(0, m.index ?? 0))) continue;
-    out.push({ figure, index: m.index ?? 0 });
+    const index = m.index ?? 0;
+    if (!matchable(figure) || LABELED.test(plain.slice(0, index))) continue;
+    // A heading's number before its title ("1.2 Discrete Probability
+    // Distributions", "2 Combinatorics") names a part, not a figure.
+    if (/^\d+(?:\.\d+)*$/.test(figure) && /^\s+[A-Z\u4e00-\u9fff]/.test(plain.slice(index + m[0].length, index + m[0].length + 3))) continue;
+    out.push({ figure, index });
   }
   return out;
 }
