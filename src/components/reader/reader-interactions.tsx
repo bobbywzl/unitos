@@ -120,6 +120,7 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { Collapse, Presence } from "@/components/presence";
 import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
+import { useUnderDocsHeader } from "@/components/reader/under-docs-header";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
@@ -2063,6 +2064,8 @@ export function ReaderInteractions({
     });
   }
   const [toast, setToast] = useState<string | null>(null);
+  // In the page editor the toasts sit under its header and Unitos row.
+  const underDocsHeader = useUnderDocsHeader(containerRef, Boolean(richText));
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The toast's optional action: "Open as a video document" on a media figure.
   const [toastAction, setToastAction] = useState<{ label: string; run: () => void } | null>(null);
@@ -11045,10 +11048,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           covers its words; the article's errors sit under the toast. */}
       <div
         className={`pointer-events-none sticky z-10 h-0 print:hidden ${
-          // A blank document's toolbar holds the top; the toasts sit under it,
-          // as under a split pane's header.
+          // A blank document's toolbar and its Unitos row hold the top; the
+          // toasts sit under them (measured: under-docs-header.ts), as under
+          // a split pane's header.
           richText ? "top-[112px]" : split ? "top-[60px]" : "top-4"
         }`}
+        style={richText && underDocsHeader !== null ? { top: underDocsHeader } : undefined}
       >
       <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
       <div

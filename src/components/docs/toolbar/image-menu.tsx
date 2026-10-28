@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { HEIC_ACCEPT } from "@/lib/heic";
 import { ImageIcon, LinkIcon, UploadIcon } from "@/components/docs/icons";
 import { MenuItem } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
@@ -62,7 +63,7 @@ export function ImageMenu({
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
+        accept={`image/png,image/jpeg,image/gif,image/webp,${HEIC_ACCEPT}`}
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];

@@ -8,6 +8,7 @@ import { listFormat } from "@/components/docs/toolbar/lists";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { LIST_COUNTERS, type ListCounter, type ListLevel } from "@/lib/docs/schema";
 import { imageFileFrom, type DroppedImageUrl } from "@/lib/image-drop";
+import { heicToJpeg, isHeicFile } from "@/lib/heic";
 import { isImageFile, refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -295,9 +296,22 @@ export function armPlainPaste(view: EditorView): void {
 }
 
 /** The image files among `files`: png, jpg, gif, webp, or bmp, by type or
-    by name (lib/handwritten/image.ts). */
+    by name (lib/handwritten/image.ts), and HEIC, which goes in as a JPEG
+    (lib/heic.ts). */
 export function imageFiles(files: FileList | File[] | null | undefined): File[] {
-  return Array.from(files ?? []).filter(isImageFile);
+  return Array.from(files ?? []).filter((file) => isImageFile(file) || isHeicFile(file));
+}
+
+/** `files` with each HEIC photo turned into a JPEG (lib/heic.ts). A HEIC
+    the browser cannot read stays out, and the first one says so. */
+async function jpegsFromHeic(editor: Editor, files: File[]): Promise<File[]> {
+  const converted = await Promise.all(files.map((file) => (isHeicFile(file) ? heicToJpeg(file) : file)));
+  const unread = files.find((_, i) => converted[i] === null);
+  if (unread && !editor.isDestroyed) {
+    const t = insertT(editor);
+    toast(t("docsTyping.heicNotRead", { name: unread.name || t("docsTyping.thisFile") }), editor);
+  }
+  return converted.filter((file): file is File => file !== null);
 }
 
 // ── The images' rules: the type, the size, the tier ─────────────────────
@@ -390,14 +404,26 @@ function imageSpot(doc: PMNode, pos: number): number {
 }
 
 /** Insert images at `pos` (the selection when absent, which the first image
-    replaces), each on its own line (imageSpot), in the order given. The
-    files the rules refuse stay out, with the reason (acceptedImages). Each
+    replaces), each on its own line (imageSpot), in the order given. A HEIC
+    photo goes in as a JPEG (lib/heic.ts). The files the rules refuse stay
+    out, with the reason (acceptedImages). Each
     shows at once from a blob: address, uploads, and takes the stored
     address, as copyImages does; one the server refuses goes, with the
     reason. */
 export async function insertImageFiles(editor: Editor, files: File[], pos?: number): Promise<void> {
-  const taken = acceptedImages(editor, files);
   let at = pos;
+  if (files.some(isHeicFile)) {
+    // A HEIC photo turns into a JPEG first. The reader may type or select
+    // while it does: then the images go in after the selection, never over
+    // the words.
+    const { doc, selection } = editor.state;
+    files = await jpegsFromHeic(editor, files);
+    if (editor.isDestroyed) return;
+    if (editor.state.doc !== doc || (at === undefined && !editor.state.selection.eq(selection))) {
+      at = editor.state.selection.to;
+    }
+  }
+  const taken = acceptedImages(editor, files);
   const shown = taken.map((file) => {
     const src = URL.createObjectURL(file);
     markUpload(editor, src, true);

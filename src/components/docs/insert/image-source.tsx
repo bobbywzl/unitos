@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { HEIC_ACCEPT } from "@/lib/heic";
 import { LinkIcon, UploadIcon } from "@/components/docs/icons";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 
@@ -52,7 +53,7 @@ export function ImageSourcePicker({ onPick }: { onPick: (source: ImageSource) =>
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
+        accept={`image/png,image/jpeg,image/gif,image/webp,${HEIC_ACCEPT}`}
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
