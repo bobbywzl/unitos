@@ -8,7 +8,7 @@ import { listFormat } from "@/components/docs/toolbar/lists";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { LIST_COUNTERS, type ListCounter, type ListLevel } from "@/lib/docs/schema";
 import { imageFileFrom, type DroppedImageUrl } from "@/lib/image-drop";
-import { heicToJpeg, isHeicFile } from "@/lib/heic";
+import { isHeicFile, jpegsFromHeic } from "@/lib/heic";
 import { isImageFile, refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -302,18 +302,6 @@ export function imageFiles(files: FileList | File[] | null | undefined): File[] 
   return Array.from(files ?? []).filter((file) => isImageFile(file) || isHeicFile(file));
 }
 
-/** `files` with each HEIC photo turned into a JPEG (lib/heic.ts). A HEIC
-    the browser cannot read stays out, and the first one says so. */
-async function jpegsFromHeic(editor: Editor, files: File[]): Promise<File[]> {
-  const converted = await Promise.all(files.map((file) => (isHeicFile(file) ? heicToJpeg(file) : file)));
-  const unread = files.find((_, i) => converted[i] === null);
-  if (unread && !editor.isDestroyed) {
-    const t = insertT(editor);
-    toast(t("docsTyping.heicNotRead", { name: unread.name || t("docsTyping.thisFile") }), editor);
-  }
-  return converted.filter((file): file is File => file !== null);
-}
-
 // ── The images' rules: the type, the size, the tier ─────────────────────
 
 /** Whether the page's reader has Unitos Premium (lib/tiers.ts), set by the
@@ -417,8 +405,13 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
     // while it does: then the images go in after the selection, never over
     // the words.
     const { doc, selection } = editor.state;
-    files = await jpegsFromHeic(editor, files);
+    const converted = await jpegsFromHeic(files);
     if (editor.isDestroyed) return;
+    files = converted.files;
+    if (converted.unread) {
+      const t = insertT(editor);
+      toast(t("api.heicNotRead", { name: converted.unread.name || t("docsTyping.thisFile") }), editor);
+    }
     if (editor.state.doc !== doc || (at === undefined && !editor.state.selection.eq(selection))) {
       at = editor.state.selection.to;
     }

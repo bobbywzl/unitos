@@ -5,6 +5,7 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
 import type { Patch } from "@/lib/markdown-style";
+import { HEIC_ACCEPT, isHeicFile, jpegsFromHeic } from "@/lib/heic";
 import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
 import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { quoteLanded } from "@/components/use-note-drop";
@@ -462,9 +463,19 @@ export function NoteEditor({
 
   // A picked or pasted image goes into the note at the caret (SPEC.md §16):
   // refused before anything leaves the browser when the tier does not allow
-  // it, stored, and inserted as its markdown on its own line.
-  const insertImages = async (files: File[]) => {
+  // it, stored, and inserted as its markdown on its own line. A HEIC photo
+  // goes in as a JPEG (lib/heic.ts).
+  const insertImages = async (picked: File[]) => {
     setImageError(null);
+    let files = picked;
+    if (files.some(isHeicFile)) {
+      const converted = await jpegsFromHeic(files);
+      if (converted.unread) {
+        setImageError(t("api.heicNotRead", { name: converted.unread.name }));
+        return;
+      }
+      files = converted.files;
+    }
     const refusal = files.map((f) => refuseImage(f, premium)).find((r) => r !== null);
     if (refusal) {
       setImageError(t(REFUSAL_KEY[refusal]));
@@ -700,7 +711,7 @@ export function NoteEditor({
         <input
           ref={fileRef}
           type="file"
-          accept={IMAGE_ACCEPT}
+          accept={`${IMAGE_ACCEPT},${HEIC_ACCEPT}`}
           multiple
           hidden
           onChange={(e) => {

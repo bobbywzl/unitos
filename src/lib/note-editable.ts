@@ -11,6 +11,7 @@
 // Offsets in this module's API are source offsets — positions in the
 // markdown — so the editor's line commands patch the markdown directly.
 
+import { isHeicFile } from "@/lib/heic";
 import {
   TEXT_COLORS,
   isAtom,
@@ -794,7 +795,7 @@ export function attachNoteEditable(
   }
 
   function onPaste(e: ClipboardEvent) {
-    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/") || isHeicFile(f));
     if (files.length === 0 || !opts.onImageFiles) return;
     e.preventDefault();
     opts.onImageFiles(files);

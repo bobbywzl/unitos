@@ -58,6 +58,7 @@ import { TranslationBar } from "@/components/reader/translation-bar";
 import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { isHeicFile } from "@/lib/heic";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
@@ -9577,7 +9578,7 @@ export function ReaderInteractions({
   // An image pasted while a block is being edited lands after that block.
   const onArticlePaste = (e: React.ClipboardEvent) => {
     const el = editMode ? figureTarget(e.target) : null;
-    const files = Array.from(e.clipboardData?.files ?? []).filter(isImageFile);
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => isImageFile(f) || isHeicFile(f));
     const html = e.clipboardData?.getData("text/html") ?? "";
     if (!el || files.length === 0 || html.replace(/<[^>]*>|&nbsp;/g, "").trim()) return;
     e.preventDefault();

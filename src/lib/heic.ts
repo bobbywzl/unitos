@@ -1,7 +1,7 @@
-// HEIC photos (an iPhone's camera format) in the page editor: the browser
-// turns one into a JPEG before it uploads, because the server stores and
-// draws png, jpg, gif, webp, and bmp only (lib/handwritten/image.ts) and
-// Chrome cannot draw a HEIC. Client only: the decoder (heic-to, libheif in
+// HEIC photos (an iPhone's camera format) in the page editor and in notes:
+// the browser turns one into a JPEG before it uploads, because the server
+// stores and draws png, jpg, gif, webp, and bmp only
+// (lib/handwritten/image.ts) and Chrome cannot draw a HEIC. Client only: the decoder (heic-to, libheif in
 // wasm, about 3 MB) loads the first time a HEIC is added, never before.
 
 const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
@@ -40,4 +40,14 @@ export async function heicToJpeg(file: File): Promise<File | null> {
     console.warn("HEIC not read:", err instanceof Error ? err.message : String(err));
     return null;
   }
+}
+
+/** `files` with each HEIC photo turned into a JPEG, in order, and the first
+    HEIC the browser could not read (it stays out), or null. */
+export async function jpegsFromHeic(files: File[]): Promise<{ files: File[]; unread: File | null }> {
+  const converted = await Promise.all(files.map((file) => (isHeicFile(file) ? heicToJpeg(file) : file)));
+  return {
+    files: converted.filter((file): file is File => file !== null),
+    unread: files.find((_, i) => converted[i] === null) ?? null,
+  };
 }

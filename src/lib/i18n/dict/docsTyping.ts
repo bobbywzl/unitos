@@ -169,7 +169,6 @@ const en = {
   // Paste and drop (typing/paste.ts, typing/drop.ts)
   uploadFailed: "Couldn't add the image",
   notAnImage: "{name} is not an image. The page takes png, jpg, gif, webp, bmp, and heic.",
-  heicNotRead: "{name} could not be read. Save it as a jpg and add it again.",
   thisFile: "This file",
   imageViewing: "The page is in Viewing mode, so the image did not go in.",
   switchToEditing: "Switch to Editing",
@@ -332,7 +331,6 @@ const zh: Record<keyof typeof en, string> = {
   autocorrectOptions: "自动更正选项",
   uploadFailed: "无法添加图片",
   notAnImage: "{name} 不是图片。页面接受 png、jpg、gif、webp、bmp 和 heic。",
-  heicNotRead: "无法读取 {name}。请把它存为 jpg 后再添加。",
   thisFile: "此文件",
   imageViewing: "页面处于查看模式，图片没有加入。",
   switchToEditing: "切换到编辑",

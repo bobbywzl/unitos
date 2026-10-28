@@ -10,6 +10,7 @@ import {
   readPageImageDrag,
   type PageImageDrag,
 } from "@/lib/image-drop";
+import { isHeicFile, jpegsFromHeic } from "@/lib/heic";
 import { imageUrl, refuseImage, storedImageId, uploadImage, type ImageRefusal } from "@/lib/images";
 import { hasDroppedLinks, readDroppedLinks, type DroppedLink } from "@/lib/note-links";
 import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
@@ -162,7 +163,7 @@ export function useNoteDrop({
     }
     // Only images belong to a note or a paragraph; anything else keeps
     // travelling to the window, where it is added as a document.
-    if (files.length === 0 || !files.some((f) => refuseImage(f, true) !== "not-image")) {
+    if (files.length === 0 || !files.some((f) => isHeicFile(f) || refuseImage(f, true) !== "not-image")) {
       setOver(null);
       return;
     }
@@ -173,9 +174,19 @@ export function useNoteDrop({
   }
 
   /** Store `files` and hand them on, or say why not: a pasted image takes
-      this path too. */
+      this path too. A HEIC photo goes in as a JPEG (lib/heic.ts). */
   async function takeFiles(files: File[]) {
     if (busy.current) return;
+    if (files.some(isHeicFile)) {
+      busy.current = true;
+      const converted = await jpegsFromHeic(files);
+      busy.current = false;
+      if (converted.unread) {
+        onError(t("api.heicNotRead", { name: converted.unread.name }));
+        return;
+      }
+      files = converted.files;
+    }
     const refusal = files.map((f) => refuseImage(f, premium)).find((r) => r !== null);
     if (refusal) {
       onError(t(REFUSAL_KEY[refusal]));

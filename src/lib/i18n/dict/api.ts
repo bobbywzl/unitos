@@ -269,6 +269,7 @@ const en = {
   notImage: "File is not an image (png, jpg, gif, webp, bmp)",
   imageNotFound: "Image not found",
   imageTooLarge: "Image is larger than 25 MB",
+  heicNotRead: "{name} could not be read. Save it as a jpg and add it again.",
   imageNeedsPremium:
     "Images this large need Unitos Premium. After the trial, images up to 5 MB drop.",
   pdfTooLarge: "PDF is larger than 50 MB",
@@ -657,6 +658,7 @@ const zh: Record<keyof typeof en, string> = {
   notImage: "文件不是图片（png、jpg、gif、webp、bmp）",
   imageNotFound: "未找到图片",
   imageTooLarge: "图片超过 25 MB",
+  heicNotRead: "无法读取 {name}。请把它存为 jpg 后再添加。",
   imageNeedsPremium: "这么大的图片需要 Unitos Premium。试用结束后可拖入最大 5 MB 的图片。",
   pdfTooLarge: "PDF 超过 50 MB",
   pdfParseFailedReason: "无法读取此 PDF。{reason}",
