@@ -119,6 +119,10 @@ function gate(request: NextRequest): NextResponse {
     pathname === "/plans" ||
     pathname === "/billing/confirmed" ||
     pathname === "/api/stripe/webhook" ||
+    // The bookmarklet's post (SPEC.md §15) comes from the site's origin, so
+    // the session cookie (SameSite Lax) is not on it: the route stages the
+    // page and redirects to /share, which asks for the session.
+    (pathname === "/share/target" && request.method === "POST") ||
     pathname === "/api/funnel" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/cron/") ||

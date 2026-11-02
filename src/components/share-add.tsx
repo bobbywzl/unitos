@@ -27,7 +27,9 @@ function failedLine(t: ReturnType<typeof useT>, status: number, said: string | u
 
 export type SharePayload =
   | { kind: "url"; url: string }
-  | { kind: "file"; uploadId: string; filename: string; fileKind: "pdf" | "video" };
+  | { kind: "file"; uploadId: string; filename: string; fileKind: "pdf" | "video" }
+  // A page sent from the browser (SPEC.md §15): staged HTML, its title, its address.
+  | { kind: "page"; uploadId: string; title: string; url: string | null };
 
 type IngestEvent = { stage: string; detail?: string } | { id: string } | { error: string; duplicate?: unknown };
 
@@ -51,7 +53,7 @@ export function ShareAdd({
   const [error, setError] = useState<string | null>(null);
   const { ask, dialog } = useDuplicateAsk();
 
-  const label = payload.kind === "url" ? payload.url : payload.filename;
+  const label = payload.kind === "url" ? payload.url : payload.kind === "page" ? payload.title : payload.filename;
 
   async function add(confirmDuplicate = false) {
     setError(null);
@@ -60,7 +62,9 @@ export function ShareAdd({
         ? parseYouTubeId(payload.url)
           ? "youtube"
           : "url"
-        : payload.fileKind;
+        : payload.kind === "page"
+          ? "url"
+          : payload.fileKind;
     setSteps(initialIngestSteps(stepKind));
     try {
       const res =
@@ -70,17 +74,30 @@ export function ShareAdd({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url: payload.url, notebookId, ...(confirmDuplicate ? { confirmDuplicate } : {}) }),
             })
-          : await fetch("/api/uploads/complete", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                uploadId: payload.uploadId,
-                filename: payload.filename,
-                notebookId,
-                kind: payload.fileKind,
-                ...(confirmDuplicate ? { confirmDuplicate } : {}),
-              }),
-            });
+          : payload.kind === "page"
+            ? await fetch("/api/uploads/complete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  uploadId: payload.uploadId,
+                  filename: payload.title,
+                  notebookId,
+                  kind: "page",
+                  ...(payload.url ? { url: payload.url } : {}),
+                  ...(confirmDuplicate ? { confirmDuplicate } : {}),
+                }),
+              })
+            : await fetch("/api/uploads/complete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  uploadId: payload.uploadId,
+                  filename: payload.filename,
+                  notebookId,
+                  kind: payload.fileKind,
+                  ...(confirmDuplicate ? { confirmDuplicate } : {}),
+                }),
+              });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throwIfDuplicate(detail, t("panes.duplicateTitle"));

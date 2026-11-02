@@ -1,5 +1,6 @@
 import { DuplicateDocumentError } from "@/lib/documents/duplicate-answer";
 import { serverT } from "@/lib/i18n/server";
+import { IngestFailure } from "@/lib/parse/ingest-error";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 
@@ -25,6 +26,7 @@ export function progressResponse<T extends Record<string, unknown>>(
       } catch (err) {
         const t = await serverT();
         if (err instanceof DuplicateDocumentError) send({ error: err.message, duplicate: { documents: err.documents } });
+        else if (err instanceof IngestFailure) send({ error: err.message, ...(err.code ? { code: err.code } : {}) });
         else send({ error: err instanceof Error ? err.message : t("common.requestFailed") });
       } finally {
         stopHeartbeat();

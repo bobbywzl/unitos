@@ -27,7 +27,16 @@ export default async function SharePage({
   let payload: SharePayload | null = null;
   const uploadId = one("u");
   const url = one("url");
-  if (uploadId && /^[a-zA-Z0-9-]{8,64}$/.test(uploadId)) {
+  if (uploadId && /^[a-zA-Z0-9-]{8,64}$/.test(uploadId) && one("k") === "page") {
+    // A page sent from the browser (SPEC.md §15): its title names it, its
+    // address, when known, becomes the document's source.
+    payload = {
+      kind: "page",
+      uploadId,
+      title: one("name") || t("panes.sentPage"),
+      url: url && /^https?:\/\//.test(url) ? url : null,
+    };
+  } else if (uploadId && /^[a-zA-Z0-9-]{8,64}$/.test(uploadId)) {
     payload = {
       kind: "file",
       uploadId,
@@ -66,7 +75,9 @@ export default async function SharePage({
       </header>
       <h1 className="text-[30px]">{t("works.shareAddTitle")}</h1>
       {payload === null ? (
-        <p className="text-sm text-sand-600">{t("works.shareAddNothing")}</p>
+        <p className="text-sm text-sand-600">
+          {one("e") === "pageTooLarge" ? t("panes.sentPageTooLarge") : t("works.shareAddNothing")}
+        </p>
       ) : projects.length === 0 ? (
         <p className="text-sm text-sand-600">{t("works.shareAddNoProjects")}</p>
       ) : (

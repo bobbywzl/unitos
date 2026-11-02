@@ -16,16 +16,16 @@ import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
-import { describeIngestError } from "@/lib/parse/ingest-error";
+import { describeIngestError, ingestFailure } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { ingestYouTube } from "@/lib/video/ingest-youtube";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
-import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile } from "@/lib/office-file";
 import { pageRangesSchema } from "@/lib/pdf-pages";
+import { MAX_PASTE_CHARS } from "@/lib/parse/paste-limits";
 
 // A split add parses one very long page and saves several documents; the AI
 // passes on such a page need the headroom.
@@ -76,6 +76,25 @@ const urlSchema = z.object({
   split: z.boolean().default(false),
   confirmDuplicate: z.boolean().default(false),
 });
+
+// A page the reader sent or pasted (SPEC.md §15): html is the page as the
+// browser saw it (the bookmarklet, or rich text on the clipboard), text the
+// article's words alone (the tidy pass writes them as Markdown). url is the
+// page's address when the reader has it; title the page's title.
+const MAX_PAGE_HTML_CHARS = 4_000_000;
+const sentPageSchema = z
+  .object({
+    folderId: z.string().min(1).nullable().optional(),
+    notebookId: z.string().min(1),
+    html: z.string().max(MAX_PAGE_HTML_CHARS).optional(),
+    text: z.string().max(MAX_PASTE_CHARS).optional(),
+    url: z.url().optional(),
+    title: z.string().max(300).optional(),
+    confirmDuplicate: z.boolean().default(false),
+  })
+  .refine((d) => (d.html?.trim() || d.text?.trim()) !== undefined && (d.html?.trim() || d.text?.trim()) !== "", {
+    message: "Provide html or text",
+  });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
 // assistant's import pick, "1"/"0" as form fields. pdfPages: the PDF's pages
@@ -296,8 +315,25 @@ export async function POST(req: Request) {
     });
   }
 
-  const { data, error } = await parseBody(req, urlSchema);
-  if (error) return error;
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: t("api.bodyNotJson") }, { status: 400 });
+  }
+  // A sent page or a pasted article takes its own path (SPEC.md §15).
+  if (raw && typeof raw === "object" && ("html" in raw || "text" in raw)) {
+    const sent = sentPageSchema.safeParse(raw);
+    if (!sent.success) {
+      return NextResponse.json({ error: t("api.validationFailed"), issues: sent.error.issues }, { status: 400 });
+    }
+    return addSentPage(parse, sent.data, user?.id ?? null, t);
+  }
+  const parsedUrl = urlSchema.safeParse(raw);
+  if (!parsedUrl.success) {
+    return NextResponse.json({ error: t("api.validationFailed"), issues: parsedUrl.error.issues }, { status: 400 });
+  }
+  const data = parsedUrl.data;
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   const access = await notebookAccess(data.notebookId, "editor");
@@ -404,7 +440,52 @@ export async function POST(req: Request) {
       };
     } catch (err) {
       console.error("URL ingest failed:", err);
-      throw new Error(describeIngestError(err, t, "url"));
+      throw ingestFailure(err, t, "url");
+    }
+  });
+}
+
+// A page the reader sent from the browser, or an article pasted (SPEC.md
+// §15): HTML parses as a fetched page does; words alone go through the tidy
+// pass and add as a Markdown file. A page with an address the account
+// already has asks first, as a link does.
+async function addSentPage(
+  parse: typeof import("@/lib/parse/ingest"),
+  data: z.infer<typeof sentPageSchema>,
+  userId: string | null,
+  t: Awaited<ReturnType<typeof serverT>>,
+) {
+  const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
+  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  const access = await notebookAccess(data.notebookId, "editor");
+  if (access instanceof NextResponse) return access;
+  const url = data.url ?? null;
+  if (url) {
+    const repeat = await duplicateAnswer(
+      access.user,
+      data.notebookId,
+      { url, splitMarker: parse.SPLIT_URL_MARKER },
+      data.confirmDuplicate,
+      t,
+    );
+    if (repeat) return repeat;
+  }
+  const html = data.html?.trim();
+  const text = data.text?.trim();
+  return progressResponse(async (onProgress) => {
+    try {
+      const opts = { deadline: parse.modelPassDeadline(maxDuration) };
+      const { document, deduped } = html
+        ? await parse.ingestSentPage({ html, url }, onProgress, opts, userId)
+        : await parse.ingestPastedText({ text: text ?? "", url, title: data.title ?? null }, onProgress, opts, userId);
+      await attachDocument(data.notebookId, document.id, data.folderId);
+      await bumpNotebook(data.notebookId);
+      // The skeleton builds after the response (SPEC.md §22).
+      if (!deduped) after(() => refreshSkeleton(document.id, userId).catch(() => {}));
+      return await addedResult(data.notebookId, document, deduped);
+    } catch (err) {
+      console.error("Sent page ingest failed:", err);
+      throw ingestFailure(err, t, html ? "url" : "file");
     }
   });
 }

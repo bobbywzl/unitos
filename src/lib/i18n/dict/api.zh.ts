@@ -258,11 +258,13 @@ export const zh: Record<keyof typeof en, string> = {
   modelKeyInvalid: "AI 服务拒绝了密钥。请检查 ANTHROPIC_API_KEY。",
   ingestTimedOut: "添加超时。请重试；很长的页面或很大的 PDF 可能需要拆分。",
   fetchBlocked:
-    "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",
+    "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
   fetchChallenge:
-    "{host} 返回了人机验证页面而不是文章，也没有存档副本。请在浏览器中打开页面，另存为 PDF，再上传该 PDF。",
-  fetchWall: "{host} 返回的是同意页、登录页、订阅页或错误页，不是文章。请在浏览器中打开该页面，另存为 PDF 后上传。",
+    "{host} 返回了人机验证页面而不是文章，也没有存档副本。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
+  fetchWall: "{host} 返回的是同意页、登录页、订阅页或错误页，不是文章。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
   fetchNotFound: "{host} 上没有此链接对应的页面（HTTP {status}）。请检查链接。",
+  tidyingPaste: "正在整理粘贴的文章",
+  pastedArticle: "粘贴的文章",
   fetchRateLimited: "{host} 正在限制请求（HTTP 429），也没有存档副本。请稍等一分钟再试。",
   fetchServerError: "{host} 返回了服务器错误（HTTP {status}）。请稍后再试。",
   fetchTimeout: "{host} 在 30 秒内没有响应。请重试。",

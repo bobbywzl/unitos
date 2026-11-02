@@ -44,6 +44,10 @@ import {
 export type UploadItem =
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
+  // An article pasted into the dialog (SPEC.md §15): the words, the rich
+  // text when the clipboard held it, the page's address and title when the
+  // reader gave them.
+  | { kind: "paste"; text: string; html: string | null; url: string | null; title: string | null }
   | { kind: "file"; file: File; pdfPages?: PageRange[] }
   // A file picked in the Google Drive picker (SPEC.md §14), with the token
   // its import spends. Picks queue beside files and links.
@@ -51,7 +55,9 @@ export type UploadItem =
 
 /** What a queued item is called in the list: the file's name, or the link. */
 export function uploadItemTitle(item: UploadItem): string {
-  return item.kind === "file" || item.kind === "drive-file" ? item.file.name : item.url;
+  if (item.kind === "file" || item.kind === "drive-file") return item.file.name;
+  if (item.kind === "paste") return item.title || item.url || item.text.trim().slice(0, 60);
+  return item.url;
 }
 
 export type UploadRequest = (
@@ -84,7 +90,9 @@ export type OpenTarget = { kind: "document" | "existing"; id: string; notebookId
 // document, the link in the field, so the reader edits it and adds it
 // again. edit: the reader pressed Edit the link, and the dialog opens with
 // the error under the field; else they wait there for the next +.
-export type ReturnedAdd = { items: UploadItem[]; error: string; edit: boolean };
+// blocked: a site turned the add away (the stream's code "blocked"): the
+// dialog opens on the ways in (SPEC.md §15).
+export type ReturnedAdd = { items: UploadItem[]; error: string; edit: boolean; blocked: boolean };
 
 // range: a video or audio file is uploaded and the reader picks the part to
 // import (components/reader/media-range.tsx) before the add completes.
@@ -101,7 +109,7 @@ type Added = { id: string; title: string };
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean; documents?: Added[]; sameFileIn?: SameFileIn }
-  | { error: string; duplicate?: unknown };
+  | { error: string; code?: string; duplicate?: unknown };
 type IngestResult = Extract<IngestEvent, { id: string }>;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -120,6 +128,7 @@ function isMediaFile(file: File): boolean {
 function uploadItemKindKey(item: UploadItem): TKey {
   if (item.kind === "url") return "panes.uploadItemPage";
   if (item.kind === "video-url") return "panes.uploadItemVideoLink";
+  if (item.kind === "paste") return "panes.uploadItemPaste";
   if (item.kind === "drive-file") return "panes.uploadItemDrive";
   if (isMediaFile(item.file)) return "panes.uploadItemMediaFile";
   if (isImageFile(item.file)) return "panes.uploadItemImage";
@@ -310,8 +319,13 @@ export function UploadAssistant({
   // The items behind the failures: they go back to Add a document on close.
   const [failedItems, setFailedItems] = useState<UploadItem[]>([]);
   function finish(target: OpenTarget | null, edit = false) {
-    onClose(target, failedItems.length > 0 ? { items: failedItems, error: failures.join(" "), edit } : undefined);
+    onClose(
+      target,
+      failedItems.length > 0 ? { items: failedItems, error: failures.join(" "), edit, blocked: blockedRef.current } : undefined,
+    );
   }
+  // A site turned the add away (the stream's code "blocked", SPEC.md §15).
+  const blockedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   // The range step (SPEC.md §15): a media file's bytes are up, and the add
   // waits for the part to import. The resolver ends the wait.
@@ -394,6 +408,7 @@ export function UploadAssistant({
     }
     if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
     if (!result || "error" in result) {
+      if (result && "error" in result && result.code === "blocked") blockedRef.current = true;
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setSteps((s) => (s ? completeIngestSteps(s) : s));
@@ -605,6 +620,27 @@ export function UploadAssistant({
     return result.documents ?? [{ id: result.id, title: result.title }];
   }
 
+  // A pasted article's add (SPEC.md §15): the rich text parses as a page,
+  // the words alone go through the tidy pass; either lands as one document.
+  async function addPaste(item: UploadItem & { kind: "paste" }): Promise<Added | null> {
+    setSteps(initialIngestSteps("url"));
+    const result = await addAsking((confirmDuplicate) =>
+      fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(item.html ? { html: item.html } : { text: item.text }),
+          ...(item.url ? { url: item.url } : {}),
+          ...(item.title ? { title: item.title } : {}),
+          notebookId,
+          folderId: request.folderId ?? undefined,
+          ...(confirmDuplicate ? { confirmDuplicate } : {}),
+        }),
+      }),
+    );
+    return result ? { id: result.id, title: result.title } : null;
+  }
+
   // What keeps a Drive pick from importing, before any request: a type the
   // app cannot read, or a size past the ceiling. null = it can import.
   function driveProblem(file: DrivePickedFile): string | null {
@@ -665,6 +701,7 @@ export function UploadAssistant({
     saveDetailRef.current = null;
     conversionFailedRef.current = null;
     sameFilesRef.current = [];
+    blockedRef.current = false;
     addStartedAtRef.current = Date.now();
     setAddStartedAt(addStartedAtRef.current);
     earlyOpenRef.current = "pending";
@@ -700,6 +737,7 @@ export function UploadAssistant({
         try {
           if (item.kind === "file") keep(await addFile(item.file, item.pdfPages));
           else if (item.kind === "drive-file") keep(await addDriveFile(item.file, item.token, item.pdfPages));
+          else if (item.kind === "paste") keep(await addPaste(item));
           else collected.push(...(await addLink(item.url)));
         } catch (err) {
           back.push(item);

@@ -287,12 +287,14 @@ export const en = {
   ingestTimedOut: "The add ran out of time. Try again; a long page or a large PDF may need splitting.",
   // Why a page could not be fetched (lib/parse/fetch-page.ts), in plain words
   fetchBlocked:
-    "{host} refused the request (HTTP {status}). The site blocks automated readers, and no archived copy exists. Open the page in your browser, save it as a PDF, and upload that PDF.",
+    "{host} refused the request (HTTP {status}). The site blocks automated readers, and no archived copy exists. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
   fetchChallenge:
-    "{host} showed a human check instead of the page, and no archived copy exists. Open the page in your browser, save it as a PDF, and upload that PDF.",
+    "{host} showed a human check instead of the page, and no archived copy exists. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
   fetchWall:
-    "{host} answered with a consent, sign-in, subscription, or error page, not the article. Open the page in your browser, save it as a PDF, and upload that PDF.",
+    "{host} answered with a consent, sign-in, subscription, or error page, not the article. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
   fetchNotFound: "{host} has no page at this link (HTTP {status}). Check the link.",
+  tidyingPaste: "Tidying the pasted article",
+  pastedArticle: "Pasted article",
   fetchRateLimited:
     "{host} is limiting requests right now (HTTP 429), and no archived copy exists. Wait a minute and try again.",
   fetchServerError: "{host} answered with a server error (HTTP {status}). Try again later.",

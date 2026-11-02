@@ -572,6 +572,44 @@ function buildResponse(all) {
 
   // Define (SPEC.md §6): one word, its meaning in its sentence. The word
   // rides back in the answer, so a check can see it arrived.
+  // The pasted article's tidy pass (lib/parse/tidy-paste.ts): the paste's
+  // lines without the page's furniture, the first as the title, a "By"
+  // line as the byline, a short line without a full stop as a heading, the
+  // rest joined into paragraphs at sentence ends.
+  if (all.includes("You turn text a reader pasted from a web page into the article as Markdown.")) {
+    const paste = all.match(/<paste>\n([\s\S]*?)\n<\/paste>/)?.[1] ?? "";
+    const junk = /^(home|subscribe|sign in|we use cookies|related:|comments|share|menu|newsletter)/i;
+    const lines = paste.split("\n").map((l) => l.trim()).filter((l) => l && !junk.test(l));
+    const out = [];
+    let first = true;
+    let para = [];
+    const flush = () => {
+      if (para.length) out.push(para.join(" "), "");
+      para = [];
+    };
+    for (const l of lines) {
+      if (first) {
+        out.push(`# ${l}`, "");
+        first = false;
+        continue;
+      }
+      if (/^by /i.test(l)) {
+        flush();
+        out.push(l, "");
+        continue;
+      }
+      if (l.length < 40 && !/[.!?]$/.test(l)) {
+        flush();
+        out.push(`## ${l}`, "");
+        continue;
+      }
+      para.push(l);
+      if (/[.!?]$/.test(l)) flush();
+    }
+    flush();
+    return JSON.stringify({ markdown: out.join("\n").trim() });
+  }
+
   if (all.includes("Define the selected word for this reader")) {
     const word = all.match(/Selected word:\n([^\n]+)/)?.[1]?.trim() ?? "";
     return `Mock definition of ${word}: its meaning in this sentence, in plain words.`;

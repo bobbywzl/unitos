@@ -10,6 +10,7 @@ import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
+import { tidyPastedArticle } from "@/lib/parse/tidy-paste";
 import { classifyPdf, pdfShape, textLayerEmpty } from "@/lib/handwritten/classify";
 import { CONVERT_MAX_PAGES, transcribePages } from "@/lib/handwritten/convert";
 import { featureConfigured } from "@/lib/feature-models";
@@ -909,11 +910,73 @@ export async function ingestUrl(
     );
     return { document, deduped };
   }
+  return ingestFetchedHtml(fetched, url, onProgress, opts, userId, { rendered: false, source: true });
+}
+
+// A page that never had an address to fetch: the article the reader pasted
+// as rich text. Relative links resolve against it; no document keeps it.
+export const PASTED_PAGE_URL = "https://pasted.invalid/";
+
+/** A page as the reader's browser saw it (SPEC.md §15): the bookmarklet
+    sends the page's HTML from the browser, where the reader is signed in to
+    the site, or the reader pasted the article as rich text. The page parses
+    as a fetched page does, with no fetch and no browser render — the
+    browser rendered it. With the page's address, the document keeps it as
+    its source; without one, the document has no source. */
+export async function ingestSentPage(
+  page: { html: string; url: string | null },
+  onProgress?: OnIngestProgress,
+  opts: IngestOptions = {},
+  userId: string | null = null,
+): Promise<{ document: Document; extra?: Document[]; deduped: boolean }> {
+  const fetched: FetchedPage = { kind: "html", html: page.html };
+  return ingestFetchedHtml(fetched, page.url ?? PASTED_PAGE_URL, onProgress, opts, userId, {
+    rendered: true,
+    source: page.url !== null,
+  });
+}
+
+/** The article the reader pasted as words (SPEC.md §15): the tidy pass
+    (lib/parse/tidy-paste.ts) writes it as Markdown, and it adds as a
+    Markdown file does — an import, pageless — with the page's address as
+    its source when the reader gave one. */
+export async function ingestPastedText(
+  paste: { text: string; url: string | null; title: string | null },
+  onProgress?: OnIngestProgress,
+  opts: IngestOptions = {},
+  userId: string | null = null,
+): Promise<{ document: Document; deduped: boolean }> {
+  const t = await serverT();
+  onProgress?.("extract", t("api.tidyingPaste"));
+  const { markdown } = await tidyPastedArticle(paste.text, {
+    title: paste.title,
+    signal: modelPassSignal(opts.deadline),
+    userId,
+  });
+  const bytes = new TextEncoder().encode(markdown) as Uint8Array<ArrayBuffer>;
+  const name = (paste.title?.trim() || (paste.url ? hostOf(paste.url) : "") || t("api.pastedArticle")).slice(0, 120);
+  return ingestMarkdown(bytes, `${name}.md`, onProgress, { ...opts, sourceUrl: paste.url ?? undefined }, userId);
+}
+
+// The tail every HTML page takes, fetched or sent: the browser render where
+// one is needed and the page is not rendered yet, the parse, the wall check,
+// the model passes, the save. source: the document keeps the address.
+async function ingestFetchedHtml(
+  fetched: FetchedPage & { kind: "html" },
+  url: string,
+  onProgress: OnIngestProgress | undefined,
+  opts: IngestOptions,
+  userId: string | null,
+  how: { rendered: boolean; source: boolean },
+): Promise<{ document: Document; extra?: Document[]; deduped: boolean }> {
   // A page whose figures its scripts draw renders in a browser first, where
   // one is configured (lib/parse/render-page.ts); an animated chart's loop
   // is stored as an image of the document.
-  const { page, render } = await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
+  const { page, render } = how.rendered
+    ? { page: fetched, render: null }
+    : await renderIfNeeded(fetched, url, onProgress, { store: { userId } });
   const pageHtml = page.kind === "html" ? page.html : fetched.html;
+  const sourceUrl = how.source ? url : undefined;
   onProgress?.("extract");
   const parsed = await parseHtmlContent(pageHtml, url, onProgress);
   // A wall is not the article (lib/parse/page-kind.ts): the add stops here
@@ -928,7 +991,7 @@ export async function ingestUrl(
   // The page's font comes from the parse, else from the layout pass.
   const font = parsed.font ?? laidFont;
   const columnWidth = parsed.columnWidth;
-  const title = parsed.title ?? url;
+  const title = parsed.title ?? (how.source ? url : (await serverT())("api.pastedArticle"));
   const detail = (blockDocument: BlockDocumentReason | null) =>
     saveDetail(blocks, {
       scriptedFigures: unrenderedScripts(fetched),
@@ -957,7 +1020,7 @@ export async function ingestUrl(
       for (let i = 0; i < parts.length; i++) {
         const data = {
           title: parts[i].title,
-          sourceUrl: `${url}${SPLIT_URL_MARKER}${i + 1}`,
+          sourceUrl: sourceUrl ? `${sourceUrl}${SPLIT_URL_MARKER}${i + 1}` : undefined,
           references: referencesForPart(parts[i].blocks, references),
           font,
           columnWidth,
@@ -978,7 +1041,7 @@ export async function ingestUrl(
     ? convertImport({ kind: "url", title, titleFromOriginal: Boolean(parsed.title), blocks })
     : null;
   onProgress?.("save", await detail(converted === "size" ? "size" : null));
-  const data = { title, sourceUrl: url, references, font, columnWidth, render };
+  const data = { title, sourceUrl, references, font, columnWidth, render };
   const document =
     converted && converted !== "size"
       ? await createImportedDocument({ ...data, converted, userId })
