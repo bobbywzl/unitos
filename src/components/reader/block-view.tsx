@@ -13,7 +13,7 @@ import {
   VisualizeIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { Equation } from "@/components/reader/equation";
+import dynamic from "next/dynamic";
 import { MediaHtml } from "@/components/reader/figure-media";
 import {
   bindTableMarkClicks,
@@ -29,6 +29,14 @@ import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass, type TextStyle } from "@/lib/text-style";
+
+// KaTeX (264KB raw) loads with the first EQUATION block, not with every
+// document: the server renders the equation, and the chunk comes with the
+// page only when the document has one. Until it lands on a soft open, the
+// TeX shows as text.
+const Equation = dynamic(() => import("@/components/reader/equation").then((m) => m.Equation), {
+  loading: () => <pre className="my-4 overflow-x-auto rounded-2xl bg-sand-200 p-4 text-sm" />,
+});
 
 export const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";

@@ -54,7 +54,7 @@ import { syncRichText } from "@/lib/docs/sync";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
-import { VideoPane } from "@/components/video/video-pane";
+import dynamicImport from "next/dynamic";
 import { deeplConfigured } from "@/lib/translate/deepl";
 import {
   parseRegion,
@@ -79,6 +79,10 @@ import { documentEditedAt, type DocumentKind } from "@/lib/document-order";
 import { EmptyProjectAdd } from "@/components/reader/empty-project-add";
 
 export const dynamic = "force-dynamic";
+
+// The video pane's scripts come with the page only when a pane shows a
+// video document (SPEC.md §11), not with every article.
+const VideoPane = dynamicImport(() => import("@/components/video/video-pane").then((m) => m.VideoPane));
 
 /** An import changed since it was imported or last re-parsed; suggestions
     count as changes. */
