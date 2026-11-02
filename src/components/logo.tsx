@@ -11,12 +11,16 @@ export function Logo({
   className?: string;
   fit?: "contain" | "cover";
 }) {
+  // The mark is drawn at 140px at most; the 256px mask is a sixth of the
+  // 512px one's bytes and every page loads it. The full-page watermark
+  // (fit "cover") stretches the mask over the page, so it keeps the 512px one.
+  const file = fit === "cover" ? "/logo-mask.png" : "/logo-mask-256.png";
   const mask = {
-    maskImage: "url(/logo-mask.png)",
+    maskImage: `url(${file})`,
     maskSize: fit,
     maskRepeat: "no-repeat",
     maskPosition: "center",
-    WebkitMaskImage: "url(/logo-mask.png)",
+    WebkitMaskImage: `url(${file})`,
     WebkitMaskSize: fit,
     WebkitMaskRepeat: "no-repeat",
     WebkitMaskPosition: "center",
