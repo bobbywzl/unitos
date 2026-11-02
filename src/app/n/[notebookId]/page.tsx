@@ -102,80 +102,104 @@ export default async function NotebookPage(props: {
   const user = await currentUser();
   if (!user) redirect("/signin");
 
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    include: {
-      collaborators: true,
-      // The project's folders (SPEC.md §6); the tree is drawn client-side.
-      folders: { select: { id: true, title: true, parentId: true, position: true, createdAt: true } },
-      documents: {
-        // Attach order. Without it the rows come back in scan order, and the
-        // first row picks the document a bare project URL opens.
-        orderBy: { document: { createdAt: "asc" } },
-        include: {
-          document: {
-            select: {
-              id: true,
-              title: true,
-              sourceUrl: true,
-              parserVersion: true,
-              fileHash: true,
-              handwritten: true,
-              figureRenderAt: true,
-              figureRenderError: true,
-              richTextRev: true,
-              importRev: true,
-              video: { select: { id: true } },
-              // The document list's sort and grouping (SPEC.md §6).
-              createdAt: true,
-              format: true,
-              generatedCommand: true,
-              // Last edited (SPEC.md §6): a rich text's last save.
-              richTextSavedAt: true,
-            },
+  // The project's rows. Prisma reads a nested include one relation at a time,
+  // in sequence; four reads side by side finish in the time of the longest.
+  // The reads that need only the ids (the stored files' first bytes, the
+  // last document, the billing switch, the link scan quota, the language,
+  // the cookies) start with them.
+  const documentSelect = {
+    id: true,
+    title: true,
+    sourceUrl: true,
+    parserVersion: true,
+    fileHash: true,
+    handwritten: true,
+    figureRenderAt: true,
+    figureRenderError: true,
+    richTextRev: true,
+    importRev: true,
+    video: { select: { id: true } },
+    // The document list's sort and grouping (SPEC.md §6).
+    createdAt: true,
+    format: true,
+    generatedCommand: true,
+    // Last edited (SPEC.md §6): a rich text's last save.
+    richTextSavedAt: true,
+  } satisfies Prisma.DocumentSelect;
+  const [
+    notebookCore,
+    folders,
+    notebookDocuments,
+    sections,
+    headRows,
+    lastRow,
+    billing,
+    linkScansLeft,
+    lang,
+    cookieStore,
+    t,
+  ] = await Promise.all([
+    db.notebook.findUnique({ where: { id: notebookId }, include: { collaborators: true } }),
+    // The project's folders (SPEC.md §6); the tree is drawn client-side.
+    db.documentFolder.findMany({
+      where: { notebookId },
+      select: { id: true, title: true, parentId: true, position: true, createdAt: true },
+    }),
+    db.notebookDocument.findMany({
+      where: { notebookId },
+      // Attach order. Without it the rows come back in scan order, and the
+      // first row picks the document a bare project URL opens.
+      orderBy: { document: { createdAt: "asc" } },
+      include: { document: { select: documentSelect } },
+    }),
+    db.section.findMany({
+      where: { notebookId },
+      orderBy: { order: "asc" },
+      include: {
+        notes: {
+          where: { status: { not: "REJECTED" } },
+          orderBy: { order: "asc" },
+          include: {
+            sources: { include: { document: { select: { id: true, title: true } } } },
+            replies: { orderBy: { createdAt: "asc" } },
           },
         },
       },
-      sections: {
-        orderBy: { order: "asc" },
-        include: {
-          notes: {
-            where: { status: { not: "REJECTED" } },
-            orderBy: { order: "asc" },
-            include: {
-              sources: { include: { document: { select: { id: true, title: true } } } },
-              replies: { orderBy: { createdAt: "asc" } },
-            },
-          },
-        },
-      },
-    },
-  });
-  if (!notebook) notFound();
+    }),
+    // Which stored files are PDFs (a stored file that does not start with
+    // `%PDF-` is a Markdown file, §2): Re-parse on a PDF asks which shape
+    // (SPEC.md §16). Read from the first bytes, never the whole file. The same
+    // read says which documents are Word files (a zip, "PK") and which hold
+    // rich text, for the document list's Sort by Kind (SPEC.md §6).
+    db.$queryRaw<{ id: string; head: string | null; rich: boolean }[]>`
+      SELECT d.id, encode(substring(d."fileData" from 1 for 5), 'escape') AS head, (d."richText" IS NOT NULL) AS rich
+      FROM "Document" d
+      JOIN "NotebookDocument" nd ON nd."documentId" = d.id
+      WHERE nd."notebookId" = ${notebookId}
+    `,
+    // No document in the address (the dashboard's card, Back to the project):
+    // the document the account last had open here (SPEC.md §6, LastDocument),
+    // if the project still holds it; else the first document.
+    doc
+      ? null
+      : db.lastDocument.findUnique({
+          where: { userId_notebookId: { userId: user.id, notebookId } },
+          select: { documentId: true },
+        }),
+    billingLinks(),
+    linkScanRunsLeft(user.id),
+    // The reader's language: glossary definitions read in it (SPEC.md §8 Phase 7).
+    currentLang(),
+    cookies(),
+    serverT(),
+  ]);
+  if (!notebookCore) notFound();
+  const notebook = { ...notebookCore, folders, documents: notebookDocuments, sections };
   // Owner or collaborator opens the corpus; anyone else gets 404 (no
   // disclosure). Viewers read; the role gates every write server-side too.
   const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
   if (!myRole) notFound();
-  // The reader's language: glossary definitions read in it (SPEC.md §8 Phase 7).
-  const lang = await currentLang();
-
-  // Which stored files are PDFs (a stored file that does not start with
-  // `%PDF-` is a Markdown file, §2): Re-parse on a PDF asks which shape
-  // (SPEC.md §16). Read from the first bytes, never the whole file. The same
-  // read says which documents are Word files (a zip, "PK") and which hold
-  // rich text, for the document list's Sort by Kind (SPEC.md §6).
-  const documentIds = notebook.documents.map((nd) => nd.document.id);
-  const heads = new Map(
-    documentIds.length > 0
-      ? (
-          await db.$queryRaw<{ id: string; head: string | null; rich: boolean }[]>`
-            SELECT id, encode(substring("fileData" from 1 for 5), 'escape') AS head, ("richText" IS NOT NULL) AS rich
-            FROM "Document"
-            WHERE id IN (${Prisma.join(documentIds)})
-          `
-        ).map((r) => [r.id, r])
-      : [],
-  );
+  const heads = new Map(headRows.map((r) => [r.id, r]));
   const pdfIds = new Set(
     notebook.documents
       .filter((nd) => nd.document.fileHash !== null && heads.get(nd.document.id)?.head === "%PDF-")
@@ -233,12 +257,7 @@ export default async function NotebookPage(props: {
   // No document in the address (the dashboard's card, Back to the project):
   // the document the account last had open here (SPEC.md §6, LastDocument),
   // if the project still holds it; else the first document.
-  const lastId = doc
-    ? null
-    : ((await db.lastDocument.findUnique({
-        where: { userId_notebookId: { userId: user.id, notebookId } },
-        select: { documentId: true },
-      }))?.documentId ?? null);
+  const lastId = lastRow?.documentId ?? null;
   const openId = doc ?? lastId;
   const activeId = openId && attached.some((d) => d.id === openId) ? openId : (attached[0]?.id ?? null);
   // The address named a document this project does not hold (a note's jump
@@ -294,10 +313,34 @@ export default async function NotebookPage(props: {
 
   // ── One pane's data: everything the reader needs for one document ─────────
   async function paneData(documentId: string) {
-    let document = await db.document.findUnique({
-      where: { id: documentId },
-      include: { blocks: { orderBy: { order: "asc" } }, video: true },
-    });
+    // The document, its anchors on both layers, and the links touching it
+    // need only its id: one round trip for all five.
+    const sourceOrder = { orderBy: { id: "asc" as const } };
+    const [documentRow, textSources, coreSources, outgoing, incoming] = await Promise.all([
+      db.document.findUnique({
+        where: { id: documentId },
+        include: { blocks: { orderBy: { order: "asc" } }, video: true },
+      }),
+      db.source.findMany({ where: { documentId, layer: null }, ...sourceOrder }),
+      db.source.findMany({ where: { documentId, layer: "core" }, ...sourceOrder }),
+      db.docLink.findMany({
+        where: { fromDocumentId: documentId },
+        orderBy: { createdAt: "desc" },
+        include: {
+          toDocument: { select: { title: true } },
+          replies: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+      db.docLink.findMany({
+        where: { toDocumentId: documentId },
+        orderBy: { createdAt: "desc" },
+        include: {
+          fromDocument: { select: { title: true } },
+          replies: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+    ]);
+    let document = documentRow;
     if (!document) return null;
     // A blank document made before the page editor holds only blocks: it
     // gets its rich text once, on this open (SPEC.md §29).
@@ -380,14 +423,18 @@ export default async function NotebookPage(props: {
         noteId: string;
       }[]
     > = {};
-    const resolved = await resolveDocumentSources(document.id, document.blocks);
     // The collapsed view's anchors (SPEC.md §28) heal against the cores the
-    // reader sees now, and paint on the cores alone.
-    const resolvedCore = await resolveDocumentSources(
-      document.id,
-      coreBlocks(document.collapse, document.blocks, document.richText),
-      "core",
-    );
+    // reader sees now, and paint on the cores alone. The two layers resolve
+    // side by side; neither touches the other's anchors.
+    const [resolved, resolvedCore] = await Promise.all([
+      resolveDocumentSources(document.id, document.blocks, null, textSources),
+      resolveDocumentSources(
+        document.id,
+        coreBlocks(document.collapse, document.blocks, document.richText),
+        "core",
+        coreSources,
+      ),
+    ]);
 
     // Annotated figure, table, and equation blocks carry sequential labels
     // ("A1", "A2", …) in document order. The label renders at the block and on
@@ -669,24 +716,6 @@ export default async function NotebookPage(props: {
     > = {};
     const linksOut: LinkOut[] = [];
     const linksIn: LinkIn[] = [];
-    const [outgoing, incoming] = await Promise.all([
-      db.docLink.findMany({
-        where: { fromDocumentId: document.id },
-        orderBy: { createdAt: "desc" },
-        include: {
-          toDocument: { select: { title: true } },
-          replies: { orderBy: { createdAt: "asc" } },
-        },
-      }),
-      db.docLink.findMany({
-        where: { toDocumentId: document.id },
-        orderBy: { createdAt: "desc" },
-        include: {
-          fromDocument: { select: { title: true } },
-          replies: { orderBy: { createdAt: "asc" } },
-        },
-      }),
-    ]);
     for (const link of outgoing) {
       // Same ladder as resolveDocumentSources: stored offsets, re-find in the
       // stored block, re-find across all blocks (re-parse gives new block ids).
@@ -1081,9 +1110,68 @@ export default async function NotebookPage(props: {
     };
   }
 
-  const paneOne = activeId ? await paneData(activeId) : null;
-  const paneTwo =
-    paneTwoId === null ? null : paneTwoId === activeId ? paneOne : await paneData(paneTwoId);
+  // Corpus distillations cite documents by id; their blocks load below.
+  const storedCorpusDistillations = corpusDistillationList(notebook.distillations);
+  const corpusQuoteDocIds = [
+    ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
+  ];
+  const attachedIdList = attached.map((d) => d.id);
+  // The open articles whose reading position the account keeps (SPEC.md §6).
+  // A video pane keeps the tab's copy alone: playback moves its pane.
+  const hasVideo = (id: string | null) => attached.find((d) => d.id === id)?.hasVideo ?? false;
+  const positionIds = [...new Set([activeId, paneTwoId].filter((id): id is string => id !== null && !hasVideo(id)))];
+
+  // The panes' data and the rest of the page's reads depend on nothing
+  // below: they start together.
+  const [
+    paneOne,
+    paneTwoOwn,
+    documentHistoryFirst,
+    corpusQuoteDocs,
+    graph,
+    historyFirst,
+    generated,
+    positionRows,
+  ] =
+    await Promise.all([
+      activeId ? paneData(activeId) : null,
+      paneTwoId === null || paneTwoId === activeId ? null : paneData(paneTwoId),
+      // History's This document (SPEC.md §12): the open document's rows,
+      // newest first: its edits, each with its replies, and the notes and
+      // annotations removed from it. Show older reads the rest.
+      activeId ? historyPage(notebookId, [activeId], null, undefined, { documentId: activeId }) : null,
+      corpusQuoteDocIds.length > 0
+        ? db.document.findMany({
+            where: { id: { in: corpusQuoteDocIds } },
+            select: {
+              id: true,
+              title: true,
+              blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
+            },
+          })
+        : [],
+      // The graph (SPEC.md §13): attached documents as nodes; links between
+      // them as undirected weighted edges — thicker with more links, dashed
+      // while only recommended ones connect a pair — and the recommended
+      // links, both ends with their passages, the AI's reason, and the
+      // replies. Accept and Dismiss live in the graph.
+      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
+      // The History panel (SPEC.md §12): its newest page; Show older reads
+      // the rest (lib/history/list.ts).
+      historyPage(notebookId, attachedIdList),
+      // The pages Stitch wrote for the project (SPEC.md §22): the graph's
+      // Generated content list.
+      listGenerated(notebookId),
+      // The account's copy of each open article's reading position. A preview
+      // build reads the production database before its migration runs: with
+      // no table, nothing resumes.
+      positionIds.length > 0
+        ? db.readingPosition
+            .findMany({ where: { userId: user.id, documentId: { in: positionIds } } })
+            .catch(() => [])
+        : [],
+    ]);
+  const paneTwo = paneTwoId === null ? null : paneTwoId === activeId ? paneOne : paneTwoOwn;
   // A media document's article (SPEC.md §11) is its own document: its reader
   // data goes to the video pane, and the article card renders through the
   // reader's interaction layer, so every text tool works on it in place.
@@ -1141,61 +1229,6 @@ export default async function NotebookPage(props: {
     ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}` })),
   ]);
 
-  // Corpus distillations cite documents by id; their blocks load below.
-  const storedCorpusDistillations = corpusDistillationList(notebook.distillations);
-  const corpusQuoteDocIds = [
-    ...new Set(storedCorpusDistillations.flatMap((d) => d.quotes.map((q) => q.documentId))),
-  ];
-  const attachedIdList = attached.map((d) => d.id);
-  // The open articles whose reading position the account keeps (SPEC.md §6).
-  // A video pane keeps the tab's copy alone: playback moves its pane.
-  const positionIds = [...new Set([paneOne, paneTwo].flatMap((p) => (p && !p.video ? [p.document.id] : [])))];
-
-  // The rest of the page's reads depend on nothing below: they start together.
-  const [
-    documentHistoryFirst,
-    corpusQuoteDocs,
-    graph,
-    historyFirst,
-    generated,
-    positionRows,
-  ] =
-    await Promise.all([
-      // History's This document (SPEC.md §12): the open document's rows,
-      // newest first: its edits, each with its replies, and the notes and
-      // annotations removed from it. Show older reads the rest.
-      paneOne ? historyPage(notebookId, [paneOne.document.id], null, undefined, { documentId: paneOne.document.id }) : null,
-      corpusQuoteDocIds.length > 0
-        ? db.document.findMany({
-            where: { id: { in: corpusQuoteDocIds } },
-            select: {
-              id: true,
-              title: true,
-              blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
-            },
-          })
-        : [],
-      // The graph (SPEC.md §13): attached documents as nodes; links between
-      // them as undirected weighted edges — thicker with more links, dashed
-      // while only recommended ones connect a pair — and the recommended
-      // links, both ends with their passages, the AI's reason, and the
-      // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
-      // The History panel (SPEC.md §12): its newest page; Show older reads
-      // the rest (lib/history/list.ts).
-      historyPage(notebookId, attachedIdList),
-      // The pages Stitch wrote for the project (SPEC.md §22): the graph's
-      // Generated content list.
-      listGenerated(notebookId),
-      // The account's copy of each open article's reading position. A preview
-      // build reads the production database before its migration runs: with
-      // no table, nothing resumes.
-      positionIds.length > 0
-        ? db.readingPosition
-            .findMany({ where: { userId: user.id, documentId: { in: positionIds } } })
-            .catch(() => [])
-        : [],
-    ]);
   const accountPositionOf = (documentId: string): BlockPosition | null => {
     const row = positionRows.find((r) => r.documentId === documentId);
     return row
@@ -1292,7 +1325,7 @@ export default async function NotebookPage(props: {
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
-    billing: await billingLinks(),
+    billing,
   };
 
   // The text layer over a document's blocks: marks, links, terms, and the
@@ -1329,7 +1362,7 @@ export default async function NotebookPage(props: {
   });
   // A document this browser reads collapsed (SPEC.md §28) comes with its
   // cores, so the article is drawn collapsed on the first paint.
-  const collapsedIds = collapsedDocuments((await cookies()).get(COLLAPSE_COOKIE)?.value);
+  const collapsedIds = collapsedDocuments(cookieStore.get(COLLAPSE_COOKIE)?.value);
   const collapsedCoresOf = (document: NonNullable<typeof paneOne>["document"]): Record<string, string> | null => {
     if (!collapsedIds.has(document.id)) return null;
     const { cores } = currentCores(readCollapse(document.collapse), document.blocks, document.richText);
@@ -1446,7 +1479,7 @@ export default async function NotebookPage(props: {
         edges: graphEdges,
         recommended: recommendedLinks,
         generated,
-        linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
+        linkScansLeft: linkScansLeft,
       }}
       history={history}
       documentHistory={documentHistory}
@@ -1520,7 +1553,7 @@ export default async function NotebookPage(props: {
           <div key="empty" className="content-in flex h-full flex-col items-center justify-center gap-5">
             <Logo size={140} className="text-sand-400" />
             <p className="max-w-sm text-center text-sm text-sand-600">
-              {(await serverT())("panes.noDocumentOpen")}
+              {t("panes.noDocumentOpen")}
             </p>
             {/* The one thing to do here; a viewer cannot add. */}
             {myRole !== "viewer" && <EmptyProjectAdd />}

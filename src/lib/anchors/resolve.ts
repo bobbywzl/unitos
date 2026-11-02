@@ -114,12 +114,15 @@ export async function resolveDocumentSources(
   documentId: string,
   loadedBlocks?: { id: string; type: string; text: string }[],
   layer: Layer | null = null,
+  // The layer's sources, when the caller read them already (the reader page
+  // reads them beside the document, in one round trip).
+  loadedSources?: Source[],
 ): Promise<ResolvedSource[]> {
   const [sources, blocks] = await Promise.all([
     // By id: ids are made in time order, so sources on the same words come
     // back in the order they were made, on every read (block-view.tsx paints
     // and lists stacked words in this order).
-    db.source.findMany({ where: { documentId, layer }, orderBy: { id: "asc" } }),
+    loadedSources ?? db.source.findMany({ where: { documentId, layer }, orderBy: { id: "asc" } }),
     loadedBlocks ??
       db.block.findMany({
         where: { documentId },
