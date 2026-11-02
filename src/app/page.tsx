@@ -18,6 +18,7 @@ import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { Notifications } from "@/components/works/notifications";
 import { currentLang } from "@/lib/i18n/server";
 import { ensureReleaseNotifications, releaseKeyFilter } from "@/lib/releases-server";
+import { ReaderWarmup } from "@/components/works/reader-warmup";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
@@ -209,6 +210,8 @@ export default async function Home() {
         />
         {/* The steps around the dissection that Unitos does not do (SPEC.md §23). */}
         <Companions />
+        {/* The reader's scripts, fetched while the dashboard is idle. */}
+        <ReaderWarmup />
       </div>
     </main>
   );
