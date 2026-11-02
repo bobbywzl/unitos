@@ -31,33 +31,42 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
   const { notebookId } = await props.params;
   const user = await currentUser();
   if (!user) redirect("/signin");
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    include: {
-      collaborators: true,
-      documents: {
-        orderBy: { document: { createdAt: "asc" } },
-        include: { document: { select: { id: true, title: true, video: { select: { id: true } } } } },
-      },
-      sections: {
-        orderBy: { order: "asc" },
-        include: {
-          notes: {
-            where: { status: { not: "REJECTED" } },
-            orderBy: { order: "asc" },
-            include: {
-              sources: { include: { document: { select: { id: true, title: true } } } },
-              replies: { orderBy: { createdAt: "asc" } },
-            },
+  // The project's rows read side by side (Prisma reads a nested include one
+  // relation at a time, in sequence), with the blocks' order, the translator,
+  // and the billing switch.
+  const [notebookCore, notebookDocuments, sectionRows, blockRows, t, billing] = await Promise.all([
+    db.notebook.findUnique({ where: { id: notebookId }, include: { collaborators: true } }),
+    db.notebookDocument.findMany({
+      where: { notebookId },
+      orderBy: { document: { createdAt: "asc" } },
+      include: { document: { select: { id: true, title: true, video: { select: { id: true } } } } },
+    }),
+    db.section.findMany({
+      where: { notebookId },
+      orderBy: { order: "asc" },
+      include: {
+        notes: {
+          where: { status: { not: "REJECTED" } },
+          orderBy: { order: "asc" },
+          include: {
+            sources: { include: { document: { select: { id: true, title: true } } } },
+            replies: { orderBy: { createdAt: "asc" } },
           },
         },
       },
-    },
-  });
-  if (!notebook) notFound();
+    }),
+    // Reading order within a document: the anchor's block, then its offset.
+    db.block.findMany({
+      where: { document: { notebooks: { some: { notebookId } } } },
+      select: { id: true, order: true },
+    }),
+    serverT(),
+    billingLinks(),
+  ]);
+  if (!notebookCore) notFound();
+  const notebook = { ...notebookCore, documents: notebookDocuments, sections: sectionRows };
   const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
   if (!myRole) notFound();
-  const t = await serverT();
 
   const toReplyViews = (
     replies: { id: string; content: string; userId: string; resolvedById: string | null; createdAt: Date }[],
@@ -109,16 +118,8 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
   const sections = byParent.get(null) ?? [];
   for (const s of sections) s.children = byParent.get(s.id) ?? [];
 
-  // Reading order within a document: the anchor's block, then its offset.
   const attachedIds = notebook.documents.map((nd) => nd.document.id);
-  const blockOrder = new Map(
-    (
-      await db.block.findMany({
-        where: { documentId: { in: attachedIds } },
-        select: { id: true, order: true },
-      })
-    ).map((b) => [b.id, b.order]),
-  );
+  const blockOrder = new Map(blockRows.map((b) => [b.id, b.order]));
 
   type Placed = { item: AnnotationItem; block: number; at: number; created: number };
   const placed = new Map<string, Placed[]>();
@@ -231,7 +232,7 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
-    billing: await billingLinks(),
+    billing,
   };
 
   return (
