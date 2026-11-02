@@ -14,7 +14,9 @@ import { personOf, type NotebookRole, type Person } from "@/lib/person";
 
 const RANK: Record<NotebookRole, number> = { viewer: 0, editor: 1, owner: 2 };
 
-export type NotebookAccess = { user: User; role: NotebookRole };
+// notebookId: the project the gate checked, when the gate read it (a route
+// that already holds a row of the project can skip reading it again).
+export type NotebookAccess = { user: User; role: NotebookRole; notebookId?: string };
 
 type NotebookForRole = {
   userId: string;
@@ -57,7 +59,7 @@ export async function notebookAccess(
 ): Promise<NotebookAccess | NextResponse> {
   const user = await requireUser();
   if (user instanceof NextResponse) return user;
-  if (!authEnabled()) return { user, role: "owner" };
+  if (!authEnabled()) return { user, role: "owner", notebookId };
   const notebook = await db.notebook.findUnique({
     where: { id: notebookId },
     select: { userId: true, collaborators: { select: { email: true, role: true } } },
@@ -69,7 +71,7 @@ export async function notebookAccess(
   const role = roleOf(notebook, user);
   const deny = await denied(role, min);
   if (deny) return deny;
-  return { user, role: role! };
+  return { user, role: role!, notebookId };
 }
 
 // Access gate for document routes (blocks, links, reparse): the best role

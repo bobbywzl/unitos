@@ -345,11 +345,18 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
   if (updated && updated.sectionId !== fromSectionId) {
     await normalizeNoteOrders(updated.sectionId);
   }
-  const section = await db.section.findUnique({
-    where: { id: updated?.sectionId ?? fromSectionId },
-    select: { notebookId: true },
-  });
-  if (section) await bumpNotebook(section.notebookId);
+  // The project to bump: the gate's, read with the note's section, while the
+  // note stayed in that section; the new section's when it moved.
+  const notebookId =
+    updated && updated.sectionId === fromSectionId && access.notebookId
+      ? access.notebookId
+      : (
+          await db.section.findUnique({
+            where: { id: updated?.sectionId ?? fromSectionId },
+            select: { notebookId: true },
+          })
+        )?.notebookId;
+  if (notebookId) await bumpNotebook(notebookId);
   return NextResponse.json(
     updated
       ? {
