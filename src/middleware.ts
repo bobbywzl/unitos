@@ -1,13 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE, VISITOR_COOKIE } from "@/lib/constants";
 import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
-import { translate } from "@/lib/i18n/dictionaries";
 
-// The dictionaries are plain data, safe at the edge. The request cookie picks
-// the language for the two error bodies this gate can send.
+// The three error bodies this gate can send, in both languages: the same
+// words as common.unauthorized, common.signInToContinue, and
+// common.accountChanged in lib/i18n/dict/common.ts. Copied here, not
+// imported: the dictionary module carries every string of the app, and the
+// edge bundle that runs on every request would carry all of it.
+const GATE_STRINGS = {
+  en: {
+    unauthorized: "Unauthorized",
+    signInToContinue: "Sign in to continue.",
+    accountChanged: "This tab was open with a different account. Reload the page.",
+  },
+  zh: {
+    unauthorized: "未授权",
+    signInToContinue: "请登录后继续。",
+    accountChanged: "此标签页原先属于其他账户。请刷新页面。",
+  },
+} as const satisfies Record<Lang, Record<string, string>>;
+
+// The request cookie picks the language for the error bodies this gate can send.
 function requestLang(request: NextRequest): Lang {
   const value = request.cookies.get(LANG_COOKIE)?.value;
   return isLang(value) ? value : "en";
+}
+
+function gateText(request: NextRequest, key: keyof (typeof GATE_STRINGS)["en"]): string {
+  return GATE_STRINGS[requestLang(request)][key];
 }
 
 // Edge gate, two doors (Scalae pattern):
@@ -53,7 +73,7 @@ function gate(request: NextRequest): NextResponse {
     if (adminAuth !== "true") {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
-          { error: translate(requestLang(request), "common.unauthorized") },
+          { error: gateText(request, "unauthorized") },
           { status: 401 },
         );
       }
@@ -119,7 +139,7 @@ function gate(request: NextRequest): NextResponse {
     const account = request.cookies.get(ACCOUNT_COOKIE)?.value;
     if (rendered && account && rendered !== account) {
       return NextResponse.json(
-        { error: translate(requestLang(request), "common.accountChanged"), code: "accountChanged" },
+        { error: gateText(request, "accountChanged"), code: "accountChanged" },
         { status: 409 },
       );
     }
@@ -127,7 +147,7 @@ function gate(request: NextRequest): NextResponse {
   if (request.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
-      { error: translate(requestLang(request), "common.signInToContinue") },
+      { error: gateText(request, "signInToContinue") },
       { status: 401 },
     );
   }
