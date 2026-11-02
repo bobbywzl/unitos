@@ -14,6 +14,11 @@ if (directUrl) process.env.DIRECT_URL = directUrl;
 
 // Serverless + pooled connection (Neon -pooler host, Supabase port 6543): mark pgbouncer and
 // cap Prisma's pool so instances do not exhaust the pooler (release-edu pattern).
+// The cap is how many queries one instance runs at once: the pages read
+// their rows side by side (the reader page starts eleven reads together),
+// so a cap of 1 queues them one round trip after another. 4 keeps the
+// pooler's client limit out of reach at the app's size (.env.example).
+const CONNECTION_LIMIT = "4";
 function tunedDatabaseUrl(): string | undefined {
   const raw = process.env.DATABASE_URL;
   if (!raw || !process.env.VERCEL) return raw;
@@ -21,7 +26,7 @@ function tunedDatabaseUrl(): string | undefined {
     const url = new URL(raw);
     const pooled = url.hostname.includes("-pooler") || url.port === "6543";
     if (pooled && !url.searchParams.has("pgbouncer")) url.searchParams.set("pgbouncer", "true");
-    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "1");
+    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", CONNECTION_LIMIT);
     if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
     return url.toString();
   } catch {

@@ -71,13 +71,13 @@ Or run every AI call through the gateway: `litellm/README.md` has the steps. Wit
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
 
-Supabase instead of Neon works too: enable the `vector` extension, then set `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=1`) and `DIRECT_URL` (port 5432) in Environment Variables.
+Supabase instead of Neon works too: enable the `vector` extension, then set `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=4`; see `.env.example` for why 4) and `DIRECT_URL` (port 5432) in Environment Variables.
 
 ## Setup
 
 1. `npm install`
 2. Copy `.env.example` to `.env` and fill in:
-   - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
+   - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=4`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_ADMIN_KEY` — the AI gateway (`litellm/README.md`). With the first two set, every AI call goes through it and the provider keys below are not read; the third opens the admin gateway page
    - `MOONSHOT_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_BASE_URL` overrides the endpoint)
