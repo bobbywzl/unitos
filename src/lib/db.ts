@@ -34,11 +34,22 @@ function tunedDatabaseUrl(): string | undefined {
   }
 }
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma?: Db };
 
 const dbUrl = tunedDatabaseUrl();
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient(dbUrl ? { datasources: { db: { url: dbUrl } } } : undefined);
+// A document's stored file (fileData: a PDF, a Word file, up to tens of
+// megabytes) leaves the database only when a read asks for it by name
+// (`select`, or `omit: { fileData: false }`). Without this, every read of a
+// Document row — the reader page on every open and every refresh, the AI
+// tools on every call — carried the whole file over the wire and threw it
+// away. The types follow the omit, so a read that needs the bytes says so.
+const makeClient = () =>
+  new PrismaClient({
+    ...(dbUrl ? { datasources: { db: { url: dbUrl } } } : {}),
+    omit: { document: { fileData: true } },
+  });
+/** The app's Prisma client, with the omit above in its type. */
+export type Db = ReturnType<typeof makeClient>;
+export const db: Db = globalForPrisma.prisma ?? makeClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;

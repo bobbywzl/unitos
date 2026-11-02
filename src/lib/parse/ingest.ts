@@ -1027,6 +1027,8 @@ export async function reparseDocument(
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: { video: { select: { id: true } } },
+    // The re-parse reads the stored file (lib/db.ts omits it by default).
+    omit: { fileData: false },
   });
   if (!document) return null;
   if (document.video) throw new Error("Video documents do not re-parse");

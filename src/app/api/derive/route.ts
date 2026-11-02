@@ -953,10 +953,12 @@ async function handle(req: Request, t: TFunc) {
     ) {
       return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
     }
-    if (!document.fileData) {
+    // The stored PDF, read by name here alone (lib/db.ts omits it by default).
+    const stored = await db.document.findUnique({ where: { id: documentId }, select: { fileData: true } });
+    if (!stored?.fileData) {
       return NextResponse.json({ error: t("api.noStoredPdf") }, { status: 400 });
     }
-    const pageImage = await renderPdfPage(new Uint8Array(document.fileData), pageBlock.page);
+    const pageImage = await renderPdfPage(new Uint8Array(stored.fileData), pageBlock.page);
     pageImages.push(pageImage);
     const crop = await cropPageRegion(pageImage, data.page.region);
     if (crop) pageImages.push(crop);

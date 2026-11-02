@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { db, type Db } from "@/lib/db";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
@@ -41,7 +41,7 @@ type EventRow = { id: string; notebookId: string; kind: string; meta: unknown };
 
 /** The history event that says where the gone note stood: its removal, the
     removal of its section, or the merge that took it. Locked when `tx` runs in a transaction. */
-async function goneEvent(noteId: string, tx: Prisma.TransactionClient, lock: boolean): Promise<EventRow | null> {
+async function goneEvent(noteId: string, tx: Prisma.TransactionClient | Db, lock: boolean): Promise<EventRow | null> {
   const rows = lock
     ? await tx.$queryRaw<EventRow[]>`
         SELECT "id", "notebookId", "kind", "meta" FROM "NotebookEvent"

@@ -380,10 +380,10 @@ export default async function NotebookPage(props: {
       if (figures || pageLabels) media = { figures: figures ?? {}, pageLabels };
       if (document.importRev !== null) {
         const pdf = pdfIds.has(documentId);
-        // A stored file that opens a zip is a Word file: slides and sheets
-        // never open in the page editor.
-        const zip = document.fileData;
-        const word = zip !== null && zip[0] === 0x50 && zip[1] === 0x4b && zip[2] === 0x03 && zip[3] === 0x04;
+        // A stored file that opens a zip ("PK") is a Word file: slides and
+        // sheets never open in the page editor. Read from the first bytes,
+        // never the whole file.
+        const word = heads.get(documentId)?.head?.startsWith("PK") ?? false;
         const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
         // A PDF's pages the reader chose at the add (SPEC.md §15), and the
         // PDF's page count with them.
