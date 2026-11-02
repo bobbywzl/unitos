@@ -7,6 +7,8 @@ import {
   type Lang,
 } from "@/lib/i18n/config";
 import { translatorFor, type TFunc } from "@/lib/i18n/dictionaries";
+// The server answers in both languages (lib/i18n/register-all.ts).
+import "@/lib/i18n/register-all";
 
 // The language a request should be served in: the cookie when present, else
 // the browser's Accept-Language, else English. Safe outside a request scope

@@ -1,67 +1,32 @@
-import { admin } from "@/lib/i18n/dict/admin";
-import { api } from "@/lib/i18n/dict/api";
-import { assistant } from "@/lib/i18n/dict/assistant";
-import { billing } from "@/lib/i18n/dict/billing";
-import { common } from "@/lib/i18n/dict/common";
-import { docs } from "@/lib/i18n/dict/docs";
-import { docsInsert } from "@/lib/i18n/dict/docsInsert";
-import { docsLayer } from "@/lib/i18n/dict/docsLayer";
-import { docsVersions } from "@/lib/i18n/dict/docsVersions";
-import { docsPage } from "@/lib/i18n/dict/docsPage";
-import { docsSuggest } from "@/lib/i18n/dict/docsSuggest";
-import { docsTyping } from "@/lib/i18n/dict/docsTyping";
-import { legal } from "@/lib/i18n/dict/legal";
-import { outline } from "@/lib/i18n/dict/outline";
-import { panels } from "@/lib/i18n/dict/panels";
-import { panes } from "@/lib/i18n/dict/panes";
-import { plans } from "@/lib/i18n/dict/plans";
-import { reader } from "@/lib/i18n/dict/reader";
-import { settings } from "@/lib/i18n/dict/settings";
-import { signin } from "@/lib/i18n/dict/signin";
-import { stitch } from "@/lib/i18n/dict/stitch";
-import { structure } from "@/lib/i18n/dict/structure";
-import { video } from "@/lib/i18n/dict/video";
-import { works } from "@/lib/i18n/dict/works";
+import { EN } from "@/lib/i18n/dict/en";
 import type { Lang } from "@/lib/i18n/config";
 
-// UI string catalog. Each namespace file exports { en, zh } with identical
-// keys (enforced by `zh: Record<keyof typeof en, string>` in every file), so
-// a key can never exist in one language only. t("namespace.key") is fully
+// UI string catalog. Each namespace file exports its English strings (en)
+// and its sibling .zh file the Chinese ones (zh) with identical keys
+// (enforced by `Record<keyof typeof en, string>` in every .zh file), so a
+// key can never exist in one language only. t("namespace.key") is fully
 // typed — a typo'd key is a compile error — and English is the fallback if a
 // lookup ever misses at runtime. The zh terminology glossary lives at the top
 // of dict/common.ts; every namespace keeps to it.
-const NAMESPACES = {
-  common,
-  signin,
-  works,
-  outline,
-  reader,
-  docs,
-  docsPage,
-  docsInsert,
-  docsTyping,
-  docsLayer,
-  docsSuggest,
-  docsVersions,
-  assistant,
-  billing,
-  panels,
-  panes,
-  plans,
-  stitch,
-  structure,
-  video,
-  settings,
-  admin,
-  api,
-  legal,
-} as const;
+//
+// Every bundle carries English (dict/en.ts). Chinese (dict/zh.ts) is
+// registered by whoever loads it: the server at start (lib/i18n/server.ts,
+// instrumentation.ts), the browser through the provider a page in Chinese
+// renders (components/lang-provider-zh.tsx). A page in English never
+// downloads the Chinese strings.
+type Namespaces = typeof EN;
+export type Tables = { readonly [N in keyof Namespaces]: Readonly<Record<keyof Namespaces[N], string>> };
 
-type Namespaces = typeof NAMESPACES;
+const tables: Partial<Record<Lang, Tables>> = { en: EN };
+
+export function registerDictionary(lang: Lang, dictionary: Tables): void {
+  tables[lang] = dictionary;
+}
+
 
 // "namespace.key" union across every dictionary.
 export type TKey = {
-  [N in keyof Namespaces & string]: `${N}.${keyof Namespaces[N]["en"] & string}`;
+  [N in keyof Namespaces & string]: `${N}.${keyof Namespaces[N] & string}`;
 }[keyof Namespaces & string];
 
 export type TParams = Record<string, string | number>;
@@ -76,8 +41,9 @@ export function translate(lang: Lang, key: TKey, params?: TParams): string {
   const dot = key.indexOf(".");
   const ns = key.slice(0, dot) as keyof Namespaces;
   const k = key.slice(dot + 1);
-  const table = NAMESPACES[ns] as { en: Record<string, string>; zh: Record<string, string> };
-  const s = table?.[lang]?.[k] ?? table?.en?.[k] ?? key;
+  const table = tables[lang]?.[ns] as Record<string, string> | undefined;
+  const fallback = EN[ns] as Record<string, string> | undefined;
+  const s = table?.[k] ?? fallback?.[k] ?? key;
   return interpolate(s, params);
 }
 

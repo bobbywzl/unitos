@@ -2,7 +2,7 @@
 // (SPEC.md §22). zh glossary: dict/common.ts — stitch 缝合 · generated
 // document 生成文档 · pick(为缝合选中节点) 选取.
 
-const en = {
+export const en = {
   generated: "Generated content",
   generatedDesc: "Every page Stitch wrote for the project, newest first. A row opens it in the reader.",
   generatedEmpty: "Nothing generated yet. Ask Stitch below for a page built from the documents.",
@@ -64,63 +64,3 @@ const en = {
   stitchDocumentConversionNone: "Not read: handwritten and not converted to text yet",
   stitchDocumentNoText: "Not read: no text",
 };
-
-const zh: Record<keyof typeof en, string> = {
-  generated: "生成文档",
-  generatedDesc: "缝合为项目写的每个页面，最新在前。点击一行在阅读器中打开。",
-  generatedEmpty: "尚未生成文档。在下方让缝合根据文档写一个页面。",
-  generatedFrom: "来自指令：{command}",
-  generatedToggleTitle: "显示缝合为项目写的页面",
-  openGenerated: "打开此生成文档",
-  blockCount: "{n} 个块",
-  deleteGenerated: "删除",
-  deleteGeneratedTitle: "删除此生成文档",
-  confirmDeleteGenerated: "删除此生成文档？其批注一并删除。引用它的笔记保留引文。",
-
-  stitch: "缝合",
-  stitchTitle: "缝合：助手在项目的文档之间工作——汇集片段、绘制链接、找出矛盾、写新页面",
-  stitchPlaceholder: "助手应在这些文档之间做什么？",
-  stitchHint:
-    "助手完整阅读每篇文档；视频或音频文档读其逐字稿。它在片段之间绘制链接，或根据片段写一个新页面，或两者都做。链接在推荐链接中等待接受；页面放在生成文档下。每条回复都说明从每篇文档读了什么。",
-  stitchSend: "发送",
-  stitchRunning: "正在阅读文档…",
-  stitchStop: "停止",
-  stitchExpand: "展开缝合",
-  stitchCollapse: "收起缝合",
-  stitchScopeAll: "全部文档（{n}）",
-  stitchScopePicked: "已选取 {n} 篇文档",
-  stitchScopePickedOne: "已选取 1 篇文档",
-  stitchPick: "选取文档",
-  stitchPickTitle: "点击图谱中的节点，选取缝合要读的文档。按住 ⇧ 点击可直接选取。",
-  stitchPickDone: "完成",
-  stitchPickClear: "清除",
-  stitchPickClearTitle: "重新阅读全部文档",
-  stitchUnpick: "从选取中移除 {title}",
-  stitchSuggestGather: "汇集每一段提到……的段落",
-  stitchSuggestConnect: "链接回答……的片段",
-  stitchSuggestContradict: "找出这些文档互相矛盾之处",
-  stitchSuggestSynthesis: "写一个页面，综合它们关于……的说法",
-  stitchLinksMade1: "已提出 {n} 条链接。请在推荐链接中接受。",
-  stitchLinksMadeN: "已提出 {n} 条链接。请在推荐链接中接受。",
-  stitchDocumentMade: "已写页面：{title}",
-  stitchOpenDocument: "打开",
-  stitchNothingStored: "没有存储任何内容。",
-  stitchFailed: "缝合失败。{reason}",
-  stitchViewer: "查看者可以阅读文档。请让编辑者运行缝合。",
-  stitchDocumentsRead: "已读 {read} / {total} 篇文档",
-  stitchNotEnoughRead: "缝合没有运行。它需要两篇可读的文档。",
-  stitchUnitText: "个块",
-  stitchUnitTranscript: "行逐字稿",
-  stitchUnitConverted: "个转换后的块",
-  stitchDocumentRead: "已读 {n} {unit}",
-  stitchDocumentTranscriptPending: "未读：逐字稿仍在转写中",
-  stitchDocumentTranscriptStale: "未读：上一次转写没有完成",
-  stitchDocumentTranscriptFailed: "未读：转写失败。{detail}",
-  stitchDocumentTranscriptNone: "未读：还没有逐字稿。打开文档以转写",
-  stitchDocumentConversionPending: "未读：转换为文本仍在进行中",
-  stitchDocumentConversionFailed: "未读：转换为文本失败。{detail}",
-  stitchDocumentConversionNone: "未读：手写文档还没有转换为文本",
-  stitchDocumentNoText: "未读：没有文本",
-};
-
-export const stitch = { en, zh } as const;

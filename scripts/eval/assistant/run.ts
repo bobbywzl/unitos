@@ -33,6 +33,7 @@ import { formatTimeRange } from "@/lib/video/types";
 import { EXTERNAL_PENDING } from "@/lib/derive/external-call";
 import { corpusSystem } from "@/lib/digest/render";
 import { translatorFor } from "@/lib/i18n/dictionaries";
+import "@/lib/i18n/register-all";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesis";
 import type { AssistantAction } from "@/lib/types";
