@@ -40,63 +40,67 @@ export default async function Home() {
     // The pending queue carries to the front door (design 2a).
     sections: { select: { _count: { select: { notes: { where: { status: "PENDING" as const } } } } } },
   };
-  const works = await db.notebook.findMany({
-    // With sign-in on, the shelf is the signed-in reader's corpora.
-    where: authEnabled() ? { userId: user.id } : undefined,
-    orderBy: { updatedAt: "desc" },
-    include: workInclude,
-  });
-
-  // Corpora shared with this account, with their owners' names.
-  const collabRows = authEnabled()
-    ? await db.notebookCollaborator.findMany({
-        where: { email: user.email },
-        select: { role: true, notebook: { include: workInclude } },
-      })
-    : [];
+  // The releases that shipped since the account was made land as update
+  // notifications on this open (SPEC.md §18, lib/releases.ts). The account's
+  // start: its sign-up, or the admin's last reset of it.
+  const startedAt = user.resetAt ?? user.createdAt;
+  const lang = await currentLang();
+  // The reads that depend on nothing but the account start together; the
+  // owners' names and the notifications follow, side by side.
+  const [works, collabRows, billing] = await Promise.all([
+    db.notebook.findMany({
+      // With sign-in on, the shelf is the signed-in reader's corpora.
+      where: authEnabled() ? { userId: user.id } : undefined,
+      orderBy: { updatedAt: "desc" },
+      include: workInclude,
+    }),
+    // Corpora shared with this account, with their owners' names.
+    authEnabled()
+      ? db.notebookCollaborator.findMany({
+          where: { email: user.email },
+          select: { role: true, notebook: { include: workInclude } },
+        })
+      : [],
+    // Billing (SPEC.md §24): the tier chip is the tier button while the
+    // switch is on — the upgrade panel for Unitos Premium, the plans page for
+    // Unitos Ultra.
+    billingLinks(),
+    ensureReleaseNotifications(user.id, startedAt, lang),
+  ]);
   collabRows.sort(
     (a, b) => b.notebook.updatedAt.getTime() - a.notebook.updatedAt.getTime(),
   );
-  const owners = await db.user.findMany({
-    where: { id: { in: [...new Set(collabRows.map((r) => r.notebook.userId))] } },
-    select: { id: true, name: true },
-  });
+  const ownerIds = [...new Set(collabRows.map((r) => r.notebook.userId))];
+  const [owners, notifications] = await Promise.all([
+    ownerIds.length > 0
+      ? db.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } })
+      : [],
+    // The account's open notifications from the admin (SPEC.md §18), newest
+    // first; a release's in this language only (one card per release).
+    db.notificationRecipient.findMany({
+      where: { userId: user.id, dismissedAt: null, notification: releaseKeyFilter(lang) },
+      orderBy: { notification: { createdAt: "desc" } },
+      select: {
+        notification: {
+          select: {
+            id: true,
+            kind: true,
+            title: true,
+            body: true,
+            createdAt: true,
+            releaseKey: true,
+            // Kind "feedback": the feedback the reply answers, shown above it.
+            feedback: { select: { message: true } },
+          },
+        },
+      },
+    }),
+  ]);
   const ownerById = new Map(owners.map((o) => [o.id, o.name]));
 
   // The account's tier (TIERS.md): the band over the page, the tier mark on
   // the badge, and the tier chip beside it. One read, the same as the reader's.
   const tier = accountTier(user, authEnabled());
-  // Billing (SPEC.md §24): the tier chip is the tier button while the
-  // switch is on — the upgrade panel for Unitos Premium, the plans page for
-  // Unitos Ultra.
-  const billing = await billingLinks();
-
-  // The releases that shipped since the account was made land as update
-  // notifications on this open (SPEC.md §18, lib/releases.ts).
-  const lang = await currentLang();
-  // The account's start: its sign-up, or the admin's last reset of it.
-  const startedAt = user.resetAt ?? user.createdAt;
-  await ensureReleaseNotifications(user.id, startedAt, lang);
-  // The account's open notifications from the admin (SPEC.md §18), newest
-  // first; a release's in this language only (one card per release).
-  const notifications = await db.notificationRecipient.findMany({
-    where: { userId: user.id, dismissedAt: null, notification: releaseKeyFilter(lang) },
-    orderBy: { notification: { createdAt: "desc" } },
-    select: {
-      notification: {
-        select: {
-          id: true,
-          kind: true,
-          title: true,
-          body: true,
-          createdAt: true,
-          releaseKey: true,
-          // Kind "feedback": the feedback the reply answers, shown above it.
-          feedback: { select: { message: true } },
-        },
-      },
-    },
-  });
 
   const toItem = (
     w: (typeof works)[number],
