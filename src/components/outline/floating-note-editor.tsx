@@ -628,6 +628,9 @@ export function FloatingNoteEditor({
       }${merging ? " note-absorb" : ""}`}
     >
       {dropError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{dropError}</p>}
+      {noteDrop.reading && (
+        <p className="mb-1 shrink-0 text-[11px] text-sand-600">{t("api.imageReading", { name: noteDrop.reading })}</p>
+      )}
       {mergeError && <p className="mb-1 shrink-0 text-[11px] text-red-500">{mergeError}</p>}
       {/* Over the sidebar: one line says what letting go does. */}
       {overSidebar && (

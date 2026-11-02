@@ -1058,6 +1058,7 @@ const NoteCardBody = memo(function NoteCardBody({
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
+        {noteDrop.reading && <p className="mt-1 text-[11px] text-sand-600">{t("api.imageReading", { name: noteDrop.reading })}</p>}
         {/* The bar, then the title field, then the body (SPEC.md §6). On a
             touch screen with the note's assistant open, the card scrolls as
             one column and nothing shrinks under its words, so the
@@ -1214,6 +1215,7 @@ const NoteCardBody = memo(function NoteCardBody({
     >
       {header}
       {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
+      {noteDrop.reading && <p className="mt-1 text-[11px] text-sand-600">{t("api.imageReading", { name: noteDrop.reading })}</p>}
 
       {!collapsed && (
         <div

@@ -58,7 +58,7 @@ import { TranslationBar } from "@/components/reader/translation-bar";
 import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import { isHeicFile } from "@/lib/heic";
+import { isHeicFile } from "@/lib/image-jpeg";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";

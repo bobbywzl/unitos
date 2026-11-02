@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { HEIC_ACCEPT } from "@/lib/heic";
+import { HEIC_ACCEPT } from "@/lib/image-jpeg";
 import { LinkIcon, UploadIcon } from "@/components/docs/icons";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 

@@ -5,8 +5,8 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
 import type { Patch } from "@/lib/markdown-style";
-import { HEIC_ACCEPT, isHeicFile, jpegsFromHeic } from "@/lib/heic";
-import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
+import { HEIC_ACCEPT, jpegsWhereNeeded, needsJpeg } from "@/lib/image-jpeg";
+import { FREE_IMAGE_BYTES, IMAGE_ACCEPT, MAX_IMAGE_BYTES, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
 import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { quoteLanded } from "@/components/use-note-drop";
 import { CheckIcon, RedoIcon, UndoIcon } from "@/components/icons";
@@ -425,6 +425,8 @@ export function NoteEditor({
   // Read once, on mount: whether the caret lands in the text.
   const autoFocusRef = useRef(autoFocus);
   const [imageError, setImageError] = useState<string | null>(null);
+  // The photo being made a JPEG now, by name (lib/image-jpeg.ts).
+  const [reading, setReading] = useState<string | null>(null);
   // What the undo and redo buttons can do, read back after every edit — the
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
   // there, so the buttons are the same two steps under a symbol.
@@ -463,15 +465,20 @@ export function NoteEditor({
 
   // A picked or pasted image goes into the note at the caret (SPEC.md §16):
   // refused before anything leaves the browser when the tier does not allow
-  // it, stored, and inserted as its markdown on its own line. A HEIC photo
-  // goes in as a JPEG (lib/heic.ts).
+  // it, stored, and inserted as its markdown on its own line. A HEIC photo,
+  // or a photo over the tier's size cap, goes in as a JPEG that fits
+  // (lib/image-jpeg.ts).
   const insertImages = async (picked: File[]) => {
     setImageError(null);
     let files = picked;
-    if (files.some(isHeicFile)) {
-      const converted = await jpegsFromHeic(files);
+    const maxBytes = premium ? MAX_IMAGE_BYTES : FREE_IMAGE_BYTES;
+    const needs = files.find((f) => needsJpeg(f, maxBytes));
+    if (needs) {
+      setReading(needs.name);
+      const converted = await jpegsWhereNeeded(files, maxBytes);
+      setReading(null);
       if (converted.unread) {
-        setImageError(t("api.heicNotRead", { name: converted.unread.name }));
+        setImageError(t("api.imageNotRead", { name: converted.unread.name }));
         return;
       }
       files = converted.files;
@@ -777,6 +784,7 @@ export function NoteEditor({
         <VoiceTypingButton field={ref} track="note-voice-typing" className="size-6" />
       </div>
       {imageError && <p className="shrink-0 text-[11px] text-red-500">{imageError}</p>}
+      {reading && <p className="shrink-0 text-[11px] text-sand-600">{t("api.imageReading", { name: reading })}</p>}
       {title}
       <div
         ref={bodyBox}

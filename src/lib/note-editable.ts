@@ -11,7 +11,7 @@
 // Offsets in this module's API are source offsets — positions in the
 // markdown — so the editor's line commands patch the markdown directly.
 
-import { isHeicFile } from "@/lib/heic";
+import { isHeicFile } from "@/lib/image-jpeg";
 import {
   TEXT_COLORS,
   isAtom,

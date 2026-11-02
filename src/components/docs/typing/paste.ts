@@ -8,8 +8,8 @@ import { listFormat } from "@/components/docs/toolbar/lists";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { LIST_COUNTERS, type ListCounter, type ListLevel } from "@/lib/docs/schema";
 import { imageFileFrom, type DroppedImageUrl } from "@/lib/image-drop";
-import { isHeicFile, jpegsFromHeic } from "@/lib/heic";
-import { isImageFile, refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
+import { imageToJpeg, isHeicFile, needsJpeg } from "@/lib/image-jpeg";
+import { FREE_IMAGE_BYTES, MAX_IMAGE_BYTES, isImageFile, refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Paste in the page editor (SPEC.md §29, typing), as Google Docs pastes:
@@ -297,7 +297,7 @@ export function armPlainPaste(view: EditorView): void {
 
 /** The image files among `files`: png, jpg, gif, webp, or bmp, by type or
     by name (lib/handwritten/image.ts), and HEIC, which goes in as a JPEG
-    (lib/heic.ts). */
+    (lib/image-jpeg.ts). */
 export function imageFiles(files: FileList | File[] | null | undefined): File[] {
   return Array.from(files ?? []).filter((file) => isImageFile(file) || isHeicFile(file));
 }
@@ -391,50 +391,70 @@ function imageSpot(doc: PMNode, pos: number): number {
   return insertPoint(doc, $pos.after(), line.type.schema.nodes.image) ?? $pos.after();
 }
 
+/** A HEIC photo's place while it turns into a JPEG (the browser cannot
+    draw a HEIC): a gray 4:3 frame, drawn faint with the turning ring as an
+    upload is. Each one is its own address, so its image is found again. */
+let framesMade = 0;
+function heicFrame(): string {
+  framesMade += 1;
+  return `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><!--${framesMade}--><rect width="480" height="360" fill="#d9d4cb"/></svg>`,
+  )}`;
+}
+
 /** Insert images at `pos` (the selection when absent, which the first image
-    replaces), each on its own line (imageSpot), in the order given. A HEIC
-    photo goes in as a JPEG (lib/heic.ts). The files the rules refuse stay
-    out, with the reason (acceptedImages). Each
+    replaces), each on its own line (imageSpot), in the order given. The
+    files the rules refuse stay out, with the reason (acceptedImages). Each
     shows at once from a blob: address, uploads, and takes the stored
     address, as copyImages does; one the server refuses goes, with the
-    reason. */
+    reason. A HEIC photo, or a photo over the size cap for the reader's
+    tier (a photo pasted from Photos is a PNG of 15 to 40 MB), is made a
+    JPEG that fits first (lib/image-jpeg.ts; seconds for a 12 MP photo): it
+    shows at once (a HEIC as a gray frame) and then goes the same way; one
+    the browser cannot make a JPEG of goes, with the reason. */
 export async function insertImageFiles(editor: Editor, files: File[], pos?: number): Promise<void> {
+  const maxBytes = (premiumOf.get(editor) ?? true) ? MAX_IMAGE_BYTES : FREE_IMAGE_BYTES;
+  const kept = new Set(acceptedImages(editor, files.filter((file) => !needsJpeg(file, maxBytes))));
+  const taken = files.filter((file) => needsJpeg(file, maxBytes) || kept.has(file));
   let at = pos;
-  if (files.some(isHeicFile)) {
-    // A HEIC photo turns into a JPEG first. The reader may type or select
-    // while it does: then the images go in after the selection, never over
-    // the words.
-    const { doc, selection } = editor.state;
-    const converted = await jpegsFromHeic(files);
-    if (editor.isDestroyed) return;
-    files = converted.files;
-    if (converted.unread) {
-      const t = insertT(editor);
-      toast(t("api.heicNotRead", { name: converted.unread.name || t("docsTyping.thisFile") }), editor);
-    }
-    if (editor.state.doc !== doc || (at === undefined && !editor.state.selection.eq(selection))) {
-      at = editor.state.selection.to;
-    }
-  }
-  const taken = acceptedImages(editor, files);
   const shown = taken.map((file) => {
-    const src = URL.createObjectURL(file);
+    const src = isHeicFile(file) ? heicFrame() : URL.createObjectURL(file);
     markUpload(editor, src, true);
     insertImage(editor, { src }, at);
     at = editor.state.selection.to;
     return src;
   });
   await Promise.all(
-    taken.map(async (file, i) => {
+    taken.map(async (picked, i) => {
+      let src = shown[i];
+      let file = picked;
+      if (needsJpeg(picked, maxBytes)) {
+        const jpeg = await imageToJpeg(picked, maxBytes);
+        if (!jpeg) {
+          const t = insertT(editor);
+          toast(t("api.imageNotRead", { name: picked.name || t("docsTyping.thisFile") }), editor);
+          markUpload(editor, src, false);
+          setImageSrc(editor, src, null);
+          if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+          return;
+        }
+        file = jpeg;
+        const blob = URL.createObjectURL(jpeg);
+        markUpload(editor, blob, true);
+        setImageSrc(editor, src, blob);
+        markUpload(editor, src, false);
+        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+        src = blob;
+      }
       let url: string | null = null;
       try {
         url = (await uploadImage(file)).url;
       } catch (err) {
         uploadFailed(editor, err);
       }
-      markUpload(editor, shown[i], false);
-      setImageSrc(editor, shown[i], url);
-      URL.revokeObjectURL(shown[i]);
+      markUpload(editor, src, false);
+      setImageSrc(editor, src, url);
+      if (src.startsWith("blob:")) URL.revokeObjectURL(src);
     }),
   );
 }
