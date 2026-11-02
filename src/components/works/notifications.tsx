@@ -4,9 +4,15 @@ import { useRouter } from "next/navigation";
 import { useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useLang, useT } from "@/components/lang-provider";
-import { Markdown } from "@/components/markdown";
+import dynamic from "next/dynamic";
 import { NotificationKindChip } from "@/components/notification-kind";
 import { Presence } from "@/components/presence";
+
+// The markdown renderer (160KB raw) comes with the dashboard only when a
+// notification shows; the body reads as text until it lands on a soft open.
+const Markdown = dynamic(() => import("@/components/markdown").then((m) => m.Markdown), {
+  loading: () => null,
+});
 
 export type NotificationItem = {
   id: string;

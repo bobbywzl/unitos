@@ -39,11 +39,14 @@ export function WorkCard({
   onDelete,
   onLeave,
   offline,
+  prefetchPage = false,
 }: {
   work: WorkItem;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => void;
   onLeave?: (id: string) => void;
+  // The card prefetches its reader page whole (the first card does).
+  prefetchPage?: boolean;
   // Offline copy (SPEC.md §17, Unitos Ultra): the card's state and the toggle.
   // Absent where the browser cannot hold one.
   offline?: { saved: boolean; saving: boolean; ultra: boolean; onToggle: (id: string) => void };
@@ -92,6 +95,10 @@ export function WorkCard({
 
       <Link
         href={`/n/${work.id}`}
+        // The first card (the project last worked on) prefetches its page
+        // whole, so the press lands on the reader with its content; the
+        // others prefetch the frame alone, as a Link does.
+        prefetch={prefetchPage ? true : undefined}
         className="relative z-1 flex aspect-[5.5/8.5] flex-col rounded-[18px] bg-sand-100 px-3 pt-6 pb-3 sm:px-[18px] sm:pb-[18px] text-center shadow-soft transition-[transform,box-shadow] duration-300 hover:-translate-y-[5px] hover:shadow-lift"
       >
         <span
