@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { READING_LINE_PX } from "@/lib/reading-position";
-import { browserUtterance } from "@/lib/voice/browser-voice";
+import { browserUtterances } from "@/lib/voice/browser-voice";
 
 // Read aloud for the whole document (SPEC.md §6, Voice): the button beside
 // Breakwork reads the document from the block at the reading position to the
 // end, block by block, in the voice the selection's Read aloud uses
-// (POST /api/speech: the free Edge voice, then OpenAI TTS; the browser voice
-// when the route answers 503). The next two blocks' audio is fetched while
+// (POST /api/speech: the free Edge voice, then Gemini's, then OpenAI TTS;
+// the browser voice when the route answers 503, and for the rest of the
+// reading after that, so no block waits on a server that cannot read). The next two blocks' audio is fetched while
 // one plays, so the reading runs on without gaps. The block being read
 // carries the read-aloud mark, drawn over the pane, never in the text, and
 // the pane follows it while the reader has not scrolled away.
@@ -99,11 +100,14 @@ function silence(): string {
 export function useReadAloud({
   onError,
   failedLine,
+  unavailableLine,
 }: {
   /** A piece failed and the reading stopped: the reason. */
   onError: (message: string) => void;
   /** The failure line for a status the route gave no reason for. */
   failedLine: (status: number) => string;
+  /** The line when the browser has no voice either. */
+  unavailableLine: string;
 }) {
   const [state, setState] = useState<ReadAloudState>("idle");
   const [blockId, setBlockId] = useState<string | null>(null);
@@ -121,9 +125,13 @@ export function useReadAloud({
   const playRef = useRef<(i: number, r: number) => Promise<void>>(async () => {});
   const onErrorRef = useRef(onError);
   const failedLineRef = useRef(failedLine);
+  const unavailableRef = useRef(unavailableLine);
+  // The route answered 503 once: the browser voice reads the rest.
+  const browserOnly = useRef(false);
   useEffect(() => {
     onErrorRef.current = onError;
     failedLineRef.current = failedLine;
+    unavailableRef.current = unavailableLine;
   });
 
   const release = useCallback(() => {
@@ -159,13 +167,17 @@ export function useReadAloud({
     if (known) return known;
     const piece = pieces.current[i];
     const clip = (async (): Promise<Clip> => {
+      if (browserOnly.current) return { browser: true };
       const res = await fetch("/api/speech", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: piece.text }),
         signal,
       });
-      if (res.status === 503) return { browser: true };
+      if (res.status === 503) {
+        browserOnly.current = true;
+        return { browser: true };
+      }
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? failedLineRef.current(res.status));
@@ -207,16 +219,31 @@ export function useReadAloud({
       };
       if ("browser" in clip) {
         const synth = window.speechSynthesis;
-        if (!synth) {
+        const utterances = synth ? browserUtterances(pieces.current[i].text) : [];
+        const last = utterances[utterances.length - 1];
+        if (!synth || !last) {
           stop();
-          onErrorRef.current(failedLineRef.current(503));
+          onErrorRef.current(unavailableRef.current);
           return;
         }
-        const utterance = browserUtterance(pieces.current[i].text);
-        utterance.onend = next;
-        utterance.onerror = next;
+        // The piece ends once: at its last sentence, or at an error, which
+        // drops the sentences left so they never overlap the next piece.
+        let ended = false;
+        const end = () => {
+          if (ended) return;
+          ended = true;
+          next();
+        };
+        last.onend = end;
+        for (const u of utterances) {
+          u.onerror = () => {
+            if (r !== run.current) return;
+            synth.cancel();
+            end();
+          };
+        }
         playing.current = "browser";
-        synth.speak(utterance);
+        for (const u of utterances) synth.speak(u);
         if (paused.current) synth.pause();
         else setState("playing");
         return;
@@ -257,6 +284,7 @@ export function useReadAloud({
       if (list.length === 0) return;
       const r = run.current;
       pieces.current = list;
+      browserOnly.current = false;
       abort.current = new AbortController();
       audio.current ??= new Audio();
       const el = audio.current;

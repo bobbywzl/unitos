@@ -26,11 +26,33 @@ export function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
   return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
-/** An utterance of `text` in its language, with the most natural voice. */
-export function browserUtterance(text: string): SpeechSynthesisUtterance {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = speechLang(text);
-  const voice = pickBrowserVoice(utterance.lang);
-  if (voice) utterance.voice = voice;
-  return utterance;
+/** Chrome's online voices stop after about 15 seconds of one utterance,
+    so a text is spoken in sentences of at most this many characters. */
+const MAX_UTTERANCE_CHARS = 220;
+
+/** `text` as utterances in its language, with the most natural voice: one
+    per sentence, a long sentence cut at its last space. speechSynthesis
+    queues them, so speaking them all reads the text through; the last
+    one's end is the text's end. */
+export function browserUtterances(text: string): SpeechSynthesisUtterance[] {
+  const lang = speechLang(text);
+  const voice = pickBrowserVoice(lang);
+  const sentences = text.match(/[^.!?。！？]+[.!?。！？]*\s*/g) ?? [text];
+  const parts: string[] = [];
+  for (const sentence of sentences) {
+    let rest = sentence.trim();
+    while (rest.length > MAX_UTTERANCE_CHARS) {
+      const at = rest.lastIndexOf(" ", MAX_UTTERANCE_CHARS);
+      const cut = at > MAX_UTTERANCE_CHARS / 2 ? at : MAX_UTTERANCE_CHARS;
+      parts.push(rest.slice(0, cut));
+      rest = rest.slice(cut).trim();
+    }
+    if (rest) parts.push(rest);
+  }
+  return parts.map((part) => {
+    const utterance = new SpeechSynthesisUtterance(part);
+    utterance.lang = lang;
+    if (voice) utterance.voice = voice;
+    return utterance;
+  });
 }

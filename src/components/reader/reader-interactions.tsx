@@ -59,7 +59,7 @@ import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { isHeicFile } from "@/lib/image-jpeg";
-import { browserUtterance } from "@/lib/voice/browser-voice";
+import { browserUtterances } from "@/lib/voice/browser-voice";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
@@ -5544,6 +5544,7 @@ export function ReaderInteractions({
   const readAloud = useReadAloud({
     onError: (message) => showError(message),
     failedLine: (status) => (status ? t("reader.voiceFailedStatus", { status }) : t("reader.voiceFailed")),
+    unavailableLine: t("reader.voiceUnavailable"),
   });
   const stopReadAloud = readAloud.stop;
   // Another document in the pane: its reading stops.
@@ -7420,15 +7421,19 @@ export function ReaderInteractions({
       showToast(t("reader.voiceUnavailable"));
       return;
     }
-    const utterance = browserUtterance(text);
-    utterance.onend = () => {
+    const utterances = browserUtterances(text);
+    const last = utterances[utterances.length - 1];
+    if (!last) return;
+    last.onend = () => {
       if (voiceRunRef.current === run) setVoice("idle");
     };
-    utterance.onerror = () => {
-      if (voiceRunRef.current === run) setVoice("idle");
-    };
+    for (const u of utterances) {
+      u.onerror = () => {
+        if (voiceRunRef.current === run) setVoice("idle");
+      };
+    }
     synth.cancel();
-    synth.speak(utterance);
+    for (const u of utterances) synth.speak(u);
     setVoice("playing");
   }
 
