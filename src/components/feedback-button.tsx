@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
+import { IMAGE_ACCEPT, MAX_IMAGE_BYTES, uploadImage } from "@/lib/images";
 import { captureOpener, returnFocus, useEscapeLayer } from "@/lib/escape-layers";
 import { readAccountCookie } from "@/lib/tab-account";
 import { isImeKey } from "@/lib/ime";
@@ -186,9 +186,8 @@ export function FeedbackButton() {
       }
       setUploading((n) => n + 1);
       try {
-        const res = await fetch("/api/images", { method: "POST", body: file });
-        if (!res.ok) throw new Error();
-        const image = (await res.json()) as { id: string; url: string };
+        // In chunks above 4 MB, the request cap (lib/images.ts).
+        const image = await uploadImage(file);
         setPhotos((prev) => [...prev, { id: image.id, url: image.url, name: file.name }]);
       } catch {
         setNote(t("works.feedbackPhotoFailed"));

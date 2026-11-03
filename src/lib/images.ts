@@ -6,6 +6,7 @@
 import { IMAGE_EXTENSIONS, isImageFile } from "@/lib/handwritten/image";
 import { DEFAULT_LANG, isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
+import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 export { IMAGE_ACCEPT, IMAGE_EXTENSIONS, isImageFile, sniffImage } from "@/lib/handwritten/image";
 
@@ -13,6 +14,12 @@ export { IMAGE_ACCEPT, IMAGE_EXTENSIONS, isImageFile, sniffImage } from "@/lib/h
 export const FREE_IMAGE_BYTES = 5 * 1024 * 1024;
 /** The largest image any tier stores. */
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+/** An image up to this size goes up in one request. Vercel caps a request
+    body at about 4.5 MB, so a larger one goes in chunks (POST /api/uploads,
+    then /api/images/complete). */
+const ONE_REQUEST_BYTES = 4 * 1024 * 1024;
+/** The chunks of the largest image. */
+export const IMAGE_UPLOAD_CHUNKS = Math.ceil(MAX_IMAGE_BYTES / UPLOAD_CHUNK_BYTES);
 
 /** Why a dropped file cannot be added, or null when it can. The reader turns
     the reason into the message; the route answers with the same reasons. */
@@ -63,30 +70,54 @@ export function imageFigureHtml(src: string, alt: string): string {
   return `<figure><img src="${escape(src)}" alt="${escape(alt)}" /></figure>`;
 }
 
-/** Store one dropped image and get its URL back. Throws with the server's
-    plain reason — too large, not an image, or Unitos Premium — or, when the
-    server gave none (a server error, no network), the one failure line
-    "Not saved. Try again." (offline: "Not saved. Try again when you are
-    online."); the status and the error go to the console. */
+/** Store one dropped image and get its URL back: in one request up to
+    4 MB, in chunks above (the request cap). Throws with the server's plain
+    reason — too large, not an image, or Unitos Premium — or, when the
+    server gave none (a server error, no network, the host's own refusal),
+    the one failure line "Not saved. Try again." (offline: "Not saved. Try
+    again when you are online."); the status and the error go to the
+    console. */
 export async function uploadImage(file: File): Promise<{ id: string; url: string }> {
-  let res: Response;
-  try {
-    res = await fetch("/api/images", {
+  if (file.size <= ONE_REQUEST_BYTES) {
+    const res = await send("/api/images", {
       method: "POST",
       headers: { "Content-Type": file.type || "application/octet-stream" },
       body: file,
     });
+    return (await res.json()) as { id: string; url: string };
+  }
+  const uploadId = crypto.randomUUID();
+  const chunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+  for (let index = 0; index < chunks; index++) {
+    const start = index * UPLOAD_CHUNK_BYTES;
+    await send(`/api/uploads?uploadId=${uploadId}&index=${index}`, {
+      method: "POST",
+      body: file.slice(start, start + UPLOAD_CHUNK_BYTES),
+    });
+  }
+  const res = await send("/api/images/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uploadId, chunks }),
+  });
+  return (await res.json()) as { id: string; url: string };
+}
+
+/** One request of an image upload: the response when it is ok, else the
+    error uploadImage throws. */
+async function send(url: string, init: RequestInit): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
   } catch (err) {
     console.warn("Image not saved:", err instanceof Error ? err.message : String(err));
     throw new Error(notSavedLine());
   }
-  if (!res.ok) {
-    const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-    if (detail?.error && res.status < 500) throw new Error(detail.error);
-    console.warn("Image not saved:", res.status, detail?.error ?? "");
-    throw new Error(notSavedLine());
-  }
-  return (await res.json()) as { id: string; url: string };
+  if (res.ok) return res;
+  const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (detail?.error && res.status < 500) throw new Error(detail.error);
+  console.warn("Image not saved:", res.status, detail?.error ?? "");
+  throw new Error(notSavedLine());
 }
 
 /** "Not saved. Try again." in the page's language (the lang cookie); offline,
