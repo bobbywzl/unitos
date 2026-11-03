@@ -63,6 +63,10 @@ const en = {
   highlightInWithNote: "Highlight in {color} with the comment",
   readAloud: "Read the selection aloud",
   stopReading: "Stop reading",
+  readDocument: "Read aloud",
+  readDocumentTitle: "Read the document aloud, from where you are",
+  readPause: "Pause",
+  readResume: "Resume",
   defineTitle:
     "The AI defines the selected word as this sentence uses it, tuned to your background. Nothing is saved.",
   assistantTitle:
@@ -379,6 +383,10 @@ const zh: Record<keyof typeof en, string> = {
   highlightInWithNote: "以{color}高亮并附上评论",
   readAloud: "朗读选中内容",
   stopReading: "停止朗读",
+  readDocument: "朗读",
+  readDocumentTitle: "从你读到的地方朗读全文",
+  readPause: "暂停",
+  readResume: "继续",
   defineTitle: "AI 结合你的背景，给出选中的词在这句话里的定义。不保存。",
   assistantTitle: "告诉助手要对选中内容做什么。它会提出计划，或在文章旁回复。",
   explainTitle: "AI 结合你的背景，用通俗的语言解释选中内容。保存在批注下。",

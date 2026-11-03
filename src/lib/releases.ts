@@ -50,6 +50,14 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20261013Body",
     features: ["structure"],
   },
+  {
+    // Read aloud for the whole document (SPEC.md §6, Voice): the button beside Breakwork glows.
+    id: "2026-11-03",
+    date: "2026-11-03",
+    titleKey: "works.release20261103Title",
+    bodyKey: "works.release20261103Body",
+    features: ["readAloud"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

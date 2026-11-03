@@ -59,6 +59,7 @@ import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { isHeicFile } from "@/lib/image-jpeg";
+import { browserUtterance } from "@/lib/voice/browser-voice";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
@@ -115,6 +116,8 @@ import {
   SummaryIcon,
   UnlinkIcon,
   VolumeIcon,
+  PlayIcon,
+  PauseIcon,
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
@@ -122,6 +125,7 @@ import { Collapse, Presence } from "@/components/presence";
 import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { useUnderDocsHeader } from "@/components/reader/under-docs-header";
+import { hasReadableBlocks, ReadAloudMark, readPieces, useReadAloud } from "@/components/reader/read-aloud";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
@@ -5533,6 +5537,17 @@ export function ReaderInteractions({
   // Breakwork (SPEC.md §32): the overlay over the reader, and its glow.
   const [structureOpen, setStructureOpen] = useState(false);
   const structureNew = useNewFeature("structure");
+  // Read aloud for the whole document (read-aloud.tsx, SPEC.md §6 Voice):
+  // the button beside Breakwork, its glow, and the reading.
+  const readAloudNew = useNewFeature("readAloud");
+  const readable = !transcript && !embedded && hasReadableBlocks(blocks);
+  const readAloud = useReadAloud({
+    onError: (message) => showError(message),
+    failedLine: (status) => (status ? t("reader.voiceFailedStatus", { status }) : t("reader.voiceFailed")),
+  });
+  const stopReadAloud = readAloud.stop;
+  // Another document in the pane: its reading stops.
+  useEffect(() => stopReadAloud, [documentId, stopReadAloud]);
   // What each block carries, for the pieces of the structure: every
   // annotation and note anchored in it, its kind and its words.
   const structureAnnotations = useMemo<Record<string, PieceAnnotation[]>>(() => {
@@ -7396,25 +7411,6 @@ export function ReaderInteractions({
     setVoice("idle");
   }
 
-  // The most natural voice the browser has for the language. The default is
-  // often robotic; neural voices ("Natural", Edge) rank first, then Google's,
-  // then premium local ones, then any voice matching the language.
-  function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
-    const prefix = lang.split("-")[0];
-    const candidates = (window.speechSynthesis?.getVoices() ?? []).filter((v) =>
-      v.lang.replace("_", "-").toLowerCase().startsWith(prefix),
-    );
-    const score = (v: SpeechSynthesisVoice) => {
-      const name = v.name.toLowerCase();
-      if (name.includes("natural") || name.includes("online")) return 4;
-      if (name.includes("google")) return 3;
-      if (name.includes("premium") || name.includes("enhanced") || name.includes("siri")) return 2;
-      if (v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase()) return 1;
-      return 0;
-    };
-    return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
-  }
-
   // The browser voice reads when /api/speech fails. The utterance language
   // follows the text: Chinese characters → zh-CN, else en-US.
   function browserSpeak(text: string, run: number) {
@@ -7424,11 +7420,7 @@ export function ReaderInteractions({
       showToast(t("reader.voiceUnavailable"));
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(text);
-    const lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
-    utterance.lang = lang;
-    const voice = pickBrowserVoice(lang);
-    if (voice) utterance.voice = voice;
+    const utterance = browserUtterance(text);
     utterance.onend = () => {
       if (voiceRunRef.current === run) setVoice("idle");
     };
@@ -7448,6 +7440,8 @@ export function ReaderInteractions({
     if (!popover) return;
     const text = passageText(popover.anchor).slice(0, 4000);
     if (!text.trim()) return;
+    // One voice at a time: the document's reading stops.
+    readAloud.stop();
     const run = ++voiceRunRef.current;
     setVoice("loading");
     // Warm the voice list: if the route fails, browserSpeak needs it loaded.
@@ -10688,6 +10682,64 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {collapseNew.isNew && <NewPill />}
     </button>
   );
+  // Read aloud (read-aloud.tsx): the button at the top right, before
+  // Breakwork. Pressed, the document is read from the block at the reading
+  // position to the end (from the start when the reader is past the last
+  // words); pressed while reading, it pauses, then resumes; ✕ stops.
+  function startReadAloud() {
+    readAloudNew.seen();
+    // One voice at a time: the selection's reading stops.
+    stopVoice();
+    const container = containerRef.current;
+    const position = container ? readReadingPosition(container, Date.now()) : null;
+    const at = position && "blockId" in position ? position.blockId : null;
+    const fromHere = readPieces(blocks, at);
+    readAloud.start(fromHere.length > 0 ? fromHere : readPieces(blocks, null));
+  }
+  const readAloudActive = readAloud.state !== "idle";
+  const readAloudButton = !readable ? null : readAloudActive ? (
+    <span className="flex items-center rounded-full bg-ink text-xs font-semibold text-paper shadow-soft">
+      <button
+        onClick={() => (readAloud.state === "paused" ? readAloud.resume() : readAloud.pause())}
+        data-track={readAloud.state === "paused" ? "read-aloud-resume" : "read-aloud-pause"}
+        data-tip={t(readAloud.state === "paused" ? "reader.readResume" : "reader.readPause")}
+        className="flex items-center gap-1.5 rounded-l-full py-1.5 pr-2 pl-3.5 max-sm:gap-1 max-sm:pl-3"
+      >
+        {readAloud.state === "loading" ? (
+          <SpinnerIcon size={13} className="motion-safe:animate-spin" />
+        ) : readAloud.state === "paused" ? (
+          <PlayIcon size={13} />
+        ) : (
+          <PauseIcon size={13} />
+        )}
+        <span className="max-[380px]:sr-only">
+          {t(readAloud.state === "paused" ? "reader.readResume" : "reader.readPause")}
+        </span>
+      </button>
+      <button
+        onClick={readAloud.stop}
+        data-track="read-aloud-stop"
+        aria-label={t("reader.stopReading")}
+        data-tip={t("reader.stopReading")}
+        className="rounded-r-full py-1.5 pr-3 pl-1.5 opacity-80 hover:opacity-100"
+      >
+        ✕
+      </button>
+    </span>
+  ) : (
+    <button
+      onClick={startReadAloud}
+      data-track="read-aloud"
+      data-tip={t("reader.readDocumentTitle")}
+      className={`flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800 max-sm:gap-1 max-sm:px-3${
+        readAloudNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+      }`}
+    >
+      <VolumeIcon size={13} />
+      <span className="max-[380px]:sr-only">{t("reader.readDocument")}</span>
+      {readAloudNew.isNew && <NewPill />}
+    </button>
+  );
   // Breakwork (SPEC.md §32): the button at the top right, beside Collapse.
   // Pressed, the structure opens over the reader.
   const structureButton = (
@@ -11020,6 +11072,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* A blank document has no Contents. */}
           {!richText && articleMenu}
           <div className="relative ml-auto flex shrink-0 items-center gap-2">
+            {readAloudButton}
             {!richText && structureButton}
             {!richText && collapseButton}
             {distillButton}
@@ -11030,6 +11083,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           </div>
         </div>
       )}
+
+      {/* The block being read aloud (read-aloud.tsx). */}
+      {readAloud.blockId && <ReadAloudMark container={containerRef} blockId={readAloud.blockId} />}
 
       {/* The drop line: where an image dropped on the text lands. */}
       {dropLine && (
@@ -11087,6 +11143,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {t("common.done")}
           </button>
         )}
+        {!split && !transcript && !embedded && !richText && readAloudButton}
         {!split && !transcript && !embedded && !richText && structureButton}
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
@@ -11181,6 +11238,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 // Extract stays in the pane header.
                 aiControls: !embedded ? (
                   <>
+                    {!split && readAloudButton}
                     {structureButton}
                     {collapseButton}
                     {!split && distillButton}
