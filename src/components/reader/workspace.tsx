@@ -239,15 +239,20 @@ export function Workspace({
   // tab of the account moves; the tab's next render (a refresh when the
   // project changes, or when the tab comes back into view) would open
   // another tab's document. So the address names the open document at once.
-  // The state is null so the router takes the new address
-  // (next/dist/client/components/app-router.js): it renders this same page
-  // again, with no request.
+  // The router must take the new address, or its refresh puts the old one
+  // back (next/dist/client/components/app-router.js): the state is null,
+  // and the call waits a task, because on the first load this effect runs
+  // before the router's own effect starts watching replaceState. The
+  // router then renders this same page again, with no request.
   useEffect(() => {
     if (!activeDocumentId) return;
-    const url = new URL(window.location.href);
-    if (url.pathname !== `/n/${notebook.id}` || url.searchParams.has("doc")) return;
-    url.searchParams.set("doc", activeDocumentId);
-    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      if (url.pathname !== `/n/${notebook.id}` || url.searchParams.has("doc")) return;
+      url.searchParams.set("doc", activeDocumentId);
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [notebook.id, activeDocumentId]);
   const [collapsed, setCollapsed] = useState(false);
   // Set while the tray is folded for a floating note (below), so that fold is
