@@ -50,9 +50,6 @@ const MODEL_PRICING: Record<string, Price> = {
   "gpt-4o-mini-tts": price(0.6, 12),
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
-  // Azure AI Speech: per character — its caller passes costUsd directly
-  // (lib/voice/azure.ts). inputTokens on these rows is characters.
-  "azure-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),
   "jev-latest": price(0.042, 0), // TypeSafe Jev: output free
   // DeepL bills per character: $25 per 1M characters on the Pro API, free
@@ -162,7 +159,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/^(whisper-large|distil-whisper)/, "groq"],
   [/^nova-/, "deepgram"],
   [/^(whisper-1|gpt-|text-embedding-|o[0-9])/, "openai"],
-  [/^(edge|azure)-tts$/, "microsoft"],
+  [/^edge-tts$/, "microsoft"],
   [/^deepl$/, "deepl"],
   [/^browser-session$/, "browser"],
   [/^resend-email$/, "resend"],

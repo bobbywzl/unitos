@@ -7,8 +7,8 @@ import { browserUtterances } from "@/lib/voice/browser-voice";
 // Read aloud for the whole document (SPEC.md §6, Voice): the button beside
 // Collapse reads the document from the block at the reading position to the
 // end, block by block, in the voice the selection's Read aloud uses
-// (POST /api/speech: the free Edge voice, then Gemini's, then OpenAI TTS;
-// the browser voice when the route answers 503, and for the rest of the
+// (POST /api/speech: the free Edge voice, then OpenAI TTS when its key is
+// set; the browser voice when the route answers 503, and for the rest of the
 // reading after that, so no block waits on a server that cannot read). The next two blocks' audio is fetched while
 // one plays, so the reading runs on without gaps. The block being read
 // carries the read-aloud mark, drawn over the pane, never in the text, and
