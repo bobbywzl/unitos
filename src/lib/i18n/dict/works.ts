@@ -130,13 +130,13 @@ const en = {
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
   guideCollapseHeader: "Collapse — every block to its core",
   guideCollapseBody:
-    "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
+    "The Collapse button at the top right of the article, beside Read aloud. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
     "The button to the right of a collapsed block reads it whole; the same button collapses it to its core again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
   // Breakwork (SPEC.md §32): the document's blocks sorted into buckets on a canvas.
   guideStructureHeader: "Breakwork — the document sorted into buckets",
   guideStructureBody:
-    "The Breakwork button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag a bucket by its header, drag a block between buckets or back to Unsorted, open a block to read it whole with its annotations, and drag from the dot at the side of a bucket or a block to another to connect them with a label and a comment.",
+    "The Breakwork button in the side bar at the right, under Extract. The document's blocks sorted into buckets on a canvas: drag a bucket by its header, drag a block between buckets or back to Unsorted, open a block to read it whole with its annotations, and drag from the dot at the side of a bucket or a block to another to connect them with a label and a comment.",
   guideStructureAssistantBody:
     "The Breakwork assistant on the left: say how to sort the document — by its parts, by keywords, by what the paragraphs share — then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and Undo takes it back.",
   // The reading position and the left-off mark (SPEC.md §6).
@@ -178,7 +178,7 @@ const en = {
     "- **Breakwork** — the button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag blocks between buckets, nest buckets, label blocks, and draw labeled connections between buckets or blocks. Every block opens whole with its annotations and the Explain and Simplify tools.\n- **The Breakwork assistant** — talk about how to sort the document, then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and it changes the structure as much as you ask.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   release20261103Title: "New: Read aloud for the whole document",
   release20261103Body:
-    "- **Read aloud** — the button at the top right of the article, beside Breakwork. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
+    "- **Read aloud** — the button at the top right of the article, beside Collapse. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
   // Feedback button
   feedback: "Feedback",
   feedbackBug: "bug",
@@ -336,12 +336,12 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelReaderViewBody: "普通、左右分屏或上下分屏：同时看两个文档。",
   guideCollapseHeader: "折叠——每个块折叠为核心",
   guideCollapseBody:
-    "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
+    "文章右上角、朗读旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
   guideCollapseWholeBody:
     "折叠后的块右侧的按钮可读全文；同一个按钮把它重新折叠为核心。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
   guideStructureHeader: "Breakwork——把文档归入类别",
   guideStructureBody:
-    "文章右上角、折叠旁边的 Breakwork 按钮。文档的块归入画布上的类别：按住类别标题可拖动类别，块可在类别之间拖动或拖回“未归类”，打开一个块可连同批注完整阅读，从类别或块侧边的圆点拖到另一个上即可建立带标签和评论的关联。",
+    "右侧边栏里、提取下面的 Breakwork 按钮。文档的块归入画布上的类别：按住类别标题可拖动类别，块可在类别之间拖动或拖回“未归类”，打开一个块可连同批注完整阅读，从类别或块侧边的圆点拖到另一个上即可建立带标签和评论的关联。",
   guideStructureAssistantBody:
     "左侧的 Breakwork 助手：说明如何归类文档——按部分、按关键词、按段落的共同点——然后让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，撤销可以恢复。",
   guideLeftOffHeader: "上次读到的位置",
@@ -380,7 +380,7 @@ const zh: Record<keyof typeof en, string> = {
     "- **Breakwork**——文章右上角、折叠旁边的按钮。文档的块归入画布上的类别：块可在类别之间拖动，类别可以嵌套，块可以加标签，类别或块之间可以画带标签的关联。每个块都可以连同批注完整打开，并使用解释和简化工具。\n- **Breakwork 助手**——先聊聊如何归类文档，再让它提出结构。它会提出类别，把每个块放进去并画出关联；你应用或丢弃，它可以按你的要求对结构做任何更改。\n\n新功能的控件会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   release20261103Title: "新功能：朗读全文",
   release20261103Body:
-    "- **朗读**——文章右上角、Breakwork 旁边的按钮。它从你读到的地方朗读到文末，声音与选中内容的朗读相同。正在朗读的段落会被标出，页面跟着它走。再按一次暂停；✕ 停止。\n\n新功能的控件会发光，直到你按下它。",
+    "- **朗读**——文章右上角、折叠旁边的按钮。它从你读到的地方朗读到文末，声音与选中内容的朗读相同。正在朗读的段落会被标出，页面跟着它走。再按一次暂停；✕ 停止。\n\n新功能的控件会发光，直到你按下它。",
   // Feedback button
   feedback: "反馈",
   feedbackBug: "问题",

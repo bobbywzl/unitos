@@ -126,6 +126,7 @@ import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { useUnderDocsHeader } from "@/components/reader/under-docs-header";
 import { hasReadableBlocks, ReadAloudMark, readPieces, useReadAloud } from "@/components/reader/read-aloud";
+import { OPEN_STRUCTURE_EVENT } from "@/components/reader/open-structure";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
@@ -5537,6 +5538,17 @@ export function ReaderInteractions({
   // Breakwork (SPEC.md §32): the overlay over the reader, and its glow.
   const [structureOpen, setStructureOpen] = useState(false);
   const structureNew = useNewFeature("structure");
+  // The side bar's Breakwork button names the open document: its reader
+  // opens the structure (open-structure.ts).
+  useEffect(() => {
+    if (transcript || embedded) return;
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<{ documentId: string | null }>).detail?.documentId !== documentId) return;
+      setStructureOpen(true);
+    };
+    window.addEventListener(OPEN_STRUCTURE_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_STRUCTURE_EVENT, onOpen);
+  }, [documentId, transcript, embedded]);
   // Read aloud for the whole document (read-aloud.tsx, SPEC.md §6 Voice):
   // the button beside Breakwork, its glow, and the reading.
   const readAloudNew = useNewFeature("readAloud");
@@ -11148,10 +11160,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {t("common.done")}
           </button>
         )}
+        {/* Breakwork and Extract are in the side bar (workspace.tsx). */}
         {!split && !transcript && !embedded && !richText && readAloudButton}
-        {!split && !transcript && !embedded && !richText && structureButton}
         {!split && !transcript && !embedded && !richText && collapseButton}
-        {!split && !transcript && !embedded && !richText && distillButton}
       </div>
       {/* A pending link's banner: under the controls, beside the toast, so
           it covers no control; in the block reader it stands in the band,
@@ -11238,15 +11249,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             ? {
                 ...richText,
                 canEdit,
-                // Breakwork, Collapse, and Extract: under the toolbar's
-                // right end, as at the article's top right. In a split view
-                // Extract stays in the pane header.
+                // Read aloud and Collapse: under the toolbar's right end, as
+                // at the article's top right; Breakwork and Extract are in
+                // the side bar (workspace.tsx). In a split view each pane
+                // keeps its own Breakwork here and its Read aloud and Extract
+                // in the pane header.
                 aiControls: !embedded ? (
                   <>
                     {!split && readAloudButton}
-                    {structureButton}
+                    {split && structureButton}
                     {collapseButton}
-                    {!split && distillButton}
                   </>
                 ) : null,
                 notebookId,

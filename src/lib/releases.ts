@@ -51,7 +51,7 @@ export const RELEASES: Release[] = [
     features: ["structure"],
   },
   {
-    // Read aloud for the whole document (SPEC.md §6, Voice): the button beside Breakwork glows.
+    // Read aloud for the whole document (SPEC.md §6, Voice): the button beside Collapse glows.
     id: "2026-11-03",
     date: "2026-11-03",
     titleKey: "works.release20261103Title",

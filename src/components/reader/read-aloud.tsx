@@ -5,7 +5,7 @@ import { READING_LINE_PX } from "@/lib/reading-position";
 import { browserUtterances } from "@/lib/voice/browser-voice";
 
 // Read aloud for the whole document (SPEC.md §6, Voice): the button beside
-// Breakwork reads the document from the block at the reading position to the
+// Collapse reads the document from the block at the reading position to the
 // end, block by block, in the voice the selection's Read aloud uses
 // (POST /api/speech: the free Edge voice, then Gemini's, then OpenAI TTS;
 // the browser voice when the route answers 503, and for the rest of the

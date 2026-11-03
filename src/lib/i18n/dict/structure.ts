@@ -4,7 +4,7 @@
 // piece 片块 · connection 关联 · unsorted 未归类 · Breakwork 不翻译.
 
 const en = {
-  // The button beside Collapse (reader-interactions.tsx)
+  // The side bar's button (workspace.tsx); in a split view, the pane's (reader-interactions.tsx)
   structure: "Breakwork",
   structureButtonTitle:
     "Breakwork: sort the document's blocks into buckets on a canvas, by hand or with the assistant, and draw connections between them",

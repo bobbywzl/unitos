@@ -24,7 +24,9 @@ import {
   QuestionIcon,
   QuoteIcon,
   SparkleIcon,
+  StructureIcon,
 } from "@/components/icons";
+import { NEW_GLOW_CLASS, useNewFeature } from "@/components/new-feature";
 import { ClickTracker } from "@/components/click-tracker";
 import { FunnelStepMark } from "@/components/funnel-step";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
@@ -43,6 +45,7 @@ import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
 import { LoadingDots } from "@/components/thinking";
 import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
+import { OPEN_STRUCTURE_EVENT } from "@/components/reader/open-structure";
 import {
   listSaved,
   noSaves,
@@ -663,6 +666,17 @@ export function Workspace({
     window.addEventListener("blur", onUp);
   }
 
+  // Breakwork from the side bar: the reader of the open document opens it
+  // (reader-interactions.tsx listens for OPEN_STRUCTURE_EVENT). A recording
+  // has no Breakwork.
+  const structureNew = useNewFeature("structure");
+  const breakworkOn = documents.some((d) => d.id === activeDocumentId && d.kind !== "media");
+  function openBreakwork() {
+    structureNew.seen();
+    setMoreOpen(false);
+    window.dispatchEvent(new CustomEvent(OPEN_STRUCTURE_EVENT, { detail: { documentId: activeDocumentId } }));
+  }
+
   function show(next: Tab) {
     if (mobileTray && tab === next) {
       setMobileTray(false);
@@ -1175,9 +1189,22 @@ export function Workspace({
             aria-current={isOpen("distill")}
             className={isOpen("distill") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
-            {/* The glyph the article's Extract button carries. */}
             <QuoteIcon />
           </button>
+
+          {/* Breakwork (SPEC.md §32): the structure of the open document,
+              over the reader. Below md it is a row of the More menu. */}
+          {breakworkOn && (
+            <button
+              onClick={openBreakwork}
+              data-track="structure"
+              aria-label={t("structure.structure")}
+              data-tip={t("structure.structureButtonTitle")}
+              className={`max-md:hidden ${RAIL_BUTTON}${structureNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+            >
+              <StructureIcon />
+            </button>
+          )}
 
           {/* Below md the bar's last button: More, a menu of what a phone
               has no room for at rest — the reader views (reader-panes.tsx
@@ -1208,6 +1235,12 @@ export function Workspace({
                 <GraphIcon size={15} />
                 {t("panes.graph")}
               </button>
+              {breakworkOn && (
+                <button data-more-row onClick={openBreakwork} data-track="more:structure" className={MORE_ROW}>
+                  <StructureIcon size={15} />
+                  {t("structure.structure")}
+                </button>
+              )}
               <button
                 data-more-row
                 onClick={() => {

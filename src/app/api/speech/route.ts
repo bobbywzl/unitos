@@ -5,15 +5,19 @@ import { gatewayConfigured, gatewayHeaders, gatewayModelId, gatewayUrl, keyFor, 
 import { serverT } from "@/lib/i18n/server";
 import { recordUsage } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
+import { azureSpeech, azureSpeechConfigured } from "@/lib/voice/azure";
 import { EDGE_TTS_MODEL, edgeSpeech } from "@/lib/voice/edge";
 import { geminiSpeech, geminiSpeechConfigured } from "@/lib/voice/gemini-tts";
 
 export const maxDuration = 60;
 
 // Voice (SPEC.md §6): the text read aloud, by the first voice that reads it.
-// 1. The Edge voice: free neural voices, no key, Chinese and English alike.
-// 2. Gemini's voice (lib/voice/gemini-tts.ts), when GEMINI_API_KEY is set.
-// 3. OpenAI TTS (model gpt-4o-mini-tts, voice alloy), when OPENAI_API_KEY is
+// 1. Azure AI Speech (lib/voice/azure.ts), when AZURE_SPEECH_KEY and
+//    AZURE_SPEECH_REGION are set: Microsoft's own service, the same Ava and
+//    Xiaoxiao voices as the Edge voice, with a key.
+// 2. The Edge voice: free neural voices, no key, Chinese and English alike.
+// 3. Gemini's voice (lib/voice/gemini-tts.ts), when GEMINI_API_KEY is set.
+// 4. OpenAI TTS (model gpt-4o-mini-tts, voice alloy), when OPENAI_API_KEY is
 //    set (under the gateway, its speech route with the app key).
 // When none reads it — out of service, out of quota (429), no key — the
 // route answers 503 with the reason, and the client reads with the browser
@@ -31,6 +35,15 @@ export async function POST(req: Request) {
   const userId = user?.id ?? null;
   // Estimate: ~4 chars per text token in, roughly the same in audio tokens out.
   const tokens = Math.ceil(data.text.length / 4);
+
+  if (azureSpeechConfigured()) {
+    try {
+      const audio = await azureSpeech(data.text, { userId });
+      return new Response(new Uint8Array(audio), { headers: { "Content-Type": "audio/mpeg" } });
+    } catch (err) {
+      console.error("[speech] azure TTS failed:", err instanceof Error ? err.message : err);
+    }
+  }
 
   try {
     const audio = await edgeSpeech(data.text);
