@@ -10706,7 +10706,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     <span className="flex items-center rounded-full bg-ink text-xs font-semibold text-paper shadow-soft">
       <button
         onClick={() => (readAloud.state === "paused" ? readAloud.resume() : readAloud.pause())}
-        data-track={readAloud.state === "paused" ? "read-aloud-resume" : "read-aloud-pause"}
+        data-track={readAloud.state === "paused" ? "read-document-resume" : "read-document-pause"}
         data-tip={t(readAloud.state === "paused" ? "reader.readResume" : "reader.readPause")}
         className="flex items-center gap-1.5 rounded-l-full py-1.5 pr-2 pl-3.5 max-sm:gap-1 max-sm:pl-3"
       >
@@ -10723,7 +10723,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </button>
       <button
         onClick={readAloud.stop}
-        data-track="read-aloud-stop"
+        data-track="read-document-stop"
         aria-label={t("reader.stopReading")}
         data-tip={t("reader.stopReading")}
         className="rounded-r-full py-1.5 pr-3 pl-1.5 opacity-80 hover:opacity-100"
@@ -10734,7 +10734,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   ) : (
     <button
       onClick={startReadAloud}
-      data-track="read-aloud"
+      data-track="read-document"
       data-tip={t("reader.readDocumentTitle")}
       className={`flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800 max-sm:gap-1 max-sm:px-3${
         readAloudNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
