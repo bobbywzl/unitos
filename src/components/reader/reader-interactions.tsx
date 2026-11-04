@@ -59,7 +59,7 @@ import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { isHeicFile } from "@/lib/image-jpeg";
-import { browserUtterances } from "@/lib/voice/browser-voice";
+import { speakText } from "@/lib/voice/browser-voice";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
@@ -7426,26 +7426,18 @@ export function ReaderInteractions({
 
   // The browser voice reads when /api/speech fails. The utterance language
   // follows the text: Chinese characters → zh-CN, else en-US.
-  function browserSpeak(text: string, run: number) {
-    const synth = window.speechSynthesis;
-    if (!synth) {
+  async function browserSpeak(text: string, run: number) {
+    const spoken = await speakText(text, {
+      onEnd: () => {
+        if (voiceRunRef.current === run) setVoice("idle");
+      },
+    });
+    if (voiceRunRef.current !== run) return;
+    if (!spoken) {
       setVoice("idle");
       showToast(t("reader.voiceUnavailable"));
       return;
     }
-    const utterances = browserUtterances(text);
-    const last = utterances[utterances.length - 1];
-    if (!last) return;
-    last.onend = () => {
-      if (voiceRunRef.current === run) setVoice("idle");
-    };
-    for (const u of utterances) {
-      u.onerror = () => {
-        if (voiceRunRef.current === run) setVoice("idle");
-      };
-    }
-    synth.cancel();
-    for (const u of utterances) synth.speak(u);
     setVoice("playing");
   }
 
@@ -7471,7 +7463,7 @@ export function ReaderInteractions({
       });
       if (voiceRunRef.current !== run) return;
       if (res.status === 503) {
-        browserSpeak(text, run);
+        await browserSpeak(text, run);
         return;
       }
       if (!res.ok) {
@@ -7488,9 +7480,25 @@ export function ReaderInteractions({
         voiceAudioRef.current = null;
         setVoice("idle");
       };
+      // Audio the browser cannot play is read by the browser voice instead,
+      // never dropped without a sound.
+      // The error event and a refused play can both come: once.
+      let fellBack = false;
+      const instead = () => {
+        if (fellBack || voiceRunRef.current !== run) return;
+        fellBack = true;
+        URL.revokeObjectURL(audio.src);
+        voiceAudioRef.current = null;
+        void browserSpeak(text, run);
+      };
       audio.onended = done;
-      audio.onerror = done;
-      await audio.play();
+      audio.onerror = instead;
+      try {
+        await audio.play();
+      } catch {
+        instead();
+        return;
+      }
       if (voiceRunRef.current === run) setVoice("playing");
     } catch (err) {
       if (voiceRunRef.current !== run) return;

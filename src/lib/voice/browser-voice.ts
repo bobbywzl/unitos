@@ -56,3 +56,65 @@ export function browserUtterances(text: string): SpeechSynthesisUtterance[] {
     return utterance;
   });
 }
+
+/** The utterances being spoken: held here, because Chrome can drop an
+    utterance nothing holds before it ends, and its end event with it. */
+let held: SpeechSynthesisUtterance[] = [];
+
+/** The voice list, loaded: Chrome fills it after the page starts and says
+    so with voiceschanged. Waits at most 1.5 s; an empty list still speaks,
+    in the default voice. */
+function voicesReady(synth: SpeechSynthesis): Promise<void> {
+  if (synth.getVoices().length > 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      synth.removeEventListener("voiceschanged", done);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 1500);
+    synth.addEventListener("voiceschanged", done);
+  });
+}
+
+/** Speak `text` with the browser voice, a sentence at a time, past Chrome's
+    known stalls: the voice list is loaded first; a voice still speaking is
+    cancelled, and the next speak waits a moment, since Chrome can drop a
+    speak that comes right after a cancel; a pause left over is resumed.
+    `onEnd` runs once, after the last sentence or at the first error (the
+    sentences left are dropped). False when the browser has no voice. */
+export async function speakText(
+  text: string,
+  { onEnd, onStart }: { onEnd: (error: boolean) => void; onStart?: () => void },
+): Promise<boolean> {
+  const synth = typeof window === "undefined" ? undefined : window.speechSynthesis;
+  if (!synth) return false;
+  await voicesReady(synth);
+  const utterances = browserUtterances(text);
+  const last = utterances[utterances.length - 1];
+  if (!last) return false;
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  synth.resume();
+  let ended = false;
+  const end = (error: boolean) => {
+    if (ended) return;
+    ended = true;
+    if (error) synth.cancel();
+    if (held === utterances) held = [];
+    onEnd(error);
+  };
+  utterances[0].onstart = () => onStart?.();
+  last.onend = () => end(false);
+  for (const u of utterances) u.onerror = (e) => {
+    // A cancel by the reader (Stop) is not an error of the text.
+    if (e.error === "interrupted" || e.error === "canceled") return;
+    end(true);
+  };
+  held = utterances;
+  for (const u of utterances) synth.speak(u);
+  return true;
+}
+

@@ -14,6 +14,8 @@ const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const CHROMIUM_FULL_VERSION = "143.0.3650.75";
 const CHROMIUM_MAJOR_VERSION = "143";
 const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
+// How long the connection may take to open.
+const OPEN_MS = 6_000;
 // The service rejects ssml messages whose escaped text exceeds 4096 bytes.
 const MAX_MESSAGE_BYTES = 4096;
 
@@ -160,6 +162,7 @@ async function synthesizeChunk(escapedText: string, voice: string, deadline: num
     const settle = () => {
       settled = true;
       clearTimeout(timer);
+      clearTimeout(opening);
       try {
         ws.close();
       } catch {
@@ -172,7 +175,12 @@ async function synthesizeChunk(escapedText: string, voice: string, deadline: num
       reject(err instanceof Error ? err : new Error(String(err)));
     };
     const timer = setTimeout(() => fail(new Error("edge-tts timed out")), Math.max(1, deadline - Date.now()));
+    // A service that takes the connection and never opens it would hold the
+    // reader in silence until the deadline: past OPEN_MS the voice gives up,
+    // and the route's next voice reads.
+    const opening = setTimeout(() => fail(new Error("edge-tts did not open")), OPEN_MS);
     ws.onopen = () => {
+      clearTimeout(opening);
       ws.send(speechConfigMessage(messageTimestamp()));
       ws.send(ssmlMessage(randomUUID().replaceAll("-", ""), messageTimestamp(), voice, escapedText));
     };

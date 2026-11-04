@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { READING_LINE_PX } from "@/lib/reading-position";
-import { browserUtterances } from "@/lib/voice/browser-voice";
+import { speakText } from "@/lib/voice/browser-voice";
 
 // Read aloud for the whole document (SPEC.md §6, Voice): the button beside
 // Collapse reads the document from the block at the reading position to the
@@ -217,35 +217,22 @@ export function useReadAloud({
       const next = () => {
         if (r === run.current) void playRef.current(i + 1, r);
       };
-      if ("browser" in clip) {
-        const synth = window.speechSynthesis;
-        const utterances = synth ? browserUtterances(pieces.current[i].text) : [];
-        const last = utterances[utterances.length - 1];
-        if (!synth || !last) {
+      // The browser voice reads the piece: on a 503, and for audio the
+      // browser cannot play, so a piece is never dropped without a sound.
+      const speakPiece = async () => {
+        playing.current = "browser";
+        const spoken = await speakText(pieces.current[i].text, { onEnd: () => next() });
+        if (r !== run.current) return;
+        if (!spoken) {
           stop();
           onErrorRef.current(unavailableRef.current);
           return;
         }
-        // The piece ends once: at its last sentence, or at an error, which
-        // drops the sentences left so they never overlap the next piece.
-        let ended = false;
-        const end = () => {
-          if (ended) return;
-          ended = true;
-          next();
-        };
-        last.onend = end;
-        for (const u of utterances) {
-          u.onerror = () => {
-            if (r !== run.current) return;
-            synth.cancel();
-            end();
-          };
-        }
-        playing.current = "browser";
-        for (const u of utterances) synth.speak(u);
-        if (paused.current) synth.pause();
+        if (paused.current) window.speechSynthesis?.pause();
         else setState("playing");
+      };
+      if ("browser" in clip) {
+        await speakPiece();
         return;
       }
       const el = audio.current;
@@ -254,21 +241,32 @@ export function useReadAloud({
         URL.revokeObjectURL(clip.url);
         next();
       };
-      el.onerror = () => {
+      // The error event and a refused play can both come for one clip: the
+      // browser voice reads the piece once.
+      let fellBack = false;
+      const fallBack = async () => {
+        if (fellBack || r !== run.current) return;
+        fellBack = true;
         URL.revokeObjectURL(clip.url);
-        next();
+        await speakPiece();
       };
+      el.onerror = () => void fallBack();
       el.src = clip.url;
       playing.current = "audio";
       if (paused.current) return;
       try {
         await el.play();
         if (r === run.current) setState("playing");
-      } catch {
-        // The browser refused the sound (no press it counts): wait for Resume.
+      } catch (err) {
         if (r !== run.current) return;
-        paused.current = true;
-        setState("paused");
+        // The browser refused sound without a press: wait for Resume. Any
+        // other refusal (audio it cannot play): the browser voice reads.
+        if (err instanceof DOMException && err.name === "NotAllowedError") {
+          paused.current = true;
+          setState("paused");
+          return;
+        }
+        await fallBack();
       }
     },
     [clipFor, stop],
