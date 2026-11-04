@@ -11,25 +11,53 @@ export function speechLang(text: string): string {
   return /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
 }
 
-/** The most natural voice the browser has for the language. A voice on the
-    device ranks first: an online voice (Chrome's Google voices on a Mac
-    above all) can take the speak and make no sound, and never end. Among
-    the device's voices the premium ones (Premium, Enhanced, Siri, Natural)
-    rank first, then the exact language; then the online voices. The
-    browser's default is used when the language has none. */
-export function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
+// macOS ships joke voices beside its real ones (a bleating sheep, a dying
+// bubble, a robot): never read with them.
+const NOVELTY_VOICES = new Set(
+  [
+    "albert", "bad news", "bahh", "bells", "boing", "bubbles", "cellos", "deranged", "good news",
+    "hysterical", "jester", "organ", "pipe organ", "superstar", "trinoids", "whisper", "wobble",
+    "zarvox", "fred", "junior", "kathy", "ralph", "princess", "agnes", "bruce", "vicki", "victoria",
+  ],
+);
+// The standard voices that read well, the voices a Mac and Windows ship.
+const GOOD_VOICES =
+  /\b(samantha|alex|allison|ava|susan|tom|karen|daniel|moira|tessa|zoe|evan|nathan|joelle|noelle|serena|aaron|nicky|jenny|aria|guy|zira|david|mark|tingting|ting-ting|meijia|mei-jia|sinji|sin-ji|lili|yu-shu|xiaoxiao|yunxi|huihui|yaoyao|kangkang)\b/;
+
+function voiceName(v: SpeechSynthesisVoice): string {
+  return v.name.toLowerCase().replace(/\s*\(.*$/, "").trim();
+}
+
+/** The browser's voices for the language, best first, the joke voices left
+    out: a natural, premium, or enhanced voice (Siri, Ava (Premium), Edge's
+    Online (Natural)); then Chrome's Google voice, natural but online (it
+    can make no sound on a Mac: speakText's watchdog moves on); then the
+    standard voices that read well (Samantha, Alex, Tingting, ...); then
+    the system's default; then the rest. */
+export function rankedVoices(lang: string): SpeechSynthesisVoice[] {
   const prefix = lang.split("-")[0];
-  const candidates = (window.speechSynthesis?.getVoices() ?? []).filter((v) =>
-    v.lang.replace("_", "-").toLowerCase().startsWith(prefix),
+  const exact = lang.toLowerCase();
+  const candidates = (window.speechSynthesis?.getVoices() ?? []).filter(
+    (v) => v.lang.replace("_", "-").toLowerCase().startsWith(prefix) && !NOVELTY_VOICES.has(voiceName(v)),
   );
   const score = (v: SpeechSynthesisVoice) => {
     const name = v.name.toLowerCase();
-    let s = v.localService ? 10 : 0;
-    if (name.includes("premium") || name.includes("enhanced") || name.includes("siri") || name.includes("natural")) s += 3;
-    if (v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase()) s += 1;
+    let s = 0;
+    if (/premium|enhanced|siri|natural|neural/.test(name)) s = 40;
+    else if (name.includes("google")) s = 30;
+    else if (GOOD_VOICES.test(name)) s = 20;
+    else if (v.default) s = 10;
+    if (v.lang.replace("_", "-").toLowerCase() === exact) s += 2;
+    if (v.localService) s += 1;
     return s;
   };
-  return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
+  return candidates.sort((a, b) => score(b) - score(a));
+}
+
+/** The best voice the browser has for the language (rankedVoices), or null:
+    the browser's default. */
+export function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
+  return rankedVoices(lang)[0] ?? null;
 }
 
 /** Chrome's online voices stop after about 15 seconds of one utterance,
@@ -93,7 +121,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
     cancelled, and the next speak waits a moment, since Chrome can drop a
     speak that comes right after a cancel; a pause left over is resumed. A
     voice that has not started within START_MS is cancelled and the text is
-    spoken again in the browser's default voice; when that does not start
+    spoken again in the next voice of rankedVoices; when that does not start
     either, the speak ends with an error. `onEnd` runs once, after the last
     sentence, or with `true` at an error (the sentences left are dropped).
     False when the browser has no voice. */
@@ -152,9 +180,13 @@ export async function speakText(
         end(true);
         return;
       }
-      console.warn("[voice] the browser voice made no start; speaking again in the default voice");
+      // The next voice that reads well, never the browser's default, which
+      // can be a joke voice.
+      const others = rankedVoices(speechLang(text)).filter((v) => v !== voice);
+      const next = others.find((v) => v.localService) ?? others[0] ?? null;
+      console.warn(`[voice] ${voice?.name ?? "the default voice"} made no start; speaking again in ${next?.name ?? "the default voice"}`);
       void settle().then(() => {
-        if (!ended) speak(null, false);
+        if (!ended) speak(next, false);
       });
     };
     watchdog = window.setTimeout(check, START_MS);
