@@ -1,9 +1,10 @@
 import type { TextStreamPart, ToolSet } from "ai";
 import { GEMINI_3_8_FLASH } from "@/lib/derive/config";
-import { featureCall, featureModelId } from "@/lib/feature-models";
+import { fallbackCalls, featureCall, featureModelId } from "@/lib/feature-models";
+import { resolveModelId } from "@/lib/models";
 import { geminiConfigured, geminiGoogleSearch } from "@/lib/gemini";
 import { WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
-import { modelCall, type Effort, type ModelCall } from "@/lib/model-call";
+import { modelCall, modelConfigured, type Effort, type ModelCall } from "@/lib/model-call";
 
 // Web access for every assistant (SPEC.md §7): the sidebar assistant, the
 // selection's tools and its assistant chat, the note assistant, and the
@@ -33,6 +34,36 @@ export async function webCall(effort: Effort): Promise<WebCall> {
   }
   const call = await featureCall("web", effort);
   return { call, tools: { [WEB_SEARCH_TOOL]: webSearchTool(call.modelId) }, searchUsd: webSearchUsd(call.modelId) };
+}
+
+/** The last message of a turn that runs again without the web: its
+    prompt still holds the web rules, and the model must not claim a search. */
+export const NO_WEB_MESSAGE = {
+  role: "user" as const,
+  content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched.",
+};
+
+/** One more try of a failed turn: a model, and its search or none. */
+export type Retry = { call: ModelCall; tools: ToolSet | null };
+
+/** The calls a turn runs again on when its model failed before any words
+    came, in order, once each (a provider's outage, its balance spent, a
+    search it refuses). After a web turn: the web feature's model with its
+    provider's search (lib/kimi.ts) when it is another model with a key.
+    Then every fallback model with a key, without the web (fallbackCalls),
+    in order. */
+export async function retryCalls(failedId: string, effort: Effort, web: boolean, picture: boolean): Promise<Retry[]> {
+  const failed = await resolveModelId(failedId);
+  const retries: Retry[] = [];
+  if (web && !picture) {
+    const id = await featureModelId("web");
+    if ((await resolveModelId(id)) !== failed && modelConfigured(id)) {
+      const call = await featureCall("web", effort);
+      retries.push({ call, tools: { [WEB_SEARCH_TOOL]: webSearchTool(call.modelId) } });
+    }
+  }
+  for (const call of await fallbackCalls(failedId, effort, picture)) retries.push({ call, tools: null });
+  return retries;
 }
 
 /** A stream part that is one search: Google's, or the provider tool's. */

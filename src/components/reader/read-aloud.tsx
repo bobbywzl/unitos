@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { READING_LINE_PX } from "@/lib/reading-position";
-import { speakText } from "@/lib/voice/browser-voice";
+import { SPEECH_WAIT_MS, speakText } from "@/lib/voice/browser-voice";
 
 // Read aloud for the whole document (SPEC.md §6, Voice): the button beside
 // Collapse reads the document from the block at the reading position to the
@@ -168,12 +168,21 @@ export function useReadAloud({
     const piece = pieces.current[i];
     const clip = (async (): Promise<Clip> => {
       if (browserOnly.current) return { browser: true };
-      const res = await fetch("/api/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: piece.text }),
-        signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: piece.text }),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(SPEECH_WAIT_MS)]),
+        });
+      } catch (err) {
+        if (signal.aborted) throw err;
+        // No answer in time, or no network: the browser voice reads the rest.
+        console.warn("[voice] /api/speech did not answer; the browser voice reads:", err);
+        browserOnly.current = true;
+        return { browser: true };
+      }
       if (res.status === 503) {
         browserOnly.current = true;
         return { browser: true };

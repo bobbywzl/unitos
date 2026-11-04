@@ -284,6 +284,21 @@ export async function fallbackCall(failedId: string, effort: Effort, picture: bo
   return null;
 }
 
+/** Every model a call can run again on after `failedId` failed, in
+    fallbackCall's order, each resolved model once: the failed one and any
+    without a key left out. */
+export async function fallbackCalls(failedId: string, effort: Effort, picture: boolean): Promise<ModelCall[]> {
+  const seen = new Set([await resolveModelId(failedId)]);
+  const calls: ModelCall[] = [];
+  for (const id of picture ? PICTURE_FALLBACKS : TEXT_FALLBACKS) {
+    const resolved = await resolveModelId(id);
+    if (seen.has(resolved) || !modelConfigured(id)) continue;
+    seen.add(resolved);
+    calls.push(await modelCall(id, effort));
+  }
+  return calls;
+}
+
 /** The feature's model at this effort, and the id called. */
 export async function featureCall(feature: Feature, effort: Effort): Promise<ModelCall> {
   return modelCall(await featureModelId(feature), effort);

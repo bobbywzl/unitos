@@ -31,7 +31,9 @@ export async function POST(req: Request) {
   const tokens = Math.ceil(data.text.length / 4);
 
   try {
-    const audio = await edgeSpeech(data.text);
+    // 12 s: a voice that takes longer holds the reader in silence; the
+    // browser voice reads instead.
+    const audio = await edgeSpeech(data.text, 12_000);
     recordUsage({ userId, feature: "voice", model: EDGE_TTS_MODEL }, { inputTokens: tokens, outputTokens: tokens });
     return new Response(new Uint8Array(audio), { headers: { "Content-Type": "audio/mpeg" } });
   } catch (err) {

@@ -2,6 +2,10 @@
 // cannot: the selection's Read aloud and the document's Read aloud both
 // fall back to it. Client only.
 
+/** How long a reading waits for /api/speech before the browser voice reads
+    instead: a server voice that takes longer holds the reader in silence. */
+export const SPEECH_WAIT_MS = 15_000;
+
 /** The language a text is read in: Chinese characters → zh-CN, else en-US. */
 export function speechLang(text: string): string {
   return /[一-鿿]/.test(text) ? "zh-CN" : "en-US";

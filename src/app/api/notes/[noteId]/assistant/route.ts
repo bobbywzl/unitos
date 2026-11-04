@@ -11,7 +11,7 @@ import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
-import { webCall, WebSources } from "@/lib/web-search";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import { checkNoteQuotes } from "@/lib/notes/assistant-check";
 import { noteAssistantPrompt } from "@/lib/prompts/note-assistant";
 import { parseBody } from "@/lib/validate";
@@ -157,27 +157,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
         }
       : {}),
   });
-  // The web turn failed (the search refused, the model refused the tool):
-  // the note's assistant answers without the web, and the reply's first
-  // line says the search failed and why.
+  // The model failed (the search refused, the provider out of service or
+  // out of balance): with the web, the note's own assistant answers without
+  // it; then the next call of retryCalls (lib/web-search.ts). A reply
+  // without the web opens with one line that says the search failed and why.
   let webFailed: string | null = null;
-  if (!result.ok && webTurn && !req.signal.aborted) {
-    console.error("[note-assistant] web turn failed, answering without the web:", result.error);
-    webFailed = t("assistant.webFailed", { reason: result.error });
-    const plain = await featureCall("note-assistant", effort);
-    result = await callForJson({
-      model: plain.model,
-      messages: [
-        ...messages,
-        { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
-      ],
-      maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
-      providerOptions: plain.providerOptions,
-      schema: answerSchema,
-      label: "note-assistant",
-      usage: { userId: access.user.id, feature: "note-assistant", model: plain.modelId },
-      abortSignal: req.signal,
-    });
+  if (!result.ok && !req.signal.aborted) {
+    const firstReason = result.error;
+    const retries = [
+      ...(webTurn ? [{ call: await featureCall("note-assistant", effort), tools: null }] : []),
+      ...(await retryCalls(webTurn ? (await featureCall("note-assistant", effort)).modelId : call.modelId, effort, false, false)),
+    ];
+    for (const retry of retries) {
+      console.error(`[note-assistant] ${call.modelId} failed, running again on ${retry.call.modelId}:`, result.ok ? "" : result.error);
+      result = await callForJson({
+        model: retry.call.model,
+        messages: webTurn ? [...messages, NO_WEB_MESSAGE] : messages,
+        maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
+        providerOptions: retry.call.providerOptions,
+        schema: answerSchema,
+        label: "note-assistant",
+        usage: { userId: access.user.id, feature: "note-assistant", model: retry.call.modelId },
+        abortSignal: req.signal,
+      });
+      if (result.ok) {
+        if (webTurn) webFailed = t("assistant.webFailed", { reason: firstReason });
+        break;
+      }
+      if (req.signal.aborted) break;
+    }
   }
   if (!result.ok) {
     return NextResponse.json({ error: t("api.noteAssistantFailed", { reason: result.error }) }, { status: 422 });

@@ -59,7 +59,7 @@ import { currentLang, serverT } from "@/lib/i18n/server";
 import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
-import { webCall, WebSources } from "@/lib/web-search";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -1307,21 +1307,26 @@ async function handle(req: Request, t: TFunc) {
           console.error(`[derive stream] ${data.type} web turn failed, running without the web:`, reason);
           failure = null;
           const note = `${t("assistant.webFailed", { reason })}\n\n`;
-          try {
-            const plain = await featureCall(derivationFeature(data.type), DERIVATION_EFFORT[data.type]);
-            sendCounted(note);
-            text =
-              note +
-              (await streamTextTo(
-                startStream(plain, false, [
-                  ...messages,
-                  { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
-                ]),
-                sendCounted,
-                { t },
-              ));
-          } catch (err) {
-            failure = err;
+          // The tool's own model first, then a fallback model with a key.
+          const own = await featureCall(derivationFeature(data.type), DERIVATION_EFFORT[data.type]);
+          const plainCalls = [own, ...(await retryCalls(own.modelId, DERIVATION_EFFORT[data.type], false, false)).map((r) => r.call)];
+          for (const plain of plainCalls) {
+            let head = note;
+            const sendAfterHead = (chunk: string) => {
+              if (head && chunk.trim()) {
+                sendCounted(head);
+                head = "";
+              }
+              sendCounted(chunk);
+            };
+            try {
+              text = note + (await streamTextTo(startStream(plain, false, [...messages, NO_WEB_MESSAGE]), sendAfterHead, { t }));
+              failure = null;
+              break;
+            } catch (err) {
+              failure = err;
+              if (req.signal.aborted || sent > 0) break;
+            }
           }
         }
         if (failure !== null && !req.signal.aborted && sent === 0 && !web) {

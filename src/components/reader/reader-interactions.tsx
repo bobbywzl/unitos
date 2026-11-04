@@ -59,7 +59,7 @@ import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { isHeicFile } from "@/lib/image-jpeg";
-import { speakText } from "@/lib/voice/browser-voice";
+import { SPEECH_WAIT_MS, speakText } from "@/lib/voice/browser-voice";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
@@ -7459,11 +7459,20 @@ export function ReaderInteractions({
     // Warm the voice list: if the route fails, browserSpeak needs it loaded.
     window.speechSynthesis?.getVoices();
     try {
-      const res = await fetch("/api/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: AbortSignal.timeout(SPEECH_WAIT_MS),
+        });
+      } catch (err) {
+        // No answer in time, or no network: the browser voice reads.
+        console.warn("[voice] /api/speech did not answer; the browser voice reads:", err);
+        if (voiceRunRef.current === run) await browserSpeak(text, run);
+        return;
+      }
       if (voiceRunRef.current !== run) return;
       if (res.status === 503) {
         await browserSpeak(text, run);

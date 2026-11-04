@@ -43,7 +43,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
-import { webCall, WebSources } from "@/lib/web-search";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
@@ -502,27 +502,34 @@ async function handle(req: Request, t: TFunc) {
             }
           : {}),
       });
-  // The web turn failed (the search refused, the model refused the tool):
-  // the command runs again without the web, and the reply's first line says
-  // the search failed and why.
+  // The model failed (the search refused, the provider out of service or
+  // out of balance): the command runs again on the next call of retryCalls
+  // (lib/web-search.ts) — after a web turn, the web feature's model with
+  // its own search, then a fallback model without the web. A reply without
+  // the web opens with one line that says the search failed and why.
   let webFailed: string | null = null;
-  if (!result.ok && webTurn && !svgChart && !req.signal.aborted) {
-    console.error("[assistant:act] web turn failed, running without the web:", result.error);
-    webFailed = t("assistant.webFailed", { reason: result.error });
-    const plain = await featureCall(attachedImage ? await pictureFeature("act") : "act", effort);
-    result = await callForJson({
-      model: plain.model,
-      messages: [
-        ...messages,
-        { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
-      ],
-      maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-      providerOptions: plain.providerOptions,
-      schema: planSchema,
-      label: "assistant:act",
-      usage: { userId: user.id, feature: "act", model: plain.modelId },
-      abortSignal: req.signal,
-    });
+  if (!result.ok && !chip && !svgChart && !req.signal.aborted) {
+    const firstReason = result.error;
+    for (const retry of await retryCalls(chatCall.modelId, effort, webTurn !== null, attachedImage !== null)) {
+      console.error(`[assistant:act] ${chatCall.modelId} failed, running again on ${retry.call.modelId}:`, result.ok ? "" : result.error);
+      const withoutWeb = webTurn !== null && retry.tools === null;
+      result = await callForJson({
+        model: retry.call.model,
+        messages: withoutWeb ? [...messages, NO_WEB_MESSAGE] : messages,
+        maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
+        providerOptions: retry.call.providerOptions,
+        schema: planSchema,
+        label: "assistant:act",
+        usage: { userId: user.id, feature: "act", model: retry.call.modelId },
+        abortSignal: req.signal,
+        ...(retry.tools ? { tools: retry.tools, stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1), pages } : {}),
+      });
+      if (result.ok) {
+        if (withoutWeb) webFailed = t("assistant.webFailed", { reason: firstReason });
+        break;
+      }
+      if (req.signal.aborted) break;
+    }
   }
   if (!result.ok) {
     const error = wordedReason(t, result.error)

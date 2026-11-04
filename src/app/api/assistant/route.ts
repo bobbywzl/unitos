@@ -1,4 +1,4 @@
-import { isStepCount, streamText, type ModelMessage } from "ai";
+import { isStepCount, streamText, type ModelMessage, type ToolSet } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -42,7 +42,7 @@ import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
-import { isSearchCall, webCall, WebSources } from "@/lib/web-search";
+import { isSearchCall, NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import type { ModelCall } from "@/lib/model-call";
 import { featureCall, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
@@ -346,7 +346,7 @@ async function handle(req: Request, t: TFunc) {
     let searches = 0;
     // The answer on one model: with the web, or without it when the web
     // turn failed before any words came (below).
-    const startAsk = (call: ModelCall, withWeb: boolean, askMessages: ModelMessage[]) => {
+    const startAsk = (call: ModelCall, tools: ToolSet | null, askMessages: ModelMessage[]) => {
       usageMeta.model = call.modelId;
       return streamText({
       model: call.model,
@@ -355,9 +355,9 @@ async function handle(req: Request, t: TFunc) {
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages: askMessages,
-      ...(webTurn && withWeb
+      ...(tools
         ? {
-            tools: webTurn.tools,
+            tools,
             stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
           }
         : {}),
@@ -385,7 +385,7 @@ async function handle(req: Request, t: TFunc) {
       },
       });
     };
-    const result = startAsk(chat, true, messages);
+    const result = startAsk(chat, webTurn?.tools ?? null, messages);
     // A model failure must reach the reader: the stream ends with
     // STREAM_ERROR_TOKEN + the reason, never a silent empty 200
     // (lib/derive/text-stream.ts, the derive route's pattern: heartbeat spaces
@@ -507,23 +507,44 @@ async function handle(req: Request, t: TFunc) {
           try {
             full = await streamTextTo(result, relay, { t, onPart });
           } catch (err) {
-            // The web turn failed before any words came (the search refused,
-            // the model refused the tool): the reader still gets an answer,
-            // from the material, with one line that says the search failed
-            // and why. Any other failure goes to the reader as before.
-            if (!webTurn || req.signal.aborted || relayed.trim() !== "") throw err;
-            const reason = modelErrorMessage(err);
-            console.error("[assistant] web turn failed, answering without the web:", reason);
-            const plain = await featureCall(pictured ? await pictureFeature("assistant") : "assistant", effort);
-            relay(`${t("assistant.webFailed", { reason })}\n\n`);
-            full = await streamTextTo(
-              startAsk(plain, false, [
-                ...messages,
-                { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
-              ]),
-              relay,
-              { t, onPart },
-            );
+            // The model failed before any words came (the search refused, the
+            // provider out of service or out of balance): the turn runs again
+            // on the next call of retryCalls (lib/web-search.ts) — after a
+            // web turn, the web feature's model with its own search, then a
+            // fallback model without the web. An answer without the web
+            // opens with one line that says the search failed and why.
+            if (req.signal.aborted || relayed.trim() !== "") throw err;
+            const firstReason = modelErrorMessage(err);
+            let failure: unknown = err;
+            let answered: string | null = null;
+            for (const retry of await retryCalls(chat.modelId, effort, webTurn !== null, pictured)) {
+              console.error(
+                `[assistant] ${usageMeta.model} failed, running again on ${retry.call.modelId}${retry.tools ? " with its search" : ""}:`,
+                modelErrorMessage(failure),
+              );
+              const withoutWeb = webTurn !== null && retry.tools === null;
+              let head = withoutWeb ? `${t("assistant.webFailed", { reason: firstReason })}\n\n` : "";
+              const relayAfterHead = (chunk: string) => {
+                if (head && chunk.trim()) {
+                  relay(head);
+                  head = "";
+                }
+                relay(chunk);
+              };
+              try {
+                answered = await streamTextTo(
+                  startAsk(retry.call, retry.tools, withoutWeb ? [...messages, NO_WEB_MESSAGE] : messages),
+                  relayAfterHead,
+                  { t, onPart },
+                );
+                break;
+              } catch (retryErr) {
+                failure = retryErr;
+                if (req.signal.aborted || relayed.trim() !== "") throw retryErr;
+              }
+            }
+            if (answered === null) throw failure;
+            full = answered;
           }
           const { text, content } = splitActionsFence(full);
           // The text before the fence, whole: the relay held back what could
@@ -552,7 +573,8 @@ async function handle(req: Request, t: TFunc) {
           // Stopped by the reader: nobody is listening.
           if (req.signal.aborted) return;
           console.error("[assistant] stream error:", err);
-          send(`${STREAM_ERROR_TOKEN}${t("assistant.failedServer")}`);
+          // The reason rides with the line, so the owner can tell what to fix.
+          send(`${STREAM_ERROR_TOKEN}${t("assistant.failedReason", { reason: modelErrorMessage(err) })}`);
         } finally {
           if (!cancelled) controller.close();
         }
