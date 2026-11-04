@@ -29,7 +29,7 @@ import {
   type DocumentEdits,
 } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
-import { callForJson } from "@/lib/derive/json-call";
+import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
@@ -43,6 +43,7 @@ import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
 import { isSearchCall, webCall, WebSources } from "@/lib/web-search";
+import type { ModelCall } from "@/lib/model-call";
 import { featureCall, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -343,14 +344,18 @@ async function handle(req: Request, t: TFunc) {
     const pages = new WebSources();
     const turns = messages.length - 2;
     let searches = 0;
-    const result = streamText({
-      model,
+    // The answer on one model: with the web, or without it when the web
+    // turn failed before any words came (below).
+    const startAsk = (call: ModelCall, withWeb: boolean, askMessages: ModelMessage[]) => {
+      usageMeta.model = call.modelId;
+      return streamText({
+      model: call.model,
       maxOutputTokens,
-      providerOptions: chat.providerOptions,
+      providerOptions: call.providerOptions,
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
-      messages,
-      ...(webTurn
+      messages: askMessages,
+      ...(webTurn && withWeb
         ? {
             tools: webTurn.tools,
             stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
@@ -378,7 +383,9 @@ async function handle(req: Request, t: TFunc) {
         );
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
-    });
+      });
+    };
+    const result = startAsk(chat, true, messages);
     // A model failure must reach the reader: the stream ends with
     // STREAM_ERROR_TOKEN + the reason, never a silent empty 200
     // (lib/derive/text-stream.ts, the derive route's pattern: heartbeat spaces
@@ -492,13 +499,32 @@ async function handle(req: Request, t: TFunc) {
           sent = Math.max(sent, end);
         };
         try {
-          const full = await streamTextTo(result, relay, {
-            t,
-            onPart: (part) => {
-              if (isSearchCall(part)) searches++;
-              pages.read(part);
-            },
-          });
+          const onPart = (part: Parameters<NonNullable<Parameters<typeof streamTextTo>[2]["onPart"]>>[0]) => {
+            if (isSearchCall(part)) searches++;
+            pages.read(part);
+          };
+          let full: string;
+          try {
+            full = await streamTextTo(result, relay, { t, onPart });
+          } catch (err) {
+            // The web turn failed before any words came (the search refused,
+            // the model refused the tool): the reader still gets an answer,
+            // from the material, with one line that says the search failed
+            // and why. Any other failure goes to the reader as before.
+            if (!webTurn || req.signal.aborted || relayed.trim() !== "") throw err;
+            const reason = modelErrorMessage(err);
+            console.error("[assistant] web turn failed, answering without the web:", reason);
+            const plain = await featureCall(pictured ? await pictureFeature("assistant") : "assistant", effort);
+            relay(`${t("assistant.webFailed", { reason })}\n\n`);
+            full = await streamTextTo(
+              startAsk(plain, false, [
+                ...messages,
+                { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
+              ]),
+              relay,
+              { t, onPart },
+            );
+          }
           const { text, content } = splitActionsFence(full);
           // The text before the fence, whole: the relay held back what could
           // have been the fence's start.

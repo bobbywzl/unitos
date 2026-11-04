@@ -169,6 +169,7 @@ const en = {
   // One failure line (SPEC.md §7): what failed, then what to do.
   failedConnection: "No answer: Unitos could not reach the server. Try again.",
   webSources: "Web sources",
+  webFailed: "The web search failed ({reason}), so this answer comes from the material alone.",
   failedServer: "No answer: the assistant had a problem. Try again.",
   assistantFailed: "Assistant failed",
   assistantFailedStatus: "Assistant failed ({status})",
@@ -311,6 +312,7 @@ const zh: Record<keyof typeof en, string> = {
   emptyResponse: "模型返回了空响应。请重试。",
   failedConnection: "没有回答：Unitos 无法连接服务器。请重试。",
   webSources: "网络来源",
+  webFailed: "网络搜索失败（{reason}），所以这个回答只来自材料本身。",
   failedServer: "没有回答：助手出了问题。请重试。",
   assistantFailed: "助手请求失败",
   assistantFailedStatus: "助手请求失败（{status}）",

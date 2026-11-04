@@ -221,7 +221,18 @@ export function useReadAloud({
       // browser cannot play, so a piece is never dropped without a sound.
       const speakPiece = async () => {
         playing.current = "browser";
-        const spoken = await speakText(pieces.current[i].text, { onEnd: () => next() });
+        const spoken = await speakText(pieces.current[i].text, {
+          onEnd: (error) => {
+            if (!error) {
+              next();
+              return;
+            }
+            // The voice made no sound: the reading stops and says so.
+            if (r !== run.current) return;
+            stop();
+            onErrorRef.current(unavailableRef.current);
+          },
+        });
         if (r !== run.current) return;
         if (!spoken) {
           stop();

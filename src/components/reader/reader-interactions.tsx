@@ -7428,8 +7428,11 @@ export function ReaderInteractions({
   // follows the text: Chinese characters → zh-CN, else en-US.
   async function browserSpeak(text: string, run: number) {
     const spoken = await speakText(text, {
-      onEnd: () => {
-        if (voiceRunRef.current === run) setVoice("idle");
+      onEnd: (error) => {
+        if (voiceRunRef.current !== run) return;
+        setVoice("idle");
+        // The voice made no sound: say so, never a silent end.
+        if (error) showToast(t("reader.voiceUnavailable"));
       },
     });
     if (voiceRunRef.current !== run) return;

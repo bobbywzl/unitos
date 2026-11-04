@@ -478,7 +478,7 @@ async function handle(req: Request, t: TFunc) {
   const chat = svgChart ?? chatCall;
   const pages = new WebSources();
   // A chip asks the chat model nothing: its command is fixed.
-  const result = chip
+  let result = chip
     ? { ok: true as const, data: { reply: null, actions: { actions: [], unreadable: [] } as ReadActions } }
     : await callForJson({
         model: chat.model,
@@ -502,6 +502,28 @@ async function handle(req: Request, t: TFunc) {
             }
           : {}),
       });
+  // The web turn failed (the search refused, the model refused the tool):
+  // the command runs again without the web, and the reply's first line says
+  // the search failed and why.
+  let webFailed: string | null = null;
+  if (!result.ok && webTurn && !svgChart && !req.signal.aborted) {
+    console.error("[assistant:act] web turn failed, running without the web:", result.error);
+    webFailed = t("assistant.webFailed", { reason: result.error });
+    const plain = await featureCall(attachedImage ? await pictureFeature("act") : "act", effort);
+    result = await callForJson({
+      model: plain.model,
+      messages: [
+        ...messages,
+        { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
+      ],
+      maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
+      providerOptions: plain.providerOptions,
+      schema: planSchema,
+      label: "assistant:act",
+      usage: { userId: user.id, feature: "act", model: plain.modelId },
+      abortSignal: req.signal,
+    });
+  }
   if (!result.ok) {
     const error = wordedReason(t, result.error)
       ? t("api.planFailed", { reason: result.error })
@@ -733,7 +755,7 @@ async function handle(req: Request, t: TFunc) {
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed."));
   // The pages the search read, under the reply (lib/web-search.ts).
-  const replyText = answer + pages.section(answer, t("assistant.webSources"));
+  const replyText = (webFailed ? `${webFailed}\n\n` : "") + answer + pages.section(answer, t("assistant.webSources"));
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
   // suggestions are in the document, and the turn says so.

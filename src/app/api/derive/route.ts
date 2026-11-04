@@ -1187,7 +1187,7 @@ async function handle(req: Request, t: TFunc) {
     const pages = new WebSources();
     // The stream on one model: the call's own, or the fallback's when the
     // first failed before any text came (below).
-    const startStream = (call: ModelCall) => {
+    const startStream = (call: ModelCall, withWeb = true, streamMessages: ModelMessage[] = messages) => {
       usageMeta.model = call.modelId;
       return streamText({
         model: call.model,
@@ -1195,8 +1195,8 @@ async function handle(req: Request, t: TFunc) {
         providerOptions: call.providerOptions,
         headers: gatewayHeaders(usageMeta),
         allowSystemInMessages: true,
-        messages,
-        ...(webTurn
+        messages: streamMessages,
+        ...(webTurn && withWeb
           ? {
               tools: webTurn.tools,
               stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
@@ -1298,6 +1298,32 @@ async function handle(req: Request, t: TFunc) {
         // balance spent): the call runs again on the fallback model, once
         // (lib/feature-models.ts fallbackCall). With web search on, the
         // search is the model's provider's, so the call stays on its model.
+        // The web turn failed before any text came (the search refused, the
+        // model refused the tool): the answer runs again without the web, on
+        // the tool's own model, under one line that says the search failed
+        // and why.
+        if (failure !== null && !req.signal.aborted && sent === 0 && web) {
+          const reason = modelErrorMessage(failure);
+          console.error(`[derive stream] ${data.type} web turn failed, running without the web:`, reason);
+          failure = null;
+          const note = `${t("assistant.webFailed", { reason })}\n\n`;
+          try {
+            const plain = await featureCall(derivationFeature(data.type), DERIVATION_EFFORT[data.type]);
+            sendCounted(note);
+            text =
+              note +
+              (await streamTextTo(
+                startStream(plain, false, [
+                  ...messages,
+                  { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
+                ]),
+                sendCounted,
+                { t },
+              ));
+          } catch (err) {
+            failure = err;
+          }
+        }
         if (failure !== null && !req.signal.aborted && sent === 0 && !web) {
           const fallback = await fallbackCall(chat.modelId, DERIVATION_EFFORT[data.type], attachedImages.length > 0);
           if (fallback) {

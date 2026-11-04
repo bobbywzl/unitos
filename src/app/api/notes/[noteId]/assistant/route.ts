@@ -139,7 +139,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
       }),
     },
   ];
-  const result = await callForJson({
+  let result = await callForJson({
     model: call.model,
     messages,
     maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
@@ -157,6 +157,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
         }
       : {}),
   });
+  // The web turn failed (the search refused, the model refused the tool):
+  // the note's assistant answers without the web, and the reply's first
+  // line says the search failed and why.
+  let webFailed: string | null = null;
+  if (!result.ok && webTurn && !req.signal.aborted) {
+    console.error("[note-assistant] web turn failed, answering without the web:", result.error);
+    webFailed = t("assistant.webFailed", { reason: result.error });
+    const plain = await featureCall("note-assistant", effort);
+    result = await callForJson({
+      model: plain.model,
+      messages: [
+        ...messages,
+        { role: "user", content: "The web search is not available for this answer. Answer from the material alone, and do not say you searched." },
+      ],
+      maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
+      providerOptions: plain.providerOptions,
+      schema: answerSchema,
+      label: "note-assistant",
+      usage: { userId: access.user.id, feature: "note-assistant", model: plain.modelId },
+      abortSignal: req.signal,
+    });
+  }
   if (!result.ok) {
     return NextResponse.json({ error: t("api.noteAssistantFailed", { reason: result.error }) }, { status: 422 });
   }
@@ -191,7 +213,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
     }
   }
   // The pages the search read, under the reply (lib/web-search.ts).
-  const reply = result.data.reply.trim();
+  const reply = (webFailed ? `${webFailed}\n\n` : "") + result.data.reply.trim();
   return NextResponse.json({
     reply: reply + pages.section(reply, t("assistant.webSources")),
     content,
