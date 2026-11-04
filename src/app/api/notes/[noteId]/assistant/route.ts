@@ -10,7 +10,8 @@ import { callForJson } from "@/lib/derive/json-call";
 import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { webCall, WebSources } from "@/lib/web-search";
 import { checkNoteQuotes } from "@/lib/notes/assistant-check";
 import { noteAssistantPrompt } from "@/lib/prompts/note-assistant";
 import { parseBody } from "@/lib/validate";
@@ -101,10 +102,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
   ]);
 
   const history = data.history.slice(-MAX_HISTORY).filter((turn) => turn.content.trim());
-  // With the web on, the web feature's model answers, with its provider's
-  // search (SPEC.md §7); else the note's assistant's own.
+  // With the web on, Gemini with Google Search answers (lib/web-search.ts,
+  // SPEC.md §7); else the note's assistant's own model.
   const web = data.web ?? true;
-  const call = await featureCall(web ? "web" : "note-assistant", NOTE_ASSISTANT_EFFORT[resolvedThinking(data.thinking, { message: data.message })]);
+  const effort = NOTE_ASSISTANT_EFFORT[resolvedThinking(data.thinking, { message: data.message })];
+  const webTurn = web ? await webCall(effort) : null;
+  const call = webTurn ? webTurn.call : await featureCall("note-assistant", effort);
+  const pages = new WebSources();
   const messages: ModelMessage[] = [
     ...(document
       ? [
@@ -144,11 +148,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
     label: "note-assistant",
     usage: { userId: access.user.id, feature: "note-assistant", model: call.modelId },
     abortSignal: req.signal,
-    ...(web
+    ...(webTurn
       ? {
-          tools: { [WEB_SEARCH_TOOL]: webSearchTool(call.modelId) },
+          tools: webTurn.tools,
           stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-          toolCallUsd: webSearchUsd(call.modelId),
+          toolCallUsd: webTurn.searchUsd,
+          pages,
         }
       : {}),
   });
@@ -185,5 +190,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
       if (fact) warnings.push(t("api.noteAssistantUngrounded", { fact }));
     }
   }
-  return NextResponse.json({ reply: result.data.reply.trim(), content, warnings } satisfies NoteAssistantAnswer);
+  // The pages the search read, under the reply (lib/web-search.ts).
+  const reply = result.data.reply.trim();
+  return NextResponse.json({
+    reply: reply + pages.section(reply, t("assistant.webSources")),
+    content,
+    warnings,
+  } satisfies NoteAssistantAnswer);
 }

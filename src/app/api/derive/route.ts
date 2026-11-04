@@ -58,7 +58,8 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { webCall, WebSources } from "@/lib/web-search";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -993,21 +994,21 @@ async function handle(req: Request, t: TFunc) {
   // feature's model, which reads the source whole (lib/derive/svg-chart.ts).
   const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
   // Web access (SPEC.md §7): an explanation, an analysis, or an answer about
-  // a range may search the web, as the assistant does — the same tool, the
-  // same rules (WEB_LINES), on the web feature's model. A call with an image
-  // or an SVG chart goes to the model that reads it, without the web.
+  // a range may search the web, as the assistant does — the same search, the
+  // same rules (WEB_LINES): Gemini with Google Search (lib/web-search.ts). A
+  // call with an image or an SVG chart goes to the model that reads it,
+  // without the web.
   const web =
     (data.web ?? true) &&
     (data.type === "EXPLAIN" || data.type === "ANALYZE" || data.type === "ASK") &&
     attachedImages.length === 0 &&
     !svgChart;
   ctx.web = web;
+  const webTurn = web ? await webCall(DERIVATION_EFFORT[data.type]) : null;
   const chat =
     svgChart ??
-    (await featureCall(
-      web ? "web" : attachedImages.length > 0 ? "vision" : derivationFeature(data.type),
-      DERIVATION_EFFORT[data.type],
-    ));
+    webTurn?.call ??
+    (await featureCall(attachedImages.length > 0 ? "vision" : derivationFeature(data.type), DERIVATION_EFFORT[data.type]));
   usageMeta.model = chat.modelId;
   const messages: ModelMessage[] = [
     {
@@ -1182,7 +1183,8 @@ async function handle(req: Request, t: TFunc) {
     data.type === "ASK" ||
     data.type === "DEFINE"
   ) {
-    const searchUsd = web ? webSearchUsd(usageMeta.model) : 0;
+    const searchUsd = webTurn?.searchUsd ?? 0;
+    const pages = new WebSources();
     // The stream on one model: the call's own, or the fallback's when the
     // first failed before any text came (below).
     const startStream = (call: ModelCall) => {
@@ -1194,9 +1196,9 @@ async function handle(req: Request, t: TFunc) {
         headers: gatewayHeaders(usageMeta),
         allowSystemInMessages: true,
         messages,
-        ...(web
+        ...(webTurn
           ? {
-              tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+              tools: webTurn.tools,
               stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
             }
           : {}),
@@ -1281,7 +1283,14 @@ async function handle(req: Request, t: TFunc) {
           send(chunk);
         };
         try {
-          text = await streamTextTo(result, sendCounted, { t });
+          text = await streamTextTo(result, sendCounted, { t, onPart: (part) => pages.read(part) });
+          // The pages the search read, under the answer, kept with it
+          // (lib/web-search.ts).
+          const sources = pages.section(text, t("assistant.webSources"));
+          if (sources) {
+            send(sources);
+            text += sources;
+          }
         } catch (err) {
           failure = err;
         }

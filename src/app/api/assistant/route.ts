@@ -41,7 +41,8 @@ import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { isSearchCall, webCall, WebSources } from "@/lib/web-search";
 import { featureCall, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -327,10 +328,9 @@ async function handle(req: Request, t: TFunc) {
       Array.isArray(m.content) &&
       m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
   );
-  const chat = await featureCall(
-    data.web === true ? "web" : pictured ? await pictureFeature("assistant") : "assistant",
-    effort,
-  );
+  // With the web on: Gemini with Google Search (lib/web-search.ts).
+  const webTurn = data.web === true ? await webCall(effort) : null;
+  const chat = webTurn ? webTurn.call : await featureCall(pictured ? await pictureFeature("assistant") : "assistant", effort);
   usageMeta.model = chat.modelId;
   const model = chat.model;
 
@@ -339,7 +339,8 @@ async function handle(req: Request, t: TFunc) {
     // provider (lib/kimi.ts), reads the result, and answers with the pages
     // it used as links; the answer streams as before.
     const web = data.web === true;
-    const searchUsd = webSearchUsd(usageMeta.model);
+    const searchUsd = webTurn?.searchUsd ?? 0;
+    const pages = new WebSources();
     const turns = messages.length - 2;
     let searches = 0;
     const result = streamText({
@@ -349,9 +350,9 @@ async function handle(req: Request, t: TFunc) {
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
-      ...(web
+      ...(webTurn
         ? {
-            tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+            tools: webTurn.tools,
             stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
           }
         : {}),
@@ -494,13 +495,17 @@ async function handle(req: Request, t: TFunc) {
           const full = await streamTextTo(result, relay, {
             t,
             onPart: (part) => {
-              if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
+              if (isSearchCall(part)) searches++;
+              pages.read(part);
             },
           });
           const { text, content } = splitActionsFence(full);
           // The text before the fence, whole: the relay held back what could
           // have been the fence's start.
           flush();
+          // The pages the search read, under the answer (lib/web-search.ts).
+          const sources = pages.section(text, t("assistant.webSources"));
+          if (sources) send(sources);
           if (act && content !== null) {
             send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
           }

@@ -148,11 +148,12 @@ export function profileLines(profile: ReaderProfileCtx): string {
 // §7): the material first, the web to check it and fill what it lacks,
 // every web source cited. Repeated exact wording across templates.
 export const WEB_LINES = [
-  "You can search the web. Use it to verify the factual claims the material and your answer rest on against outside sources, and to add what the material lacks. Rules:",
-  "1. Answer from the material first; the web checks it. Never present a web result as if it came from the material.",
-  "2. Cite every web source you use as a markdown link at the point it supports, with the page title as the link text.",
-  "3. When the web contradicts the material, say so plainly and show both sides.",
-  '4. End with a section titled "Web sources" listing every web page you relied on as a markdown link, one per line. Leave the section out when you used none.',
+  "You can search the web, as any AI chatbot can. These rules come before every rule above that limits the answer to the material. Rules:",
+  "1. Search when the question reaches past the material: a fact, a date, a history, a person, a definition, or anything recent that the material does not state. Search when the reader asks you to look something up, to check something, or to use the internet. Never ask whether to search, and never tell the reader to ask again: search, then answer.",
+  "2. When the material answers the question in full, answer from it. Search then only to check a factual claim the answer rests on that may be out of date.",
+  "3. Say which sentences come from the web and which come from the material. Never present a web result as if it came from the material.",
+  "4. Name each web source in the sentence it supports: the site or the page title. Write no web addresses and no list of sources: the app lists the pages you read under the answer.",
+  "5. When the web contradicts the material, say so plainly and show both sides.",
 ];
 
 // The reader's notes as the assistant reads them (SPEC.md §7): every note

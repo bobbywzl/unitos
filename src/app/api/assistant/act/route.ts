@@ -42,7 +42,8 @@ import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figu
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { webCall, WebSources } from "@/lib/web-search";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
@@ -467,15 +468,15 @@ async function handle(req: Request, t: TFunc) {
   // A video frame goes to a model that reads images (SPEC.md §2): the act's
   // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
-  // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
+  // a turn with the web on to Gemini with Google Search (lib/web-search.ts).
   // How hard this command runs (SPEC.md §7): the reader's choice, or Auto's
   // reading of the command (lib/assistant/depth.ts).
   const depthInput = { message: data.command, turns: history.length, attachments: attachedImage ? 1 : 0, scope: "document" as const };
-  const chatCall = await featureCall(
-    web ? "web" : attachedImage ? await pictureFeature("act") : "act",
-    thinkingEffort(data.thinking, depthInput),
-  );
+  const effort = thinkingEffort(data.thinking, depthInput);
+  const webTurn = web ? await webCall(effort) : null;
+  const chatCall = webTurn ? webTurn.call : await featureCall(attachedImage ? await pictureFeature("act") : "act", effort);
   const chat = svgChart ?? chatCall;
+  const pages = new WebSources();
   // A chip asks the chat model nothing: its command is fixed.
   const result = chip
     ? { ok: true as const, data: { reply: null, actions: { actions: [], unreadable: [] } as ReadActions } }
@@ -490,11 +491,14 @@ async function handle(req: Request, t: TFunc) {
         // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
         // model call, not just the response the client would have read.
         abortSignal: req.signal,
-        ...(web
+        // The search goes with the web turn's model, never with the SVG
+        // chart's (Claude reads the chart's source, with no search).
+        ...(webTurn && !svgChart
           ? {
-              tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatCall.modelId) },
+              tools: webTurn.tools,
               stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-              toolCallUsd: webSearchUsd(chatCall.modelId),
+              toolCallUsd: webTurn.searchUsd,
+              pages,
             }
           : {}),
       });
@@ -728,7 +732,8 @@ async function handle(req: Request, t: TFunc) {
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed."));
-  const replyText = answer;
+  // The pages the search read, under the reply (lib/web-search.ts).
+  const replyText = answer + pages.section(answer, t("assistant.webSources"));
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
   // suggestions are in the document, and the turn says so.

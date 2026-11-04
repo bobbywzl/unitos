@@ -168,6 +168,7 @@ const en = {
   emptyResponse: "The model returned an empty response. Try again.",
   // One failure line (SPEC.md §7): what failed, then what to do.
   failedConnection: "No answer: Unitos could not reach the server. Try again.",
+  webSources: "Web sources",
   failedServer: "No answer: the assistant had a problem. Try again.",
   assistantFailed: "Assistant failed",
   assistantFailedStatus: "Assistant failed ({status})",
@@ -309,6 +310,7 @@ const zh: Record<keyof typeof en, string> = {
   barChatTitle: "在文字旁的卡片中打开这段对话",
   emptyResponse: "模型返回了空响应。请重试。",
   failedConnection: "没有回答：Unitos 无法连接服务器。请重试。",
+  webSources: "网络来源",
   failedServer: "没有回答：助手出了问题。请重试。",
   assistantFailed: "助手请求失败",
   assistantFailedStatus: "助手请求失败（{status}）",

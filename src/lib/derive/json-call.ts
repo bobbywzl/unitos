@@ -1,3 +1,4 @@
+import type { WebSources } from "@/lib/web-search";
 import { APICallError, generateText, RetryError, type ModelMessage, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
@@ -106,6 +107,8 @@ export async function callForJson<S extends z.ZodType>(params: {
   tools?: ToolSet;
   stopWhen?: Parameters<typeof generateText>[0]["stopWhen"];
   toolCallUsd?: number;
+  // The pages a web turn read (lib/web-search.ts), for the list under the answer.
+  pages?: WebSources;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const run = async (model: LanguageModel, messages: ModelMessage[], usage: UsageMeta | undefined) => {
     const result = await generateText({
@@ -121,6 +124,7 @@ export async function callForJson<S extends z.ZodType>(params: {
       ...(params.tools ? { tools: params.tools, stopWhen: params.stopWhen } : {}),
     });
     const toolCalls = params.tools ? result.steps.reduce((n, step) => n + step.toolCalls.length, 0) : 0;
+    params.pages?.readResult(result);
     console.log(
       `[derive] ${params.label} cacheRead=${result.usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
         `cacheWrite=${result.usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
