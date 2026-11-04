@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AssistantBoundary } from "@/components/assistant/assistant-boundary";
 import {
   attachmentKind,
   capFileName,
@@ -465,7 +466,17 @@ function hasFiles(e: React.DragEvent): boolean {
 // One assistant panel with the Recommended functions and a scope control (SPEC.md §7).
 // The first question turns it into a conversation: the turns in a thread
 // that scrolls, the composer at the foot, images and files attachable.
-export function AssistantPanel({
+/** The panel inside its error boundary (assistant-boundary.tsx): an error
+    it throws stays in the panel, never takes the page down. */
+export function AssistantPanel(props: Parameters<typeof AssistantPanelBody>[0]) {
+  return (
+    <AssistantBoundary>
+      <AssistantPanelBody {...props} />
+    </AssistantBoundary>
+  );
+}
+
+function AssistantPanelBody({
   notebookId,
   documentId,
   summaries,

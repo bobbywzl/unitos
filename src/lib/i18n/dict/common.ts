@@ -127,6 +127,9 @@ const en = {
   // Offline work (SPEC.md §17, Unitos Premium)
   // The one failure line of a write (SPEC.md §17, lib/api.ts): "Not saved"
   // and what the reader can do. A write that retries by itself shows no line.
+  pageError: "This page stopped on an error.",
+  reload: "Reload",
+  tryAgain: "Try again",
   notSaved: "Not saved. Try again.",
   // A read that failed (a list, a conversation, an attachment): the same shape.
   notLoaded: "Not loaded. Try again.",
@@ -232,6 +235,9 @@ const zh: Record<keyof typeof en, string> = {
   tierTrial: "Unitos Premium · 试用至 {date}",
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
+  pageError: "此页面因出错而停止。",
+  reload: "重新加载",
+  tryAgain: "重试",
   notSaved: "未保存。请重试。",
   notLoaded: "未加载。请重试。",
   conversationCleared: "对话已清除",
