@@ -57,7 +57,7 @@ export function kimiEffort(effort: Effort): KimiEffort {
 export async function modelCall(id: string, effort: Effort): Promise<ModelCall> {
   const modelId = await resolveModelId(id);
   if (isClaudeId(id)) {
-    return { model: await claude(id), providerOptions: claudeOptions(effort), modelId };
+    return { model: await claude(id), providerOptions: claudeOptions(effort, modelId), modelId };
   }
   if (isGeminiId(id)) {
     return { model: await gemini(id), providerOptions: geminiOptions(effort), modelId };

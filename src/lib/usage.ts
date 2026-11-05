@@ -48,6 +48,9 @@ const MODEL_PRICING: Record<string, Price> = {
   // (lib/video/deepgram.ts). inputTokens on these rows is seconds of audio.
   "nova-3": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
+  // Claude Haiku 5.5: $0.10 in, $0.50 out per 1M tokens up to a 100K-token
+  // prompt ($0.50 and $2.50 beyond it); the family rule below is Haiku 4.5's.
+  "claude-haiku-5-5": anthropicPrice(0.1, 0.5),
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),

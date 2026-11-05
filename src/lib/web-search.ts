@@ -3,17 +3,20 @@ import { GEMINI_3_8_FLASH } from "@/lib/derive/config";
 import { fallbackCalls, featureCall, featureModelId } from "@/lib/feature-models";
 import { resolveModelId } from "@/lib/models";
 import { geminiConfigured, geminiGoogleSearch } from "@/lib/gemini";
-import { WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
-import { modelCall, modelConfigured, type Effort, type ModelCall } from "@/lib/model-call";
+import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { CLAUDE_WEB_SEARCH_USD, claudeConfigured, claudeWebSearch } from "@/lib/claude";
+import { isClaudeId, modelCall, modelConfigured, type Effort, type ModelCall } from "@/lib/model-call";
 
 // Web access for every assistant (SPEC.md §7): the sidebar assistant, the
 // selection's tools and its assistant chat, the note assistant, and the
-// assistant's commands. With the web on, the turn runs on Gemini with Google
-// Search, the assistant's own model and key: Google runs the search inside
-// the call, and the pages it read come back as url sources, which the route
-// lists under the answer (webSourcesSection). Without a Gemini key the turn
-// runs on the web feature's model with its provider's search (lib/kimi.ts:
-// Z.ai under GLM, Moonshot under Kimi), as before.
+// assistant's commands. With the web on, the turn runs on the assistant's
+// own model with its provider's built-in search: Claude's web search on the
+// assistant's Claude model (Claude Haiku 5.5), or Google Search while Gemini
+// runs the assistant (GEMINI_ROUTING). The search runs inside the call, and
+// the pages it read come back as url sources, which the route lists under
+// the answer (WebSources). With neither, the turn runs on the web feature's
+// model with its provider's search (lib/kimi.ts: Z.ai under GLM, Moonshot
+// under Kimi), as before.
 
 export const GOOGLE_SEARCH_TOOL = "google_search";
 
@@ -27,8 +30,16 @@ export type WebCall = {
 
 /** The model and the search for a turn with the web on. */
 export async function webCall(effort: Effort): Promise<WebCall> {
+  const assistant = await featureModelId("assistant");
+  if (isClaudeId(assistant) && claudeConfigured()) {
+    const call = await modelCall(assistant, effort);
+    return {
+      call,
+      tools: { [WEB_SEARCH_TOOL]: claudeWebSearch(call.modelId, WEB_SEARCH_MAX_USES) },
+      searchUsd: CLAUDE_WEB_SEARCH_USD,
+    };
+  }
   if (geminiConfigured()) {
-    const assistant = await featureModelId("assistant");
     const call = await modelCall(assistant.startsWith("gemini-") ? assistant : GEMINI_3_8_FLASH, effort);
     return { call, tools: { [GOOGLE_SEARCH_TOOL]: geminiGoogleSearch() }, searchUsd: 0 };
   }

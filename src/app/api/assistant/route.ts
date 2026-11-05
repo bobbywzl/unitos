@@ -41,10 +41,10 @@ import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
 import { isSearchCall, NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import type { ModelCall } from "@/lib/model-call";
-import { featureCall, pictureFeature } from "@/lib/feature-models";
+import { featureCall, featureConfigured, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -116,7 +116,8 @@ export async function POST(req: Request) {
 
 async function handle(req: Request, t: TFunc) {
   const started = Date.now();
-  if (!kimiConfigured()) {
+  // The assistant's own model needs its key (Claude Haiku 5.5: ANTHROPIC_API_KEY).
+  if (!(await featureConfigured("assistant"))) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, assistantSchema);

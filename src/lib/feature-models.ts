@@ -22,6 +22,8 @@ import {
   SVG_CHART_MODEL,
   VISION_MODEL,
   GEMINI_FLASH,
+  GEMINI_ROUTING,
+  CLAUDE_HAIKU_5_5,
   CLAUDE_SONNET_5_5,
   KIMI_ROUTING,
   VISUALIZE_MODEL,
@@ -31,7 +33,7 @@ import {
   WEB_SEARCH_MODEL,
 } from "@/lib/derive/config";
 import { isGlmModel, resolveModelId } from "@/lib/models";
-import { modelCall, modelConfigured, modelKeyName, type Effort, type ModelCall } from "@/lib/model-call";
+import { isGeminiId, modelCall, modelConfigured, modelKeyName, type Effort, type ModelCall } from "@/lib/model-call";
 import { probeChatModel } from "@/lib/model-update";
 import { currentLang } from "@/lib/i18n/server";
 
@@ -249,7 +251,9 @@ export async function featureModelId(feature: Feature): Promise<string> {
   // it. A call outside a request (cron) reads English and keeps its model.
   if (KIMI_ROUTING && (await currentLang()) === "zh" && modelConfigured(KIMI_K3)) return KIMI_K3;
   const row = (await rows())[feature];
-  if (row) return row;
+  // A row that names a Gemini id while Gemini is off (GEMINI_ROUTING) gives
+  // way to the feature's default: Gemini would refuse the call.
+  if (row && !(isGeminiId(row) && !GEMINI_ROUTING)) return row;
   const id = FEATURE_DEFAULTS[feature];
   const fallback = FEATURE_FALLBACKS[feature];
   return fallback && !modelConfigured(id) ? fallback : id;
@@ -266,8 +270,11 @@ export async function pictureFeature(feature: Feature): Promise<Feature> {
 // that is not the one that failed. A call that carries a picture needs a
 // model that reads pictures (Gemini, Claude, Kimi); a text call takes GLM
 // first, the cheapest.
-const PICTURE_FALLBACKS = [GEMINI_FLASH, CLAUDE_SONNET_5_5, ...(KIMI_ROUTING ? [KIMI_K3] : [])];
-const TEXT_FALLBACKS = [GLM_5_3, ...(KIMI_ROUTING ? [KIMI_K3] : []), GEMINI_FLASH, CLAUDE_SONNET_5_5];
+// Gemini's ids stay in the lists: while GEMINI_ROUTING is off, they have no
+// key (modelConfigured) and are passed over. Claude Haiku 5.5 reads pictures
+// too, after Sonnet, which reads small print better.
+const PICTURE_FALLBACKS = [GEMINI_FLASH, CLAUDE_SONNET_5_5, CLAUDE_HAIKU_5_5, ...(KIMI_ROUTING ? [KIMI_K3] : [])];
+const TEXT_FALLBACKS = [GLM_5_3, ...(KIMI_ROUTING ? [KIMI_K3] : []), GEMINI_FLASH, CLAUDE_HAIKU_5_5, CLAUDE_SONNET_5_5];
 
 /** The model a streamed call runs again on when its model failed before
     any text came (a provider's outage, its balance spent: Moonshot refused

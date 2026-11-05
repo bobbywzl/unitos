@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
-import { geminiCall, geminiConfigured, geminiCountTokens } from "@/lib/video/gemini";
+import { geminiCall, geminiConfigured, geminiCountTokens, videoTextConfigured } from "@/lib/video/gemini";
 import {
   CHUNK_SECONDS,
   GEMINI_SINGLE_CALL_TOKENS,
@@ -195,7 +195,9 @@ export async function nameSpeakers(
     if (id !== null && !roster.has(id)) roster.set(id, { id, name: lines[i].speakerName ?? "" });
   });
   if (roster.size <= 1) return EMPTY;
-  if (geminiConfigured()) {
+  // The names come from the lines' words: a text pass, on Claude Haiku 5.5
+  // while Gemini is off (lib/video/gemini.ts).
+  if (videoTextConfigured()) {
     try {
       // Names are said early — an introduction, a host's welcome — so the
       // first batch names most voices; later batches only fill in the rest.

@@ -55,6 +55,20 @@ export async function claude(modelId: string): Promise<LanguageModel> {
   return provider(await resolveModelId(modelId));
 }
 
+/** Claude's web search (Anthropic's server tool; lib/web-search.ts): the
+    search runs on Anthropic's side inside the call, and the pages it read
+    come back as the stream's url sources. The tool with dynamic filtering
+    where the model takes it; Claude Haiku 5.5 takes the basic one. */
+export function claudeWebSearch(modelId: string, maxUses: number) {
+  provider ??= createAnthropic({ apiKey: claudeApiKey(), baseURL: claudeBaseUrl() });
+  return /haiku/i.test(modelId)
+    ? provider.tools.webSearch_20250305({ maxUses })
+    : provider.tools.webSearch_20260209({ maxUses });
+}
+
+/** What one Claude web search costs: $10 per 1,000 searches. */
+export const CLAUDE_WEB_SEARCH_USD = 0.01;
+
 /** Provider options for one call: the reasoning effort (lib/derive/config.ts)
     and the server-side fallback. These models always reason, so no thinking
     setting is sent; the effort sets how long it reasons. When the safety
@@ -63,6 +77,8 @@ export async function claude(modelId: string): Promise<LanguageModel> {
     instead of failing; usage then records the call under the model asked
     for. Temperature and top_p are fixed by the model, so nothing else is
     set. */
-export function claudeOptions(effort: ClaudeEffort = HANDWRITTEN_EFFORT) {
+export function claudeOptions(effort: ClaudeEffort = HANDWRITTEN_EFFORT, modelId?: string) {
+  // Claude Haiku 5.5 has no server-side fallback: the field is left off.
+  if (modelId && /haiku/i.test(modelId)) return { anthropic: { effort } };
   return { anthropic: { effort, fallbacks: "default" as const } };
 }

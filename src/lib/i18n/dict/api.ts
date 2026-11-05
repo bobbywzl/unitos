@@ -123,7 +123,7 @@ const en = {
   noVideoBlock: "This document has no video block",
 
   // Assistant
-  assistantNeedsKey: "MOONSHOT_API_KEY is not set. The assistant needs it.",
+  assistantNeedsKey: "The assistant's model has no API key set.",
   assistantFailed: "The assistant failed. {reason}",
   taskCorpusScope: "This task runs at Project scope",
   questionRequired: "Type a question or attach an image or a file",
@@ -523,7 +523,7 @@ const zh: Record<keyof typeof en, string> = {
   noVideo: "此文档没有视频",
   noVideoBlock: "此文档没有视频块",
 
-  assistantNeedsKey: "未设置 MOONSHOT_API_KEY。助手需要它。",
+  assistantNeedsKey: "助手的模型没有设置 API 密钥。",
   assistantFailed: "助手请求失败。{reason}",
   taskCorpusScope: "此任务在项目范围运行",
   questionRequired: "请输入问题，或附上图片或文件",

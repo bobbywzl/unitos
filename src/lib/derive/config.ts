@@ -4,9 +4,9 @@ import { translate } from "@/lib/i18n/dictionaries";
 import type { AssistantAction } from "@/lib/types";
 
 // The models (SPEC.md §2). The assistant — its answers and its edit
-// commands — runs on Gemini 3.8 Flash (GEMINI_3_8_FLASH below; the client is
-// lib/gemini.ts); where no Gemini key is set it falls back to GLM 5.3
-// (lib/feature-models.ts). GLM 5.3, Z.ai's flagship, is behind the reader's
+// commands — runs on Claude Haiku 5.5 (CLAUDE_HAIKU_5_5 below): fast, cheap,
+// and it reads pictures; Gemini 3.8 Flash ran it while GEMINI_ROUTING was on
+// (the client is lib/gemini.ts). GLM 5.3, Z.ai's flagship, is behind the reader's
 // tools, the assistant with Web on, Stitch's answer, and the merge of notes; GLM 5.3
 // Flash, its small sibling, behind every reading but the parse — the
 // readings copy claims into structure, and Flash reads a million tokens for
@@ -32,6 +32,20 @@ export const CLAUDE_OPUS_5_5 = "claude-opus-5-5";
 // Chinese reader's rule in lib/feature-models.ts, the fallbacks) until this
 // is true again.
 export const KIMI_ROUTING = false;
+// Gemini is off: its API refused every call when the credit ran out (Nov
+// 2026). Off, no call goes to Gemini (geminiConfigured() in
+// lib/video/gemini.ts answers false whatever key is set): the assistant and
+// its commands run on Claude Haiku 5.5, Web on searches with Claude's web
+// search (lib/web-search.ts), the video's text passes (naming the speakers,
+// tidying a transcript) run on Claude Haiku 5.5, and the passes that watch
+// or hear the media itself (a transcription rung, a clip's description, the
+// speakers by voice) step aside for the rungs that need no Gemini. True
+// routes all of it back.
+export const GEMINI_ROUTING = false;
+// Claude Haiku 5.5: Anthropic's fast, low-cost model ($0.10 in, $0.50 out
+// per million tokens), with pictures and a 1M context. It has no
+// server-side refusal fallback (claudeOptions in lib/claude.ts sends none).
+export const CLAUDE_HAIKU_5_5 = "claude-haiku-5-5";
 // The assistant with Web on runs on GLM 5.3, the same model as with Web
 // off. The search follows the model that answers (lib/kimi.ts): Z.ai's Web
 // Search API under GLM, Moonshot's web-search formula under Kimi K3 — which
@@ -100,7 +114,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SALIENCE: GLM_5_3_FLASH,
   EXTRACT: GLM_5_3_FLASH,
   SUMMARIZE: GLM_5_3,
-  SYNTHESIS: GEMINI_3_8_FLASH,
+  SYNTHESIS: GEMINI_ROUTING ? GEMINI_3_8_FLASH : CLAUDE_HAIKU_5_5,
   FIND: GLM_5_3_FLASH,
   DISTILL: KIMI_ROUTING ? KIMI_K3 : GLM_5_3, // Extract: the reader's question and the quotes that answer it
   FORMALIZE: GLM_5_3,
