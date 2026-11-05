@@ -524,7 +524,11 @@ async function handle(req: Request, t: TFunc) {
                 modelErrorMessage(failure),
               );
               const withoutWeb = webTurn !== null && retry.tools === null;
-              let head = withoutWeb ? `${t("assistant.webFailed", { reason: firstReason })}\n\n` : "";
+              // After a failed web turn the answer says why, whichever model answers.
+              let head =
+                webTurn === null
+                  ? ""
+                  : `${t(withoutWeb ? "assistant.webFailed" : "assistant.webRetried", { reason: firstReason })}\n\n`;
               const relayAfterHead = (chunk: string) => {
                 if (head && chunk.trim()) {
                   relay(head);
@@ -552,7 +556,7 @@ async function handle(req: Request, t: TFunc) {
           // have been the fence's start.
           flush();
           // The pages the search read, under the answer (lib/web-search.ts).
-          const sources = pages.section(text, t("assistant.webSources"));
+          const sources = pages.section(text, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
           if (sources) send(sources);
           if (act && content !== null) {
             send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);

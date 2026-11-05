@@ -86,8 +86,21 @@ export function isSearchCall(part: { type: string; toolName?: string }): boolean
     sources, and the links a provider search's results carry. */
 export class WebSources {
   private pages = new Map<string, string>();
+  /** The error a search answered with instead of pages (Claude's web search
+      answers 200 with an error code: not enabled for the organization, too
+      many requests, unavailable). */
+  private searchError: string | null = null;
+
+  private readError(value: unknown): void {
+    if (!value || typeof value !== "object") return;
+    const code = (value as { errorCode?: unknown; error_code?: unknown }).errorCode ?? (value as { error_code?: unknown }).error_code;
+    if (typeof code === "string" && !this.searchError) this.searchError = code;
+  }
 
   read<TOOLS extends ToolSet>(part: TextStreamPart<TOOLS>): void {
+    if ((part.type === "tool-result" || part.type === "tool-error") && part.toolName === WEB_SEARCH_TOOL) {
+      this.readError(part.type === "tool-result" ? part.output : part.error);
+    }
     if (part.type === "source" && part.sourceType === "url") {
       if (!this.pages.has(part.url)) this.pages.set(part.url, part.title?.trim() || hostOf(part.url));
       return;
@@ -112,6 +125,7 @@ export class WebSources {
     }
     for (const step of result.steps) {
       for (const r of step.toolResults) {
+        if (r.toolName === WEB_SEARCH_TOOL) this.readError(r.output);
         if (r.toolName !== WEB_SEARCH_TOOL || typeof r.output !== "string") continue;
         for (const m of r.output.matchAll(/https?:\/\/[^\s)\]"'<>]+/g)) {
           if (!this.pages.has(m[0])) this.pages.set(m[0], hostOf(m[0]));
@@ -128,8 +142,9 @@ export class WebSources {
       page. Empty when the turn read no page, or when the answer already
       ends with its own Web sources section (a provider search's answer
       writes it, its links taken from the results). */
-  section(answer: string, heading: string): string {
-    if (this.pages.size === 0) return "";
+  section(answer: string, heading: string, errorLine?: (code: string) => string): string {
+    // No page read, and the search said why: the reason under the answer.
+    if (this.pages.size === 0) return this.searchError && errorLine ? `\n\n*${errorLine(this.searchError)}*` : "";
     if (/\n#*\s*\**\s*web sources\b/i.test(answer) || answer.includes(heading)) return "";
     const lines = [...this.pages].map(([url, title]) => `- [${title.replace(/[[\]]/g, "")}](${url})`);
     return `\n\n**${heading}**\n${lines.join("\n")}`;

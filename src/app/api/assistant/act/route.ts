@@ -525,7 +525,8 @@ async function handle(req: Request, t: TFunc) {
         ...(retry.tools ? { tools: retry.tools, stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1), pages } : {}),
       });
       if (result.ok) {
-        if (withoutWeb) webFailed = t("assistant.webFailed", { reason: firstReason });
+        // After a failed web turn the reply says why, whichever model answered.
+        if (webTurn !== null) webFailed = t(withoutWeb ? "assistant.webFailed" : "assistant.webRetried", { reason: firstReason });
         break;
       }
       if (req.signal.aborted) break;
@@ -762,7 +763,7 @@ async function handle(req: Request, t: TFunc) {
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed."));
   // The pages the search read, under the reply (lib/web-search.ts).
-  const replyText = (webFailed ? `${webFailed}\n\n` : "") + answer + pages.section(answer, t("assistant.webSources"));
+  const replyText = (webFailed ? `${webFailed}\n\n` : "") + answer + pages.section(answer, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
   // suggestions are in the document, and the turn says so.

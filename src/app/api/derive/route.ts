@@ -1286,7 +1286,7 @@ async function handle(req: Request, t: TFunc) {
           text = await streamTextTo(result, sendCounted, { t, onPart: (part) => pages.read(part) });
           // The pages the search read, under the answer, kept with it
           // (lib/web-search.ts).
-          const sources = pages.section(text, t("assistant.webSources"));
+          const sources = pages.section(text, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
           if (sources) {
             send(sources);
             text += sources;

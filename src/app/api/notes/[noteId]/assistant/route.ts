@@ -223,7 +223,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
   // The pages the search read, under the reply (lib/web-search.ts).
   const reply = (webFailed ? `${webFailed}\n\n` : "") + result.data.reply.trim();
   return NextResponse.json({
-    reply: reply + pages.section(reply, t("assistant.webSources")),
+    reply: reply + pages.section(reply, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code })),
     content,
     warnings,
   } satisfies NoteAssistantAnswer);
