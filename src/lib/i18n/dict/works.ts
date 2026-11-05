@@ -179,6 +179,9 @@ const en = {
   release20261103Title: "New: Read aloud for the whole document",
   release20261103Body:
     "- **Read aloud** — the button at the top right of the article, beside Collapse. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
+  release20261105Title: "New: Stars in Breakwork",
+  release20261105Body:
+    "- **Stars** — in Breakwork, every block in a bucket takes one to three stars, at the right of its row. The bucket lists the three-star blocks first, then two, then one, then the rest, each group under its own line. Two arrows move a block to the top or the bottom of its group.\n- **Connections** — the dot at the side of a bucket or a block is easier to grab, every dot shows while you drag a connection, a click anywhere on a curve opens it, and a curve to a block scrolled out of view ends at the edge of its bucket.",
   // Feedback button
   feedback: "Feedback",
   feedbackBug: "bug",
@@ -381,6 +384,9 @@ const zh: Record<keyof typeof en, string> = {
   release20261103Title: "新功能：朗读全文",
   release20261103Body:
     "- **朗读**——文章右上角、折叠旁边的按钮。它从你读到的地方朗读到文末，声音与选中内容的朗读相同。正在朗读的段落会被标出，页面跟着它走。再按一次暂停；✕ 停止。\n\n新功能的控件会发光，直到你按下它。",
+  release20261105Title: "新功能：Breakwork 里的星",
+  release20261105Body:
+    "- **星**——在 Breakwork 里，类别中的每个块可以加一到三颗星，在行的右侧。类别先列三星的块，再列两星、一星，最后是其余的，每组各在一条线下。两个箭头把块移到其所在组的顶部或底部。\n- **关联**——类别或块侧边的圆点更容易抓到，拖动关联时每个圆点都会显示，点击曲线上的任意位置即可打开它，指向已滚出视野的块的曲线会在其类别的边缘结束。",
   // Feedback button
   feedback: "反馈",
   feedbackBug: "问题",

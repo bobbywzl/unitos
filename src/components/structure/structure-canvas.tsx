@@ -22,8 +22,12 @@ import { SparkleIcon, TrashIcon } from "@/components/icons";
 import { BUCKET_WIDTH, topBucketOf, type Structure, type StructureConnection } from "@/lib/structure";
 import { BucketBox } from "@/components/structure/bucket-box";
 import {
+  endKey,
   endOfHandle,
+  OffscreenProvider,
   useStructure,
+  type Offscreen,
+  type OffscreenReport,
   type StructureBlock,
 } from "@/components/structure/structure-context";
 
@@ -31,10 +35,15 @@ import {
 // header; a bucket inside another draws inside its node. A connection is a
 // curve between the handles of its two ends — a bucket's header or a piece
 // row, in whichever node they sit — with its label on the curve; a click on
-// the label opens the connection card: the label, the comment, Delete. A
-// drag from one end's handle to another's draws a new connection. Pan and
-// zoom as the graph: drag empty space to pan, scroll to pan, pinch or
-// Ctrl/Cmd+wheel to zoom.
+// the curve or its chip opens the connection card: the label, the comment,
+// Delete. An end scrolled out of its bucket's body has no place to draw to:
+// its curve ends at the bucket's edge instead, at the top when the row is
+// above the body, at the bottom when it is below (the buckets report what
+// is out of view, OffscreenProvider). A drag from one end's handle to
+// another's draws a new connection; while it is dragged every handle shows,
+// and the curve snaps to a handle within CONNECTION_RADIUS. Pan and zoom as
+// the graph: drag empty space to pan, scroll to pan, pinch or Ctrl/Cmd+wheel
+// to zoom.
 
 type BucketNodeData = { bucketId: string };
 // reversed: the curve runs from the connection's second end to its first
@@ -44,6 +53,8 @@ type ConnectionEdgeData = { connection: StructureConnection; reversed: boolean }
 // The room between two top buckets, in px, under which they count as one
 // column: their connection joins their right sides.
 const SIDE_GAP = 24;
+// How close to a handle, in px, a dragged connection snaps to it.
+const CONNECTION_RADIUS = 40;
 
 function BucketNode({ id, data }: NodeProps<BucketNodeData>) {
   const { structure } = useStructure();
@@ -71,7 +82,7 @@ function ConnectionEdge({
   selected,
 }: EdgeProps<ConnectionEdgeData>) {
   const t = useT();
-  const { selectedConnectionId, selectConnection } = useStructure();
+  const { selectedConnectionId, selectConnection, canEdit } = useStructure();
   const connection = data?.connection;
   const reversed = data?.reversed ?? false;
   const open = connection ? selectedConnectionId === connection.id : false;
@@ -92,20 +103,20 @@ function ConnectionEdge({
         d={path}
         fill="none"
         stroke={lit ? "var(--clay)" : "var(--sand-500)"}
-        strokeWidth={lit ? 2.5 : 1.75}
+        strokeWidth={lit ? 2.5 : 2}
         strokeDasharray={
           connection.byAssistant && !connection.label ? "6 5" : undefined
         }
-        className="react-flow__edge-path"
+        className="react-flow__edge-path structure-edge-path"
         markerEnd={reversed ? undefined : `url(#${lit ? "structure-arrow-lit" : "structure-arrow"})`}
         markerStart={reversed ? `url(#${lit ? "structure-arrow-lit" : "structure-arrow"})` : undefined}
       />
-      {/* A wide invisible path takes the click. */}
+      {/* A wide invisible path takes the click and the hover. */}
       <path
         d={path}
         fill="none"
         stroke="transparent"
-        strokeWidth={18}
+        strokeWidth={24}
         className="react-flow__edge-interaction"
       />
       <EdgeLabelRenderer>
@@ -124,15 +135,17 @@ function ConnectionEdge({
             }}
             data-track="structure-connection"
             data-tip={t("structure.connectionTitle")}
-            className={`flex max-w-[220px] items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold shadow-soft ${
+            className={`flex max-w-[220px] items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] shadow-soft ${
               lit
-                ? "border-clay bg-clay text-clay-fg"
-                : "border-line bg-card text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                ? "border-clay bg-clay font-semibold text-clay-fg"
+                : connection.label
+                  ? "border-line bg-card font-semibold text-sand-700 hover:border-clay hover:bg-clay-100 hover:text-clay-800"
+                  : "border-dashed border-sand-400 bg-card text-sand-500 hover:border-clay hover:bg-clay-100 hover:text-clay-800"
             }`}
           >
             {connection.byAssistant && <SparkleIcon size={10} />}
             <span className="truncate">
-              {connection.label || t("structure.connectionUnlabeled")}
+              {connection.label || t(canEdit ? "structure.connectionAddLabel" : "structure.connectionUnlabeled")}
             </span>
           </button>
           {open && (
@@ -258,7 +271,7 @@ const edgeTypes = { connection: ConnectionEdge };
 
 function Canvas() {
   const t = useT();
-  const { structure, canEdit, ops, selectConnection } = useStructure();
+  const { structure, canEdit, ops, selectConnection, selectedConnectionId } = useStructure();
   const tops = useMemo(
     () => structure.buckets.filter((b) => !b.parentId),
     [structure.buckets],
@@ -266,6 +279,21 @@ function Canvas() {
 
   const [flowNodes, setFlowNodes, onNodesChange] =
     useNodesState<BucketNodeData>([]);
+  // The ends scrolled out of each top bucket's body, as the buckets report
+  // them; a report that changes nothing is dropped, so a scroll that moves
+  // no end out of view redraws nothing.
+  const [offscreen, setOffscreen] = useState<Map<string, Map<string, Offscreen>>>(new Map());
+  const reportOffscreen = useCallback<OffscreenReport>((topBucketId, ends) => {
+    setOffscreen((current) => {
+      const before = current.get(topBucketId);
+      if (before && before.size === ends.size && [...ends].every(([k, v]) => before.get(k) === v)) return current;
+      const next = new Map(current);
+      if (ends.size === 0) next.delete(topBucketId);
+      else next.set(topBucketId, ends);
+      return next;
+    });
+  }, []);
+  const [connecting, setConnecting] = useState(false);
   // The nodes follow the buckets: a new bucket gets a node at its position,
   // a removed one loses its node, and a bucket moved by the assistant's
   // layout moves — but a node the reader is dragging keeps its place.
@@ -317,8 +345,16 @@ function Canvas() {
       const toTop = topBucketOf(structure, toBucket);
       const fromX = xOf.get(fromTop) ?? 0;
       const toX = xOf.get(toTop) ?? 0;
-      const fromHandle = (side: "l" | "r") => `${side}|${c.from.kind}|${c.from.id}`;
-      const toHandle = (side: "l" | "r") => `${side}|${c.to.kind}|${c.to.id}`;
+      // An end scrolled out of its top bucket's body: the curve ends at
+      // the bucket's header handle (above) or its bottom handle (below).
+      const handleOf = (end: StructureConnection["from"], top: string) => (side: "l" | "r") => {
+        const place = offscreen.get(top)?.get(endKey(end));
+        if (place === "above") return `${side}|bucket|${top}`;
+        if (place === "below") return `${side}b|bucket|${top}`;
+        return `${side}|${end.kind}|${end.id}`;
+      };
+      const fromHandle = handleOf(c.from, fromTop);
+      const toHandle = handleOf(c.to, toTop);
       const route =
         fromTop !== toTop && fromX + BUCKET_WIDTH + SIDE_GAP <= toX
           ? { source: fromTop, target: toTop, sourceHandle: fromHandle("r"), targetHandle: toHandle("l"), reversed: false }
@@ -337,13 +373,37 @@ function Canvas() {
         },
       ];
     });
-  }, [structure, flowNodes]);
+  }, [structure, flowNodes, offscreen]);
 
+  // Belt and braces for the CSS rule: a scroll of any part of the canvas
+  // but a bucket's body (the list, .nowheel) is undone at once, so
+  // reactflow's positions stay true.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const onScroll = (e: Event) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLElement) || el.classList.contains("nowheel")) return;
+      if (el.scrollTop !== 0) el.scrollTop = 0;
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    };
+    wrap.addEventListener("scroll", onScroll, true);
+    return () => wrap.removeEventListener("scroll", onScroll, true);
+  }, []);
+
+  // The connection runs from the end the drag started at to the end it was
+  // dropped on, whichever side's handle it started from (reactflow names
+  // the ends by handle type instead: a drag from a left handle would read
+  // the other way round).
+  const dragStart = useRef<string | null>(null);
   const onConnect = useCallback(
     (connection: Connection) => {
-      const from = endOfHandle(connection.sourceHandle);
-      const to = endOfHandle(connection.targetHandle);
-      if (!from || !to) return;
+      const source = endOfHandle(connection.sourceHandle);
+      const target = endOfHandle(connection.targetHandle);
+      if (!source || !target) return;
+      const startedAtTarget = dragStart.current !== null && dragStart.current === connection.targetHandle;
+      const [from, to] = startedAtTarget ? [target, source] : [source, target];
       const id = ops.connect(from, to);
       if (id) selectConnection(id);
     },
@@ -351,7 +411,10 @@ function Canvas() {
   );
 
   return (
-    <div className="corpus-graph structure-canvas relative h-full w-full">
+    <div
+      ref={wrapRef}
+      className={`corpus-graph structure-canvas relative h-full w-full ${connecting ? "structure-connecting" : ""} ${selectedConnectionId ? "structure-card-open" : ""}`}
+    >
       <svg className="absolute size-0">
         <defs>
           <marker
@@ -359,8 +422,8 @@ function Canvas() {
             viewBox="0 0 10 10"
             refX="9"
             refY="5"
-            markerWidth="7"
-            markerHeight="7"
+            markerWidth="9"
+            markerHeight="9"
             orient="auto-start-reverse"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--sand-500)" />
@@ -370,14 +433,15 @@ function Canvas() {
             viewBox="0 0 10 10"
             refX="9"
             refY="5"
-            markerWidth="7"
-            markerHeight="7"
+            markerWidth="9"
+            markerHeight="9"
             orient="auto-start-reverse"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--clay)" />
           </marker>
         </defs>
       </svg>
+      <OffscreenProvider value={reportOffscreen}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -396,8 +460,18 @@ function Canvas() {
           );
         }}
         onConnect={onConnect}
+        onConnectStart={(_, params) => {
+          dragStart.current = params.handleId;
+          setConnecting(true);
+        }}
+        onConnectEnd={() => setConnecting(false)}
+        onEdgeClick={(e, edge) => {
+          e.stopPropagation();
+          selectConnection(edge.id);
+        }}
         onPaneClick={() => selectConnection(null)}
         connectionMode={ConnectionMode.Loose}
+        connectionRadius={CONNECTION_RADIUS}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         panOnDrag
@@ -422,6 +496,7 @@ function Canvas() {
           fitViewOptions={{ padding: 0.2, maxZoom: 1, duration: 400 }}
         />
       </ReactFlow>
+      </OffscreenProvider>
       {tops.length === 0 && (
         <p className="pointer-events-none absolute inset-x-0 top-1/2 mx-auto max-w-[460px] -translate-y-1/2 px-8 text-center text-sm text-sand-600">
           {t(canEdit ? "structure.empty" : "structure.emptyViewer")}

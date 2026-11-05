@@ -76,6 +76,8 @@
   --kind-visualize: #c2408f;
   --kind-assistant: #c67139;
   --kind-link: #5b6b7a;
+  /* A piece's stars in Breakwork. */
+  --star: #d9a54a;
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -137,6 +139,7 @@
   --kind-visualize: #f08ac8;
   --kind-assistant: #d98a52;
   --kind-link: #9fb0c0;
+  --star: #e6b85c;
 
   color-scheme: dark;
 }
@@ -144,6 +147,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-star: var(--star);
 
   --color-paper: var(--paper);
   --color-shell: var(--shell);
@@ -1980,6 +1984,14 @@ ellipse.anchor-flash {
 .structure-canvas .react-flow__node {
   width: auto;
 }
+/* The canvas never scrolls: a focus or a scrollIntoView on a row outside
+   the view would scroll an overflow-hidden pane, and reactflow, which reads
+   no scroll, would then draw every curve and drop off by that much. */
+.structure-canvas .react-flow,
+.structure-canvas .react-flow__renderer,
+.structure-canvas .react-flow__pane {
+  overflow: clip;
+}
 .structure-canvas .react-flow__node-bucket {
   border: 0;
   background: transparent;
@@ -1990,18 +2002,41 @@ ellipse.anchor-flash {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--clay) 45%, transparent), var(--elev-md);
 }
 .structure-canvas .structure-handle.react-flow__handle {
+  /* The handle is a 22px hit area; its dot is 11px, drawn by ::after, so a
+     drag starts from anywhere near the dot and a finger finds it. */
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.structure-canvas .structure-handle.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
   width: 11px;
   height: 11px;
+  border-radius: 999px;
   border: 2px solid var(--card);
   background: var(--sand-400);
-  opacity: 0;
-  transition: opacity 150ms ease, background 150ms ease;
+  transform: translate(-50%, -50%);
+  transition: background 150ms ease, transform 150ms ease;
 }
 .structure-canvas .react-flow__handle-left.structure-handle {
-  left: -6px;
+  left: -11px;
 }
 .structure-canvas .react-flow__handle-right.structure-handle {
-  right: -6px;
+  right: -11px;
+}
+/* The bottom handles of a top bucket: where a curve ends when its piece is
+   scrolled out of the bucket's body. Never dragged from, never shown. */
+.structure-canvas .structure-handle-bottom.react-flow__handle {
+  opacity: 0 !important;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
 }
 .structure-canvas .structure-bucket:hover > .bucket-drag > .structure-handle,
 .structure-canvas [data-piece-row]:hover > .structure-handle,
@@ -2010,16 +2045,56 @@ ellipse.anchor-flash {
 .structure-canvas .structure-handle:hover {
   opacity: 1;
 }
-.structure-canvas .structure-handle:hover,
-.structure-canvas .react-flow__handle.valid {
+/* While a connection is dragged, every handle shows, so the reader sees
+   where it can land; the one under the pointer lights. */
+.structure-connecting .structure-handle.react-flow__handle {
+  opacity: 0.6;
+}
+.structure-canvas .structure-handle:hover::after,
+.structure-canvas .react-flow__handle.connecting::after,
+.structure-canvas .react-flow__handle.valid::after {
   background: var(--clay);
+  transform: translate(-50%, -50%) scale(1.25);
 }
 .structure-canvas .react-flow__connection-path {
   stroke: var(--clay);
-  stroke-width: 2;
+  stroke-width: 2.25;
 }
 .structure-canvas .react-flow__edge-interaction {
   cursor: pointer;
+}
+/* A curve under the pointer lights, with its chip. */
+.structure-canvas .react-flow__edge:hover .structure-edge-path {
+  stroke: var(--clay);
+  stroke-width: 2.5;
+}
+.structure-canvas .react-flow__edge:hover .structure-edge-path[marker-end] {
+  marker-end: url(#structure-arrow-lit);
+}
+.structure-canvas .react-flow__edge:hover .structure-edge-path[marker-start] {
+  marker-start: url(#structure-arrow-lit);
+}
+/* A piece's tools — the stars and the two arrows — show on hover, on focus,
+   and while the row is open; a star the piece has (data-on) shows always.
+   A finger has no hover: on a coarse pointer the tools show while the row
+   is open, which one tap does. */
+.structure-canvas .piece-tool {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.structure-canvas .piece-tool[data-on],
+.structure-canvas [data-piece-row]:hover .piece-tool,
+.structure-canvas [data-piece-row]:focus-within .piece-tool,
+.structure-canvas [data-piece-row][data-open] .piece-tool {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .structure-canvas [data-piece-row]:hover .piece-tool:not([data-on]) {
+    opacity: 0;
+  }
+  .structure-canvas [data-piece-row][data-open] .piece-tool {
+    opacity: 1;
+  }
 }
 /* A bucket the pointer is on, or one with a box in focus, rises over its
    neighbors: an opened piece grows the bucket, and the words stay readable.
@@ -2028,9 +2103,11 @@ ellipse.anchor-flash {
 .structure-canvas .react-flow__node:focus-within {
   z-index: 900 !important;
 }
-/* A connection's label and its open card stand over the buckets. */
+/* A connection's chip and its open card stand over every bucket, the
+   hovered one (900, below) and the selected one (reactflow's 1000) too: a
+   chip is what opens the connection, so a bucket never hides it. */
 .structure-canvas .react-flow__edgelabel-renderer {
-  z-index: 5;
+  z-index: 1001;
 }
 
 /* Documents whose recommended links await acceptance breathe on their own

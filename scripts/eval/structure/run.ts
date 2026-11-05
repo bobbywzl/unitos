@@ -65,7 +65,7 @@ function canvasOf(c: StructureCase, blocks: StructureDocBlock[]): Structure {
     s.buckets.push({ id: b.id, title: b.title, description: b.description ?? "", parentId: b.parent ?? null, x: i * 460, y: 0, color: null, order: i });
     parseRanges(b.blocks, readable.length).forEach((n, order) => {
       const block = readable[n - 1];
-      s.pieces.push({ blockId: block.id, hash: pieceHash(block.text), preview: piecePreview(block.text), bucketId: b.id, order, label: "" });
+      s.pieces.push({ blockId: block.id, hash: pieceHash(block.text), preview: piecePreview(block.text), bucketId: b.id, order, label: "", stars: 0 });
     });
   });
   return s;
