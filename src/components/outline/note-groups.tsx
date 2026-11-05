@@ -20,8 +20,9 @@ import { carryNoteEditors } from "@/components/outline/use-note-draft";
 import { flattenNotes, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
 // How the notes are grouped (SPEC.md §6), on the tray and on the notes full
-// page: last edited, newest first, in one list (the default); by section
-// (the reader's own categories, where notes drag and drop); by document; by
+// page: by section (the default: the reader's own categories, where notes
+// drag and drop and a section is added); last edited, newest first, in one
+// list; by document; by
 // the week or the month a note was made; or by title, A to Z. Every grouping
 // but section is a view: it moves no note, and a note still edits,
 // collapses, and opens its source in it. One choice per browser, the same
@@ -71,7 +72,9 @@ function subscribe(onChange: () => void) {
 
 export function useNoteGrouping(): [NoteGrouping, (g: NoteGrouping) => void] {
   const stored = useSyncExternalStore(subscribe, () => read(GROUPING_STORE), () => null);
-  const grouping = NOTE_GROUPINGS.includes(stored as NoteGrouping) ? (stored as NoteGrouping) : "edited";
+  // A browser that never chose sees the sections, as every reader did before
+  // Group by came (CLAUDE.md rule zero 5); a choice made stays.
+  const grouping = NOTE_GROUPINGS.includes(stored as NoteGrouping) ? (stored as NoteGrouping) : "section";
   // A new Group by draws the notes anew: an open editor goes on in its
   // note's new card (use-note-draft.ts carryNoteEditors).
   const choose = useCallback((g: NoteGrouping) => {

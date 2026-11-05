@@ -118,6 +118,7 @@ import {
   VolumeIcon,
   PlayIcon,
   PauseIcon,
+  PlusIcon,
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
@@ -6377,6 +6378,23 @@ export function ReaderInteractions({
     refreshWhenOnline(router);
   }
 
+  // New section from the toolbox (Add to notes ▾): its name while it is
+  // typed; null while the row is a button.
+  const [newSection, setNewSection] = useState<string | null>(null);
+  async function addToNewSection(title: string) {
+    const name = title.trim();
+    if (!name || !popover || busy) return;
+    try {
+      const section = await api<{ id: string }>("/api/sections", "POST", { notebookId, title: name });
+      setNewSection(null);
+      await addToSection(section.id);
+      // The new section joins the choices and the tray.
+      router.refresh();
+    } catch (err) {
+      addFailed(err);
+    }
+  }
+
   async function addToSection(sectionId: string) {
     if (!popover || busy) return;
     setBusy(true);
@@ -11897,6 +11915,42 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                       ))}
                     </div>
                   </>
+                )}
+                {/* A new section, named here: the words go in as its first note. */}
+                {newSection === null ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => setNewSection("")}
+                    data-track="add-to-notes-new-section"
+                    data-tip={t("reader.addNewSectionTitle")}
+                    className={`flex items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                  >
+                    <PlusIcon size={coarse ? 13 : 11} />
+                    {t("reader.addNewSection")}
+                  </button>
+                ) : (
+                  <input
+                    autoFocus
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (isImeKey(e)) return;
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void addToNewSection(newSection);
+                      }
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setNewSection(null);
+                      }
+                    }}
+                    placeholder={t("reader.newSectionPlaceholder")}
+                    aria-label={t("reader.newSectionPlaceholder")}
+                    data-track="add-to-notes-new-section-name"
+                    className={`w-full rounded-full bg-sand-100 ${
+                      coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                    } outline-none placeholder:text-sand-500`}
+                  />
                 )}
                 {hasNotes && (
                   <>
