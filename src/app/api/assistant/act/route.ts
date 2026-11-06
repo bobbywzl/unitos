@@ -19,6 +19,8 @@ import {
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
+import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
+import { parseRegion } from "@/lib/video/types";
 
 // A revise action reads its windows within the route's time: those not
 // started by then are reported (lib/assistant/revise.ts).
@@ -263,7 +265,7 @@ async function handle(req: Request, t: TFunc) {
     kind: ToolKind;
     content: string;
     turns: ChatTurn[];
-    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string; layer: string | null }[];
+    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string; layer: string | null; region: unknown }[];
   } | null = null;
   if (data.toolNoteId) {
     const note = await db.note.findUnique({
@@ -276,7 +278,7 @@ async function handle(req: Request, t: TFunc) {
         section: { select: { notebookId: true } },
         sources: {
           where: { documentId: data.documentId },
-          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true, layer: true },
+          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true, layer: true, region: true },
         },
       },
     });
@@ -298,12 +300,20 @@ async function handle(req: Request, t: TFunc) {
   // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
   let selectionBlock = "";
   let attachedImage: FigureImage | null = null;
+  // Images after the first: a highlighted page's whole page, after its crop.
+  const extraImages: FigureImage[] = [];
   let svgSource: string | null = null;
+  // A tool conversation on a highlighted spot of a handwritten page (SPEC.md
+  // §16): the tool's source is a region on a PAGE block, not words, so it
+  // resolves to no text. The spot's crop and the page go to the model
+  // instead, as the first Explain sent them.
+  const pageRegion = toolNote ? parseRegion(toolNote.sources[0]?.region) : null;
+  const pageSource = toolNote && pageRegion ? { blockId: toolNote.sources[0].blockId, region: pageRegion } : null;
   // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
   // old ones; the quote carries the selection across.
-  const anchorInput = toolNote ? toolNote.sources[0] : data.anchor;
+  const anchorInput = pageSource ? null : toolNote ? toolNote.sources[0] : data.anchor;
   const segmentsInput = toolNote ? toolNote.sources : data.segments;
   // A core anchor (SPEC.md §28) resolves against the cores, its context the
   // cores around it.
@@ -362,6 +372,26 @@ async function handle(req: Request, t: TFunc) {
     if (!(await selectFigure(anchor.blockId))) selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
   } else if (data.figureBlockId) {
     if (!(await selectFigure(data.figureBlockId))) return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+  } else if (pageSource) {
+    const pageBlock = document.blocks.find((b) => b.id === pageSource.blockId);
+    const file =
+      pageBlock?.type === "PAGE" && pageBlock.page !== null
+        ? await db.document.findUnique({ where: { id: document.id }, select: { fileData: true } })
+        : null;
+    if (!pageBlock || pageBlock.type !== "PAGE" || pageBlock.page === null || !file?.fileData) {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    }
+    const pageImage = await renderPdfPage(new Uint8Array(file.fileData), pageBlock.page);
+    const crop = await cropPageRegion(pageImage, pageSource.region);
+    attachedImage = { bytes: crop ?? pageImage, mediaType: "image/png" };
+    if (crop) extraImages.push({ bytes: pageImage, mediaType: "image/png" });
+    selectionBlock = [
+      `The reader highlighted a spot on page ${pageBlock.page} ("${pageBlockText(pageBlock.page)}", block ${pageSource.blockId}) of this handwritten document.`,
+      crop
+        ? "The first attached image is the highlighted part, enlarged. The second is the whole page."
+        : "The attached image is the whole page; find the highlighted spot on it.",
+      "The command applies to this spot unless it says otherwise. Never state anything about the image you cannot actually see; where the handwriting is illegible, say so plainly.",
+    ].join("\n");
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
     // client could capture it; the transcript for the range grounds the words.
@@ -460,6 +490,7 @@ async function handle(req: Request, t: TFunc) {
           content: [
             { type: "text", text: userPrompt },
             { type: "file", data: attachedImage.bytes, mediaType: attachedImage.mediaType },
+            ...extraImages.map((image) => ({ type: "file" as const, data: image.bytes, mediaType: image.mediaType })),
           ],
         }
       : { role: "user", content: userPrompt },
