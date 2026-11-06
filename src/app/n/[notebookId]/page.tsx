@@ -1006,7 +1006,7 @@ export default async function NotebookPage(props: {
     }
 
     // ── Handwritten documents (SPEC.md §16) ─────────────────────────────────
-    // The stored marks per PAGE block — Circle & ask answers and page comments
+    // The stored marks per PAGE block — Highlight & ask answers and page comments
     // — and the conversion status for the strip under the pages. Built from
     // the resolved sources, so a mark healed onto a rebuilt page paints in the
     // same render.

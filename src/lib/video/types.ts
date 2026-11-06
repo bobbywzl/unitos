@@ -23,10 +23,16 @@ export function isMediaUrl(raw: string): boolean {
   }
 }
 
-// A drawn region on the video frame, in percent coordinates (0–100) of the
-// frame — never pixels — so it stays glued to the same spot at any player size.
-// The draw tool makes a freehand closed loop (kind "path"); kind "ellipse"
-// stays valid for annotations drawn before the loop tool.
+// A drawn region on the video frame or a page, in percent coordinates
+// (0–100) of the frame — never pixels — so it stays glued to the same spot at
+// any size. The video's draw tool makes a freehand closed loop (kind "path");
+// kind "ellipse" stays valid for annotations drawn before the loop tool. On a
+// page (SPEC.md §16) the highlighter paints strokes (kind "stroke"): each
+// stroke is the points the pointer passed, `width` is the band's width in
+// percent of the page's width, and the region is the band around every
+// stroke. Loops drawn on pages before the highlighter stay as they are.
+const percentPoint = z.tuple([z.number().min(0).max(100), z.number().min(0).max(100)]);
+export const STROKE_WIDTH_MAX = 15;
 export const regionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("ellipse"),
@@ -37,10 +43,12 @@ export const regionSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("path"),
-    points: z
-      .array(z.tuple([z.number().min(0).max(100), z.number().min(0).max(100)]))
-      .min(3)
-      .max(400),
+    points: z.array(percentPoint).min(3).max(400),
+  }),
+  z.object({
+    kind: z.literal("stroke"),
+    width: z.number().min(0.5).max(STROKE_WIDTH_MAX),
+    strokes: z.array(z.array(percentPoint).min(1).max(400)).min(1).max(40),
   }),
 ]);
 export type Region = z.infer<typeof regionSchema>;
@@ -51,8 +59,13 @@ export function parseRegion(value: unknown): Region | null {
 }
 
 /** The region's bounding box in percent coordinates, for frame cropping and
-    card placement. */
-export function regionBounds(region: Region): {
+    card placement. A stroke's box takes the band in: half its width on each
+    side, in percent of the width across and, with `aspect` (the page's width
+    over its height; 1 when not known), the same length down. */
+export function regionBounds(
+  region: Region,
+  aspect = 1,
+): {
   x1: number;
   y1: number;
   x2: number;
@@ -66,19 +79,30 @@ export function regionBounds(region: Region): {
       y2: region.cy + region.ry,
     };
   }
-  const xs = region.points.map(([x]) => x);
-  const ys = region.points.map(([, y]) => y);
+  const points = region.kind === "path" ? region.points : region.strokes.flat();
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const padX = region.kind === "stroke" ? region.width / 2 : 0;
+  const padY = padX * aspect;
   return {
-    x1: Math.min(...xs),
-    y1: Math.min(...ys),
-    x2: Math.max(...xs),
-    y2: Math.max(...ys),
+    x1: Math.max(0, Math.min(...xs) - padX),
+    y1: Math.max(0, Math.min(...ys) - padY),
+    x2: Math.min(100, Math.max(...xs) + padX),
+    y2: Math.min(100, Math.max(...ys) + padY),
   };
 }
 
 /** A closed SVG path for a loop's points, in the overlay's percent space. */
 export function regionPathD(points: [number, number][]): string {
   return points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ") + " Z";
+}
+
+/** An open SVG path for one stroke's points: the line the band is drawn
+    along. A stroke of one point is a dot: the path doubles the point so a
+    round cap draws it. */
+export function strokePathD(points: [number, number][]): string {
+  const line = points.length === 1 ? [points[0], points[0]] : points;
+  return line.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
 }
 
 // The time range of a video anchor. endTime is always after startTime.

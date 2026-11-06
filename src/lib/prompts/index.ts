@@ -14,7 +14,7 @@ import { visualizePrompt } from "@/lib/prompts/visualize";
 import type { PromptCtx } from "@/lib/prompts/types";
 
 // One template per DerivationType. New derivation = new template + destination handler,
-// same pipeline (CLAUDE.md). EXPLAIN serves Circle & ask on a handwritten page
+// same pipeline (CLAUDE.md). EXPLAIN serves Highlight & ask on a handwritten page
 // only (SPEC.md §16); EXTRACT (the old Match-it) has no template: the
 // assistant does that work (SPEC.md §7).
 export const promptTemplates: Partial<Record<DerivationType, (ctx: PromptCtx) => string>> = {

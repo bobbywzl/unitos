@@ -27,7 +27,7 @@ export const GLM_5_3_FLASH = "glm-5.3-flash";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5_5 = "claude-opus-5-5";
 // Kimi K3 is off: Moonshot refused every call at a balance of zero (20 Oct
-// 2026, exceeded_current_quota_error), and Circle & ask answered nothing.
+// 2026, exceeded_current_quota_error), and Highlight & ask answered nothing.
 // The features it served run elsewhere (VISION_MODEL, DISTILL below, the
 // Chinese reader's rule in lib/feature-models.ts, the fallbacks) until this
 // is true again.
@@ -53,7 +53,7 @@ export const CLAUDE_HAIKU_5_5 = "claude-haiku-5-5";
 export const WEB_SEARCH_MODEL = GLM_5_3;
 // The voice command (SPEC.md §6) runs on Claude Sonnet 5.5 (VOICE_MODEL below).
 export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
-// GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
+// GLM 5.3 takes text alone. A call that carries an image — Highlight & ask on
 // a figure, a page image, a picture attached to the assistant, a video
 // frame — goes to the vision model instead, whatever the feature's model:
 // Claude Sonnet 5.5, which reads small print and numbers in a figure at

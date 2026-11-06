@@ -503,7 +503,7 @@ async function claimCapturedImages(
 
 // A handwritten document: no text blocks — one PAGE block per PDF page it
 // holds (every page, or the chosen pages), the bytes kept for the page image
-// route, Circle & ask, and conversion (SPEC.md §16).
+// route, Highlight & ask, and conversion (SPEC.md §16).
 async function createHandwrittenDocument(data: {
   title: string;
   sourceUrl?: string;

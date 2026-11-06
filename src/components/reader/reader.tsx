@@ -680,7 +680,7 @@ export function Reader({
   stylesByBlock: Record<string, StyleSpan[]>;
   editedByBlock: Record<string, { start: number; end: number }[]>;
   documentId?: string; // PDF figure blocks render their page via the figure image route
-  // Handwritten document (SPEC.md §16): PAGE blocks render with Circle & ask
+  // Handwritten document (SPEC.md §16): PAGE blocks render with Highlight & ask
   // and their stored marks; the conversion strip sits after the last page.
   pages?: {
     notebookId: string;
@@ -771,7 +771,7 @@ export function Reader({
   const columnStyle: React.CSSProperties = columnWidth
     ? ({ "--reader-column-w": `${columnWidth + ARTICLE_PADDING_PX}px` } as React.CSSProperties)
     : {};
-  // Handwritten document: the Circle & ask hint rides the first page; the
+  // Handwritten document: the Highlight & ask hint rides the first page; the
   // conversion strip renders after the last page (SPEC.md §16).
   const firstPageIndex = blocks.findIndex((b) => b.type === "PAGE");
   const lastPageIndex = blocks.reduce((last, b, i) => (b.type === "PAGE" ? i : last), -1);
@@ -1620,9 +1620,9 @@ type RowPage = {
   marks: PageMark[];
   size: PageSize | null;
   canEdit: boolean;
-  /** Reading mode: Circle & ask works on the page. */
+  /** Reading mode: Highlight & ask works on the page. */
   reading: boolean;
-  /** The first page carries the Circle & ask hint. */
+  /** The first page carries the Highlight & ask hint. */
   first: boolean;
   /** The conversion strip stands under the last page. */
   last: boolean;

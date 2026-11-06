@@ -86,7 +86,7 @@ const en = {
   guideCircleBody:
     "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; Explain deciphers the visual; a color marks it; Comment and Link work as on text.",
   guideCirclePagesBody:
-    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Explain, Comment, or pick a color.",
+    "Handwritten PDFs import as pages: drag the highlighter over a formula, a sketch, or a margin note — the haze is what the AI reads — then Ask, Explain, Comment, or pick a color to keep the highlight.",
   guideSelectHeader: "Select text and use the AI toolbar",
   guideDefine: "Define",
   guideDefineBody:
@@ -179,9 +179,9 @@ const en = {
   release20261103Title: "New: Read aloud for the whole document",
   release20261103Body:
     "- **Read aloud** — the button at the top right of the article, beside Collapse. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
-  release20261105Title: "New: Stars in Breakwork",
+  release20261105Title: "New: Stars in Breakwork, and the highlighter on pages",
   release20261105Body:
-    "- **Stars** — in Breakwork, every block in a bucket takes one to three stars, at the right of its row. The bucket lists the three-star blocks first, then two, then one, then the rest, each group under its own line. Two arrows move a block to the top or the bottom of its group.\n- **Connections** — the dot at the side of a bucket or a block is easier to grab, every dot shows while you drag a connection, a click anywhere on a curve opens it, and a curve to a block scrolled out of view ends at the edge of its bucket.",
+    "- **Stars** — in Breakwork, every block in a bucket takes one to three stars, at the right of its row. The bucket lists the three-star blocks first, then two, then one, then the rest, each group under its own line. Two arrows move a block to the top or the bottom of its group.\n- **Connections** — the dot at the side of a bucket or a block is easier to grab, every dot shows while you drag a connection, a click anywhere on a curve opens it, and a curve to a block scrolled out of view ends at the edge of its bucket.\n- **The highlighter on pages** — on a handwritten page, a drag now paints a haze instead of drawing a loop. Drag again for more lines. The haze is what Ask, Explain, and Comment read, and a color keeps it as a highlight. Loops drawn before stay as they are.",
   // Feedback button
   feedback: "Feedback",
   feedbackBug: "bug",
@@ -300,7 +300,7 @@ const zh: Record<keyof typeof en, string> = {
   guideCircleBody:
     "按住并在插图或公式的任意部分画圈。助手解读图像并回答；“分析”分三段解读插图或表格；“解释”解读图像；颜色标记它；“评论”和“链接”与文本上相同。",
   guideCirclePagesBody:
-    "手写 PDF 按页面导入，每一页都是一张插图：圈出公式、草图或旁注，然后提问、解释、评论，或选颜色。",
+    "手写 PDF 按页面导入：用荧光笔划过公式、草图或旁注——AI 读的就是这片高亮——然后提问、解释、评论，或选颜色保留高亮。",
   guideSelectHeader: "选中文本，使用 AI 工具栏",
   guideDefine: "定义",
   guideDefineBody:
@@ -384,9 +384,9 @@ const zh: Record<keyof typeof en, string> = {
   release20261103Title: "新功能：朗读全文",
   release20261103Body:
     "- **朗读**——文章右上角、折叠旁边的按钮。它从你读到的地方朗读到文末，声音与选中内容的朗读相同。正在朗读的段落会被标出，页面跟着它走。再按一次暂停；✕ 停止。\n\n新功能的控件会发光，直到你按下它。",
-  release20261105Title: "新功能：Breakwork 里的星",
+  release20261105Title: "新功能：Breakwork 里的星，以及页面上的荧光笔",
   release20261105Body:
-    "- **星**——在 Breakwork 里，类别中的每个块可以加一到三颗星，在行的右侧。类别先列三星的块，再列两星、一星，最后是其余的，每组各在一条线下。两个箭头把块移到其所在组的顶部或底部。\n- **关联**——类别或块侧边的圆点更容易抓到，拖动关联时每个圆点都会显示，点击曲线上的任意位置即可打开它，指向已滚出视野的块的曲线会在其类别的边缘结束。",
+    "- **星**——在 Breakwork 里，类别中的每个块可以加一到三颗星，在行的右侧。类别先列三星的块，再列两星、一星，最后是其余的，每组各在一条线下。两个箭头把块移到其所在组的顶部或底部。\n- **关联**——类别或块侧边的圆点更容易抓到，拖动关联时每个圆点都会显示，点击曲线上的任意位置即可打开它，指向已滚出视野的块的曲线会在其类别的边缘结束。\n- **页面上的荧光笔**——在手写页面上，拖动现在画出一片高亮雾层，而不是一个圈。多行可多划几次。AI 读的就是这片高亮，提问、解释、评论都以它为准，选颜色可保留高亮。之前画的圈保持不变。",
   // Feedback button
   feedback: "反馈",
   feedbackBug: "问题",

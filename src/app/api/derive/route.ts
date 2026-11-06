@@ -179,7 +179,7 @@ const deriveSchema = z
         .optional(),
     })
     .optional(),
-  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The PAGE block,
+  // EXPLAIN on a handwritten page (SPEC.md §16): Highlight & ask. The PAGE block,
   // the drawn region, and the reader's question when one was typed. The server
   // renders the page and the circled part from the stored PDF.
   page: z
@@ -928,7 +928,7 @@ async function handle(req: Request, t: TFunc) {
     }
   }
 
-  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The server
+  // EXPLAIN on a handwritten page (SPEC.md §16): Highlight & ask. The server
   // renders the page and the circled part from the stored PDF and attaches
   // both — the page carries the context, the crop carries the circled spot.
   let pageAnchor: { blockId: string; quotedText: string; region: unknown } | null = null;

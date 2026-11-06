@@ -278,7 +278,7 @@ const TEXT_FALLBACKS = [GLM_5_3, ...(KIMI_ROUTING ? [KIMI_K3] : []), GEMINI_FLAS
 
 /** The model a streamed call runs again on when its model failed before
     any text came (a provider's outage, its balance spent: Moonshot refused
-    every Kimi K3 call at a negative balance, and Circle & ask answered
+    every Kimi K3 call at a negative balance, and Highlight & ask answered
     nothing), or null when none is left. The gateway's own fallbacks
     (litellm/config.yaml) run first under the gateway; this one runs
     without it. */

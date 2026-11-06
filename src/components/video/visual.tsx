@@ -94,7 +94,7 @@ export function Visual({
                         strokeWidth={2}
                         vectorEffect="non-scaling-stroke"
                       />
-                    ) : (
+                    ) : a.region.kind === "path" ? (
                       <path
                         d={regionPathD(a.region.points)}
                         fill="none"
@@ -103,6 +103,9 @@ export function Visual({
                         strokeLinejoin="round"
                         vectorEffect="non-scaling-stroke"
                       />
+                    ) : (
+                      // A stroke is the page highlighter's (SPEC.md §16); a frame never carries one.
+                      null
                     )}
                   </svg>
                 )}

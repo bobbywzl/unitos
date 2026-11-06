@@ -2847,7 +2847,7 @@ export function ReaderInteractions({
     // The passage: every block the selection touches, in reading order, one
     // segment per block (lib/anchors/passage.ts). A rendered equation's DOM
     // text is not the stored TeX, and a page's DOM text is its label and the
-    // Circle & ask card, not stored text: neither takes a span, and a
+    // Highlight & ask card, not stored text: neither takes a span, and a
     // selection that crosses one leaves it out (truncated says so).
     const blockEls = Array.from(
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),

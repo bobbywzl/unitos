@@ -3,7 +3,7 @@ import { sniffImage, type ImageMime } from "@/lib/handwritten/image";
 
 // An image becomes a one-page PDF before ingest (SPEC.md §16), so it takes
 // the handwritten path exactly as a scanned page does: the stored bytes are a
-// PDF, the page renders through pdf.js, Circle & ask and conversion work
+// PDF, the page renders through pdf.js, Highlight & ask and conversion work
 // unchanged — a new source, never a new parser. A JPEG embeds as it is, and
 // its EXIF orientation becomes the page's rotation (and a mirror, for the
 // four mirrored orientations), so a phone photo shows upright. Any other
@@ -18,7 +18,7 @@ const LOSSLESS_MAX_PIXELS = 6_000_000;
 // so pixels past this only cost memory. A JPEG past it takes the canvas
 // path too, so the stored image is no larger. Images benchmark finding: a
 // 108 MP phone photo embedded as it was took every render of its page
-// (the page image, conversion, Circle & ask) to 1.9 GB and 11 s.
+// (the page image, conversion, Highlight & ask) to 1.9 GB and 11 s.
 const MAX_PIXELS = 24_000_000;
 const JPEG_QUALITY = 92;
 // The page fits inside Letter and never upscales: the page size sets the

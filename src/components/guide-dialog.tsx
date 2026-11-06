@@ -7,7 +7,7 @@ import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The reader's guide: Extract, Circle & ask, every selection tool, every
+// The reader's guide: Extract, Highlight & ask, every selection tool, every
 // side panel tab, and the keys, in one place. Opened from the ? button in the header. Each
 // tool and each tab is one card: its name, then what it does.
 
@@ -76,7 +76,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
   }, [open, onClose]);
 
   const h = "font-display text-[15px] text-clay-800";
-  // One card per tool or tab, styled like Circle & ask.
+  // One card per tool or tab, styled like Highlight & ask.
   const card = ([nameKey, bodyKey]: [TKey, TKey]) => (
     <div key={nameKey} className="flex flex-col gap-1 rounded-2xl bg-clay-100/70 p-4">
       <span className={h}>{t(nameKey)}</span>
@@ -158,7 +158,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideLeftOffBody")}</p>
         </section>
 
-        {/* Circle & ask (the signature move), emphasized. */}
+        {/* Highlight & ask (the signature move), emphasized. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideCircleHeader")}</span>
           <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideCircleBody")}</p>

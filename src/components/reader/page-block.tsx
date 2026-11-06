@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -10,28 +10,38 @@ import { api } from "@/lib/api";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
-import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
+import { regionBounds, regionPathD, strokePathD, type Region } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // One page of a handwritten document (SPEC.md §16): the page image the page
-// image route serves, the stored marks drawn over it, and Circle & ask —
-// drag a loop on the page, then ask, explain, comment, or pick a color to
-// lasso highlight the circled spot. Ask and Explain stream through
-// /api/derive (EXPLAIN with a page payload; Ask adds the question) and persist
-// as annotations with a region source; Comment and the lasso highlight post
-// to /api/annotations.
-// Clicking a mark opens its annotation like a text mark.
+// image route serves, the stored marks drawn over it, and Highlight & ask —
+// drag the highlighter over a spot of the page: the drag paints a haze, a
+// translucent band along the pointer's path, and more drags add to it; then
+// ask, explain, comment, or pick a color to keep the haze as a highlight.
+// The haze is what Ask, Explain, and Comment read. Ask and Explain stream
+// through /api/derive (EXPLAIN with a page payload; Ask adds the question)
+// and persist as annotations with a region source; Comment and the kept
+// highlight post to /api/annotations. Loops drawn before the highlighter
+// (kind "path" and "ellipse") still paint as loops. Clicking a mark opens
+// its annotation like a text mark.
 
 export type PageMark = {
   sourceId: string;
   noteId: string;
   kind: "explain" | "comment" | "highlight";
-  color: string | null; // highlight only: the loop paints in this color
+  color: string | null; // highlight only: the mark paints in this color
   region: Region;
 };
 
-type DrawState = { points: { x: number; y: number }[] };
-type Pending = { region: Region };
+// The band's width, in percent of the page's width: about one line of
+// handwriting on a letter or A4 page.
+export const STROKE_WIDTH = 4;
+// The pointer's path is kept at this many points at most.
+const STROKE_POINTS_MAX = 400;
+// A pending region is strokes: the card opens on the first, the rest add.
+type StrokeRegion = Extract<Region, { kind: "stroke" }>;
+type DrawState = { points: [number, number][] };
+type Pending = { region: StrokeRegion };
 // asked = the question this answer ran with, null when Explain ran without
 // one: what Regenerate runs again. noteId = the annotation it saved, which
 // Regenerate replaces (SPEC.md §4).
@@ -62,7 +72,7 @@ export function PageBlock({
   // arrives, so the browser loads pages lazily. Null = not known yet.
   size: PageSize | null;
   canEdit: boolean;
-  hint: boolean; // first page only: the fading Circle & ask hint
+  hint: boolean; // first page only: the fading Highlight & ask hint
 }) {
   const t = useT();
   const router = useRouter();
@@ -74,6 +84,27 @@ export function PageBlock({
   const [error, setError] = useState<string | null>(null);
   const [hintDone, setHintDone] = useState(false);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  // The page's height in units of its width, times 100: the SVG's viewBox
+  // is 100 wide and this tall, so a stroke's band is as wide down the page
+  // as across it. From the stored image's pixels, else the drawn page.
+  const [measuredH, setMeasuredH] = useState<number | null>(null);
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const read = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setMeasuredH((r.height / r.width) * 100);
+    };
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const viewH = size ? (size.height / size.width) * 100 : (measuredH ?? 141);
+  // Percent of the page's height → the SVG's units.
+  const sy = viewH / 100;
+  // The page's width over its height: how far the band reaches down the page.
+  const aspect = 100 / viewH;
   // The running Ask or Explain, so Stop can abort it: the card returns to
   // the question, nothing persists.
   const askAbortRef = useRef<AbortController | null>(null);
@@ -92,27 +123,28 @@ export function PageBlock({
     };
   }
 
-  // The drag draws a freehand loop; releasing closes it and opens the card.
+  // The drag paints a stroke; releasing adds it to the haze and opens the
+  // card (or keeps it open).
   function startDraw(e: React.PointerEvent<HTMLDivElement>) {
     if (!canEdit || e.button !== 0 || busy !== null) return;
     const p = percentAt(e);
     if (!p) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDraw({ points: [p] });
+    setDraw({ points: [[p.x, p.y]] });
   }
   function moveDraw(e: React.PointerEvent<HTMLDivElement>) {
     if (!draw || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
     const p = percentAt(e);
     if (!p) return;
-    const last = draw.points[draw.points.length - 1];
-    if (Math.hypot(p.x - last.x, p.y - last.y) < 0.7) return;
-    setDraw({ points: [...draw.points, p] });
+    const [lx, ly] = draw.points[draw.points.length - 1];
+    if (Math.hypot(p.x - lx, (p.y - ly) * sy) < 0.4) return;
+    setDraw({ points: [...draw.points, [p.x, p.y]] });
   }
   // The smallest stored mark under a point, for click-to-open. Marks are pure
-  // paint (pointer-events none), so a loop can be drawn starting over one.
+  // paint (pointer-events none), so a stroke can start over one.
   function markAt(p: { x: number; y: number }): PageMark | null {
     const hits = marks
-      .map((m) => ({ m, b: regionBounds(m.region) }))
+      .map((m) => ({ m, b: regionBounds(m.region, aspect) }))
       .filter(({ b }) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2)
       .sort((a, z) => (a.b.x2 - a.b.x1) * (a.b.y2 - a.b.y1) - (z.b.x2 - z.b.x1) * (z.b.y2 - z.b.y1));
     return hits[0]?.m ?? null;
@@ -129,21 +161,28 @@ export function PageBlock({
     e.currentTarget.releasePointerCapture(e.pointerId);
     const raw = draw.points;
     setDraw(null);
-    // A click or a tiny scribble is not a loop: open the mark under it, if any.
-    const xs = raw.map((p) => p.x);
-    const ys = raw.map((p) => p.y);
-    if (raw.length < 6 || (Math.max(...xs) - Math.min(...xs) < 2 && Math.max(...ys) - Math.min(...ys) < 2)) {
+    // A click is not a stroke: open the mark under it, if any.
+    const xs = raw.map(([x]) => x);
+    const ys = raw.map(([, y]) => y);
+    if (raw.length < 3 || (Math.max(...xs) - Math.min(...xs) < 1 && Math.max(...ys) - Math.min(...ys) < 1)) {
       const at = raw[raw.length - 1] ?? raw[0];
-      const mark = at ? markAt(at) : null;
+      const mark = at ? markAt({ x: at[0], y: at[1] }) : null;
       if (mark) openMark(mark);
       return;
     }
-    // Cap the stored point count; the loop closes itself when rendered.
-    const step = Math.max(1, Math.ceil(raw.length / 300));
+    // Cap the stored point count.
+    const step = Math.max(1, Math.ceil(raw.length / STROKE_POINTS_MAX));
     const points = raw
       .filter((_, i) => i % step === 0)
-      .map((p): [number, number] => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100]);
-    setPending({ region: { kind: "path", points } });
+      .map(([x, y]): [number, number] => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
+    // The first stroke opens the card; a stroke while the card shows the
+    // question adds to the haze. A stroke after an answer starts over.
+    if (pending && answer === null && pending.region.strokes.length < 40) {
+      setPending({ region: { ...pending.region, strokes: [...pending.region.strokes, points] } });
+      setError(null);
+      return;
+    }
+    setPending({ region: { kind: "stroke", width: STROKE_WIDTH, strokes: [points] } });
     setQuestion("");
     setAnswer(null);
     setError(null);
@@ -259,8 +298,8 @@ export function PageBlock({
     await annotate({ color, ...(content ? { comment: content } : {}) });
   }
 
-  // The card sits under the loop, clamped inside the page.
-  const bounds = pending ? regionBounds(pending.region) : null;
+  // The card sits under the haze, clamped inside the page.
+  const bounds = pending ? regionBounds(pending.region, aspect) : null;
   const cardLeft = bounds ? Math.max(16, Math.min(84, (bounds.x1 + bounds.x2) / 2)) : 50;
   const cardTop = bounds ? Math.min(96, bounds.y2 + 1.5) : 50;
 
@@ -286,7 +325,7 @@ export function PageBlock({
           draggable={false}
           className="block h-auto w-full select-none"
         />
-        {/* Draw layer: the drag draws the loop; a plain click opens the mark
+        {/* Draw layer: the drag paints a stroke; a plain click opens the mark
             under it. Viewers draw nothing; their click still opens marks. */}
         <div
           ref={overlayRef}
@@ -306,21 +345,42 @@ export function PageBlock({
           className="absolute inset-0"
           style={{ touchAction: "none", cursor: canEdit ? "crosshair" : "default" }}
         />
-        {/* Stored marks and the loop being drawn. Marks carry data-source-id,
-            so source chip jumps and flashes land on them like text marks. */}
+        {/* Stored marks and the haze being painted. Marks carry data-source-id,
+            so source chip jumps and flashes land on them like text marks. The
+            viewBox is in units of the page's width, so a band is as wide
+            down the page as across it; the old loops scale their y into it. */}
         <svg
           aria-hidden
-          viewBox="0 0 100 100"
+          viewBox={`0 0 100 ${viewH}`}
           preserveAspectRatio="none"
           className="pointer-events-none absolute inset-0 h-full w-full"
         >
           {marks.map((m) => {
-            // A lasso highlight paints solid in its color; other marks keep
-            // the clay glow.
+            // A kept highlight paints in its color; Explain and Comment marks
+            // keep the clay glow.
             const hue =
               m.kind === "highlight" && m.color && m.color in HUE_DOT
                 ? HUE_DOT[m.color as HighlightHue]
                 : null;
+            const region = m.region;
+            if (region.kind === "stroke") {
+              return (
+                <g key={m.sourceId} data-source-id={m.sourceId} className="page-haze">
+                  {region.strokes.map((points, i) => (
+                    <path
+                      key={i}
+                      d={strokePathD(points.map(([x, y]): [number, number] => [x, y * sy]))}
+                      fill="none"
+                      stroke={hue ?? "var(--clay-400)"}
+                      strokeOpacity={hue ? 0.3 : 0.26}
+                      strokeWidth={region.width}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </g>
+              );
+            }
             const shared = {
               "data-source-id": m.sourceId,
               fill: hue ? `color-mix(in srgb, ${hue} 22%, transparent)` : "rgba(246, 160, 107, 0.07)",
@@ -330,34 +390,38 @@ export function PageBlock({
               vectorEffect: "non-scaling-stroke" as const,
               style: hue ? undefined : { filter: "drop-shadow(0 0 5px rgba(246, 160, 107, 0.45))" },
             };
-            return m.region.kind === "ellipse" ? (
-              <ellipse key={m.sourceId} cx={m.region.cx} cy={m.region.cy} rx={m.region.rx} ry={m.region.ry} {...shared} />
+            return region.kind === "ellipse" ? (
+              <ellipse key={m.sourceId} cx={region.cx} cy={region.cy * sy} rx={region.rx} ry={region.ry * sy} {...shared} />
             ) : (
-              <path key={m.sourceId} d={regionPathD(m.region.points)} {...shared} />
+              <path key={m.sourceId} d={regionPathD(region.points.map(([x, y]): [number, number] => [x, y * sy]))} {...shared} />
             );
           })}
-          {draw && draw.points.length > 1 && (
-            <path
-              d={regionPathD(draw.points.map((p): [number, number] => [p.x, p.y]))}
-              fill="rgba(246, 160, 107, 0.08)"
-              stroke="var(--clay-400)"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeDasharray="6 4"
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-          {pending && pending.region.kind === "path" && !draw && (
-            <path
-              d={regionPathD(pending.region.points)}
-              fill="rgba(246, 160, 107, 0.08)"
-              stroke="var(--clay-400)"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeDasharray="6 4"
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
+          {/* The haze: the pending strokes, and the one under the pointer. */}
+          <g className="page-haze" data-page-haze={pending || draw ? "" : undefined}>
+            {pending?.region.strokes.map((points, i) => (
+              <path
+                key={i}
+                d={strokePathD(points.map(([x, y]): [number, number] => [x, y * sy]))}
+                fill="none"
+                stroke="var(--clay-400)"
+                strokeOpacity={0.34}
+                strokeWidth={STROKE_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            {draw && (
+              <path
+                d={strokePathD(draw.points.map(([x, y]): [number, number] => [x, y * sy]))}
+                fill="none"
+                stroke="var(--clay-400)"
+                strokeOpacity={0.34}
+                strokeWidth={STROKE_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </g>
         </svg>
 
         {hint && canEdit && !hintDone && !pending && (

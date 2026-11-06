@@ -30,7 +30,7 @@
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
 //   split 拆分 · handwritten 手写 ·
-//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
+//   conversion(手写转文本) 转换 · Highlight & ask(页面上的工具：荧光笔划过一处，再提问) 高亮并提问 · highlighter(页面上的笔) 荧光笔 · haze(荧光笔划出的半透明一片) 高亮雾层 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · offline copy(离线保存的项目) 离线副本 ·
 //   Save for offline 离线保存 · Unitos Premium 不翻译 ·
 //   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
