@@ -15,14 +15,18 @@ export type CardMoreItem = {
   onSelect: () => void;
 };
 
-// A tool card's rare actions (SPEC.md §6): Regenerate and Delete in one ⋯ at
-// the end of the card's foot row, so the head holds Expand and ✕ alone and a
-// slip from ✕ deletes nothing. The menu opens above the ⋯, its right edge at
-// the ⋯'s, and moves sideways to stay 8 px inside the screen (a phone's card
-// wraps its foot row, so the ⋯ can sit at the left); with no room above, it
-// opens below. A row, Escape, or a press outside closes it.
+// A tool card's rare actions (SPEC.md §6) at the end of the card's foot
+// row: Delete as its own red button, the trash and the word, so it is seen
+// and never mistaken for ✕ (the head holds Expand and ✕ alone, so a slip
+// from ✕ deletes nothing); the other actions (Regenerate) in one ⋯ beside
+// it. The menu opens above the ⋯, its right edge at the ⋯'s, and moves
+// sideways to stay 8 px inside the screen (a phone's card wraps its foot
+// row, so the ⋯ can sit at the left); with no room above, it opens below.
+// A row, Escape, or a press outside closes it.
 export function CardMore({ items, className }: { items: CardMoreItem[]; className: string }) {
   const t = useT();
+  const dangers = items.filter((item) => item.danger);
+  const rest = items.filter((item) => !item.danger);
   const rootRef = useRef<HTMLSpanElement>(null);
   const menuRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
@@ -59,21 +63,37 @@ export function CardMore({ items, className }: { items: CardMoreItem[]; classNam
   }, [open]);
   if (items.length === 0) return null;
   return (
-    <span ref={rootRef} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        data-track="tool-card-more"
-        data-no-drag
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t("panes.more")}
-        data-tip={items.map((item) => item.label).join(" · ")}
-        className={className}
-      >
-        <MoreIcon size={13} />
-      </button>
-      {open && (
+    <span ref={rootRef} className="relative flex shrink-0 items-center gap-1">
+      {dangers.map((item) => (
+        <button
+          key={item.track}
+          type="button"
+          onClick={item.onSelect}
+          data-track={item.track}
+          data-tip={item.tip}
+          data-no-drag
+          className="flex shrink-0 items-center gap-1 rounded-full border border-red-200 px-2.5 py-1 text-[11.5px] font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 pointer-coarse:py-2"
+        >
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+      {rest.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          data-track="tool-card-more"
+          data-no-drag
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={t("panes.more")}
+          data-tip={rest.map((item) => item.label).join(" · ")}
+          className={className}
+        >
+          <MoreIcon size={13} />
+        </button>
+      )}
+      {open && rest.length > 0 && (
         <span
           ref={menuRef}
           role="menu"
@@ -82,7 +102,7 @@ export function CardMore({ items, className }: { items: CardMoreItem[]; classNam
           }`}
           style={{ right: -place.dx }}
         >
-          {items.map((item) => (
+          {rest.map((item) => (
             <button
               key={item.track}
               type="button"

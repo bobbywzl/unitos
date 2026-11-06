@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
+import { useRemovedNotes } from "@/lib/notes/undo-pill";
 import { regionBounds, regionPathD, strokePathD, type Region } from "@/lib/video/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
@@ -58,7 +59,7 @@ export function PageBlock({
   notebookId,
   blockId,
   text,
-  marks,
+  marks: storedMarks,
   size,
   canEdit,
   hint,
@@ -76,6 +77,10 @@ export function PageBlock({
 }) {
   const t = useT();
   const router = useRouter();
+  // A mark whose annotation this tab deleted goes at once, before the
+  // refresh brings the page without it; Undo brings it back the same way.
+  const removed = useRemovedNotes();
+  const marks = storedMarks.filter((m) => !removed.has(m.noteId));
   const [draw, setDraw] = useState<DrawState | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [question, setQuestion] = useState("");
