@@ -152,6 +152,26 @@ function buildResponse(all) {
       ],
     });
   }
+  // Breakwork (SPEC.md §32): a structure of two top buckets over the
+  // numbered blocks, halves in reading order, with one connection.
+  if (all.includes("The reader sorts this document into buckets")) {
+    const numbers = [...all.matchAll(/\[block (\d+)\]/g)].map((m) => Number(m[1]));
+    const max = numbers.length ? Math.max(...numbers) : 0;
+    if (max < 2) return JSON.stringify({ reply: "Mock: nothing to sort yet.", structure: null });
+    const half = Math.ceil(max / 2);
+    console.log("[mock structure]", max, "blocks");
+    return JSON.stringify({
+      reply: "Mock: two buckets, the first half and the second half of the document.",
+      structure: {
+        buckets: [
+          { id: "new1", title: "First half", description: "The opening blocks.", parent: null, blocks: `1-${half}` },
+          { id: "new2", title: "Second half", description: "The closing blocks.", parent: null, blocks: `${half + 1}-${max}` },
+        ],
+        labels: { 1: "Opening" },
+        connections: [{ from: "bucket new1", to: "bucket new2", label: "leads to", comment: "The first half sets up the second." }],
+      },
+    });
+  }
   if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
   if (all.includes("Check each paragraph below for grammar and wording problems.")) return grammarIssues(all);
   // The panel at This page scope: the answer, then the actions fence.

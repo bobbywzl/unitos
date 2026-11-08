@@ -23,6 +23,10 @@ export type CardMoreItem = {
 // sideways to stay 8 px inside the screen (a phone's card wraps its foot
 // row, so the ⋯ can sit at the left); with no room above, it opens below.
 // A row, Escape, or a press outside closes it.
+/** The Delete button every AI tool surface draws: red, the trash and the word. */
+export const DELETE_BUTTON_CLASS =
+  "flex shrink-0 items-center gap-1 rounded-full border border-red-200 px-2.5 py-1 text-[11.5px] font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 pointer-coarse:py-2";
+
 export function CardMore({ items, className }: { items: CardMoreItem[]; className: string }) {
   const t = useT();
   const dangers = items.filter((item) => item.danger);
@@ -72,7 +76,7 @@ export function CardMore({ items, className }: { items: CardMoreItem[]; classNam
           data-track={item.track}
           data-tip={item.tip}
           data-no-drag
-          className="flex shrink-0 items-center gap-1 rounded-full border border-red-200 px-2.5 py-1 text-[11.5px] font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 pointer-coarse:py-2"
+          className={DELETE_BUTTON_CLASS}
         >
           {item.icon}
           {item.label}
