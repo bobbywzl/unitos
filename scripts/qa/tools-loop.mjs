@@ -58,11 +58,15 @@ async function step(name, fn) {
   const ui = await uiErrors();
   await page.screenshot({ path: `${OUT}/tool-${name.replace(/[^a-z0-9]+/gi, "-")}.png` }).catch(() => {});
   const bad = crashed || errors.length > 0 || ui.length > 0 || outcome !== "ok";
+  // A failing step keeps its own picture: the next round does not write over it.
+  if (bad) await page.screenshot({ path: `${OUT}/fail-${Date.now()}-${name.replace(/[^a-z0-9]+/gi, "-")}.png` }).catch(() => {});
   results.push({ name, outcome: crashed ? "CRASH" : bad ? "ERROR" : "ok", detail, errors: [...errors], ui });
   console.log(`${crashed ? "CRASH" : bad ? "ERROR" : "ok   "} ${name}${detail ? " — " + detail : ""}`);
   for (const e of errors) console.log("     ", e);
   for (const u of ui) console.log("      ui:", u);
-  if (crashed) { await page.reload({ waitUntil: "networkidle" }); }
+  // A crash page, or a step that lost the page (a navigation under it):
+  // the next step starts from a loaded page again.
+  if (crashed || /context was destroyed|Target closed|net::ERR/i.test(detail)) { await page.reload({ waitUntil: "networkidle" }).catch(() => {}); }
 }
 const openText = async () => { await page.goto(`${BASE}/n/${NB}?doc=${TEXT_DOC}`, { waitUntil: "networkidle" }); await page.waitForTimeout(500); };
 async function selectWords(text, from = 20, to = 220) {
@@ -98,11 +102,11 @@ await step("visualize", async () => { await closeCards(); await selectWords("One
 await step("comment", async () => { await closeCards(); await selectWords("Default payments"); await page.locator('[data-track="comment"]').first().click(); const box = page.locator('[data-selection-popover] textarea, [data-side-card] textarea').last(); await box.fill("QA comment"); await page.locator('[data-track="comment-save"]').click(); await page.waitForTimeout(1500); return "saved"; });
 await step("highlight color", async () => { await closeCards(); await selectWords("Per-query gap"); const dot = page.locator('[data-track^="highlight:"]').first(); await dot.click(); await page.waitForTimeout(1500); return `marks ${await page.locator("mark[data-source-id]").count()}`; });
 await step("add to notes", async () => { await closeCards(); await selectWords("Two-thirds"); await page.locator('[data-track="add-to-notes"]').first().click(); await page.waitForTimeout(600); const sec = page.locator('[data-track="add-to-notes-section"]'); if (await sec.count()) await sec.first().click(); await page.waitForTimeout(1500); return "done"; });
-await step("sidebar assistant", async () => { await closeCards(); await page.locator('aside [data-track="assistant"], [data-track-surface="sidebar"] [data-track="assistant"]').first().click().catch(async () => page.locator('[data-track="assistant"]').last().click()); await page.waitForTimeout(800); const box = page.locator("aside textarea, [data-track-surface=\"tray\"] textarea").last(); await box.fill("What is the main claim of this memo?"); await box.press("Enter"); await page.waitForTimeout(6000); const txt = await page.evaluate(() => document.querySelector("aside")?.innerText ?? ""); if (!/main claim[\s\S]{40,}/i.test(txt)) throw new Error("no assistant answer"); return txt.slice(0, 120).replace(/\n/g, " | "); });
+await step("sidebar assistant", async () => { await closeCards(); await page.locator('aside [data-track="assistant"], [data-track-surface="sidebar"] [data-track="assistant"]').first().click().catch(async () => page.locator('[data-track="assistant"]').last().click()); await page.waitForTimeout(800); const box = page.locator("aside textarea:visible").last(); await box.waitFor({ timeout: 10000 }); await box.fill("What is the main claim of this memo?"); await box.press("Enter"); await page.waitForTimeout(6000); const txt = await page.evaluate(() => document.querySelector("aside")?.innerText ?? ""); if (!/main claim[\s\S]{40,}/i.test(txt)) throw new Error("no assistant answer"); return txt.slice(0, 120).replace(/\n/g, " | "); });
 await step("extract (distill)", async () => { await page.locator('[data-track="distill"]').first().click(); await page.waitForTimeout(800); await page.getByRole("button", { name: "Extract from the article" }).click(); const box = page.getByPlaceholder("What should this article answer?").first(); await box.fill("How much does Google pay for the default?"); const run = page.locator('[data-track="distill-page-run"]'); if (await run.count()) await run.click(); else await box.press("Enter"); await page.waitForTimeout(8000); await settle(); const txt = await page.evaluate(() => document.body.innerText); if (!/\$42 billion/.test(txt)) throw new Error("no extraction with the quote"); await page.locator('[data-track="distill-page-close"]').click(); await page.waitForTimeout(500); return "extraction shown"; });
 await step("collapse", async () => { await page.locator('[data-track="collapse"]').first().click(); await page.waitForTimeout(10000); const txt = await page.evaluate(() => document.body.innerText); return /core|Collapse/i.test(txt) ? "collapsed" : "unclear"; });
 await step("collapse off", async () => { const off = page.locator('[data-track="collapse-off"], [data-track="collapse"]').first(); await off.click(); await page.waitForTimeout(1000); return "done"; });
-await step("breakwork assistant", async () => { await page.keyboard.press("Escape"); await page.locator('[data-track="structure"]').first().click(); await page.locator('[data-track="structure-add-bucket"]').waitFor(); await page.waitForTimeout(2500); await page.locator('[data-track="structure-suggest:parts"], [data-track^="structure-suggest:"]').first().click(); await page.locator('[data-track="structure-send"]').click(); await page.waitForTimeout(12000); const apply = page.locator('[data-track="structure-apply"]'); if (!(await apply.count())) throw new Error("no proposal"); await apply.first().click(); await page.waitForTimeout(2000); return `buckets ${await page.locator(".structure-bucket").count()}`; });
+await step("breakwork assistant", async () => { await page.keyboard.press("Escape"); await page.locator('[data-track="structure"]:visible').first().click(); await page.locator('[data-track="structure-add-bucket"]').waitFor(); await page.waitForTimeout(2500); await page.getByPlaceholder("How should the document be sorted?").fill("Sort the document by its parts, one bucket each"); await page.locator('[data-track="structure-send"]').click(); await page.waitForTimeout(12000); const apply = page.locator('[data-track="structure-apply"]'); if (!(await apply.count())) throw new Error("no proposal"); await apply.first().click(); await page.waitForTimeout(2000); return `buckets ${await page.locator(".structure-bucket").count()}`; });
 await step("breakwork close", async () => { await page.locator('[data-track="structure-close"]').click(); await page.waitForTimeout(800); return "closed"; });
 await step("stitch", async () => { await page.locator('[data-track="graph"]').first().click(); await page.waitForTimeout(3000); const box = page.locator("textarea").last(); await box.fill("Gather the passages about default payments"); await page.locator('[data-track="stitch-send"]').click(); await page.waitForTimeout(15000); const txt = await page.evaluate(() => document.body.innerText); return /payment/i.test(txt) ? "answered" : "unclear"; });
 // Pages: Highlight & ask
@@ -112,5 +116,107 @@ await step("page: explain", async () => { await swipe(0.19); await page.locator(
 await step("page: ask", async () => { await page.locator('[data-track="page-answer-close"]').click().catch(() => {}); await swipe(0.26); await page.locator("[data-selection-popover] textarea").fill("what number is here?"); await page.locator('[data-track="page-ask"]').click(); await page.waitForTimeout(8000); const txt = await page.locator("[data-selection-popover]").innerText(); if (txt.length < 60) throw new Error("no answer"); return txt.slice(0, 100).replace(/\n/g, " | "); });
 await step("page: comment", async () => { await page.locator('[data-track="page-answer-close"]').click().catch(() => {}); await swipe(0.33); await page.locator("[data-selection-popover] textarea").fill("QA page comment"); await page.locator('[data-track="page-comment"]').click(); await page.waitForTimeout(2000); return "saved"; });
 await step("page: color", async () => { await swipe(0.4); await page.locator('[data-track="page-highlight:gold"]').click(); await page.waitForTimeout(2000); return `marks ${await page.locator(`[data-block-id="${BLOCK}"] [data-source-id]`).count()}`; });
+// ── Stress: the surfaces under resizes, tab switches, and repeats ─────────
+// A render loop (React's "Maximum update depth exceeded") shows as a crash
+// page or a page error; these steps press on the places that measure
+// themselves: the page's haze layer, Breakwork's canvas, the tray.
+const SIZES = [[1500, 1000], [1100, 800], [820, 900], [1700, 1100], [1280, 720], [1500, 1000]];
+const resizeStorm = async () => { for (const [width, height] of SIZES) { await page.setViewportSize({ width, height }); await page.waitForTimeout(250); } };
+await step("stress: page resize", async () => { await resizeStorm(); await swipe(0.47); await resizeStorm(); await page.keyboard.press("Escape"); return "resized with a haze pending"; });
+await step("stress: page tray tabs", async () => { for (const tab of ["annotations", "notes", "distill", "annotations", "notes"]) { await page.locator(`[data-track="${tab}"]`).first().click(); await page.waitForTimeout(350); } return "tabs switched"; });
+await step("stress: page delete and undo", async () => {
+  // The Annotations tab's own trash: the page mark must go at once, and
+  // Undo must bring it back.
+  const marks = page.locator(`[data-block-id="${BLOCK}"] [data-source-id]`);
+  const before = await marks.count();
+  await page.locator('[data-track="annotations"]').first().click();
+  await page.waitForTimeout(600);
+  // A row's Delete is in its ⋯ menu (annotation-menu.tsx).
+  await page.locator('aside [data-track="annotation-menu"]').first().click();
+  await page.locator('[role="menu"] [data-track="annotation-delete"]').first().click();
+  await page.waitForTimeout(300);
+  const after = await marks.count();
+  if (after !== before - 1) throw new Error(`the mark should go at once: ${before} → ${after}`);
+  // The pill shows once the server has answered the delete.
+  const undo = page.locator('[data-track="undo-posted"]').first();
+  await undo.waitFor({ timeout: 15000 });
+  await undo.click();
+  // Undo is History's Restore of the delete, then a refresh: the mark is
+  // back once the page has the row again.
+  let back = after;
+  for (let i = 0; i < 40 && back !== before; i++) { await page.waitForTimeout(500); back = await marks.count(); }
+  if (back !== before) throw new Error(`Undo should bring the mark back: ${before} → ${after} → ${back}`);
+  return `marks ${before} → ${after} → ${back}`;
+});
+await step("stress: text resize", async () => { await openText(); await selectWords("Why this matters"); await resizeStorm(); await closeCards(); return "resized with the toolbar open"; });
+await step("stress: text tray tabs", async () => { for (const tab of ["annotations", "notes", "distill", "history", "annotations", "notes"]) { const b = page.locator(`[data-track="${tab}"]`).first(); if (await b.count()) { await b.click(); await page.waitForTimeout(350); } } const fold = page.locator('[data-track="collapse-tray"]').first(); if (await fold.count()) { await fold.click(); await page.waitForTimeout(400); await page.locator('[data-track="notes"]').first().click(); await page.waitForTimeout(400); } return "tabs switched, tray folded and opened"; });
+await step("stress: breakwork stars and scroll", async () => {
+  await page.locator('[data-track="structure"]:visible').first().click();
+  await page.locator('[data-track="structure-add-bucket"]').waitFor();
+  await page.waitForTimeout(2500);
+  await page.locator(".react-flow__controls-fitview").click();
+  await page.waitForTimeout(500);
+  const rows = page.locator("[data-piece-row]");
+  const n = await rows.count();
+  for (const [i, stars] of [[0, 3], [1, 2], [2, 1], [3, 3]]) {
+    if (i >= n) break;
+    const id = await rows.nth(i).getAttribute("data-piece-row");
+    const row = page.locator(`[data-piece-row="${id}"]`);
+    await row.scrollIntoViewIfNeeded();
+    await row.hover();
+    await row.locator(`[data-track="piece-star:${stars}"]`).click({ timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(150);
+  }
+  for (const list of await page.locator(".structure-bucket .nowheel").all()) { for (const top of [99999, 0, 400, 0]) { await list.evaluate((el, t) => (el.scrollTop = t), top); await page.waitForTimeout(120); } }
+  await resizeStorm();
+  return `rows ${n}, starred, scrolled, resized`;
+});
+await step("stress: breakwork reopen", async () => { for (let i = 0; i < 3; i++) { await page.locator('[data-track="structure-close"]').click(); await page.waitForTimeout(400); await page.locator('[data-track="structure"]:visible').first().click(); await page.locator('[data-track="structure-add-bucket"]').waitFor(); await page.waitForTimeout(900); } await page.locator('[data-track="structure-close"]').click(); await page.waitForTimeout(400); return "opened and closed three times"; });
+await step("stress: card under resize, scroll, and drag", async () => {
+  // An open tool card with its Continue box measures and places itself:
+  // the window resizes, the article scrolls, and the card is dragged.
+  await openText();
+  await selectWords("Why this matters");
+  await page.locator('[data-track="explain"]').first().click();
+  await waitCard(/EXPLANATION[\s\S]{20,}/);
+  await settle();
+  await page.locator('[data-track="explain-continue"]').first().click();
+  await page.waitForTimeout(300);
+  await resizeStorm();
+  const article = page.locator("[data-block-id]").first();
+  const ab = await article.boundingBox();
+  await page.mouse.move(ab.x + 100, Math.max(200, ab.y + 50));
+  for (const dy of [500, 700, -400, 900, -1500, 300, -300]) { await page.mouse.wheel(0, dy); await page.waitForTimeout(150); }
+  const head = page.locator("[data-side-card] .cursor-move").first();
+  if (await head.count()) {
+    const hb = await head.boundingBox();
+    if (hb) { await page.mouse.move(hb.x + 40, hb.y + 8); await page.mouse.down(); await page.mouse.move(hb.x - 120, hb.y + 160, { steps: 8 }); await page.mouse.move(hb.x + 60, hb.y - 40, { steps: 8 }); await page.mouse.up(); }
+  }
+  await resizeStorm();
+  const cards = await page.locator("[data-side-card]").count();
+  await page.locator('[data-track="explain-delete"]').first().click({ timeout: 4000 }).catch(() => {});
+  await closeCards();
+  return `cards open ${cards}`;
+});
+await step("stress: page card and scroll", async () => {
+  await page.goto(`${BASE}/n/${NB}?doc=${PAGE_DOC}`, { waitUntil: "networkidle" });
+  await page.waitForFunction((sel) => { const i = document.querySelector(sel); return i && i.complete && i.naturalWidth > 0; }, `[data-block-id="${BLOCK}"] img`);
+  await swipe(0.54);
+  await page.locator('[data-track="page-explain"]').click();
+  await page.waitForTimeout(5000);
+  await resizeStorm();
+  const pb = await page.locator(`[data-block-id="${BLOCK}"]`).boundingBox();
+  await page.mouse.move(pb.x + 30, pb.y + 30);
+  for (const dy of [400, 600, -300, 800, -1500]) { await page.mouse.wheel(0, dy); await page.waitForTimeout(150); }
+  await page.locator('[data-track="page-answer-close"]').click({ timeout: 4000 }).catch(() => {});
+  // The row's Jump in the Annotations tab opens the annotation from the tab.
+  await page.locator('[data-track="annotations"]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('aside [data-track="annotation-expand"]').first().click({ timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await resizeStorm();
+  return "page card resized and scrolled, a row opened in the tab";
+});
+await step("stress: switch documents", async () => { for (const doc of [PAGE_DOC, TEXT_DOC, PAGE_DOC, TEXT_DOC]) { await page.goto(`${BASE}/n/${NB}?doc=${doc}`, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700); } await page.waitForLoadState("networkidle"); return "four switches"; });
 console.log("\nSUMMARY:", results.map((r) => `${r.outcome}:${r.name}`).join("  "));
 await browser.close();
