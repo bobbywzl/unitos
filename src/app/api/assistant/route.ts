@@ -116,7 +116,7 @@ export async function POST(req: Request) {
 
 async function handle(req: Request, t: TFunc) {
   const started = Date.now();
-  // The assistant's own model needs its key (Claude Haiku 5.5: ANTHROPIC_API_KEY).
+  // The assistant's own model needs its key (Claude Sonnet 5.5: ANTHROPIC_API_KEY).
   if (!(await featureConfigured("assistant"))) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
