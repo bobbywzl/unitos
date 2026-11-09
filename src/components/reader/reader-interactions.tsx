@@ -64,6 +64,7 @@ import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, refreshWhenOnline } from "@/lib/offline/queue";
+import { REPLICA_NOTICE_EVENT, REPLICA_SAVE_EVENT, type ReplicaNotice, type ReplicaSave } from "@/components/reader/replica-edit";
 import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
 import { rememberCollapsedDocument } from "@/lib/collapse-memory";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
@@ -2738,9 +2739,13 @@ export function ReaderInteractions({
   const [editHint, setEditHint] = useState(false);
   // Where the hint shows: beside the article, or as a row under the pane.
   const [hintBeside, setHintBeside] = useState(true);
-  // Slides and sheets have no edit mode and no figure: the hint's words are
-  // not true there, so it waits for the next article.
+  // Slides and sheets are edited a line or a cell at a time (replica-edit.ts)
+  // and have no figure: the hint says their own words, and is its own hint
+  // (a reader who learned the article's hint has not learned this one).
   const officeDocument = blocks.some((b) => b.type === "SLIDE" || b.type === "SHEET");
+  const officeHint: TKey = blocks.some((b) => b.type === "SLIDE") ? "reader.editHintSlides" : "reader.editHintSheets";
+  const hintKey = officeDocument ? "unitos-edit-hint-office" : "unitos-edit-hint";
+  const hintWords = () => (officeDocument ? t(officeHint) : t(coarse ? "reader.touchHint" : "reader.editHint"));
 
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
@@ -4480,13 +4485,13 @@ export function ReaderInteractions({
   const hintPlayed = () => {
     setEditHint(false);
     try {
-      localStorage.setItem("unitos-edit-hint", "done");
+      localStorage.setItem(hintKey, "done");
     } catch {
       // Storage blocked: the hint shows again on the next open.
     }
   };
   useEffect(() => {
-    if (localStorage.getItem("unitos-edit-hint") === "done") return;
+    if (localStorage.getItem(hintKey) === "done") return;
     // Beside the article when its right margin holds the card (with its
     // 20px from the pane's edge); else a row under the pane.
     const container = containerRef.current;
@@ -4499,7 +4504,7 @@ export function ReaderInteractions({
     // Post-hydration reveal on purpose: localStorage is client-only, so the
     // SSR pass must render without the hint.
     setEditHint(true);
-  }, [documentId]);
+  }, [documentId, hintKey]);
 
   // Hold-and-circle gesture on figures and equations opens their tools.
   useEffect(() => {
@@ -9673,6 +9678,50 @@ export function ReaderInteractions({
       showError(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
+  // A slide's line or a sheet's cell edited in place (replica-edit.ts): the
+  // same text route, the same Undo step. The piece hears whether the server
+  // took the words, and goes back to what it was when it did not.
+  async function saveReplicaEdit(blockId: string, text: string): Promise<boolean> {
+    const before = blocksRef.current.find((b) => b.id === blockId)?.text;
+    try {
+      await api(`/api/blocks/${blockId}`, "PATCH", { text });
+      if (before !== undefined && before !== text) {
+        record({
+          undo: () => saveBlockEdit(blockId, before),
+          redo: () => saveBlockEdit(blockId, text),
+        });
+      }
+      hintPlayed();
+      refreshWhenOnline(router);
+      return true;
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
+      return false;
+    }
+  }
+  const saveReplicaEditRef = useRef(saveReplicaEdit);
+  saveReplicaEditRef.current = saveReplicaEdit;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  useEffect(() => {
+    const onSave = (e: Event) => {
+      const { blockId, text, settle } = (e as CustomEvent<ReplicaSave>).detail;
+      // Only this pane's block: a split view has two readers listening.
+      if (!blocksRef.current.some((b) => b.id === blockId)) return;
+      void saveReplicaEditRef.current(blockId, text).then(settle);
+    };
+    // A piece that does not open (a formula's cell) says why.
+    const onNotice = (e: Event) => {
+      const { blockId, text } = (e as CustomEvent<ReplicaNotice>).detail;
+      if (blocksRef.current.some((b) => b.id === blockId)) showToastRef.current(text);
+    };
+    window.addEventListener(REPLICA_SAVE_EVENT, onSave);
+    window.addEventListener(REPLICA_NOTICE_EVENT, onNotice);
+    return () => {
+      window.removeEventListener(REPLICA_SAVE_EVENT, onSave);
+      window.removeEventListener(REPLICA_NOTICE_EVENT, onNotice);
+    };
+  }, []);
 
 /** The format a stored block is in, for a step that puts it back. */
 /** A block's format as Undo restores it: a code block is code again. */
@@ -11245,14 +11294,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
             coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
           }${popover ? " invisible" : ""}`}
         >
-          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+          {hintWords()}
         </div>
       )}
 
@@ -13160,7 +13209,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           phone, a narrow window): a row under the pane, which takes its
           height from the pane's foot, so it covers no word and the lines
           the reader reads stay where they are. */}
-      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           data-edit-hint
           onAnimationEnd={hintPlayed}
@@ -13168,7 +13217,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             coarse ? "text-[13px]" : "text-[12px]"
           }`}
         >
-          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+          {hintWords()}
         </div>
       )}
     </div>

@@ -12,8 +12,10 @@ import {
   SummaryIcon,
   VisualizeIcon,
 } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
+import { useReplicaEdit } from "@/components/reader/replica-edit";
 import { MediaHtml } from "@/components/reader/figure-media";
 import {
   bindTableMarkClicks,
@@ -902,6 +904,7 @@ function MarkedHtml({
   text,
   highlights,
   ring,
+  editable = false,
 }: {
   blockId: string;
   documentId?: string;
@@ -910,9 +913,13 @@ function MarkedHtml({
   text: string;
   highlights: Highlight[];
   ring: string;
+  /** A slide or a sheet: an editor edits a line or a cell in place (replica-edit.ts). */
+  editable?: boolean;
 }) {
   const t = useT();
+  const { canEdit } = useCollab();
   const ref = useRef<HTMLDivElement>(null);
+  useReplicaEdit(ref, blockId, text, editable && canEdit, t("reader.formulaCell"));
   const [painted, setPainted] = useState(true);
   const signature = marksSignature(highlights);
   useLayoutEffect(() => {
@@ -1145,6 +1152,7 @@ export function BlockView({
             text={block.text}
             highlights={highlights}
             ring={htmlHighlighted}
+            editable
           />
         );
       }
@@ -1163,6 +1171,7 @@ export function BlockView({
             text={block.text}
             highlights={highlights}
             ring={htmlHighlighted}
+            editable
           />
         );
       }
