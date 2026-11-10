@@ -43,7 +43,7 @@ import {
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
-import { actMaterial, actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, actRules, textSelectionBlock } from "@/lib/prompts/act";
 import { askPrompt } from "@/lib/prompts/ask";
 import { definable } from "@/lib/define";
 import { definePrompt } from "@/lib/prompts/define";
@@ -406,8 +406,8 @@ const adapters: Record<EvalTool, Adapter> = {
       command: c.question ?? "Explain this.",
     };
     const prompt = actPrompt(ctx);
-    // The document, then the material, as the route sends them (lib/assistant/context.ts).
-    const r = await callTool({ messages: [system(f), { role: "system", content: actMaterial(ctx) }, { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
+    // The document, the rules, then the material, as the route sends them (lib/assistant/context.ts).
+    const r = await callTool({ messages: [system(f), { role: "system", content: actRules(ctx) }, { role: "system", content: actMaterial(ctx) }, { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
     const planSchema = z.object({
       reply: z.string().nullable(),
       actions: z.array(z.unknown()).optional(),

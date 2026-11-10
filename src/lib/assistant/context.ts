@@ -15,11 +15,19 @@ import { documentPrefix, type PageName, type PrefixBlock } from "@/lib/derive/co
 //    This page, the assistant's suggestions and their passes, the note's
 //    assistant, Save as note, the voice command — so one entry serves them
 //    all, for every reader of the document.
-// 2. The material: what the reader made — notes, annotations, layers, the
+// 2. The rules: what is the same for every message of a surface on the
+//    document while the document changes the same way. The selection chat's
+//    rules whole; the sidebar's action types and rules for actions (its
+//    rules of the answer stay in the message, next to the question: a
+//    conversation's turns stand between the layers and the message). They
+//    stand after the document, so the document's entry stays one for every
+//    surface, and before the material, so a new note never costs them again.
+// 3. The material: what the reader made — notes, annotations, layers, the
 //    project's sections. It changes when the reader works, so a new note
-//    costs this layer again and never the document.
-// 3. The conversation: the turns so far, which only grow.
-// 4. The message: the selection, the question, the rules. Never cached.
+//    costs this layer again and never the document or the rules.
+// 4. The conversation: the turns so far, which only grow.
+// 5. The message: the selection, the question, what the reader attached,
+//    and in the sidebar the rules of the answer. Never cached.
 //
 // A layer's marker is ignored by every provider but Anthropic: GLM, Kimi,
 // and Gemini cache a repeated prefix on their own, and the same order
@@ -58,12 +66,20 @@ export function stableLayer(text: string): ModelMessage {
   return { role: "system", content: text, providerOptions: marker(DOCUMENT_TTL) };
 }
 
-/** Layer 2: what the reader made. */
+/** Layer 2: the rules of the surface, kept as long as the document: a
+    reader who comes back to the document within the hour reads both. */
+export function rulesLayer(text: string): ModelMessage {
+  return { role: "system", content: text, providerOptions: marker(DOCUMENT_TTL) };
+}
+
+/** Layer 3: what the reader made. */
 export function materialLayer(text: string): ModelMessage {
   return { role: "system", content: text, providerOptions: marker(WORKING_TTL) };
 }
 
-/** Layer 3: the turns so far end here. The marker goes on the last turn
+/** Layer 4: the turns so far end here. A request takes four markers at
+    most: the caller leaves this one out when a tool of the provider adds
+    its own (the web search). The marker goes on the last turn
     before the message, whose words are the same in the next request; the
     message itself carries the rules and is never the same twice. */
 export function markConversation(turns: ModelMessage[]): void {

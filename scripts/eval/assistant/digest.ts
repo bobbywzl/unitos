@@ -154,8 +154,9 @@ export function fixtureParts(f: Fixture, notes: CaseNote[] = [], blocks?: PlanCo
 /** The This page system for the fixture, as the route sends it: the
     document layer (the document's blocks), then the material layer (the
     project and what the reader made on the document). */
-export function fixtureSystem(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"]): string {
+export function fixtureSystem(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"], rules?: string): string {
   const material = documentMaterial(fixtureParts(f, notes, blocks), f.name);
   if (material === null) throw new Error(`${f.name} did not render`);
-  return [documentPrefix(f.title, (blocks ?? planBlocks(f)) as never, null, null), material].join("\n\n");
+  // The rules layer stands between the two (lib/assistant/context.ts).
+  return [documentPrefix(f.title, (blocks ?? planBlocks(f)) as never, null, null), ...(rules ? [rules] : []), material].join("\n\n");
 }
