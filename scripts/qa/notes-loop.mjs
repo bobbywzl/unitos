@@ -95,6 +95,8 @@ await step("note: write a second", async () => {
 const mine = () => tray.locator("[data-note-id]").filter({ hasText: stamp });
 // A note folds to one line; its words, and Copy, History, and Delete, show
 // once it is open.
+// A collapsed row is its line alone: the pencil, the jump, and the first
+// select circle are on the open note.
 const openCard = async (card) => {
   if (!(await card.locator('[data-track="note-delete"]').count())) {
     await card.locator('[data-track="note-collapse"]').first().click();
@@ -110,7 +112,7 @@ const closeCard = async (card) => {
 await step("note: edit", async () => {
   const id = await mine().first().getAttribute("data-note-id");
   const card = tray.locator(`[data-note-id="${id}"]`);
-  await card.hover();
+  await openCard(card);
   await card.locator('[data-track="note-edit"]').first().click();
   const box = card.locator('[contenteditable="true"], textarea').last();
   await box.waitFor({ timeout: 5000 });
@@ -153,7 +155,9 @@ await step("notes: join two and undo", async () => {
   const cards = mine();
   if ((await cards.count()) < 2) throw new Error("two notes needed");
   for (const i of [0, 1]) {
-    await cards.nth(i).hover();
+    // The first circle is on an open note; once one note is selected,
+    // every row shows its circle.
+    if (!(await cards.nth(i).locator('[data-track="note-select"]').count())) await openCard(cards.nth(i));
     await cards.nth(i).locator('[data-track="note-select"]').first().click();
     await page.waitForTimeout(150);
   }
@@ -171,7 +175,9 @@ await step("notes: merge with AI and undo", async () => {
   const before = await noteCount();
   const cards = mine();
   for (const i of [0, 1]) {
-    await cards.nth(i).hover();
+    // The first circle is on an open note; once one note is selected,
+    // every row shows its circle.
+    if (!(await cards.nth(i).locator('[data-track="note-select"]').count())) await openCard(cards.nth(i));
     await cards.nth(i).locator('[data-track="note-select"]').first().click();
     await page.waitForTimeout(150);
   }

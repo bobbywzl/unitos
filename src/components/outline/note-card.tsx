@@ -10,7 +10,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { Highlight } from "@/components/highlight";
-import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
@@ -759,14 +759,16 @@ const NoteCardBody = memo(function NoteCardBody({
       }
     : {};
 
-  // The header row, the same in every state: collapse chevron and id at the
-  // left; edit, jump, pin, and select at the right. Collapsed, the title (or
-  // the gist) and the source count sit between them.
-  // At rest on a pointer that hovers, a row shows its line and its pencil:
-  // the id waits for the hover (the open note shows it), and the select
-  // circle too, until some note is selected. On touch the circle stays.
+  // The header row. Open, it holds the collapse chevron and the id at the
+  // left; edit, jump, pin, and select at the right. Collapsed, the row is
+  // its line: the chevron and the title (or the gist) across the whole
+  // width, so the reader reads as much of the title as fits. A click opens
+  // the note and a hold drags it; the id, the source count, the pencil,
+  // and the jump are on the open note. The row keeps only what says a
+  // state or must be answered: the author on a shared project, not saved,
+  // pinned, a pending note's Accept and Reject, and the select circle once
+  // some note is selected.
   const row = collapsed && !editing;
-  const restHidden = "pointer-fine:hidden pointer-fine:group-hover/note:flex pointer-fine:group-focus-within/note:flex";
   const header = (
     <div className="flex min-h-[18px] items-center gap-1.5">
       {foldable && !editing && !merging && !collapsed && (
@@ -786,7 +788,15 @@ const NoteCardBody = memo(function NoteCardBody({
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
       )}
-      <NoteId id={note.id} className={row ? "hidden group-hover/note:inline-flex group-focus-within/note:inline-flex" : ""} />
+      {!row && <NoteId id={note.id} />}
+      {/* How many sources the note has, on the open note: the row is its
+          line alone. */}
+      {!row && !merging && note.sources.length > 0 && (
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500" data-tip={sourcesTip(note.sources, t)}>
+          <AnchorIcon />
+          {note.sources.length}
+        </span>
+      )}
       {/* The AI is writing the note that takes this one and the merged notes'
           place (SPEC.md §6). It takes the row: the line is about to be
           rewritten, and every control here acts on a note still being
@@ -877,24 +887,6 @@ const NoteCardBody = memo(function NoteCardBody({
           )}
         </span>
       )}
-      {row && note.sources.length > 0 && (
-        <span
-          className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
-          data-tip={sourcesTip(note.sources, t)}
-        >
-          <AnchorIcon />
-          {note.sources.length}
-        </span>
-      )}
-      {row && note.replies.length > 0 && (
-        <span
-          className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
-          data-tip={t("outline.repliesTitle", { n: note.replies.length })}
-        >
-          <CommentIcon size={11} />
-          {note.replies.length}
-        </span>
-      )}
       {row && author && <PersonBadge person={author} size={14} />}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
@@ -905,7 +897,7 @@ const NoteCardBody = memo(function NoteCardBody({
         {!editing && !note.queued && note.unsaved && (
           <SaveStateLabel state="failed" compact={collapsed} tip={canEdit ? undefined : t("common.notSavedNoEdit")} />
         )}
-        {canEdit && !editing && !merging && (
+        {canEdit && !editing && !merging && !row && (
           <button
             onClick={openEditor}
             data-track="note-edit"
@@ -918,7 +910,7 @@ const NoteCardBody = memo(function NoteCardBody({
             <PencilIcon size={16} />
           </button>
         )}
-        {jumpSource && !editing && !merging && (
+        {jumpSource && !editing && !merging && !row && (
           <button
             onClick={() => jumpTo(jumpSource)}
             data-track="note-jump"
@@ -970,7 +962,7 @@ const NoteCardBody = memo(function NoteCardBody({
             </button>
           </>
         )}
-        {selectable && !editing && !merging && (
+        {selectable && !editing && !merging && (!row || isSelected || selecting) && (
           <button
             onClick={() => commands.toggleSelect(note.id)}
             data-track="note-select"
@@ -978,9 +970,7 @@ const NoteCardBody = memo(function NoteCardBody({
             aria-checked={isSelected}
             aria-label={t("outline.selectNote")}
             data-tip={t(tray ? "outline.selectNoteTitle" : "outline.selectNoteTitleCompare")}
-            className={`h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${TOUCH_HIT} ${
-              isSelected || selecting ? "flex" : `flex ${restHidden}`
-            } ${
+            className={`flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${TOUCH_HIT} ${
               isSelected
                 ? "border-clay bg-clay text-clay-fg opacity-100"
                 : "border-sand-400 bg-card text-transparent opacity-50 hover:border-clay-500 hover:opacity-100"

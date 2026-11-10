@@ -229,7 +229,8 @@ export function AnnotationCard({
             {t(ANNOTATION_KIND_KEY[annotation.kind])}
           </span>
         )}
-        <NoteId id={annotation.id} annotation />
+        {/* The id is on the open card; a collapsed row is its line. */}
+        {!collapsed && <NoteId id={annotation.id} annotation />}
         {collapsed && (
           <button
             onClick={() => {
