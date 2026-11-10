@@ -3,11 +3,12 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, type PageName } from "@/lib/derive/context";
+import { type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall } from "@/lib/feature-models";
 import { targetPrompt } from "@/lib/prompts/target";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import { documentLayer } from "@/lib/assistant/context";
 
 // The target pass (SPEC.md §7): a command whose scope runs past the windows
 // one command takes (SUGGEST_MAX_WINDOWS) names the blocks it changes first,
@@ -70,11 +71,7 @@ export async function runTargetPass(run: {
 }): Promise<string[] | null> {
   const { document } = run;
   const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content: documentPrefix(document.title, document.rows, document.references, document.pageName),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-    },
+    documentLayer(document.title, document.rows, document.references, document.pageName),
     {
       role: "user",
       content: targetPrompt({

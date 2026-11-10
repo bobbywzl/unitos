@@ -24,7 +24,7 @@ import { z } from "zod";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
 import { parseJson } from "@/lib/derive/json";
-import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
 import { longestIncreasing } from "@/lib/assistant/reorder";
@@ -84,12 +84,12 @@ function prepare(): void {
     const transcript = fixtureTranscript(f);
     const history = c.history ?? [];
     // The selection chat's own prompt (src/app/api/assistant/act/route.ts):
-    // the document prefix as the system message, the act prompt as the user
-    // message, the conversation inside it.
+    // the document and the material as the system layers, the act prompt as
+    // the user message, the conversation inside it.
     const picked = c.chat === "selection" && c.selection ? rowSelection(blocks, c.selection, c, f) : null;
-    const actUser =
+    const actCtx =
       c.chat === "selection"
-        ? actPrompt({
+        ? {
             profile: c.profile,
             lang: c.lang,
             selectionBlock: picked ? textSelectionBlock(picked.blockId, picked.quotedText) : "",
@@ -100,13 +100,16 @@ function prepare(): void {
             notes: notes.map((n, i) => ({ id: `note-${i + 1}`, sectionTitle: n.section, content: n.content })),
             history: history.map((turn) => ({ role: turn.role, content: turn.content })),
             command: c.question,
-            edits: c.edits ?? "blocks",
+            edits: c.edits ?? ("blocks" as const),
             pages: [],
             transcript: transcript?.lines ?? null,
             figureBlockId: null,
-          })
+          }
         : null;
-    const system = actUser !== null ? documentPrefix(f.title, blocks as never, null, null) : scope === "document" ? fixtureSystem(f, notes, blocks) : corpusSystem(fixtureParts(f, notes, blocks));
+    const actUser = actCtx ? actPrompt(actCtx) : null;
+    // The context layers (lib/assistant/context.ts): the document, then the
+    // material, as each route sends them.
+    const system = actCtx !== null ? [documentPrefix(f.title, blocks as never, null, null), actMaterial(actCtx)].join("\n\n") : scope === "document" ? fixtureSystem(f, notes, blocks) : corpusSystem(fixtureParts(f, notes, blocks));
     const prompt = actUser ?? synthesisAskPrompt({
       profile: c.profile,
       lang: c.lang,

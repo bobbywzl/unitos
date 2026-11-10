@@ -2,7 +2,7 @@ import type { WebSources } from "@/lib/web-search";
 import { APICallError, generateText, RetryError, type ModelMessage, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import type { z } from "zod";
-import { claude, CLAUDE_REFUSAL_FALLBACK, isClaudeModel } from "@/lib/claude";
+import { claude, CLAUDE_REFUSAL_FALLBACK, isClaudeModel, steadyRequest, turnEffortFailed } from "@/lib/claude";
 import { EXTERNAL_PENDING, externalCall, externalDir } from "@/lib/derive/external-call";
 import { CLAUDE_OPUS_5_5 } from "@/lib/derive/config";
 import { extractJson, parseJson } from "@/lib/derive/json";
@@ -111,17 +111,28 @@ export async function callForJson<S extends z.ZodType>(params: {
   pages?: WebSources;
 }): Promise<JsonCallResult<z.infer<S>>> {
   const run = async (model: LanguageModel, messages: ModelMessage[], usage: UsageMeta | undefined) => {
-    const result = await generateText({
-      model,
-      maxOutputTokens: params.maxOutputTokens,
-      providerOptions: params.providerOptions,
-      // The gateway's spend logs carry the same account and function as the
-      // usage record (lib/gateway.ts); nothing without the gateway.
-      headers: usage ? gatewayHeaders(usage) : undefined,
-      allowSystemInMessages: true,
-      messages,
-      abortSignal: params.abortSignal,
-      ...(params.tools ? { tools: params.tools, stopWhen: params.stopWhen } : {}),
+    // A call that marks a cache layer keeps the top of its request the same
+    // at every effort (steadyRequest, lib/claude.ts): the turn's effort
+    // rides in a message of its own. An API that refuses that message (HTTP
+    // 400) gets the call again as it was built.
+    const send = (request: { providerOptions: ProviderOptions; messages: ModelMessage[]; headers: Record<string, string> }) =>
+      generateText({
+        model,
+        maxOutputTokens: params.maxOutputTokens,
+        providerOptions: request.providerOptions,
+        // The gateway's spend logs carry the same account and function as the
+        // usage record (lib/gateway.ts); nothing without the gateway.
+        headers: { ...(usage ? gatewayHeaders(usage) : {}), ...request.headers },
+        allowSystemInMessages: true,
+        messages: request.messages,
+        abortSignal: params.abortSignal,
+        ...(params.tools ? { tools: params.tools, stopWhen: params.stopWhen } : {}),
+      });
+    const plain = { providerOptions: params.providerOptions, messages, headers: {} };
+    const steady = isClaudeModel(model) ? steadyRequest(modelIdOf(model), params.providerOptions, messages) : null;
+    const result = await send(steady ?? plain).catch((err: unknown) => {
+      if (!steady?.steady || !turnEffortFailed(httpFailure(err)?.status, params.label)) throw err;
+      return send(plain);
     });
     const toolCalls = params.tools ? result.steps.reduce((n, step) => n + step.toolCalls.length, 0) : 0;
     params.pages?.readResult(result);
@@ -131,7 +142,7 @@ export async function callForJson<S extends z.ZodType>(params: {
         `output=${result.usage.outputTokens ?? 0}${params.tools ? ` toolCalls=${toolCalls}` : ""}`,
     );
     if (usage) {
-      const tokens = sdkTokens(result.usage);
+      const tokens = sdkTokens(result.usage, result.providerMetadata);
       recordUsage(
         usage,
         tokens,

@@ -34,7 +34,6 @@ import { runTargetPass } from "@/lib/assistant/target";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import {
   annotationsSection,
-  documentPrefix,
   loadProfile,
   pageNames,
   passageContext,
@@ -51,7 +50,8 @@ import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, 
 import { runRevise } from "@/lib/assistant/revise";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
-import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { documentLayer, materialLayer } from "@/lib/assistant/context";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
@@ -453,7 +453,7 @@ async function handle(req: Request, t: TFunc) {
   const lang = await currentLang();
   // A video's or an audio's voices, chapters, and anchored words (SPEC.md §11).
   const transcript = await transcriptContext(document.id);
-  const userPrompt = actPrompt({
+  const promptCtx = {
     profile,
     lang,
     selectionBlock,
@@ -477,13 +477,15 @@ async function handle(req: Request, t: TFunc) {
     pages: pageLines(document.blocks),
     transcript: transcript?.lines ?? null,
     figureBlockId,
-  });
+  };
+  const userPrompt = actPrompt(promptCtx);
 
+  // The context layers (lib/assistant/context.ts): the document, which every
+  // surface on this document reads from one cache entry; the project's
+  // material, the same until the reader adds a note; then this message.
   const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
-    },
+    documentLayer(document.title, document.blocks, document.references, pageNames(document)),
+    materialLayer(actMaterial(promptCtx)),
     attachedImage
       ? {
           role: "user",

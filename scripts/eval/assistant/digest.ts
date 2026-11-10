@@ -1,13 +1,14 @@
 // The assistant loop's document context (SPEC.md §7, §25): a fixture as the
-// digest stores it, so documentSystem renders the same This page system
-// prefix the route sends, byte for byte in shape; the plan's view of the
+// digest stores it, so the context layers (lib/assistant/context.ts) render
+// the same This page system the route sends, byte for byte in shape — the
+// document layer, then the material layer; the plan's view of the
 // blocks; and a recording's transcript context (voices and who speaks from
 // which line), as lib/assistant/transcript.ts builds it from the database.
-import { renderBlockLines } from "@/lib/derive/context";
+import { documentPrefix, renderBlockLines } from "@/lib/derive/context";
 import { suggestionRows } from "./richtext";
 import type { PlanContext } from "@/lib/assistant/plan";
 import type { TranscriptContext } from "@/lib/assistant/transcript";
-import { documentSystem } from "@/lib/digest/render";
+import { documentMaterial } from "@/lib/digest/render";
 import type { DigestNote, DigestParts } from "@/lib/digest/types";
 import type { Fixture, FixtureBlock } from "../lib";
 
@@ -150,9 +151,11 @@ export function fixtureParts(f: Fixture, notes: CaseNote[] = [], blocks?: PlanCo
   };
 }
 
-/** The This page system prefix for the fixture, as the route renders it. */
+/** The This page system for the fixture, as the route sends it: the
+    document layer (the document's blocks), then the material layer (the
+    project and what the reader made on the document). */
 export function fixtureSystem(f: Fixture, notes: CaseNote[] = [], blocks?: PlanContext["blocks"]): string {
-  const system = documentSystem(fixtureParts(f, notes, blocks), f.name);
-  if (system === null) throw new Error(`${f.name} did not render`);
-  return system;
+  const material = documentMaterial(fixtureParts(f, notes, blocks), f.name);
+  if (material === null) throw new Error(`${f.name} did not render`);
+  return [documentPrefix(f.title, (blocks ?? planBlocks(f)) as never, null, null), material].join("\n\n");
 }

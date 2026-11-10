@@ -19,7 +19,7 @@ import {
   STREAM_PLAN_TOKEN,
   SUGGEST_DEADLINE_MS,
 } from "@/lib/derive/config";
-import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
+import { loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
 import {
   scanActionsFence,
   enrichActions,
@@ -29,14 +29,17 @@ import {
   type DocumentEdits,
 } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
-import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { callForJson, httpFailure, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
-import { corpusPickedSystem, corpusSystem, documentSystem } from "@/lib/digest/render";
+import { corpusLayers, corpusPickedLayers, documentMaterial, documentReadsWhole, documentSystem } from "@/lib/digest/render";
+import { documentLayer, markConversation, materialLayer, stableLayer } from "@/lib/assistant/context";
+import { steadyRequest, turnEffortFailed } from "@/lib/claude";
+import { isClaudeId } from "@/lib/model-call";
 import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -150,20 +153,43 @@ async function handle(req: Request, t: TFunc) {
   const depthInput = { message: question, turns: data.history?.length ?? 0, attachments: images.length + files.length, scope: data.scope };
   const effort = thinkingEffort(data.thinking, depthInput);
 
-  // The digest is the scope context: deterministic until the content changes,
-  // so the prompt prefix caches across questions (SPEC.md §2).
-  let system: string;
+  // The digest is the scope context, sent in the context layers (SPEC.md §2,
+  // lib/assistant/context.ts): what changes least first, each layer marked
+  // for the cache, so the next message reads them at the cache's price.
+  let layers: ModelMessage[];
   let scopeLabel: string;
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   if (data.scope === "document") {
-    // This page: the open document from the project's digest, whole, with
-    // its layers and the notes that cite it.
-    const rendered = documentSystem(digest.parts, data.documentId!);
-    if (rendered === null) {
+    // This page: the open document, whole, then the project and everything
+    // the reader made on the document. The document layer is rendered from
+    // the document's blocks as the selection chat renders it, byte for
+    // byte, so the two read one cache entry; a new note costs the material
+    // layer again and never the document.
+    const material = documentMaterial(digest.parts, data.documentId!);
+    if (material === null) {
       return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
     }
-    system = rendered;
+    const open = documentReadsWhole(digest.parts, data.documentId!)
+      ? await db.document.findUnique({
+          where: { id: data.documentId! },
+          select: {
+            title: true,
+            references: true,
+            importRev: true,
+            pageLabels: true,
+            blocks: {
+              orderBy: { order: "asc" },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
+            },
+          },
+        })
+      : null;
+    // A document past the text budget is cut by the digest, as before: one
+    // layer, the text and the material together.
+    layers = open
+      ? [documentLayer(open.title, open.blocks, open.references, pageNames(open)), materialLayer(material)]
+      : [materialLayer(documentSystem(digest.parts, data.documentId!) ?? material)];
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
@@ -183,18 +209,23 @@ async function handle(req: Request, t: TFunc) {
       return null;
     });
     if (picks) {
-      system = corpusPickedSystem(digest.parts, picks);
+      // What the reader made is the same for every message; the picked
+      // blocks are this message's alone, so they follow it unmarked.
+      const picked = corpusPickedLayers(digest.parts, picks);
+      layers = [materialLayer(picked.material), { role: "system", content: picked.picked }];
       scopeLabel =
         "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
     } else {
       // Past the text budget, the documents render in the order the question
       // needs them (lib/digest/rank.ts), so the cut falls on the rest.
       const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
-      system = corpusSystem({ ...digest.parts, documents });
+      const whole = corpusLayers({ ...digest.parts, documents });
+      layers = [stableLayer(whole.documents), materialLayer(whole.material)];
       scopeLabel =
         "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
     }
   }
+  const systemChars = layers.reduce((n, layer) => n + (typeof layer.content === "string" ? layer.content.length : 0), 0);
 
   const lang = await currentLang();
   // This page scope (SPEC.md §7): the assistant may propose actions on the
@@ -240,7 +271,7 @@ async function handle(req: Request, t: TFunc) {
           return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript, pages };
         })()
       : null;
-  const messages: ModelMessage[] = [{ role: "system", content: system }];
+  const messages: ModelMessage[] = [...layers];
   if (data.task === "ask") {
     // The conversation (SPEC.md §7): the turns so far go in as messages, the
     // reader's with the images they carried, then this message with the
@@ -286,6 +317,9 @@ async function handle(req: Request, t: TFunc) {
         content: parts.length > 0 ? [{ type: "text", text }, ...parts] : text,
       });
     }
+    // The turns so far are the same in the next request: the conversation
+    // layer ends here. This message, with its rules, is new every time.
+    if (history.length > 0) markConversation(messages);
     const parts = imageParts(images);
     const text = synthesisAskPrompt({
       profile,
@@ -343,19 +377,28 @@ async function handle(req: Request, t: TFunc) {
     const web = data.web === true;
     const searchUsd = webTurn?.searchUsd ?? 0;
     const pages = new WebSources();
-    const turns = messages.length - 2;
+    const turns = messages.length - layers.length - 1;
     let searches = 0;
+    // Whether the last call carried the turn's effort in a message of its
+    // own (steadyRequest, lib/claude.ts): a 400 on it runs again plain.
+    let steady = false;
     // The answer on one model: with the web, or without it when the web
-    // turn failed before any words came (below).
-    const startAsk = (call: ModelCall, tools: ToolSet | null, askMessages: ModelMessage[]) => {
+    // turn failed before any words came (below). plain: the request as it
+    // was built, the effort at its top.
+    const startAsk = (call: ModelCall, tools: ToolSet | null, askMessages: ModelMessage[], plain = false) => {
       usageMeta.model = call.modelId;
+      const request =
+        !plain && isClaudeId(call.modelId)
+          ? steadyRequest(call.modelId, call.providerOptions, askMessages)
+          : { providerOptions: call.providerOptions, messages: askMessages, headers: {}, steady: false };
+      steady = request.steady;
       return streamText({
       model: call.model,
       maxOutputTokens,
-      providerOptions: call.providerOptions,
-      headers: gatewayHeaders(usageMeta),
+      providerOptions: request.providerOptions,
+      headers: { ...gatewayHeaders(usageMeta), ...request.headers },
       allowSystemInMessages: true,
-      messages: askMessages,
+      messages: request.messages,
       ...(tools
         ? {
             tools,
@@ -365,12 +408,12 @@ async function handle(req: Request, t: TFunc) {
       // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
       // model call, not just the response the client would have read.
       abortSignal: req.signal,
-      onEnd: ({ usage }) => {
+      onEnd: ({ usage, providerMetadata }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${systemChars} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
-        const tokens = sdkTokens(usage);
+        const tokens = sdkTokens(usage, providerMetadata);
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
       // Stop (SPEC.md §6): the steps that finished were billed, so they are
@@ -506,7 +549,13 @@ async function handle(req: Request, t: TFunc) {
           };
           let full: string;
           try {
-            full = await streamTextTo(result, relay, { t, onPart });
+            full = await streamTextTo(result, relay, { t, onPart }).catch((err: unknown) => {
+              // The API refused the per-message effort before any words
+              // came: the same call again, the effort at its top.
+              if (req.signal.aborted || relayed.trim() !== "" || !steady) throw err;
+              if (!turnEffortFailed(httpFailure(err)?.status, "assistant:ask")) throw err;
+              return streamTextTo(startAsk(chat, webTurn?.tools ?? null, messages, true), relay, { t, onPart });
+            });
           } catch (err) {
             // The model failed before any words came (the search refused, the
             // provider out of service or out of balance): the turn runs again

@@ -17,9 +17,12 @@ import {
 // The reader's message becomes a plan: reply (the answer), actions (edits,
 // highlights, notes the reader approves), and matches (the passages across
 // the document that deal with the selection's topic, the work the old
-// Match-it tool did). The document is the cached system prefix; this is the
-// user message. Not in promptTemplates: the route is the assistant's, not
-// /api/derive.
+// Match-it tool did). The call goes in the context layers
+// (lib/assistant/context.ts): the document, then the material (actMaterial:
+// the project's sections, its other documents, the reader's notes), both
+// read from the cache by the next message; this is the user message, what
+// is new each time. Not in promptTemplates: the route is the assistant's,
+// not /api/derive.
 // What makes a reply worth reading: it answers in its first sentence, every
 // claim in it rests on a cited block, the matches are the passages a reader
 // would have found by reading the whole document with the selection in mind,
@@ -71,6 +74,27 @@ export function textSelectionBlock(blockId: string, text: string, core = false):
   return `This is the selection chat. The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
 }
 
+/** The material layer of the selection chat (lib/assistant/context.ts):
+    what the project holds beside the open document. It is the same from
+    message to message until the reader adds a note or a section, so it
+    follows the document and is read from the cache. What the document
+    itself fixes comes first (its sheets, its pages, its voices), then the
+    project's sections and documents, then the notes, which change most. */
+export function actMaterial(ctx: Pick<ActCtx, "sections" | "otherDocuments" | "notes" | "sheets" | "pages" | "transcript">): string {
+  return [
+    "The project this document is in follows: its sections, its other documents, and the reader's notes and annotations.",
+    ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
+    ...(ctx.pages?.length ? ["", `Pages (each page's picture, then the blocks that hold its words):\n${ctx.pages.join("\n")}`] : []),
+    ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
+    "",
+    `Sections in the corpus (id — title):\n${ctx.sections.length > 0 ? ctx.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
+    "",
+    `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    "",
+    `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
+  ].join("\n");
+}
+
 export function actPrompt(ctx: ActCtx): string {
   const language = languageName(ctx.lang);
   return [
@@ -81,14 +105,7 @@ export function actPrompt(ctx: ActCtx): string {
     ctx.selectionBlock || "The reader has no text selected. The command applies to the document.",
     ...(ctx.toolBlock ? ["", ctx.toolBlock] : []),
     "",
-    `Sections in the corpus (id — title):\n${ctx.sections.length > 0 ? ctx.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
-    "",
-    `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
-    ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
-    ...(ctx.pages?.length ? ["", `Pages (each page's picture, then the blocks that hold its words):\n${ctx.pages.join("\n")}`] : []),
-    ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
-    "",
-    `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
+    "The project's sections, its other documents, and the reader's notes and annotations are above, after the document.",
     "",
     "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(ctx.edits ?? "blocks", Boolean(ctx.transcript)),

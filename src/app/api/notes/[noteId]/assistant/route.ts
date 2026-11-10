@@ -5,7 +5,7 @@ import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { NOTE_ASSISTANT_EFFORT, NOTE_ASSISTANT_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, loadProfile, pageNames } from "@/lib/derive/context";
+import { loadProfile, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
@@ -15,6 +15,7 @@ import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-searc
 import { checkNoteQuotes } from "@/lib/notes/assistant-check";
 import { noteAssistantPrompt } from "@/lib/prompts/note-assistant";
 import { parseBody } from "@/lib/validate";
+import { documentLayer } from "@/lib/assistant/context";
 
 export const maxDuration = 180;
 
@@ -112,11 +113,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
   const messages: ModelMessage[] = [
     ...(document
       ? [
-          {
-            role: "system" as const,
-            content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
-            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-          },
+          documentLayer(document.title, document.blocks, document.references, pageNames(document)),
         ]
       : []),
     ...history.map((turn) => ({ role: turn.role, content: turn.content }) as ModelMessage),

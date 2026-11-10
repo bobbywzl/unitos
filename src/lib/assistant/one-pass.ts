@@ -5,7 +5,7 @@ import { planOrder, scopeUnits, type OrderEntry, type OrderPlan, type OrderUnit 
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
 import { ONE_PASS_MAX_CHARS, SUGGEST_EFFORT, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, type PageName } from "@/lib/derive/context";
+import { type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { checkOps } from "@/lib/derive/suggest";
 import type { ResolvedOp } from "@/lib/docs/assistant-suggestions";
@@ -16,6 +16,7 @@ import type { Lang } from "@/lib/i18n/config";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { onePassPrompt } from "@/lib/prompts/one-pass";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import { documentLayer } from "@/lib/assistant/context";
 
 // The one pass (SPEC.md §7): a command over a document that fits one call,
 // done as a chat with the whole document would do it — one model call reads
@@ -240,11 +241,7 @@ export async function runOnePass(run: OnePassRun): Promise<OnePassResult> {
     plan: run.plan,
     history: run.history,
   });
-  const prefix: ModelMessage = {
-    role: "system",
-    content: documentPrefix(document.title, document.rows, document.references, document.pageName),
-    providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-  };
+  const prefix: ModelMessage = documentLayer(document.title, document.rows, document.references, document.pageName);
   const call = await featureCall("suggest", SUGGEST_EFFORT[run.thinking]);
   const result = await callForJson({
     model: call.model,
