@@ -1,11 +1,13 @@
 import { actionLines, NEAREST_CHANGE_RULE, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
-  ANSWER_LENGTH,
+  ANSWER_SHAPE,
   answerLanguage,
+  ASSISTANT_GROUNDING,
+  ASSISTANT_STYLE,
+  beyondRule,
   CONNECTION_RULE,
   CORE_RULE,
-  GROUNDING_RULE,
   languageName,
   profileLines,
   SPECIFICITY_RULE,
@@ -92,22 +94,23 @@ export function synthesisAskPrompt(params: {
     "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them as one answer: passages that make the same point are one point with each cited. A passage that disagrees with the others is named as disagreeing, never dropped.",
     params.web
       ? "3. A question the material answers only in part, or not at all: answer the part it answers, then search the web for the rest and answer it from the pages you read (the web rules below)."
-      : "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
+      : "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. What is known beyond the material goes under its own label (the rule on beyond the document), never mixed into what the material says.",
     "3a. Cite with the tags alone: [block <id>] and [note <id>] render as links. Never write an id in your own words (\"note cmuo…\"), and never write a tag where you mean the words: name the note by what it says. Each tag goes right after the claim it supports. A claim that rests on several blocks takes each block's tag, side by side: tags side by side render as one chip with their count.",
     "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance. When the document never states the count itself, the answer says so in two words (\"by my count, three\"), and nothing more on how it was counted. Figures that look like the ones counted but are left out (a price beside a total) are named in one short sentence that says why they do not count.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
-    "6. Stop at the answer. After the sentences that answer and the reasoning they rest on, nothing follows: no aside on a passage that neither answers nor contradicts, no context the question did not ask for, no figure derived from the document's figures, no mistake the reader might make, no advice, no closing lesson or verdict, and at most one sentence that ties the answer to the reader's purpose. A point is made once, never restated in other words. Never say how the answer was found (the blocks read, the checks made): say what is so. A lookup ends with its one to three sentences, in one paragraph. Every sentence holds one claim and stays under 25 words: a second claim starts a new sentence.",
-    ANSWER_LENGTH,
+    "6. Stop at the answer. A lookup ends with its one to three sentences: no aside, no context the question did not ask for, no advice. A short answer ends with the limit the document attaches. An answer under labels ends with its bottom line. Nowhere: an aside on a passage that neither answers nor contradicts, a figure derived from the document's figures that the question did not ask for, a point restated in other words, or how the answer was found (the blocks read, the checks made): say what is so. Every sentence holds one claim and stays under 25 words: a second claim starts a new sentence.",
+    ANSWER_SHAPE,
     CORE_RULE,
+    beyondRule(params.web),
     CONNECTION_RULE,
-    GROUNDING_RULE,
+    ASSISTANT_GROUNDING,
     SPECIFICITY_RULE,
     ...(files.length > 0 || imageCount > 0
       ? [
           "An attached file or image is material too: answer from it together with the material above, and name the file when you cite it.",
         ]
       : []),
-    STYLE_RULE,
+    ASSISTANT_STYLE,
     ...(params.actions
       ? [
           "",

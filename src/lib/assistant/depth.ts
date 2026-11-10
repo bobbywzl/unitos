@@ -46,7 +46,7 @@ const EVERY = /\b(every|all the|all of|each)\b|所有|每个|每一|全部/i;
 const BOUNDED = /\b(the|this|that|these|those|its|my) (\w+ )?(paragraph|paragraphs|sentence|sentences|line|lines|section|heading|list|table|block|quote|note|part)\b|\bunder ["“]|这[一两三]?[段句行节]|那[一两三]?[段句行节]/i;
 
 // A question of meaning: why, how, explain, what does it mean, evaluate, argue.
-const MEANING = /\b(why|how (does|do|did|would|could|can|is|are)|explain|what does .* mean|mean by|evaluate|assess|argue|argument|implication|interpret|significan|trade-?off|should i|should we|is (it|this|that|the .{1,40}) (true|real|right|sound|fair|justified|correct|worth)|does (it|this|that|the .{1,40}) (hold|work|follow|matter)|can i (trust|rely)|does the (document|paper|memo|article|author) (say|claim|show)|in what way)\b|为什么|怎么|如何|解释|意味着|评价|论证|含义|应该|是否|靠谱|站得住/i;
+const MEANING = /\b(why|how (does|do|did|would|could|can|is|are)|explain|what (does|do|did|might|could|would|can) .* mean|what .* (really )?(means?|implies|suggests?)\b|mean by|read(ing)? between the lines|what to make of|evaluate|assess|argue|argument|implication|interpret|significan|trade-?off|should i|should we|is (it|this|that|the .{1,40}) (true|real|right|sound|fair|justified|correct|worth)|does (it|this|that|the .{1,40}) (hold|work|follow|matter)|can i (trust|rely)|does the (document|paper|memo|article|author) (say|claim|show)|in what way)\b|为什么|怎么|如何|解释|意味着|评价|论证|含义|应该|是否|靠谱|站得住/i;
 
 // Several asks in one message.
 const SEVERAL = /(\band then\b|;|\bthen\b.*\band\b|\n\s*[-*]\s|\n\s*\d+[.)]\s|，然后|；)/i;

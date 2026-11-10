@@ -2,13 +2,14 @@ import { actionLines, insertParagraphLine, NEAREST_CHANGE_RULE, TRANSCRIPT_RULE,
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import {
-  ANSWER_LENGTH,
+  ANSWER_SHAPE,
+  ASSISTANT_STYLE,
+  beyondRule,
   CONNECTION_RULE,
   CORE_RULE,
   languageName,
   profileLines,
   readerNotesText,
-  STYLE_RULE,
   WEB_LINES,
   type ReaderProfileCtx,
 } from "@/lib/prompts/types";
@@ -125,7 +126,7 @@ export function actRules(ctx: Pick<ActCtx, "profile" | "lang" | "hasSelection" |
     NEAREST_CHANGE_RULE("5a"),
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click. Several blocks named together take each block's tag, side by side: tags side by side render as one chip with their count.",
     `7. Write reply, every description, and every why in ${language}.`,
-    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. ${ANSWER_LENGTH} ${CORE_RULE} ${CONNECTION_RULE} ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted. Stop at the answer: no context the question did not ask for, no point made twice, no account of how the answer was found. In the selection chat the whole reply to a question is one paragraph of at most three sentences, each under 25 words and each claim with its block, unless the message asks for detail. A question about the selected passage is answered from the passage first: what it states, in its own terms, and the conclusion it draws itself, in one sentence with its block. A second sentence only for what the question needs and the passage lacks; other blocks' findings only when the question asks for them. Each block is cited once. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
+    `8. reply, for a command that asks a question: the answer, as markdown inside the JSON string, each label and each bullet on a line of its own (\\n). ${ANSWER_SHAPE} ${CORE_RULE} ${beyondRule(ctx.web)} ${CONNECTION_RULE} ${ASSISTANT_STYLE} A question about the selected passage starts from the passage: the core says what the selected words state or mean, in plain words, with their block. Every claim about the document cites its block. Say plainly when the document does not answer, then say what the document does say about it. A sentence that could be written about any other document is deleted; a sentence that only restates the selection in other words is deleted. No point made twice, no account of how the answer was found. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",

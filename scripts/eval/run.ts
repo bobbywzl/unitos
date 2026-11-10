@@ -383,7 +383,7 @@ const adapters: Record<EvalTool, Adapter> = {
     const checks: Check[] = [
       tagCheck(r.text, f),
       { name: "cites at least one block", ok: blockTags(r.text).length > 0 },
-      capCheck(r.text, 250),
+      capCheck(r.text, 320),
       languageCheck(r.text, c.lang),
       openerCheck(r.text),
     ];
@@ -431,7 +431,7 @@ const adapters: Record<EvalTool, Adapter> = {
       { name: "never the selection itself", ok: resolved.every((m) => !m.self) },
       { name: "reply cites blocks", ok: blockTags(reply).length > 0 },
       tagCheck(reply, f),
-      capCheck(reply, 150),
+      capCheck(reply, 320),
       languageCheck(reply, c.lang),
       openerCheck(reply),
     ];

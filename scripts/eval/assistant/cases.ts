@@ -126,6 +126,12 @@ export const STUDENT_ZH: ReaderProfileCtx = {
   application: "",
 };
 
+export const INVESTOR: ReaderProfileCtx = {
+  background: "Individual investor doing due diligence on Alphabet. Reads earnings calls, no advertising industry background.",
+  purpose: "Judge whether Search ad revenue can keep growing without hurting the product.",
+  application: "",
+};
+
 export const CASES: AssistantCase[] = [
   // ── answer: from the source ───────────────────────────────────────────
   {
@@ -578,7 +584,7 @@ export const CASES: AssistantCase[] = [
     selection: { block: 18 },
     question: "What do the 0 ms and 700 ms results show?",
     expect: { change: false, answer: { includes: ["700"], cites: true } },
-    good: "No action. The answer in one or two sentences: at 0 ms both meanings prime (exhaustive access), at 700 ms only the context-appropriate one (selection within about a second), which is Model A's prediction; cites the block.",
+    good: "No action. A short answer, no labels: at 0 ms both meanings prime (exhaustive access), at 700 ms only the context-appropriate one (selection within about a second), which is Model A's prediction, with the limit the notes attach when they give one; cites the block.",
   },
   {
     id: "act-add-definition",
@@ -1858,7 +1864,7 @@ export const CASES: AssistantCase[] = [
     selection: { block: 8, text: "The gap is convexity: the curve of price against rate bends, so duration overstates the loss when rates rise and understates the gain when they fall." },
     question: "What does this mean for my bond if rates go up?",
     expect: { change: false, answer: { includes: ["845"], cites: true } },
-    good: "From the selected sentence first: the bond loses a little less than duration predicts. With the paragraph's own numbers: for the 10-year bond, duration says about $830 after a two-point rise, and the actual price is about $845. One to three sentences, cited, no advice.",
+    good: "From the selected sentence first: the bond loses a little less than duration predicts. With the paragraph's own numbers: for the 10-year bond, duration says about $830 after a two-point rise, and the actual price is about $845. The core first, then a few labeled points (what the selected sentence says, the paragraph's numbers, what limits it: the loss stays large), a bottom line for a home buyer; cited, no investment advice.",
   },
   {
     id: "confirm-bond-keep-figure",
@@ -1913,5 +1919,48 @@ export const CASES: AssistantCase[] = [
     question: "Rewrite the Duration section for someone who has never owned a bond, and add a worked example with the 2-year bond from the table.",
     expect: { change: true, touch: [8], fresh: true, exists: [{ includes: ["2-year", "1.9"] }] },
     good: "The Duration paragraph rewritten in plain words, every number kept (8.5, 17 percent, $830, $845, the fund with a duration of 6), and a worked example with the 2-year bond: a duration of 1.9 means about 1.9 percent per point, so the rise from 3 to 5 percent costs about 3.8 percent, close to the table's −3.7%. Either one edit_block on the paragraph that holds the example, or the edit and one new paragraph after it. The answer is one sentence.",
+  },
+  // ── depth: a question of meaning gets an answer under labels ──────────
+  {
+    id: "depth-call-disciplined-chat",
+    family: "act",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    chat: "selection",
+    selection: { block: 7, text: "There are many changes we can make to the ad experience, and we approach each of them in a disciplined way, as people use mobile more and their behavior shifts." },
+    question: 'What might a "disciplined way" mean - referencing authentically what Google hasd oen so far in this region',
+    expect: { change: false, answer: { cites: true } },
+    good: "The core first: no target for more ads; changes are tested and judged over the long term. Then labels in core points: what the call says (no coverage target, long testing, the fourth ad on a small share of queries, cited); what Google has actually done, from outside the document and marked so (the February 2016 removal of right-side ads, its research on ad blindness and the cut in mobile ad load, a quality bar that leaves most searches without top ads); the other side (revenue can also be raised through auction and pricing changes, as the antitrust trial showed, so a steady ad count is not restraint on revenue); a bottom line for an investor (watch paid clicks against cost per click). Condensed, nothing invented, outside facts never tagged with a block.",
+  },
+  {
+    id: "depth-call-disciplined-page",
+    family: "answer",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    question: 'What might "a disciplined way" mean here, going by what Google has actually done with search ads so far?',
+    expect: { change: false, answer: { cites: true } },
+    good: "The same answer as the selection chat's: the core first, then labels in core points (what the call says, cited; what Google has done, from outside the document and marked so; the other side: pricing and auction changes; a bottom line for an investor). 120 to 280 words. No actions block.",
+  },
+  {
+    id: "depth-call-cpc-lookup",
+    family: "answer",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    question: "How much did cost per click fall?",
+    expect: { change: false, answer: { includes: ["12"], cites: true, maxWords: 60 } },
+    good: "A lookup: cost per click on Google's own sites fell 12 percent, mostly from the mix of YouTube and mobile clicks; one to three sentences, cited, no labels, no bullets, nothing from outside the document.",
+  },
+  {
+    id: "depth-memo-between-lines",
+    family: "answer",
+    fixture: "report-earnings-memo",
+    lang: "en",
+    profile: ANALYST,
+    question: "What is management not saying about the price increases?",
+    expect: { change: false, answer: { cites: true } },
+    good: "Reads between the lines from the memo's own numbers: revenue rose on price while shipments fell, the rate rise was larger than any peer's, and two large customers are moving volume, so the price increase is buying margin with volume that may not come back. Under labels, in core points, each on its block; the other side where the memo gives one; a bottom line. Says it is a reading, not a statement of the memo.",
   },
 ];

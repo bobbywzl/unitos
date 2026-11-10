@@ -8,12 +8,14 @@ export type Criterion = { key: string; ask: string };
 
 export const FAMILY_RUBRIC: Record<Family, { what: string; criteria: Criterion[] }> = {
   answer: {
-    what: "An answer to the reader's question from the document: the answer first, every claim on a cited block the reader can open, what the document does not answer said plainly, nothing the reader did not ask for.",
+    what: "An answer to the reader's question whose depth follows the question: a lookup in one to three sentences; a question of meaning as the core first, then labels in core points (what the document says, what stands between the lines, the other side, what is known beyond the document) and a bottom line. Every claim about the document on a cited block the reader can open; what comes from outside the document kept apart and marked.",
     criteria: [
       { key: "answer_first", ask: "Is the answer in the first one or two sentences, before the evidence?" },
       { key: "evidence", ask: "Does every claim rest on a cited [block <id>] that actually says it, with the exact words where the wording carries the point?" },
       { key: "complete", ask: "Does it gather every passage that bears on the question, including one that disagrees, rather than the first it found?" },
-      { key: "honest", ask: "Does it say what the document does not answer, without filling the gap from general knowledge?" },
+      { key: "depth", ask: "Does the depth follow the question: a lookup in one to three sentences; a question the document answers in one place as a short answer of 40 to 120 words with its reason and the limit the document attaches, no labels; and a question of meaning as the core first, then two to four bold labels with one-sentence points (what the document says, what stands between the lines, the other side, what is known beyond the document where the question asks), closed by a bottom line?" },
+      { key: "core_points", ask: "Is it condensed to core points: the few points that change how the reader sees the passage, each said once, with nothing that only restates the passage?" },
+      { key: "honest", ask: "Does it say what the document does not answer? Is everything from outside the document kept apart under its own label, never tagged with a block, specific (the event, the study, the figure, the name, the year), and free of anything invented? And when the question asked for what lies outside the document, is it there?" },
       { key: "fit", ask: "Is it written for the reader context and, in a conversation, does it add to the earlier answers rather than repeat them?" },
       { key: "no_actions", ask: "Does it propose no change the reader did not ask for (no actions block, no offer to edit)?" },
     ],
@@ -37,7 +39,7 @@ export const FAMILY_RUBRIC: Record<Family, { what: string; criteria: Criterion[]
     ],
   },
   act: {
-    what: "The selection chat on a passage: a question gets its answer from the document in a sentence or two with its evidence cited; a command gets the change proposed at once — on a document with rich text the suggestions land on the selected words, pending, with nothing outside the selection touched and no second turn asked for; a command that asks for new words never writes them into the reply.",
+    what: "The selection chat on a passage: a question gets an answer whose depth follows the question (a lookup in one to three sentences; a question of meaning as the core first, then labels in core points and a bottom line, with what comes from outside the document kept apart and marked), its evidence cited; a command gets the change proposed at once — on a document with rich text the suggestions land on the selected words, pending, with nothing outside the selection touched and no second turn asked for; a command that asks for new words never writes them into the reply.",
     criteria: [
       { key: "at_once", ask: "Does the first turn do the work — the change landed as suggestions, or the plan proposed — with no offer, no question back, and no wait for a confirmation?" },
       { key: "on_selection", ask: "Do the suggestions change the selected words and nothing outside them, the way the message asked (every op landed, none skipped)?" },
