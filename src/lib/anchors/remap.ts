@@ -30,24 +30,36 @@ export function diffSegments(before: string, after: string): Segment[] {
   const a = tokenize(before);
   const b = tokenize(after);
 
-  // Matched token pairs via LCS. Past the budget, treat the whole text as replaced.
+  // The words both texts open with and end with match as they stand: an
+  // edit is in the middle. So one cell changed in a sheet of thirty
+  // thousand words costs the middle only, and every anchor outside it keeps
+  // its place.
+  let head = 0;
+  while (head < a.length && head < b.length && a[head].text === b[head].text) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail].text === b[b.length - 1 - tail].text) tail++;
+  const rows = a.length - head - tail;
+  const cols = b.length - head - tail + 1;
+
+  // Matched token pairs: the opening words, the middle via LCS, the ending
+  // words. A middle past the budget is treated as replaced whole.
   const pairs: { ai: number; bi: number }[] = [];
-  if (a.length * b.length <= 500_000) {
-    const cols = b.length + 1;
-    const dp = new Uint32Array((a.length + 1) * cols);
-    for (let i = a.length - 1; i >= 0; i--) {
-      for (let j = b.length - 1; j >= 0; j--) {
+  for (let k = 0; k < head; k++) pairs.push({ ai: k, bi: k });
+  if (rows > 0 && cols > 1 && rows * (cols - 1) <= 500_000) {
+    const dp = new Uint32Array((rows + 1) * cols);
+    for (let i = rows - 1; i >= 0; i--) {
+      for (let j = cols - 2; j >= 0; j--) {
         dp[i * cols + j] =
-          a[i].text === b[j].text
+          a[head + i].text === b[head + j].text
             ? dp[(i + 1) * cols + j + 1] + 1
             : Math.max(dp[(i + 1) * cols + j], dp[i * cols + j + 1]);
       }
     }
     let i = 0;
     let j = 0;
-    while (i < a.length && j < b.length) {
-      if (a[i].text === b[j].text) {
-        pairs.push({ ai: i, bi: j });
+    while (i < rows && j < cols - 1) {
+      if (a[head + i].text === b[head + j].text) {
+        pairs.push({ ai: head + i, bi: head + j });
         i++;
         j++;
       } else if (dp[(i + 1) * cols + j] >= dp[i * cols + j + 1]) {
@@ -57,6 +69,7 @@ export function diffSegments(before: string, after: string): Segment[] {
       }
     }
   }
+  for (let k = tail; k > 0; k--) pairs.push({ ai: a.length - k, bi: b.length - k });
 
   const segments: Segment[] = [];
   let oldAt = 0;
