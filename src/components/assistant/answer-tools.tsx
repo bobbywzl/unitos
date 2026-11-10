@@ -6,7 +6,7 @@ import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
 import type { Person } from "@/lib/person";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
-import { SparkleIcon, CommentIcon } from "@/components/icons";
+import { ChevronDownIcon, SparkleIcon, CommentIcon } from "@/components/icons";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // Highlighting an assistant answer (SPEC.md §7) offers three things: Start
@@ -326,24 +326,39 @@ export function SideChatChips({
   className?: string;
 }) {
   const t = useT();
+  // One line until the reader opens it: the label and how many. Open, each
+  // side chat is one row of the panel's width, one line long.
+  const [open, setOpen] = useState(false);
   if (sideChats.length === 0) return null;
   return (
-    <div className={`flex flex-wrap items-center gap-1 ${className}`}>
-      <span className="text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
+    <div className={`shrink-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        data-track={open ? "assistant-side-chats-close" : "assistant-side-chats-open"}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded-full px-1 py-0.5 text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase hover:text-clay-800"
+      >
+        <ChevronDownIcon size={11} className={open ? "" : "-rotate-90"} />
         {t("assistant.sideChats")}
-      </span>
-      {sideChats.map((s) => (
-        <button
-          key={s.key}
-          type="button"
-          onClick={() => onOpen(s.key)}
-          data-track="assistant-side-chat-open"
-          data-tip={s.quote}
-          className="max-w-[180px] truncate rounded-full bg-card px-2.5 py-0.5 text-[11px] text-sand-600 shadow-soft hover:text-clay-800"
-        >
-          {quoteLine(s.quote, 40)}
-        </button>
-      ))}
+        <span className="rounded-full bg-sand-200 px-1.5 text-[10.5px] font-semibold tracking-normal text-sand-600">{sideChats.length}</span>
+      </button>
+      {open && (
+        <div className="mt-1 flex max-h-32 flex-col gap-1 overflow-y-auto">
+          {sideChats.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onOpen(s.key)}
+              data-track="assistant-side-chat-open"
+              title={s.quote}
+              className="block w-full shrink-0 truncate rounded-xl bg-card px-3 py-1.5 text-left text-xs text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+            >
+              {quoteLine(s.quote, 80)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

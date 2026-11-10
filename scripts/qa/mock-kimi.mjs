@@ -501,6 +501,17 @@ function buildResponse(all) {
     return JSON.stringify({ parts });
   }
 
+  // HABITS (lib/prompts/habits.ts): asks named for the open project.
+  if (all.includes('"habits"') && all.includes("The open project:")) {
+    const project = /The open project: ([^\n]*)/.exec(all)?.[1] ?? "this project";
+    return JSON.stringify({
+      habits: [
+        { kind: "plain meaning", ask: `Explain the main claim of ${project} in one plain sentence` },
+        { kind: "business angle", ask: "What is the business reason behind this?" },
+        { kind: "check my reading", ask: "Would you say my reading of the argument is right?" },
+      ],
+    });
+  }
   if (all.includes('"gists"')) {
     const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
       id: m[1],

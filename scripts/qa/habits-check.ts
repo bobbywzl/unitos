@@ -1,4 +1,4 @@
-import { askKind, habitsOf, type Ask } from "@/lib/assistant/habits";
+import { askKind, habitAsks, habitStamp, habitsOf, type Ask } from "@/lib/assistant/habits";
 
 let failed = 0;
 const check = (name: string, got: unknown, want: unknown) => {
@@ -38,5 +38,38 @@ check(
   ).map((h) => h.kind),
   ["study guide", "summary", "translate"],
 );
+check(
+  "the kind asked most in this project comes first",
+  habitsOf(
+    [
+      ...["d1", "d2", "d3", "d4"].map((d, i) => ask("make a study guide", d, i + 1, "other")),
+      ...["d5", "d6", "d7"].map((d, i) => ask("summarize the document", d, i + 1, "here")),
+    ],
+    now,
+    undefined,
+    "here",
+  ).map((h) => h.kind),
+  ["summary", "study guide"],
+);
+// What the assistant reads to write habits: sentences of the window, each
+// once, this project's apart from the others'.
+check(
+  "the asks the assistant reads",
+  habitAsks(
+    [
+      ask("[block abc-b3] what does take rate mean in one plain sentence", "d1", 1, "here"),
+      ask("What does take rate mean in one plain sentence", "d1", 2, "here"),
+      ask("ok do it", "d1", 1, "here"),
+      ask("why did margins fall, in business terms?", "d9", 3, "other"),
+      ask("an old ask that is past the window", "d9", 80, "other"),
+    ],
+    "here",
+    now,
+  ),
+  { here: ["what does take rate mean in one plain sentence"], elsewhere: ["why did margins fall, in business terms?"], total: 2 },
+);
+check("the stamp holds for three more asks", habitStamp("n1", 4, now) === habitStamp("n1", 7, now), true);
+check("the stamp changes at the fourth", habitStamp("n1", 4, now) === habitStamp("n1", 8, now), false);
+check("the stamp is the project's", habitStamp("n1", 4, now) === habitStamp("n2", 4, now), false);
 console.log(failed === 0 ? "habits-check: all passed" : `habits-check: ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

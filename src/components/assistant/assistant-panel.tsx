@@ -88,6 +88,12 @@ function caretBlockIn(documentId: string): string | undefined {
   return typeof id === "string" && id ? id : undefined;
 }
 
+// The box grows with its words to this height (max-h-40), then scrolls.
+const BOX_MAX_HEIGHT = 160;
+
+// How many of the reader's habits show before Show more (SPEC.md §7).
+const HABITS_SHOWN = 3;
+
 // One attachment of a message (SPEC.md §7): an image stored through
 // POST /api/images, or a file read to text. `pending` while it is still
 // being read; a pending one cannot be sent.
@@ -376,6 +382,21 @@ const SCOPES: { id: Scope; labelKey: TKey; hintKey: TKey }[] = [
 
 type Habit = { kind: string; text: string; count: number };
 const HABITS_HIDDEN_KEY = "unitos.assistant.habitsHiddenUntil";
+// The habits the browser keeps, per project: { stamp, habits }.
+const HABITS_KEPT_KEY = "unitos.assistant.habits";
+
+function isKeptHabits(value: unknown): value is { stamp: string; habits: Habit[] } {
+  if (typeof value !== "object" || value === null) return false;
+  const kept = value as { stamp?: unknown; habits?: unknown };
+  return (
+    typeof kept.stamp === "string" &&
+    Array.isArray(kept.habits) &&
+    kept.habits.every(
+      (h: unknown) =>
+        typeof h === "object" && h !== null && typeof (h as Habit).kind === "string" && typeof (h as Habit).text === "string",
+    )
+  );
+}
 
 // Recommended functions for the open document, in this order.
 const RECOMMENDED: { depth: SummaryDepth; labelKey: TKey; hintKey: TKey }[] = [
@@ -737,28 +758,50 @@ function AssistantPanelBody({
   const [error, setError] = useState<string | null>(null);
   // Recommended output: generated in this session, over the stored initials.
   const [recDepth, setRecDepth] = useState<SummaryDepth | null>(null);
-  // The reader's habits (SPEC.md §7): the asks they repeat, offered again as
-  // chips under Recommended; Hide keeps them away for thirty days.
+  // The reader's habits (SPEC.md §7): asks written from how they ask, for
+  // this project, offered as rows under Recommended; Hide keeps them away
+  // for thirty days. The browser keeps the rows with the stamp they came
+  // with, and the server writes new ones only when the stamp changes.
   const [habits, setHabits] = useState<Habit[]>([]);
+  // Three asks show; the rest open on demand.
+  const [habitsOpen, setHabitsOpen] = useState(false);
+  const hasDocument = documentId !== null;
   useEffect(() => {
     let hidden = false;
+    let kept: { stamp: string; habits: Habit[] } | null = null;
+    const keptKey = `${HABITS_KEPT_KEY}:${notebookId}:${hasDocument ? "document" : "project"}`;
     try {
       hidden = Number(localStorage.getItem(HABITS_HIDDEN_KEY) ?? 0) > Date.now();
+      const parsed: unknown = JSON.parse(localStorage.getItem(keptKey) ?? "null");
+      if (isKeptHabits(parsed)) kept = parsed;
     } catch {
       /* no storage */
     }
     if (hidden) return;
     let gone = false;
-    fetch(`/api/assistant/habits?notebookId=${encodeURIComponent(notebookId)}`)
-      .then((res) => (res.ok ? (res.json() as Promise<{ habits?: Habit[] }>) : null))
+    const query = new URLSearchParams({ notebookId });
+    if (documentId) query.set("documentId", documentId);
+    if (kept) query.set("have", kept.stamp);
+    fetch(`/api/assistant/habits?${query}`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ habits?: Habit[]; stamp?: string; unchanged?: boolean }>) : null))
       .then((json) => {
-        if (!gone && Array.isArray(json?.habits)) setHabits(json.habits);
+        if (gone || !json) return;
+        if (json.unchanged && kept) return setHabits(kept.habits);
+        if (!Array.isArray(json.habits)) return;
+        setHabits(json.habits);
+        try {
+          if (json.stamp) localStorage.setItem(keptKey, JSON.stringify({ stamp: json.stamp, habits: json.habits }));
+        } catch {
+          /* no storage */
+        }
       })
       .catch(() => {});
     return () => {
       gone = true;
     };
-  }, [notebookId]);
+    // The open document changes the rows only by being there or not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId, hasDocument]);
   function hideHabits() {
     setHabits([]);
     try {
@@ -1663,7 +1706,7 @@ function AssistantPanelBody({
     const el = boxRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, BOX_MAX_HEIGHT)}px`;
   };
   useLayoutEffect(fitBox, [question]);
   // The box keeps the focus when the first message swaps the resting layout
@@ -1764,8 +1807,18 @@ function AssistantPanelBody({
     </div>
   );
 
+  // Before the first message the box is the lower part of the panel: it
+  // fills the room under Recommended, and a click anywhere on it types. A
+  // task's findings take that room once a task ran. Below md the panel is a
+  // bottom sheet and the box keeps its own height.
+  const boxFills = !inConversation && !issues && !taskRun;
   const composer = (
     <form
+      onClick={(e) => {
+        // The whole card is the box: a click on its own surface, between or
+        // beside its buttons, puts the caret in the field.
+        if (!(e.target as HTMLElement).closest("button, a, input, textarea")) boxRef.current?.focus();
+      }}
       onSubmit={(e) => {
         e.preventDefault();
         stickRef.current = true;
@@ -1787,7 +1840,10 @@ function AssistantPanelBody({
         setOver(false);
         void addFiles([...(e.dataTransfer?.files ?? [])]);
       }}
-      className={`shrink-0 rounded-2xl bg-card p-2 shadow-soft ${over ? "outline-2 outline-clay-300" : ""}`}
+      data-assistant-box
+      className={`cursor-text rounded-2xl bg-card p-2 shadow-soft ${
+        boxFills ? "max-md:shrink-0 md:flex md:min-h-56 md:flex-1 md:flex-col" : "shrink-0"
+      } ${over ? "outline-2 outline-clay-300" : ""}`}
     >
       {attachments.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5 px-1 pt-1">
@@ -1867,9 +1923,14 @@ function AssistantPanelBody({
                   ? "assistant.askPlaceholderDocument"
                   : "assistant.askPlaceholderProject",
         )}
-        className="block max-h-40 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-sand-500"
+        // Three lines at the least, so the field is a target a pointer and a
+        // thumb find; it grows with the words to ten lines, and fills the
+        // card where the card fills the panel.
+        className={`block min-h-[4.75rem] w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-6 outline-none placeholder:text-sand-500 ${
+          boxFills ? "max-md:max-h-40 md:min-h-0 md:flex-1" : "max-h-40"
+        }`}
       />
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         <input
           ref={fileInputRef}
           type="file"
@@ -1888,9 +1949,9 @@ function AssistantPanelBody({
           data-track="assistant-attach"
           aria-label={t("assistant.attach")}
           data-tip={t("assistant.attachTitle")}
-          className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          className="flex size-9 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
         >
-          <PaperclipIcon size={15} />
+          <PaperclipIcon size={16} />
         </button>
         {drive && (
           <button
@@ -1899,12 +1960,12 @@ function AssistantPanelBody({
             data-track="assistant-attach-drive"
             aria-label={t("assistant.attachDrive")}
             data-tip={t("assistant.attachDriveTitle")}
-            className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+            className="flex size-9 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
           >
-            <DriveIcon size={15} />
+            <DriveIcon size={16} />
           </button>
         )}
-        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="ml-auto size-8" size={14} />
+        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="ml-auto size-9" size={15} />
         {/* While an answer runs the button is Stop, or Queue once a message
             is composed; the thinking row in the thread keeps its own Stop. */}
         <button
@@ -2260,8 +2321,10 @@ function AssistantPanelBody({
   // and the rows and the composer stay at the sheet's foot, as in a
   // conversation; on md+ the whole layout scrolls in the tray.
   return (
-    <div className="space-y-3 max-md:flex max-md:h-full max-md:flex-col">
-      <div className="space-y-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto">
+    <div className={`space-y-3 max-md:flex max-md:h-full max-md:flex-col ${boxFills ? "md:flex md:h-full md:flex-col md:gap-3 md:space-y-0" : ""}`}>
+      {/* With the box filling the panel, what is above it gives way and
+          scrolls when the panel is short. */}
+      <div className={`space-y-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto ${boxFills ? "md:-mx-1 md:min-h-0 md:shrink md:overflow-y-auto md:px-1 md:pb-1" : ""}`}>
       {head}
       {documentId && (
         <div className="space-y-2">
@@ -2298,10 +2361,13 @@ function AssistantPanelBody({
                   {t("assistant.habitsHide")}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {habits.map((h) => (
+              {/* One row per ask, every row the panel's width and one line
+                  long, so the list reads as a list; three show, and the rest
+                  open on demand. */}
+              <div className="flex flex-col gap-1">
+                {(habitsOpen ? habits : habits.slice(0, HABITS_SHOWN)).map((h) => (
                   <button
-                    key={h.kind}
+                    key={`${h.kind}:${h.text}`}
                     type="button"
                     onClick={() =>
                       void send({
@@ -2314,14 +2380,25 @@ function AssistantPanelBody({
                       })
                     }
                     disabled={busy}
-                    title={t("assistant.habitsHint", { n: h.count })}
+                    title={`${h.text}\n${h.count > 0 ? t("assistant.habitsHint", { n: h.count }) : t("assistant.habitsWrittenHint")}`}
                     data-track="assistant-habit"
-                    className="rounded-full bg-card px-3 py-1 text-left text-xs text-sand-800 shadow-soft hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+                    className="block w-full truncate rounded-xl bg-card px-3 py-1.5 text-left text-xs text-sand-800 shadow-soft hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
                   >
                     {h.text}
                   </button>
                 ))}
               </div>
+              {habits.length > HABITS_SHOWN && (
+                <button
+                  type="button"
+                  onClick={() => setHabitsOpen((v) => !v)}
+                  data-track={habitsOpen ? "assistant-habits-fewer" : "assistant-habits-more"}
+                  aria-expanded={habitsOpen}
+                  className="px-1 text-xs text-sand-500 hover:text-clay-800"
+                >
+                  {habitsOpen ? t("assistant.habitsFewer") : t("assistant.habitsMore", { n: habits.length - HABITS_SHOWN })}
+                </button>
+              )}
             </div>
           )}
           {recDepth && (recommendedShown || recError || recBusy === recDepth) && (
