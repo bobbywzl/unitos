@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import type { Page } from "playwright-core";
 import { z } from "zod";
+import { publicRequestCheck } from "@/lib/public-url";
 import { browserConfigured, launchBrowser, sessionLengthOf, withTimeout } from "@/lib/browser";
 import { VISION_CHECK_EFFORT, VISION_CHECK_TILES } from "@/lib/derive/config";
 import { featureModelId } from "@/lib/feature-models";
@@ -210,9 +211,14 @@ export async function pictureBoth(input: {
     const context = await browser.newContext({ locale: "en-US", viewport: VIEWPORT, deviceScaleFactor: 1 });
     try {
       // The pictures need the page's images and fonts; media never plays.
-      await context.route("**/*", (route) =>
-        route.request().resourceType() === "media" ? route.abort() : route.continue(),
-      );
+      // The page and what it loads are public addresses only
+      // (lib/public-url.ts).
+      const isPublic = publicRequestCheck();
+      await context.route("**/*", async (route) => {
+        if (route.request().resourceType() === "media") return route.abort();
+        if (!(await isPublic(route.request().url()))) return route.abort("blockedbyclient");
+        return route.continue();
+      });
       const page = await context.newPage();
       page.setDefaultTimeout(STEP_TIMEOUT_MS);
       input.onProgress?.(t("api.checkingPagePictures"));
