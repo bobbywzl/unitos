@@ -37,7 +37,7 @@ import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
 import { corpusLayers, corpusPickedLayers, documentMaterial, documentReadsWhole, documentSystem } from "@/lib/digest/render";
-import { documentLayer, markConversation, materialLayer, stableLayer } from "@/lib/assistant/context";
+import { documentLayer, markConversation, materialLayer, rulesLayer, stableLayer } from "@/lib/assistant/context";
 import { steadyRequest, turnEffortFailed } from "@/lib/claude";
 import { isClaudeId } from "@/lib/model-call";
 import { projectPicks } from "@/lib/assistant/project-reading";
@@ -50,7 +50,7 @@ import type { ModelCall } from "@/lib/model-call";
 import { featureCall, featureConfigured, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
+import { synthesisActions, synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
@@ -157,6 +157,9 @@ async function handle(req: Request, t: TFunc) {
   // lib/assistant/context.ts): what changes least first, each layer marked
   // for the cache, so the next message reads them at the cache's price.
   let layers: ModelMessage[];
+  // Where the rules layer goes among them: after the documents, which are
+  // kept as long, and before what the reader made.
+  let rulesAt: number;
   let scopeLabel: string;
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
@@ -190,6 +193,7 @@ async function handle(req: Request, t: TFunc) {
     layers = open
       ? [documentLayer(open.title, open.blocks, open.references, pageNames(open)), materialLayer(material)]
       : [materialLayer(documentSystem(digest.parts, data.documentId!) ?? material)];
+    rulesAt = open ? 1 : 0;
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
@@ -213,6 +217,7 @@ async function handle(req: Request, t: TFunc) {
       // blocks are this message's alone, so they follow it unmarked.
       const picked = corpusPickedLayers(digest.parts, picks);
       layers = [materialLayer(picked.material), { role: "system", content: picked.picked }];
+      rulesAt = 0;
       scopeLabel =
         "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
     } else {
@@ -221,6 +226,7 @@ async function handle(req: Request, t: TFunc) {
       const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
       const whole = corpusLayers({ ...digest.parts, documents });
       layers = [stableLayer(whole.documents), materialLayer(whole.material)];
+      rulesAt = 1;
       scopeLabel =
         "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
     }
@@ -273,6 +279,25 @@ async function handle(req: Request, t: TFunc) {
       : null;
   const messages: ModelMessage[] = [...layers];
   if (data.task === "ask") {
+    // The rules layer (lib/assistant/context.ts), at This page scope: the
+    // action types and the rules for actions, the same for every message,
+    // so the cache reads them. The rules of the answer stay in the message.
+    if (act) {
+      messages.splice(
+        rulesAt,
+        0,
+        rulesLayer(
+          synthesisActions({
+            sections: act.sections,
+            otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
+            edits: act.edits,
+            sheets: act.sheets,
+            pages: act.pages,
+            transcript: act.transcript?.lines ?? null,
+          }),
+        ),
+      );
+    }
     // The conversation (SPEC.md §7): the turns so far go in as messages, the
     // reader's with the images they carried, then this message with the
     // rules. A turn with no text is skipped: a stopped answer left nothing.
@@ -319,7 +344,9 @@ async function handle(req: Request, t: TFunc) {
     }
     // The turns so far are the same in the next request: the conversation
     // layer ends here. This message, with its rules, is new every time.
-    if (history.length > 0) markConversation(messages);
+    // A request takes four markers: with the web on, the search's own
+    // cache write takes the place of this one.
+    if (history.length > 0 && data.web !== true) markConversation(messages);
     const parts = imageParts(images);
     const text = synthesisAskPrompt({
       profile,
@@ -330,17 +357,8 @@ async function handle(req: Request, t: TFunc) {
       continued: history.length > 0,
       files,
       imageCount: parts.length,
-      act: act
-        ? {
-            sections: act.sections,
-            otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
-            edits: act.edits,
-            caretBlockId: data.caretBlockId,
-            sheets: act.sheets,
-            pages: act.pages,
-            transcript: act.transcript?.lines ?? null,
-          }
-        : undefined,
+      actions: act !== null,
+      caretBlockId: act ? data.caretBlockId : undefined,
     });
     messages.push({
       role: "user",
@@ -377,7 +395,8 @@ async function handle(req: Request, t: TFunc) {
     const web = data.web === true;
     const searchUsd = webTurn?.searchUsd ?? 0;
     const pages = new WebSources();
-    const turns = messages.length - layers.length - 1;
+    // The layers, the rules layer among them, and this message are not turns.
+    const turns = messages.length - layers.length - (act ? 1 : 0) - 1;
     let searches = 0;
     // Whether the last call carried the turn's effort in a message of its
     // own (steadyRequest, lib/claude.ts): a 400 on it runs again plain.

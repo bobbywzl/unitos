@@ -50,8 +50,8 @@ import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, 
 import { runRevise } from "@/lib/assistant/revise";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
-import { actMaterial, actPrompt, textSelectionBlock } from "@/lib/prompts/act";
-import { documentLayer, materialLayer } from "@/lib/assistant/context";
+import { actMaterial, actPrompt, actRules, textSelectionBlock } from "@/lib/prompts/act";
+import { documentLayer, materialLayer, rulesLayer } from "@/lib/assistant/context";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
@@ -481,10 +481,12 @@ async function handle(req: Request, t: TFunc) {
   const userPrompt = actPrompt(promptCtx);
 
   // The context layers (lib/assistant/context.ts): the document, which every
-  // surface on this document reads from one cache entry; the project's
-  // material, the same until the reader adds a note; then this message.
+  // surface on this document reads from one cache entry; the rules, the
+  // same for every message; the project's material, the same until the
+  // reader adds a note; then this message, which holds only what is new.
   const messages: ModelMessage[] = [
     documentLayer(document.title, document.blocks, document.references, pageNames(document)),
+    rulesLayer(actRules(promptCtx)),
     materialLayer(actMaterial(promptCtx)),
     attachedImage
       ? {

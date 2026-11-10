@@ -19,8 +19,12 @@ import {
 
 // The conversation (SPEC.md §7): the first question opens it, every later
 // message continues it. The turns so far go in as messages before this one;
-// this prompt is the current message with the rules, so the rules sit next
-// to the answer whatever the window holds.
+// this prompt is the current message with the rules of the answer, so they
+// sit next to the answer whatever the window holds. What the assistant looks
+// up to write a change — the action types, their fields, the rules for
+// actions — is the same for every message, so it goes in the rules layer
+// (synthesisActions; lib/assistant/context.ts), which the cache reads, and
+// the message names it.
 //
 // web: the assistant can search the web (SPEC.md §7). The material stays the
 // first source; the web checks it and fills what it lacks, and every web
@@ -43,10 +47,11 @@ export function synthesisAskPrompt(params: {
   files?: { name: string; text?: string }[];
   imageCount?: number;
   // This page scope (SPEC.md §7): the assistant may propose actions on the
-  // open document and the notes, which the reader approves in the plan card.
-  // edits: how the document changes (lib/assistant/plan.ts); caretBlockId:
-  // the block the caret stands in.
-  act?: PageActions;
+  // open document and the notes, which the reader approves in the plan card
+  // (the rules layer holds them: synthesisActions). caretBlockId: the block
+  // the caret stands in.
+  actions?: boolean;
+  caretBlockId?: string | null;
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -103,7 +108,13 @@ export function synthesisAskPrompt(params: {
         ]
       : []),
     STYLE_RULE,
-    ...(params.act ? actLines(params.act) : [ACT_ELSEWHERE_LINE]),
+    ...(params.actions
+      ? [
+          "",
+          "You can propose changes to the open document and the notes. The reader approves every action before it runs. The action types and the rules for actions stand after the document, before what the reader made: follow them when the message asks for a change.",
+          ...(params.caretBlockId ? [`The caret stands in [block ${params.caretBlockId}]. "Here" means right after it.`] : []),
+        ]
+      : [ACT_ELSEWHERE_LINE]),
     ...(params.web ? ["", ...WEB_LINES] : []),
     answerLanguage(params.lang),
   ].join("\n");
@@ -117,7 +128,6 @@ type PageActions = {
   sections: { id: string; title: string; parentTitle: string | null }[];
   otherDocuments: { id: string; title: string }[];
   edits?: DocumentEdits;
-  caretBlockId?: string | null;
   // What each sheet of the document keeps as it is (sheetKeepLines).
   sheets?: string[];
   // A handwritten document's pages and the blocks that hold each page's
@@ -134,16 +144,22 @@ type PageActions = {
 // document (lib/assistant/plan.ts), and sends the plan after the answer; the
 // reader approves it in the plan card before anything runs. A suggest action
 // goes to the page instead: its changes land as the assistant's suggestions.
+/** The rules layer of the sidebar at This page scope
+    (lib/assistant/context.ts): what a change is written from. Nothing in it
+    names the message, the reader, or the web, so it is the same for every
+    message on the document while the document changes the same way. */
+export function synthesisActions(act: PageActions): string {
+  return actLines(act).join("\n");
+}
+
 function actLines(act: PageActions): string[] {
   return [
-    "",
     "You can propose changes to the open document and the notes. The reader approves every action before it runs.",
     `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(act.sheets?.length ? [`Sheets (what each keeps as it is):\n${act.sheets.join("\n")}`] : []),
     ...(act.pages?.length ? [`Pages (each page's picture, then the blocks that hold its words):\n${act.pages.join("\n")}`] : []),
     ...(act.transcript ?? []),
-    ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(act.edits ?? "blocks", Boolean(act.transcript)),
     "Rules for actions:",

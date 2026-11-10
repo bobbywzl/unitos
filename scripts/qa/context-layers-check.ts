@@ -87,9 +87,10 @@ async function main() {
   const { claudeOptions, steadyRequest } = await import("../../src/lib/claude");
   const { createAnthropic } = await import("@ai-sdk/anthropic");
   const { callForJson } = await import("../../src/lib/derive/json-call");
-  const { documentLayer, materialLayer, markConversation, stableLayer } = await import("../../src/lib/assistant/context");
+  const { documentLayer, materialLayer, markConversation, rulesLayer, stableLayer } = await import("../../src/lib/assistant/context");
   const { documentPrefix } = await import("../../src/lib/derive/context");
-  const { actMaterial, actPrompt, textSelectionBlock } = await import("../../src/lib/prompts/act");
+  const { actMaterial, actPrompt, actRules, textSelectionBlock } = await import("../../src/lib/prompts/act");
+  const { synthesisActions, synthesisAskPrompt } = await import("../../src/lib/prompts/synthesis");
   const { corpusLayers, corpusPickedLayers, documentMaterial, documentReadsWhole } = await import("../../src/lib/digest/render");
   const { computeCostUsd, sdkTokens } = await import("../../src/lib/usage");
   const { generateText, streamText } = await import("ai");
@@ -122,10 +123,12 @@ async function main() {
     history: [],
     command: "Why did rents rise?",
   };
-  const actMessages = (command: string, withNotes = notes): ModelMessage[] => [
+  type Turn = { role: "user" | "assistant"; content: string };
+  const actMessages = (command: string, withNotes = notes, history: Turn[] = []): ModelMessage[] => [
     documentLayer(title, actBlocks, null, null),
+    rulesLayer(actRules(actCtx)),
     materialLayer(actMaterial({ ...actCtx, notes: withNotes })),
-    { role: "user", content: actPrompt({ ...actCtx, command }) },
+    { role: "user", content: actPrompt({ ...actCtx, command, history }) },
   ];
   const send = (messages: ModelMessage[], effort: "low" | "medium" | "high" | "max") =>
     callForJson({ model, messages, maxOutputTokens: 1024, schema, label: "check", providerOptions: claudeOptions(effort, SONNET) });
@@ -134,14 +137,16 @@ async function main() {
   const first = await send(actMessages("Why did rents rise?"), "low");
   check("the call answers", first.ok, first.ok ? "" : first.error);
   const a = captured[captured.length - 1];
-  check("two system layers", systemOf(a).length === 2, String(systemOf(a).length));
+  check("three system layers", systemOf(a).length === 3, String(systemOf(a).length));
+  check("the rules layer follows the document and is kept as long", systemOf(a)[1].cache_control?.ttl === "1h" && (systemOf(a)[1].text ?? "").includes("Rules:") && (systemOf(a)[1].text ?? "").includes("Action types"), JSON.stringify(systemOf(a)[1].cache_control));
   check("the document layer is the document prefix", systemOf(a)[0].text === documentPrefix(title, pageBlocks, null, null));
   check("the document layer is kept for an hour", systemOf(a)[0].cache_control?.ttl === "1h", JSON.stringify(systemOf(a)[0].cache_control));
-  check("the material layer is marked for five minutes", systemOf(a)[1].cache_control?.type === "ephemeral" && systemOf(a)[1].cache_control?.ttl === "5m", JSON.stringify(systemOf(a)[1].cache_control));
-  check("the material layer holds the notes", (systemOf(a)[1].text ?? "").includes("[note n1]") && (systemOf(a)[1].text ?? "").includes("d2 — Wages 2024"));
+  check("the material layer is marked for five minutes", systemOf(a)[2].cache_control?.type === "ephemeral" && systemOf(a)[2].cache_control?.ttl === "5m", JSON.stringify(systemOf(a)[2].cache_control));
+  check("the material layer holds the notes", (systemOf(a)[2].text ?? "").includes("[note n1]") && (systemOf(a)[2].text ?? "").includes("d2 — Wages 2024"));
   const userText = messagesOf(a).find((m) => m.role === "user");
   const userWords = typeof userText?.content === "string" ? userText.content : (userText?.content ?? []).map((b) => b.text ?? "").join("");
-  check("the message holds the selection and the command, never the notes", userWords.includes("rents rose eleven percent") && userWords.includes("Command: Why did rents rise?") && !userWords.includes("[note n1]"));
+  check("the message holds the selection and the command, never the notes or the rules", userWords.includes("rents rose eleven percent") && userWords.includes("Command: Why did rents rise?") && !userWords.includes("[note n1]") && !userWords.includes("Rules:") && !userWords.includes("Action types"));
+  check("the message is what is new: under 1,000 characters", userWords.length < 1000, String(userWords.length));
   check("the top of the request names the model's default effort", topEffort(a) === "high", String(topEffort(a)));
   check("the turn's effort rides in a message of its own", turnEffort(a) === "low", String(turnEffort(a)));
   const effortMessage = messagesOf(a)[messagesOf(a).length - 1];
@@ -168,7 +173,16 @@ async function main() {
   await send(actMessages("Why?", [...notes, { id: "n2", sectionTitle: "Housing", content: "A new note." }]), "high");
   const d = captured[captured.length - 1];
   check("a new note: the document layer is byte for byte the same", systemOf(d)[0].text === systemOf(a)[0].text && JSON.stringify(systemOf(d)[0]) === JSON.stringify(systemOf(a)[0]));
-  check("a new note: the material layer changed", systemOf(d)[1].text !== systemOf(a)[1].text);
+  check("a new note: the rules layer is the same", JSON.stringify(systemOf(d)[1]) === JSON.stringify(systemOf(a)[1]));
+  check("a new note: the material layer changed", systemOf(d)[2].text !== systemOf(a)[2].text);
+
+  // 4a. A later message of the conversation: the same layers, the turns in the message.
+  await send(actMessages("And wages?", notes, [{ role: "user", content: "Why did rents rise?" }, { role: "assistant", content: "Supply fell [block b3]." }]), "high");
+  const later = captured[captured.length - 1];
+  check("a later message: every layer is byte for byte the first message's", JSON.stringify(systemOf(later)) === JSON.stringify(systemOf(a)));
+  const laterUser = messagesOf(later).find((m) => m.role === "user");
+  const laterWords = typeof laterUser?.content === "string" ? laterUser.content : (laterUser?.content ?? []).map((block) => block.text ?? "").join("");
+  check("a later message: the conversation so far is in the message", laterWords.includes("Conversation so far") && laterWords.includes("Supply fell [block b3]."));
 
   // 5. The sidebar at This page: the same document layer, then its material,
   // then the conversation, marked at its last turn.
@@ -193,7 +207,16 @@ async function main() {
     { role: "assistant", content: "Rents rose eleven percent [block b1]." },
   ];
   markConversation(turns);
-  await send([documentLayer(title, pageBlocks, null, null), materialLayer(material ?? ""), ...turns, { role: "user", content: "Question: and wages?" }], "medium");
+  const pageActs = { sections: [{ id: "s1", title: "Housing", parentTitle: null }], otherDocuments: [], edits: "blocks" as const };
+  const askRules = synthesisActions(pageActs);
+  const ask1 = synthesisAskPrompt({ profile: actCtx.profile, lang: "en", scopeLabel: "this page", question: "and wages?", continued: true, actions: true, caretBlockId: "b4" });
+  const ask2 = synthesisAskPrompt({ profile: actCtx.profile, lang: "en", scopeLabel: "this page", question: "What is this about?", actions: true });
+  check("the sidebar's rules layer holds the action types and the rules for actions, never the question, the caret, or the reader", askRules.includes("Rules for actions:") && askRules.includes("Action types") && !askRules.includes("and wages?") && !askRules.includes("caret stands") && !askRules.includes("Reader context"));
+  check("the sidebar's rules layer is the same with the web on or off, and for every question", askRules === synthesisActions({ ...pageActs }));
+  check("the sidebar's message holds the question, the caret, and the rules of the answer, never the action types", ask1.includes("Question: and wages?") && ask1.includes("[block b4]") && ask1.includes("Stop at the answer") && !ask1.includes("Rules for actions:") && !ask1.includes("Action types") && !ask2.includes("Action types"));
+  check("the sidebar's message names the rules layer", ask2.includes("The action types and the rules for actions stand after the document"));
+  check("Project scope: no actions, and the message says where a change runs", synthesisAskPrompt({ profile: actCtx.profile, lang: "en", scopeLabel: "this project", question: "x" }).includes("changes run from the This page scope"));
+  await send([documentLayer(title, pageBlocks, null, null), rulesLayer(askRules), materialLayer(material ?? ""), ...turns, { role: "user", content: ask1 }], "medium");
   const e = captured[captured.length - 1];
   check("This page reads the selection chat's document entry", JSON.stringify(systemOf(e)[0]) === JSON.stringify(systemOf(a)[0]));
   const lastTurn = messagesOf(e)[1];
@@ -203,7 +226,7 @@ async function main() {
   const askBlock = Array.isArray(ask.content) ? ask.content[ask.content.length - 1] : null;
   check("the message itself is never marked", ask.role === "user" && !askBlock?.cache_control);
   const markers = [...systemOf(e), ...messagesOf(e).flatMap((m) => (Array.isArray(m.content) ? m.content : []))].filter((block) => block.cache_control);
-  check("three markers, the hour first", markers.length === 3 && markers[0].cache_control?.ttl === "1h" && markers.slice(1).every((m) => m.cache_control?.ttl !== "1h"), JSON.stringify(markers.map((m) => m.cache_control)));
+  check("four markers, the hour's two first", markers.length === 4 && markers[0].cache_control?.ttl === "1h" && markers[1].cache_control?.ttl === "1h" && markers.slice(2).every((m) => m.cache_control?.ttl !== "1h"), JSON.stringify(markers.map((m) => m.cache_control)));
 
   // 6. Project scope: the documents apart from what the reader made.
   const whole = corpusLayers(parts);
