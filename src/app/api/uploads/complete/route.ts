@@ -21,7 +21,7 @@ import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
-import { isSheetsFile } from "@/lib/office-file";
+import { isDelimitedText, isSheetsFile } from "@/lib/office-file";
 import { pageRangesSchema } from "@/lib/pdf-pages";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
         throw new Error(describeIngestError(err, t, "file"));
       }
     });
-  } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
+  } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }) && isDelimitedText(bytes, filename))) {
     // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
     // parses with its own parser, no judgment, no model pass.
     const format = parse.sniffOfficeFile(bytes) === "pptx" ? "slides" : "sheets";

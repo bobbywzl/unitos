@@ -16,7 +16,10 @@ export function describeIngestError(
   const name = err instanceof Error ? err.name : "";
   const message = err instanceof Error ? err.message : String(err);
   const text = `${name} ${message}`.toLowerCase();
-  if (message === "Could not extract readable content") return t("api.unreadableContent");
+  // A page with no text may draw it with scripts; a file with no text is empty.
+  if (message === "Could not extract readable content") {
+    return t(kind === "file" ? "api.fileEmpty" : "api.unreadableContent");
+  }
   if (/passwordexception|password/.test(text)) return t("api.pdfEncrypted");
   if (/invalidpdfexception|invalid pdf|formaterror|missingpdfexception|xref|not a pdf/.test(text)) {
     return t("api.pdfDamaged");
@@ -57,5 +60,15 @@ function describeFetchError(err: FetchPageError, t: TFunc): string {
       return t("api.fetchTimeout", { host });
     case "unreachable":
       return t("api.fetchUnreachable", { host });
+    case "scheme":
+      return t("api.fetchScheme");
+    case "private":
+      return t("api.fetchPrivate");
+    case "image":
+      return t("api.fetchImage");
+    case "file":
+      return t("api.fetchFile");
+    case "tooLarge":
+      return t("api.fetchTooLarge");
   }
 }

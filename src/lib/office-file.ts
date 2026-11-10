@@ -40,6 +40,16 @@ export function isSheetsFile(file: { type: string; name: string }): boolean {
   return SHEETS_MIME_TYPES.has(file.type) || SHEETS_EXTENSIONS.test(file.name);
 }
 
+/** Whether bytes that are no zip can be a delimited text file (.csv, .tsv):
+    the name is not .xlsx (a .xlsx is a zip), and the bytes are text — no NUL
+    byte, except in UTF-16, which opens with its mark. Random bytes named
+    .xlsx or .csv are no sheets. */
+export function isDelimitedText(bytes: Uint8Array, name: string): boolean {
+  if (/\.xlsx$/i.test(name)) return false;
+  const wide = (bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff);
+  return wide || !bytes.subarray(0, 8192).includes(0);
+}
+
 /** The format a picked file has by its type or name; null for anything else. */
 export function officeFormatOf(file: { type: string; name: string }): OfficeFormat | null {
   if (isSlidesFile(file)) return "slides";

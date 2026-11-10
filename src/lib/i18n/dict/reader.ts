@@ -161,6 +161,9 @@ const en = {
     "Double-click any paragraph to edit it. Click the title to edit it. Click a figure, or hold and draw a small circle on a table, for its tools.",
   touchHint:
     "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Tap a figure, or hold and draw a small circle on a table, for its tools.",
+  editHintSlides: "Double-click a line of a slide to edit it. Enter saves, Esc puts it back. Click the title to edit it.",
+  editHintSheets: "Double-click a cell to edit it. Enter saves, Esc puts it back. Click the title to edit it.",
+  formulaCell: "This cell is a formula: it computes its value. Edit the cells it reads.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -471,6 +474,9 @@ const zh: Record<keyof typeof en, string> = {
     "双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
   touchHint:
     "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
+  editHintSlides: "双击幻灯片的一行即可编辑。回车保存，Esc 恢复原样。点击标题即可编辑。",
+  editHintSheets: "双击一个单元格即可编辑。回车保存，Esc 恢复原样。点击标题即可编辑。",
+  formulaCell: "这个单元格是公式：它的值由计算得出。请编辑它引用的单元格。",
   documentTitle: "文档标题",
   renameDocumentTitle: "点击编辑标题",
 

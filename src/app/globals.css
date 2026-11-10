@@ -1977,6 +1977,32 @@ ellipse.anchor-flash {
   opacity: 0;
 }
 
+/* A slide's line or a sheet's cell while it is edited in place (SPEC.md
+   §27, replica-edit.ts): a clay ring, the card's ground so the words read
+   over any fill, the text caret. Saving dims the piece until the server
+   answers. */
+[data-replica-editing] {
+  outline: 2px solid var(--clay);
+  outline-offset: 1px;
+  border-radius: 3px;
+  background: var(--card) !important;
+  color: var(--ink) !important;
+  cursor: text;
+  position: relative;
+  z-index: 3;
+}
+.reader-sheet td[data-replica-editing] {
+  overflow: visible;
+  white-space: nowrap;
+}
+[data-replica-saving] {
+  opacity: 0.55;
+}
+.reader-slide p.sp,
+.reader-sheet td {
+  cursor: default;
+}
+
 /* The highlighter's haze on a handwritten page (SPEC.md §16): the band
    blends into the page like a marker, soft at its edge. */
 .page-haze {

@@ -760,6 +760,9 @@ export async function ingestDocx(
   });
   const title = parsed.title ?? filename.replace(/\.docx$/i, "");
   const blocks = parsed.blocks;
+  // A Word file with no words and no pictures adds nothing
+  // (lib/parse/ingest-error.ts says so).
+  if (blocks.length === 0) throw new Error("Could not extract readable content");
   const converted = (await importPageEditorOn())
     ? convertImport({ kind: "docx", title, titleFromOriginal: !parsed.titleFromFile, blocks, ...pageLook(parsed) })
     : null;

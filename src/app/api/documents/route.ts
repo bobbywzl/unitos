@@ -24,7 +24,7 @@ import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
-import { isSheetsFile } from "@/lib/office-file";
+import { isDelimitedText, isSheetsFile } from "@/lib/office-file";
 import { pageRangesSchema } from "@/lib/pdf-pages";
 
 // A split add parses one very long page and saves several documents; the AI
@@ -71,7 +71,9 @@ export async function GET() {
 const urlSchema = z.object({
   // The folder of the project the new document lands in (SPEC.md §6).
   folderId: z.string().min(1).nullable().optional(),
-  url: z.url(),
+  // Any words: the route answers a line that is no web link in plain words
+  // (api.fetchScheme), not with "Validation failed".
+  url: z.string().trim().min(1).max(8000),
   notebookId: z.string().min(1),
   split: z.boolean().default(false),
   confirmDuplicate: z.boolean().default(false),
@@ -114,7 +116,7 @@ function officeFormat(
   const office = parse.sniffOfficeFile(bytes);
   if (office === "pptx") return "slides";
   if (office === "xlsx") return "sheets";
-  if (!parse.isZipBytes(bytes) && isSheetsFile(file)) return "sheets";
+  if (!parse.isZipBytes(bytes) && isSheetsFile(file) && isDelimitedText(bytes, file.name)) return "sheets";
   return null;
 }
 
@@ -298,6 +300,10 @@ export async function POST(req: Request) {
 
   const { data, error } = await parseBody(req, urlSchema);
   if (error) return error;
+  const link = URL.canParse(data.url) ? new URL(data.url) : null;
+  if (!link || (link.protocol !== "http:" && link.protocol !== "https:")) {
+    return NextResponse.json({ error: t("api.fetchScheme") }, { status: 400 });
+  }
   const notebook = await db.notebook.findUnique({ where: { id: data.notebookId } });
   if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   const access = await notebookAccess(data.notebookId, "editor");
