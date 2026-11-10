@@ -11,7 +11,7 @@ import { isClaudeId, modelCall, modelConfigured, type Effort, type ModelCall } f
 // selection's tools and its assistant chat, the note assistant, and the
 // assistant's commands. With the web on, the turn runs on the assistant's
 // own model with its provider's built-in search: Claude's web search on the
-// assistant's Claude model (Claude Haiku 5.5), or Google Search while Gemini
+// assistant's Claude model (Claude Sonnet 5.5), or Google Search while Gemini
 // runs the assistant (GEMINI_ROUTING). The search runs inside the call, and
 // the pages it read come back as url sources, which the route lists under
 // the answer (WebSources). With neither, the turn runs on the web feature's

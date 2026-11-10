@@ -15,7 +15,7 @@ import { formatTimeRange } from "@/lib/video/types";
 // The reference list is appended so in-text citations stay explainable — pass
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
-type PrefixBlock = Pick<Block, "id" | "type" | "text"> &
+export type PrefixBlock = Pick<Block, "id" | "type" | "text"> &
   Partial<Pick<Block, "startTime" | "endTime" | "page">> & { cell?: unknown };
 
 /** How a document's prefix names a row's page (SPEC.md §30). */

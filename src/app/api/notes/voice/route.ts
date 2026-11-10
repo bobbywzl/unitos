@@ -6,7 +6,7 @@ import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { documentPrefix, loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
+import { loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
@@ -15,6 +15,7 @@ import { voicePrompt } from "@/lib/prompts/voice";
 import { geminiConfigured } from "@/lib/video/gemini";
 import { failureLine } from "@/app/api/assistant/failure-line";
 import { transcribe, whisperConfigured } from "@/lib/video/transcribe";
+import { documentLayer } from "@/lib/assistant/context";
 
 export const maxDuration = 180;
 
@@ -131,11 +132,7 @@ export async function POST(req: Request) {
         const messages: ModelMessage[] = [
           ...(document
             ? [
-                {
-                  role: "system" as const,
-                  content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
-                  providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-                },
+                documentLayer(document.title, document.blocks, document.references, pageNames(document)),
               ]
             : []),
           { role: "user", content: userPrompt },

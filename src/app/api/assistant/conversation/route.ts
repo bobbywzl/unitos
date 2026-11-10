@@ -159,7 +159,22 @@ const saveSchema = z.object({
   // words it was started on. Set on the first save; the note carries them.
   sideChatOf: z.string().min(1).optional(),
   quote: z.string().min(1).max(2000).optional(),
+  // The document open when the conversation was started (SPEC.md §7): the
+  // Annotations tab lists the conversation on that document alone. Set on
+  // the first save, and on the first save of a conversation from before
+  // the field existed; a document not in the project counts as none.
+  documentId: z.string().min(1).nullish(),
 });
+
+/** The document id when the document is in the project, else null. */
+async function attachedDocumentId(notebookId: string, documentId: string | null | undefined) {
+  if (!documentId) return null;
+  const attached = await db.notebookDocument.findUnique({
+    where: { notebookId_documentId: { notebookId, documentId } },
+    select: { documentId: true },
+  });
+  return attached ? documentId : null;
+}
 
 export async function POST(req: Request) {
   const { data, error } = await parseBody(req, saveSchema);
@@ -187,7 +202,10 @@ export async function POST(req: Request) {
       createdById: access.user.id,
       section: { notebookId: data.notebookId },
     };
-    const current = await db.note.findFirst({ where: mine, select: { content: true, updatedAt: true } });
+    const current = await db.note.findFirst({
+      where: mine,
+      select: { content: true, updatedAt: true, documentId: true, sideChatOfId: true },
+    });
     if (current) {
       const changed = (note: { content: string; updatedAt: Date }) =>
         NextResponse.json(
@@ -200,9 +218,15 @@ export async function POST(req: Request) {
       }
       // The stamp is set here, later than the base, so it names this write alone.
       const stamp = new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1));
+      // A conversation from before its document was recorded takes the
+      // document it is continued in; a side chat records none.
+      const documentId =
+        current.documentId === null && current.sideChatOfId === null
+          ? await attachedDocumentId(data.notebookId, data.documentId)
+          : current.documentId;
       const updated = await db.note.updateMany({
         where: { ...mine, updatedAt: current.updatedAt },
-        data: { content: transcript, updatedAt: stamp },
+        data: { content: transcript, updatedAt: stamp, documentId },
       });
       if (updated.count === 0) {
         const now = await db.note.findFirst({ where: mine, select: { content: true, updatedAt: true } });
@@ -228,6 +252,7 @@ export async function POST(req: Request) {
       order: count,
       sideChatOfId: data.sideChatOf ?? null,
       sideChatQuote: data.sideChatOf ? (data.quote ?? "") : null,
+      documentId: data.sideChatOf ? null : await attachedDocumentId(data.notebookId, data.documentId),
     },
     select: { id: true, updatedAt: true },
   });

@@ -1142,6 +1142,9 @@ function AssistantPanelBody({
             // A side chat belongs to the conversation it was started from.
             sideChatOf: side ? noteIdRef.current : undefined,
             quote: side ? side.quote : undefined,
+            // The open document: the conversation lists in its Annotations
+            // tab alone (SPEC.md §7).
+            documentId: documentId ?? undefined,
             turns: turnsToSave.map((turn) => ({
               role: turn.role,
               content: turn.content.slice(0, TURN_MAX_CHARS),
