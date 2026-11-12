@@ -11,6 +11,7 @@ export const AI_ROUTE = new RegExp(
       "assistant(/.*)?",
       "notes/gist",
       "notes/voice",
+      "speech/transcribe",
       "notes/organize",
       "notes/[^/]+/assistant",
       "documents/[^/]+/(glossary|translate|convert|reparse|transcribe|finish|article|figure|speakers)",

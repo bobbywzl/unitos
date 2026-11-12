@@ -226,6 +226,9 @@ export function FeedbackButton() {
   useEscapeLayer(open, close);
 
   if (pathname.startsWith("/admin")) return null;
+  // The phone page (SPEC.md §33): its note box and its tab bar fill the
+  // foot of the screen, where the pill would lie on them.
+  if (pathname === "/phone") return null;
 
   // Wire values stay "bug" | "idea" | "other"; only the chip label translates.
   const categoryLabel = {

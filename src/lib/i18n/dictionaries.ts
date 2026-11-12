@@ -18,6 +18,7 @@ import { plans } from "@/lib/i18n/dict/plans";
 import { reader } from "@/lib/i18n/dict/reader";
 import { settings } from "@/lib/i18n/dict/settings";
 import { signin } from "@/lib/i18n/dict/signin";
+import { phone } from "@/lib/i18n/dict/phone";
 import { stitch } from "@/lib/i18n/dict/stitch";
 import { structure } from "@/lib/i18n/dict/structure";
 import { video } from "@/lib/i18n/dict/video";
@@ -49,6 +50,7 @@ const NAMESPACES = {
   panes,
   plans,
   stitch,
+  phone,
   structure,
   video,
   settings,
