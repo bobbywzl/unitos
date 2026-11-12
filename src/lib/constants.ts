@@ -8,6 +8,9 @@ export const SESSION_COOKIE = "dissect-session";
 export const STATE_COOKIE = "dissect-oauth-state";
 // Apple posts the callback cross-site (response_mode form_post), so its state
 // cookie needs SameSite=None and its own name.
+// Set beside the state cookie when the app started the sign-in (SPEC.md §33,
+// lib/app-handoff.ts): the challenge the handoff is bound to.
+export const APP_SIGNIN_COOKIE = "dissect-app-signin";
 export const APPLE_STATE_COOKIE = "dissect-apple-state";
 // The Link Google Drive code flow (SPEC.md §14): its own state cookie so a
 // concurrent sign-in cannot clobber it, plus the path to return to after the

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { setAppChallenge, validChallenge } from "@/lib/app-handoff";
 import { APPLE_STATE_COOKIE, appleAuthUrl, appleEnabled, appOrigin, newState } from "@/lib/auth";
 
 // Start the Apple sign-in flow: redirect to Apple's consent screen. The state
@@ -15,5 +16,9 @@ export async function GET(req: Request) {
     path: "/",
     maxAge: 600,
   });
+  // The app's sign-in sheet (SPEC.md §33): the callback hands the sign-in
+  // back to the app instead of setting a session in the sheet.
+  const app = new URL(req.url).searchParams.get("app");
+  if (validChallenge(app)) setAppChallenge(res, app, true);
   return res;
 }

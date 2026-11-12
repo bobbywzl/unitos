@@ -103,6 +103,9 @@ function gate(request: NextRequest): NextResponse {
     pathname === "/reset" ||
     pathname === "/offline" ||
     pathname === "/sw.js" ||
+    // The app's universal-links file (SPEC.md §33): iOS fetches it with no
+    // session. It names the app and two addresses and nothing of an account.
+    pathname === "/.well-known/apple-app-site-association" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname === "/billing" ||
