@@ -36,6 +36,10 @@ Notes-centric web app for deep reading. Documents attach to notebooks; every AI 
 - The onboarding funnel: how far new visitors get from the sign-in page to a subscription (sign-in page, account, dashboard, reader, plans, order, checkout, subscribed), one browser joined to the account it makes; the admin funnel page (`/admin/funnel`) shows the visitors that reached each step, where each stopped, new visitors by day, and the latest visitors
 - Click telemetry: every click on a reader control records its surface (top bar, sidebar, AI toolbar, article menu, reader, notes tray) and control; the admin clicks page (`/admin/clicks`) shows clicks per day by surface, per surface, per control, and per account
 - Settings (`/settings`): account + sign out, language, light/dark/system theme, context, service status
+- The app for iPhone, iPad, and Mac (`apps/apple`, SPEC.md §33): one Xcode project, a window onto the site. Mac is the web app in its own window; iPad adds the Apple Pencil; iPhone opens on the phone page. `apps/apple/README.md` has the steps to build it
+- Jot: with a pen (the Apple Pencil on an iPad), write over a document in the reader. A jotting stays with the paragraph it is written on; a finger still scrolls and selects; the bar holds the pen, the eraser, five colors, two widths, and Undo
+- Finger selection: on a touch screen, a finger drawn along a line selects its words and the AI toolbar opens
+- The phone page (`/phone`): Notes and Assistant with no side bar — type or speak a note into a section, and ask the assistant about the project
 
 ## Stack
 

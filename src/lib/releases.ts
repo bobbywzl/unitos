@@ -66,6 +66,14 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20261105Body",
     features: [],
   },
+  {
+    // Jottings and the finger selection (SPEC.md §33): the Jot button at the reader's foot glows where it shows.
+    id: "2026-11-12",
+    date: "2026-11-12",
+    titleKey: "works.release20261112Title",
+    bodyKey: "works.release20261112Body",
+    features: ["jot"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */
