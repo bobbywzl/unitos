@@ -1160,3 +1160,32 @@ model KeptChat {
   @@unique([userId, notebookId, place])
   @@index([notebookId])
 }
+
+// A jotting (SPEC.md §33): one stroke of handwriting an account drew with a
+// pen over a document in the reader, in one project. It is keyed to a block
+// (blockId; blockOrder is where the block stood among the document's blocks,
+// the place the stroke takes when the block is gone) and its points are in
+// hundredths of the block's width from the block's top left corner, so it
+// stays with its words. The browser names the row (id), so a save sent twice
+// writes it once. Erasing sets erasedAt and never deletes the row: Undo
+// brings the stroke back. Soft references like KeptChat's: no cascade
+// reaches a jotting, and it belongs to one project, so a document shared by
+// several accounts (one row, deduped) never shows one account's jottings to
+// another project.
+model Jotting {
+  id         String    @id
+  userId     String
+  notebookId String
+  documentId String
+  blockId    String
+  blockOrder Int
+  layer      String? // null | "core" (drawn on the block's core, SPEC.md §28)
+  color      String // "ink" | "clay" | "sage" | "gold" | "plum"
+  width      Float
+  aspect     Float // the block's height when drawn, in the same units
+  points     Json // [[x, y, pressure], ...]
+  createdAt  DateTime  @default(now())
+  erasedAt   DateTime?
+
+  @@index([notebookId, documentId])
+}

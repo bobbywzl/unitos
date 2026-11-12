@@ -127,6 +127,7 @@ import { Collapse, Presence } from "@/components/presence";
 import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { useUnderDocsHeader } from "@/components/reader/under-docs-header";
+import { JottingLayer } from "@/components/reader/jotting-layer";
 import { hasReadableBlocks, ReadAloudMark, readPieces, useReadAloud } from "@/components/reader/read-aloud";
 import { OPEN_STRUCTURE_EVENT } from "@/components/reader/open-structure";
 import { ArticleErrors } from "@/components/reader/article-errors";
@@ -13204,6 +13205,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
+      {/* Jottings (SPEC.md §33): the pen's handwriting over the pane, and the
+          Jot bar at the pane's foot. An embedded layer has none: the pane
+          around it carries them. */}
+      {!embedded && (
+        <JottingLayer
+          key={`${notebookId}:${documentId}`}
+          container={containerRef}
+          documentId={documentId}
+          notebookId={notebookId}
+          canEdit={canEdit}
+          myId={myId}
+          hidden={distillOpen || conversationView !== null}
+        />
+      )}
     </div>
       {/* The hint where the article's margin cannot hold it (a tablet, a
           phone, a narrow window): a row under the pane, which takes its
