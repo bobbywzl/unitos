@@ -26,7 +26,24 @@ import { db } from "@/lib/db";
 // purpose "app" (the row every other sign-in link uses: hashed, single-use,
 // expiring), so the email routes, which ask for their own purpose, refuse it.
 
+//
+// The switch. `unitos://` is a custom scheme, and any app on a device can
+// claim one. Someone who got a person to install such an app, and then to
+// follow a link to /api/auth/login?app=<their own challenge> and sign in,
+// could receive the token there and redeem it with their own verifier. So
+// the handoff is off until APP_SIGNIN=on is set, which the owner does when
+// the app is released: with it off, ?app= is ignored and every sign-in door
+// does what it always did. The stronger door, for a later version of the
+// app, is an https address the app claims through its associated domain
+// (iOS 17.4, ASWebAuthenticationSession's https callback), which no other
+// app can claim.
+
 const HANDOFF_SECONDS = 120;
+
+/** Whether the app's sign-in handoff is offered (APP_SIGNIN=on). */
+export function appSignInOn(): boolean {
+  return process.env.APP_SIGNIN === "on";
+}
 const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
 
 /** A challenge as the app sends it: 32 bytes of SHA-256 in base64url. */
@@ -63,6 +80,7 @@ export async function createAppHandoff(email: string, challenge: string): Promis
 /** Redeem a handoff: the email it was made for, once, within two minutes,
     and only with the verifier of the challenge it was made with. */
 export async function redeemAppHandoff(token: string, verifier: string): Promise<string | null> {
+  if (!appSignInOn()) return null;
   if (!/^[0-9a-f]{64}$/.test(token) || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) return null;
   const row = await db.emailConfirmation.findUnique({
     where: { tokenHash: rowHash(token, challengeOf(verifier)) },
@@ -75,13 +93,16 @@ export async function redeemAppHandoff(token: string, verifier: string): Promise
 
 /** The challenge the sign-in started with, when the app started it. */
 export function appChallenge(req: Request): string | null {
+  if (!appSignInOn()) return null;
   const value = req.headers.get("cookie")?.match(new RegExp(`(?:^|; )${APP_SIGNIN_COOKIE}=([^;]+)`))?.[1];
   return validChallenge(value) ? value : null;
 }
 
-/** Remember that the app started this sign-in. `crossSite`: Apple answers
-    with a cross-site POST, which carries a SameSite=None cookie only. */
-export function setAppChallenge(res: NextResponse, challenge: string, crossSite: boolean): void {
+/** Remember that the app started this sign-in, when the handoff is on and
+    the challenge is one. `crossSite`: Apple answers with a cross-site POST,
+    which carries a SameSite=None cookie only. */
+export function setAppChallenge(res: NextResponse, challenge: string | null, crossSite: boolean): void {
+  if (!appSignInOn() || !validChallenge(challenge)) return;
   res.cookies.set(APP_SIGNIN_COOKIE, challenge, {
     httpOnly: true,
     secure: crossSite || process.env.NODE_ENV === "production",

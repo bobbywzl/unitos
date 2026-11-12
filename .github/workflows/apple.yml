@@ -1,6 +1,6 @@
 # Builds the app (apps/apple, SPEC.md §33) for iPhone and iPad (the
 # simulator) and for Mac (Mac Catalyst), with no signing: the check that the
-# Swift compiles. Runs only when the app's own files change.
+# Swift compiles. -quiet prints the warnings and the errors only. Runs only when the app's own files change.
 name: Apple app
 
 on:
@@ -22,18 +22,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Xcode version
         run: xcodebuild -version
       - name: Build for iPhone and iPad
         run: |
-          set -o pipefail
-          xcodebuild -project apps/apple/Unitos.xcodeproj -scheme Unitos -configuration Debug \
+          xcodebuild -quiet -project apps/apple/Unitos.xcodeproj -scheme Unitos -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build | tail -n 200
+            CODE_SIGNING_ALLOWED=NO build
       - name: Build for Mac
         run: |
-          set -o pipefail
-          xcodebuild -project apps/apple/Unitos.xcodeproj -scheme Unitos -configuration Debug \
+          xcodebuild -quiet -project apps/apple/Unitos.xcodeproj -scheme Unitos -configuration Debug \
             -destination 'generic/platform=macOS,variant=Mac Catalyst' \
-            CODE_SIGNING_ALLOWED=NO build | tail -n 200
+            CODE_SIGNING_ALLOWED=NO build

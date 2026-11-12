@@ -12,6 +12,7 @@ import { challengeOf, createAppHandoff, redeemAppHandoff, validChallenge } from 
 import { confirmEmailToken } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+// The handoff is off until the owner turns it on (lib/app-handoff.ts).
 const EMAIL = "handoff-check@test.local";
 let failed = 0;
 function check(name: string, ok: boolean) {
@@ -26,6 +27,10 @@ async function main() {
   check("a challenge of another shape is refused", !validChallenge("abc") && !validChallenge(`${challenge}=`));
 
   let token = await createAppHandoff(EMAIL, challenge);
+  delete process.env.APP_SIGNIN;
+  check("with the switch off nothing redeems", (await redeemAppHandoff(token, verifier)) === null);
+  process.env.APP_SIGNIN = "on";
+  check("with the switch off the handoff was not used up", (await db.emailConfirmation.count({ where: { email: EMAIL, purpose: "app" } })) === 1);
   check("a wrong verifier redeems nothing", (await redeemAppHandoff(token, randomBytes(32).toString("base64url"))) === null);
   check("the email routes refuse a handoff token", (await confirmEmailToken(token, "signup")) === null);
   check("the right verifier redeems the email", (await redeemAppHandoff(token, verifier)) === EMAIL);

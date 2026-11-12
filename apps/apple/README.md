@@ -44,9 +44,15 @@ Xcode 16 or later.
   then serves `/.well-known/apple-app-site-association`), and in Xcode add
   the capability Associated Domains with `applinks:<the site's host>`. The
   capability needs a paid developer team, so the project ships without it.
-- **Google sign-in.** Nothing to add: the app opens the site's own
-  `/api/auth/login?app=…` in the system sign-in sheet, and the redirect
-  address registered with Google stays the site's.
+- **Google and Apple sign-in.** Set `APP_SIGNIN=on` on the site. The app
+  opens the site's own `/api/auth/login?app=…` in the system sign-in sheet,
+  and the site hands the sign-in back at `unitos://signed-in`. The redirect
+  address registered with Google stays the site's. The switch is off by
+  default because any app on a device can claim a custom scheme
+  (`src/lib/app-handoff.ts` says what that allows); a later version should
+  move the way back to an https address claimed through the associated
+  domain. With the switch off, email and password sign-in still work in
+  the app.
 
 ## What the app does not do yet
 
