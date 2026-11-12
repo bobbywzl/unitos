@@ -103,6 +103,16 @@ const TAB_TITLES: Record<Tab, TKey> = {
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// The peek (md+): how long the pointer rests on the rail before the folded
+// tray draws, how long off the rail and the tray before it folds, and the
+// tray column's slide (globals.css .tray-column). The column lies over the
+// reader, its right edge at the rail's left (the rail is 52px wide), one
+// layer over the page editor's header (z-index 35, docs/css/page.css) and
+// under the app's menus (40) and dialogs (50).
+const PEEK_OPEN_MS = 140;
+const PEEK_CLOSE_MS = 260;
+const PEEK_SLIDE_MS = 320;
+const PEEK_COLUMN = "md:absolute md:inset-y-0 md:right-[52px] md:z-[36] md:shadow-[-14px_0_36px_-14px_rgb(0_0_0/0.22)]";
 // A row of the bar's More menu (below md).
 const MORE_ROW =
   "flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800";
@@ -804,6 +814,57 @@ export function Workspace({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [needsRoom]);
 
+  // The peek (SPEC.md §6), md+: the pointer on the rail of a folded tray
+  // draws the tray over the reader, on the tab it was left on, and the
+  // reader keeps its width. The pointer off the rail and the tray folds it
+  // again. A press or the focus in the tray, or a press on a rail button,
+  // opens the tray for good, as the chevron does. "closing": the tray is
+  // sliding shut, still over the reader. No peek while a button is held (a
+  // drag across the rail) or while the tray is folded for a floating note.
+  const [peek, setPeek] = useState<"open" | "closing" | null>(null);
+  if (!collapsed && peek !== null) setPeek(null);
+  const peekTimer = useRef<number | null>(null);
+  const clearPeekTimer = () => {
+    if (peekTimer.current !== null) window.clearTimeout(peekTimer.current);
+    peekTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (peekTimer.current !== null) window.clearTimeout(peekTimer.current);
+    },
+    [],
+  );
+  function peekEnter(e: React.PointerEvent) {
+    if (e.pointerType !== "mouse" || phone) return;
+    clearPeekTimer();
+    if (!collapsed || needsRoom || peek === "open" || e.buttons !== 0) return;
+    peekTimer.current = window.setTimeout(() => setPeek("open"), PEEK_OPEN_MS);
+  }
+  function peekLeave(e: React.PointerEvent) {
+    if (e.pointerType !== "mouse" || phone) return;
+    clearPeekTimer();
+    if (peek === null) return;
+    // A press held as the pointer leaves is a drag out of the tray (the
+    // resize bar, a note): the press opened the tray already.
+    peekTimer.current = window.setTimeout(
+      () => {
+        setPeek((now) => (now === null ? null : "closing"));
+        peekTimer.current = window.setTimeout(() => setPeek((now) => (now === "closing" ? null : now)), PEEK_SLIDE_MS);
+      },
+      peek === "open" ? PEEK_CLOSE_MS : 0,
+    );
+  }
+  function pinPeek() {
+    if (peek !== "open" || !collapsed) return;
+    clearPeekTimer();
+    setPeek(null);
+    setCollapsed(false);
+    rememberTray({ collapsed: false, tab });
+  }
+  const peekOpen = collapsed && peek === "open";
+  // The rail's button for the tab a peek shows reads pressed, as for an open tray.
+  const railButton = (which: Tab) => (isOpen(which) || (peekOpen && tab === which) ? RAIL_BUTTON_ON : RAIL_BUTTON);
+
   return (
     // print: the shell flattens to plain flow so the whole document prints,
     // not one screen of the scroll pane; chrome and trays hide.
@@ -963,17 +1024,24 @@ export function Workspace({
         </div>
 
         {/* The tray column: on md+ it slides shut to zero width when collapsed
-            and the reader takes the room; below md it is the bottom sheet's
+            and the reader takes the room; a peek draws it over the reader,
+            beside the rail, and the reader keeps its width; below md it is the bottom sheet's
             row under the reader, SHEET_HEIGHT tall while mobileTray is set
             and empty otherwise. In a split view the width changes at once —
             the strip's scroll is the motion. */}
         <div
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
-          inert={(collapsed && !mobileTray) || undefined}
+          inert={(collapsed && !peekOpen && !mobileTray) || undefined}
+          onPointerEnter={peekEnter}
+          onPointerLeave={peekLeave}
+          onPointerDownCapture={pinPeek}
+          onFocusCapture={pinPeek}
           className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
-            resizing || split ? "tray-column-resizing" : ""
-          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"} ${mobileTray ? SHEET_HEIGHT : ""}`}
+            resizing || (split && peek === null) ? "tray-column-resizing" : ""
+          } ${collapsed && !peekOpen ? "md:w-0" : "md:w-[var(--tray-w)]"} ${
+            collapsed && peek !== null ? PEEK_COLUMN : ""
+          } ${mobileTray ? SHEET_HEIGHT : ""}`}
         >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
@@ -1050,7 +1118,7 @@ export function Workspace({
                   documents={notebook.documents}
                   scope={noteScope}
                   onScope={setNoteScope}
-                  visible={isOpen("notes")}
+                  visible={isOpen("notes") || (peekOpen && tab === "notes")}
                 />
               </div>
             )}
@@ -1108,6 +1176,8 @@ export function Workspace({
           data-track-surface="sidebar"
           data-nudge="rail"
           aria-label={t("panes.workspace")}
+          onPointerEnter={peekEnter}
+          onPointerLeave={peekLeave}
           className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:relative md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
         >
           <button
@@ -1131,7 +1201,7 @@ export function Workspace({
               aria-label={t("panes.assistant")}
               data-tip={t("panes.assistantTabTitle")}
               aria-current={isOpen("assistant")}
-              className={isOpen("assistant") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+              className={railButton("assistant")}
             >
               <SparkleIcon />
             </button>
@@ -1154,7 +1224,7 @@ export function Workspace({
             aria-label={t("panes.notes")}
             data-tip={pending.length > 0 ? t("panes.pendingCountTitle") : t("panes.notesTabTitle")}
             aria-current={isOpen("notes")}
-            className={isOpen("notes") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("notes")}
           >
             <NotesIcon />
             {notesBloom > 0 && (
@@ -1176,7 +1246,7 @@ export function Workspace({
             aria-label={t("panes.annotations")}
             data-tip={t("panes.annotationsTabTitle")}
             aria-current={isOpen("annotations")}
-            className={isOpen("annotations") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("annotations")}
           >
             <CommentIcon />
           </button>
@@ -1187,7 +1257,7 @@ export function Workspace({
             aria-label={t("panes.distill")}
             data-tip={t("panes.distillTabTitle")}
             aria-current={isOpen("distill")}
-            className={isOpen("distill") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("distill")}
           >
             <QuoteIcon />
           </button>

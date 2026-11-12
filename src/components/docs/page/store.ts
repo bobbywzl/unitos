@@ -71,8 +71,6 @@ type PageState = {
 type Listener = () => void;
 
 export type PageStore = {
-  /** The reader chose to open or close the outline on this document before. */
-  outlineChosen: boolean;
   get: () => PageState;
   set: (patch: Partial<PageState>) => void;
   subscribe: (listener: Listener) => () => void;
@@ -95,7 +93,10 @@ export type PageStore = {
 
 const RULER_KEY = "unitos-docs-ruler";
 const PRINT_LAYOUT_KEY = "unitos-docs-print-layout";
-const OUTLINE_KEY = "unitos-docs-outline";
+// The reader's own open or close of the outline. The key before it
+// ("unitos-docs-outline") also held the opens a new, empty document made by
+// itself, so it is not read: those were not the reader's choice.
+const OUTLINE_KEY = "unitos-docs-outline-choice";
 const OUTLINE_WIDTH_KEY = "unitos-docs-outline-width";
 const TEXT_WIDTH_KEY = "unitos-docs-text-width";
 
@@ -124,8 +125,8 @@ const stores = new WeakMap<Editor, PageStore>();
 function createStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
   const width = readPref(TEXT_WIDTH_KEY);
   const outlineWidth = Number(readPref(OUTLINE_WIDTH_KEY));
-  // The outline's open state is kept per document; a new document opens it
-  // (the canvas decides, it knows whether the document is new).
+  // The outline is closed until the reader opens it; the reader's choice is
+  // kept per document.
   const outlinePref = readPref(`${OUTLINE_KEY}:${documentId}`);
   let state: PageState = {
     documentId,
@@ -171,7 +172,6 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
   // Printing turns the print layout on for the length of the print.
   let printing = false;
   const store: PageStore = {
-    outlineChosen: outlinePref !== null,
     get: () => state,
     set: (patch) => {
       const next = { ...state, ...patch };
