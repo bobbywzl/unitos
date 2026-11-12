@@ -274,6 +274,18 @@ select,
   border-bottom: 2px dashed color-mix(in srgb, var(--sage-600) 75%, transparent);
 }
 
+/* The finger selection (SPEC.md §33, components/reader/finger-select.tsx):
+   on a pane that offers it, a text block scrolls up and down under a finger
+   and hands a sideways drag to the page, which selects the words the finger
+   passes. Only the blocks that are lines of words: a table, a code block, an
+   equation, and a figure keep every touch gesture, so one that scrolls
+   sideways still does. In the page editor the rule sits on the page's own
+   paragraphs, headings, and lists, not on a table's cells. */
+[data-reader-root][data-finger-select] .reader-block:is(p, h1, h2, h3, h4, h5, h6, span, .whitespace-pre-wrap),
+[data-reader-root][data-finger-select] .docs-prose > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote) {
+  touch-action: pan-y pinch-zoom;
+}
+
 /* Highlights tint the paper behind the words; they never repaint the words.
    Browsers default <mark> to black-on-yellow, which is unreadable on the dark
    theme's highlight backgrounds — inherit keeps body text its own color, and
