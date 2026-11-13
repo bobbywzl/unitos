@@ -49,6 +49,7 @@ export type GatewayProvider =
   | "groq"
   | "openai"
   | "deepgram"
+  | "xai"
   | "deepl"
   | "typesafe";
 
@@ -60,6 +61,7 @@ const KEY_ENV: Record<GatewayProvider, string> = {
   groq: "GROQ_API_KEY",
   openai: "OPENAI_API_KEY",
   deepgram: "DEEPGRAM_API_KEY",
+  xai: "XAI_API_KEY",
   deepl: "DEEPL_API_KEY",
   typesafe: "TYPESAFE_API_KEY",
 };
@@ -110,10 +112,11 @@ export function keyFor(provider: GatewayProvider): string | undefined {
 
 /** The provider's features are on: the gateway is set, or the provider's
     own key is. Under the gateway the provider's key lives there; a call the
-    gateway cannot serve fails like any provider error. Deepgram never takes
-    the gateway, so its own key decides. */
+    gateway cannot serve fails like any provider error. Deepgram and xAI (the
+    voice model, lib/video/grok.ts) never take the gateway, so their own keys
+    decide. */
 export function providerConfigured(provider: GatewayProvider): boolean {
-  if (provider === "deepgram") return Boolean(providerKey(provider));
+  if (provider === "deepgram" || provider === "xai") return Boolean(providerKey(provider));
   return gatewayConfigured() || Boolean(providerKey(provider));
 }
 

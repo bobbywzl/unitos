@@ -34,7 +34,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     heading: "legal.pAiHeading",
     blocks: [
       { p: "legal.pAiIntro" },
-      { ul: ["legal.pAiAnthropic", "legal.pAiMoonshot", "legal.pAiOpenAI", "legal.pAiGoogle", "legal.pAiYouTube"] },
+      { ul: ["legal.pAiAnthropic", "legal.pAiMoonshot", "legal.pAiOpenAI", "legal.pAiXai", "legal.pAiGoogle", "legal.pAiYouTube"] },
       { p: "legal.pAiTraining" },
     ],
   },

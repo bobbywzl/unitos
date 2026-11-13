@@ -78,6 +78,7 @@ export default async function AdminPage() {
     { label: "MOONSHOT_API_KEY", description: t("admin.svcKimi"), state: viaGateway(Boolean(providerKey("moonshot"))) },
     { label: "ANTHROPIC_API_KEY", description: t("admin.svcClaude"), state: viaGateway(Boolean(providerKey("anthropic"))) },
     { label: "GEMINI_API_KEY", description: t("admin.svcGemini"), state: viaGateway(Boolean(providerKey("gemini"))) },
+    { label: "XAI_API_KEY", description: t("admin.svcVoice"), state: providerKey("xai") ? "set" : "unset" },
     {
       label: "DEEPGRAM_API_KEY · GROQ_API_KEY · OPENAI_API_KEY",
       description: t("admin.svcTranscribe"),

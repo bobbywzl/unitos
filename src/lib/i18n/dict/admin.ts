@@ -287,7 +287,9 @@ const en = {
   svcGateway: "The AI gateway: every AI call, the provider keys, rate limits, spend",
   svcGatewayAdmin: "The gateway's master key: the gateway page at /admin/gateway reads with it",
   svcGemini: "Gemini 3.8 Flash: the assistant. Gemini 3.7 Flash: video transcription, clip descriptions, speakers",
-  svcTranscribe: "Transcription of uploads and voice notes; OpenAI also reads aloud. Deepgram never takes the gateway",
+  svcVoice:
+    "Grok Voice Transcribe 2.0, the voice model: writes out uploads, voice commands, spoken notes, and voice typing. A direct call. Unset, the providers on the next row do it and voice typing uses the browser's speech service",
+  svcTranscribe: "Transcription when the voice model is unset or fails; OpenAI also reads aloud. Deepgram never takes the gateway",
   svcDeepl: "Translation",
   svcViaGateway: "On the gateway",
   usageGatewayDesc:
@@ -725,7 +727,9 @@ const zh: Record<keyof typeof en, string> = {
   svcGateway: "AI 网关：所有 AI 调用、提供商密钥、速率限制、支出",
   svcGatewayAdmin: "网关的主密钥：位于 /admin/gateway 的网关页面用它读取",
   svcGemini: "Gemini 3.8 Flash：助手。Gemini 3.7 Flash：视频逐字稿、片段描述、说话人",
-  svcTranscribe: "上传文件和语音笔记的逐字稿；OpenAI 也用于朗读。Deepgram 从不经过网关",
+  svcVoice:
+    "Grok Voice Transcribe 2.0，语音模型：把上传文件、语音指令、口述笔记和语音输入写成文字。直接调用。未设置时由下一行的提供商完成，语音输入使用浏览器的语音服务",
+  svcTranscribe: "语音模型未设置或失败时的逐字稿；OpenAI 也用于朗读。Deepgram 从不经过网关",
   svcDeepl: "翻译",
   svcViaGateway: "在网关上",
   usageGatewayDesc:

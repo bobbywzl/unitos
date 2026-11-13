@@ -54,6 +54,9 @@ const MODEL_PRICING: Record<string, Price> = {
   // Deepgram: per-second transcription — its caller passes costUsd directly
   // (lib/video/deepgram.ts). inputTokens on these rows is seconds of audio.
   "nova-3": price(0, 0),
+  // xAI Grok Voice Transcribe: per-second transcription — its caller passes
+  // costUsd directly (lib/video/grok.ts). inputTokens is seconds of audio.
+  "grok-voice-transcribe-2.0": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
   // Claude Haiku 5.5: $0.10 in, $0.50 out per 1M tokens up to a 100K-token
   // prompt ($0.50 and $2.50 beyond it); the family rule below is Haiku 4.5's.
@@ -190,6 +193,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/^(gemini|gemini-files)/, "google"],
   [/^(whisper-large|distil-whisper)/, "groq"],
   [/^nova-/, "deepgram"],
+  [/^grok-/, "xai"],
   [/^(whisper-1|gpt-|text-embedding-|o[0-9])/, "openai"],
   [/^edge-tts$/, "microsoft"],
   [/^deepl$/, "deepl"],

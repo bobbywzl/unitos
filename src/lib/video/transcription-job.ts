@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
 import { transcriptLines } from "@/lib/video/tidy";
-import { deepgramConfigured } from "@/lib/video/deepgram";
 import { geminiConfigured } from "@/lib/video/gemini";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
 import {
@@ -20,8 +19,9 @@ import {
   type TranscribeOptions,
   type TranscribeSource,
   type TranscriptSegment,
+  transcriptionConfigured,
   TRANSCRIPTION_KEYS_UNSET,
-  whisperConfigured,
+  wholeFileConfigured,
 } from "@/lib/video/transcribe";
 import { detectSpeakers, nameSpeakers } from "@/lib/video/speakers";
 
@@ -90,15 +90,15 @@ export async function runTranscription(
     }
   } else {
     // Uploads need a provider key; the YouTube ladder has a keyless rung.
-    if (!deepgramConfigured() && !whisperConfigured() && !geminiConfigured()) {
+    if (!transcriptionConfigured()) {
       return { ok: false, status: 503, error: TRANSCRIPTION_KEYS_UNSET };
     }
-    // What a big file can still be transcribed by: Deepgram takes the whole
-    // file, an MP3 past the Whisper cap splits at frame boundaries, and any
-    // format at all goes through Gemini's file store. Only without all of
-    // them is the 25 MB cap the end of it.
+    // What a big file can still be transcribed by: Grok and Deepgram take
+    // the whole file, an MP3 past the Whisper cap splits at frame
+    // boundaries, and any format at all goes through Gemini's file store.
+    // Only without all of them is the 25 MB cap the end of it.
     const chunkable = asset.mimeType === "audio/mpeg";
-    const store = geminiConfigured() || deepgramConfigured();
+    const store = wholeFileConfigured();
     if (asset.size === null) {
       return { ok: false, status: 400, error: "This file has no recorded size" };
     }

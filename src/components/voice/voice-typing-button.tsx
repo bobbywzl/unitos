@@ -10,12 +10,16 @@ import { glueBefore, spokenPieces, VOICE_LANGUAGES } from "@/lib/voice-typing";
 const STATUS_MS = 5000;
 
 // Voice typing beside a text box (SPEC.md §29, typing): a microphone button
-// that types what the browser's speech service hears at the box's caret, as
-// the page editor's microphone box does in a document. A click starts
-// listening, a second click stops it; listening goes on through pauses.
-// "period", "comma", "new line", and the like type what they name, in
-// English. While it listens, a small card over the button shows the words
-// heard so far and the language it listens in; the language is one choice
+// that types what is heard at the box's caret, as the page editor's
+// microphone box does in a document. A click starts listening, a second
+// click stops it; listening goes on through pauses. With the voice model set
+// on the server, the model writes each phrase out after its pause, with its
+// punctuation, in the language spoken; else the browser's speech service
+// types the words as they are said, and "period", "comma", and the like type
+// what they name, in English. "new line" and "new paragraph" break the line
+// either way. While it listens, a small card over the button shows the words
+// heard so far (or that a phrase is being written out) and the language it
+// listens in; the language is one choice
 // per browser, picked in the page editor's microphone box, else the app's
 // language. The card takes no clicks, so a card or a menu the box sits in
 // never reads a click on it as a click outside. The words go in as typing does — the box's
@@ -67,12 +71,12 @@ function insert(el: Field, text: string): void {
   }
 }
 
-function typeHeardInto(el: Field, phrase: string, english: boolean): void {
+function typeHeardInto(el: Field, phrase: string, english: boolean, written = false): void {
   if (!el.isConnected || (isTextField(el) && (el.disabled || el.readOnly))) return;
   if (document.activeElement !== el) el.focus();
   const singleLine = el instanceof HTMLInputElement;
   let first = true;
-  for (const piece of spokenPieces(phrase.trim(), english)) {
+  for (const piece of spokenPieces(phrase.trim(), english, written)) {
     if ("text" in piece) {
       insert(el, (first ? glueBefore(charBefore(el), piece.text) : "") + piece.text);
     } else if (singleLine) {
@@ -84,6 +88,67 @@ function typeHeardInto(el: Field, phrase: string, english: boolean): void {
     }
     first = false;
   }
+}
+
+// With the voice model the words of the last phrase arrive a moment after
+// they were said (lib/voice/dictation.ts). A press or a key that would close
+// or send the box waits for them, this long at most.
+const WORDS_WAIT_MS = 6000;
+
+function wordsIn(waiting: Promise<void>): Promise<void> {
+  return Promise.race([waiting, new Promise<void>((resolve) => window.setTimeout(resolve, WORDS_WAIT_MS))]);
+}
+
+// True while a held press is being played again: the listeners that hold a
+// press let their own replay through.
+let replaying = false;
+
+/** A press held back until the words were in, played again where it landed. */
+function replayPress(target: Element, x: number, y: number): void {
+  const init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0 };
+  replaying = true;
+  try {
+    target.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 1, pointerId: 1, isPrimary: true }));
+    target.dispatchEvent(new MouseEvent("mousedown", { ...init, buttons: 1 }));
+    target.dispatchEvent(new PointerEvent("pointerup", { ...init, pointerId: 1, isPrimary: true }));
+    target.dispatchEvent(new MouseEvent("mouseup", init));
+    target.dispatchEvent(new MouseEvent("click", { ...init, detail: 1 }));
+  } finally {
+    replaying = false;
+  }
+}
+
+/** Hold a press that began outside the box while words are on their way:
+    nothing sees it now, and it is played again, whole, once the words are
+    typed, so a Send or a Done acts on the box with every word in it. */
+function holdPress(e: PointerEvent, waiting: Promise<void>): void {
+  const target = e.target instanceof Element ? e.target : null;
+  const { clientX, clientY } = e;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const swallow = (held: Event) => {
+    if (replaying) return;
+    held.preventDefault();
+    held.stopImmediatePropagation();
+  };
+  const HELD = ["mousedown", "mouseup", "click"] as const;
+  for (const type of HELD) document.addEventListener(type, swallow, true);
+  // The press itself ends first: its click is swallowed with the rest.
+  const lifted = new Promise<void>((resolve) => {
+    const onUp = (up: Event) => {
+      if (replaying) return;
+      swallow(up);
+      document.removeEventListener("pointerup", onUp, true);
+      document.removeEventListener("pointercancel", onUp, true);
+      window.setTimeout(resolve, 0);
+    };
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onUp, true);
+  });
+  void Promise.all([wordsIn(waiting), lifted]).then(() => {
+    for (const type of HELD) document.removeEventListener(type, swallow, true);
+    if (target?.isConnected) replayPress(target, clientX, clientY);
+  });
 }
 
 export function VoiceTypingButton({
@@ -101,13 +166,13 @@ export function VoiceTypingButton({
   const t = useT();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const targetRef = useRef<Field | null>(null);
-  const speech = useSpeech((phrase, english) => {
+  const speech = useSpeech((phrase, english, written) => {
     const el = targetRef.current;
-    if (el) typeHeardInto(el, phrase, english);
+    if (el) typeHeardInto(el, phrase, english, written);
   });
-  const { listening, status, interim } = speech;
+  const { listening, status, interim, pending } = speech;
   const [rect, setRect] = useState<{ left: number; width: number; top: number; bottom: number } | null>(null);
-  const showCard = listening || status !== "";
+  const showCard = listening || pending || status !== "";
 
   // The card sits over the button while it shows, and follows it on scroll.
   // A box above the button (the toolbar's assistant box) keeps its words in
@@ -146,13 +211,21 @@ export function VoiceTypingButton({
   // its new line where Enter does not send. In a rich text box Enter goes on at
   // once: the box reads its own text, with the words already in.
   const { flush } = speech;
+  // With the voice model the words are not here yet (`pending`): the press
+  // or the key is held until they are typed, then played again (holdPress),
+  // and the same holds for a moment after the microphone is turned off.
   useEffect(() => {
-    if (!listening) return;
+    if (!listening && !pending) return;
     const onDown = (e: PointerEvent) => {
+      if (replaying) return;
       const target = e.target instanceof Node ? e.target : null;
       if (target && (buttonRef.current?.contains(target) || targetRef.current?.contains(target))) return;
       const heard = speech.interim.trim();
-      flush();
+      const waiting = flush();
+      if (waiting) {
+        holdPress(e, waiting);
+        return;
+      }
       // The words typed can move what was pressed (Done drops a line), and
       // the click then lands beside it: it is clicked once the words are in.
       const pressed = heard && target instanceof Element ? target.closest<HTMLElement>("button, a, [role=button]") : null;
@@ -172,13 +245,19 @@ export function VoiceTypingButton({
       document.addEventListener("pointerup", onUp, true);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (!e.isTrusted || !speech.interim.trim()) return;
+      if (!e.isTrusted || (!speech.interim.trim() && !pending)) return;
       const target = e.target;
+      // The key goes on once the words are in: after a frame for the
+      // browser's speech service, which has them now, and when the model's
+      // answer has come.
+      const then = (waiting: Promise<void> | undefined, go: () => void) => {
+        if (waiting) void wordsIn(waiting).then(go);
+        else requestAnimationFrame(go);
+      };
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopImmediatePropagation();
-        flush();
-        requestAnimationFrame(() => {
+        then(flush(), () => {
           if (target instanceof Node && target.isConnected) {
             target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
           }
@@ -189,14 +268,28 @@ export function VoiceTypingButton({
       const field = targetRef.current;
       if (!field || !(target instanceof Node) || !field.contains(target)) return;
       if (!isTextField(field)) {
-        flush();
+        const waiting = flush();
+        if (!waiting) return;
+        // A rich text box, the words still on their way: Enter waits for
+        // them, then goes to the box's own key handler, and types its
+        // paragraph break where no handler takes it.
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const { ctrlKey, metaKey, altKey } = e;
+        void wordsIn(waiting).then(() => {
+          if (!field.isConnected) return;
+          const again = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", ctrlKey, metaKey, altKey, bubbles: true, cancelable: true });
+          if (!field.dispatchEvent(again) || ctrlKey || metaKey || altKey) return;
+          if (document.activeElement !== field) field.focus();
+          document.execCommand("insertParagraph");
+        });
         return;
       }
       e.preventDefault();
       e.stopImmediatePropagation();
-      flush();
+      const waiting = flush();
       const { ctrlKey, metaKey, altKey } = e;
-      requestAnimationFrame(() => {
+      then(waiting, () => {
         if (!field.isConnected) return;
         const again = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", ctrlKey, metaKey, altKey, bubbles: true, cancelable: true });
         // No handler took the key: it does what a key press does there.
@@ -212,7 +305,7 @@ export function VoiceTypingButton({
       document.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [listening, flush, speech.interim]);
+  }, [listening, pending, flush, speech.interim]);
 
   // The box left the page (a card closed, a message sent and the box went):
   // the microphone turns off.
@@ -242,7 +335,7 @@ export function VoiceTypingButton({
         ? t("docsTyping.voiceBlocked")
         : status === "trouble"
           ? t("docsTyping.voiceTrouble")
-          : interim || t("docsTyping.listening");
+          : interim || (pending ? t("docsTyping.writing") : t("docsTyping.listening"));
   const label = listening ? t("docsTyping.clickToStop") : t("docsTyping.clickToSpeak");
 
   return (

@@ -46,6 +46,8 @@
 //   jotting(用笔在文档上写下的一笔) 笔迹 · Jot(写笔迹的工具) 写画 · pen 笔 · eraser 橡皮擦 ·
 //   finger selection(手指沿一行划过选中词) 划选 · phone page(iPhone 应用的页面) 手机页面 ·
 //   note box(手机页面上写笔记的输入框) 笔记框 ·
+//   voice model(把录音写成文字的那个模型) 语音模型 · voice typing 语音输入 ·
+//   phrase(语音输入中两次停顿之间说的话) 一句话 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
 //   conversation 对话 · attachment 附件 · file 文件 ·
 //   stitch 缝合 · generated document 生成文档 · pick(为缝合选中节点) 选取 ·

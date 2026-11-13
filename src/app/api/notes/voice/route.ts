@@ -12,9 +12,9 @@ import { currentLang, serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import { notesPlanSchema, writePlannedNotes } from "@/lib/notes/write-planned";
 import { voicePrompt } from "@/lib/prompts/voice";
-import { geminiConfigured } from "@/lib/video/gemini";
 import { failureLine } from "@/app/api/assistant/failure-line";
-import { transcribe, whisperConfigured } from "@/lib/video/transcribe";
+import { segmentsText } from "@/lib/video/grok";
+import { transcribe, transcriptionConfigured } from "@/lib/video/transcribe";
 import { documentLayer } from "@/lib/assistant/context";
 
 export const maxDuration = 180;
@@ -32,8 +32,6 @@ export const maxDuration = 180;
 // then the result. A request body past about 4.5 MB is refused by the host,
 // so the client records at a low bitrate and stops at five minutes.
 const MAX_BYTES = 4 * 1024 * 1024;
-// Segments further apart than this start a new paragraph of the command.
-const PARAGRAPH_GAP_SECONDS = 2;
 
 const querySchema = z.object({
   sectionId: z.string().min(1),
@@ -59,7 +57,7 @@ export async function POST(req: Request) {
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
-  if (!whisperConfigured() && !geminiConfigured()) {
+  if (!transcriptionConfigured()) {
     return NextResponse.json({ error: t("api.voiceNoteNeedsKey") }, { status: 503 });
   }
   if (!(await featureConfigured("voice"))) {
@@ -191,21 +189,8 @@ async function transcribeCommand(
 ): Promise<string> {
   const { segments } = await transcribe(
     { kind: "upload", bytes, mimeType },
-    { deadline: Date.now() + 100_000, userId },
+    // One person speaking a command: no voices to tell apart.
+    { deadline: Date.now() + 100_000, userId, speakers: false },
   );
-  const paragraphs: string[] = [];
-  let open = "";
-  let lastEnd = -Infinity;
-  for (const segment of segments) {
-    const text = segment.text.trim();
-    if (!text) continue;
-    if (open && segment.start - lastEnd > PARAGRAPH_GAP_SECONDS) {
-      paragraphs.push(open);
-      open = "";
-    }
-    open = open ? `${open} ${text}` : text;
-    lastEnd = segment.end;
-  }
-  if (open) paragraphs.push(open);
-  return paragraphs.join("\n\n").trim();
+  return segmentsText(segments);
 }
