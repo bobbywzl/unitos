@@ -179,8 +179,8 @@ const en = {
   release20261103Title: "New: Read aloud for the whole document",
   release20261103Body:
     "- **Read aloud** — the button at the top right of the article, beside Collapse. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
-  release20261112Title: "New: write on a document with a pen",
-  release20261112Body:
+  release20261116Title: "New: write on a document with a pen",
+  release20261116Body:
     "- **Jot** — on an iPad, or any screen with a pen, press Jot at the foot of the reader and write over the document. The jottings stay with the paragraph they are written on. A finger still scrolls and selects. The bar holds the pen, the eraser, five colors, two widths, and Undo.\n- **Finger selection** — on a touch screen, draw a finger along a line to select its words. The tools open when the finger lifts.",
   release20261105Title: "New: Stars in Breakwork, and the highlighter on pages",
   release20261105Body:
@@ -387,8 +387,8 @@ const zh: Record<keyof typeof en, string> = {
   release20261103Title: "新功能：朗读全文",
   release20261103Body:
     "- **朗读**——文章右上角、折叠旁边的按钮。它从你读到的地方朗读到文末，声音与选中内容的朗读相同。正在朗读的段落会被标出，页面跟着它走。再按一次暂停；✕ 停止。\n\n新功能的控件会发光，直到你按下它。",
-  release20261112Title: "新功能：用笔在文档上书写",
-  release20261112Body:
+  release20261116Title: "新功能：用笔在文档上书写",
+  release20261116Body:
     "- **写画**——在 iPad 或任何带笔的屏幕上，按下阅读器底部的“写画”，即可在文档上书写。笔迹会跟随它所在的段落。手指仍可滚动和选中文本。工具条里有笔、橡皮擦、五种颜色、两种粗细和撤销。\n- **划选**——在触摸屏上，用手指沿一行划过即可选中其中的词，手指抬起时工具出现。",
   release20261105Title: "新功能：Breakwork 里的星，以及页面上的荧光笔",
   release20261105Body:

@@ -68,10 +68,10 @@ export const RELEASES: Release[] = [
   },
   {
     // Jottings and the finger selection (SPEC.md §33): the Jot button at the reader's foot glows where it shows.
-    id: "2026-11-12",
-    date: "2026-11-12",
-    titleKey: "works.release20261112Title",
-    bodyKey: "works.release20261112Body",
+    id: "2026-11-16",
+    date: "2026-11-16",
+    titleKey: "works.release20261116Title",
+    bodyKey: "works.release20261116Body",
     features: ["jot"],
   },
 ];
