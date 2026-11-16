@@ -87,15 +87,30 @@ await open();
 const edited = await page.locator("[data-phone-note]", { hasText: `Phone note ${stamp}` }).innerText();
 check("an edited note saves", edited.includes("Edited on the phone."), edited.slice(0, 80));
 
-// 7. The assistant answers and the conversation is kept.
+// 7. The assistant answers and the conversation is kept. The Web toggle is
+// on by default and rides the request, as it does in the sidebar assistant.
 await page.click('[data-track="phone-tab:assistant"]');
+const webOf = (request) => JSON.parse(request.postData() ?? "{}").web;
+const asked = [];
+page.on("request", (r) => {
+  if (r.method() === "POST" && r.url().endsWith("/api/assistant")) asked.push(webOf(r));
+});
+check("the Web toggle shows beside the thinking chip", (await page.locator('[data-track^="assistant-web"]').count()) === 1);
 await page.fill("[data-phone-ask]", `What is the main claim? (${stamp})`);
 await page.click('[data-track="phone-ask"]');
 await page.waitForFunction(() => document.querySelectorAll("[data-phone-chat] > div").length > 0 && !document.querySelector('[data-phone-chat] [role="status"]'), null, { timeout: 90_000 });
 const answer = await page.locator("[data-phone-chat] > div").last().innerText();
 check("the assistant answers", answer.trim().length > 20, answer.slice(0, 80));
+check("the question went out with the web on", asked[0] === true, JSON.stringify(asked));
 check("the assistant shows no error", (await page.locator('[data-phone-page] [role="alert"]').count()) === 0, await page.locator('[data-phone-page] [role="alert"]').allInnerTexts().then((a) => a.join(" | ")));
 await page.screenshot({ path: `${OUT}/phone-3-assistant.png` });
+// Web off: the next question goes out with the web off.
+await page.click('[data-track^="assistant-web"]');
+await page.fill("[data-phone-ask]", `Second question (${stamp})`);
+await page.click('[data-track="phone-ask"]');
+await page.waitForFunction(() => !document.querySelector('[data-phone-chat] [role="status"]'), null, { timeout: 90_000 });
+check("with Web turned off the question goes out with the web off", asked[1] === false, JSON.stringify(asked));
+await page.click('[data-track^="assistant-web"]');
 await open();
 await page.click('[data-track="phone-tab:assistant"]');
 await page.waitForTimeout(1200);

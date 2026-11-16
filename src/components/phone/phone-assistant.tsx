@@ -6,6 +6,8 @@ import { failureLine, modelFetch, noReason } from "@/components/assistant/failur
 import { useT } from "@/components/lang-provider";
 import type { PhoneProject } from "@/components/phone/phone-app";
 import { ThinkingIndicator } from "@/components/thinking";
+import { ThinkingChips } from "@/components/assistant/thinking-chips";
+import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { readThinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
 import { splitStreamError, splitStreamPlan } from "@/lib/derive/config";
@@ -26,6 +28,10 @@ export function PhoneAssistant({ project }: { project: PhoneProject }) {
   const [streamed, setStreamed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // The Web toggle every assistant surface shares (on by default): with it
+  // on, the assistant searches the web for what the project's documents do
+  // not answer and joins that to what they say (SPEC.md §7).
+  const web = useWeb();
   const saved = useRef<Saved>({ conversationNoteId: null, updatedAt: null });
   const abort = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -121,7 +127,7 @@ export function PhoneAssistant({ project }: { project: PhoneProject }) {
             scope: "notebook",
             task: "ask",
             question: q,
-            web: false,
+            web,
             thinking: readThinking(),
             history,
           }),
@@ -217,6 +223,11 @@ export function PhoneAssistant({ project }: { project: PhoneProject }) {
             {error}
           </p>
         )}
+        {/* The two choices the sidebar assistant has: the web, and how hard it thinks. */}
+        <div className="mb-2 flex items-center gap-2">
+          <WebChip small />
+          <ThinkingChips small />
+        </div>
         <textarea
           data-phone-ask
           value={question}
