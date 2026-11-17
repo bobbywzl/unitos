@@ -31,6 +31,19 @@ export function noteTitle(content: string): string {
   return splitNote(content).title;
 }
 
+/** The gist as the title of an open note that has no title of its own
+    (SPEC.md §6): the phrase its collapsed row shows stands above the body
+    too, so the note reads the same open and collapsed. It is drawn, never
+    written into the note: Note.content stays as the reader wrote it. A note
+    whose whole text is little longer than the gist takes none: the title
+    would say the body twice. plainText is the note's text with the markdown
+    taken off (lib/markdown-preview.ts). */
+export function gistAsTitle(gist: string | null | undefined, plainText: string): string {
+  const phrase = gist?.trim() ?? "";
+  if (!phrase) return "";
+  return plainText.trim().length > phrase.length * 2 ? phrase : "";
+}
+
 /** The title and the body as one note. An empty title leaves the body as it
     is; a title stands on its own line, a blank line before the body. */
 export function joinNoteParts(title: string, body: string): string {

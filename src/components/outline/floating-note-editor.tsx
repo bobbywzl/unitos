@@ -8,7 +8,8 @@ import { NOTE_WRAP_GAP as GAP, announceNoteWrap, type NoteWrapSpacer } from "@/l
 import type { CardDragEndDetail } from "@/lib/card-drag";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
-import { editDraft, splitNote } from "@/lib/note-title";
+import { markdownPreview } from "@/lib/markdown-preview";
+import { editDraft, gistAsTitle, splitNote } from "@/lib/note-title";
 import type { NoteView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PencilIcon } from "@/components/icons";
@@ -238,6 +239,8 @@ export function FloatingNoteEditor({
   });
   // The note as it reads in the draggable mode.
   const shown = splitNote(content);
+  // With no title of its own, the note's gist is its title (SPEC.md §6).
+  const shownTitle = shown.title || gistAsTitle(note?.gist, markdownPreview(content));
   // The width is set once; after that the corner handle owns the card's size.
   const [width] = useState(() => Math.min(WIDTH, window.innerWidth - 2 * MARGIN));
   // Over the article: the card's place on screen.
@@ -696,7 +699,7 @@ export function FloatingNoteEditor({
         </div>
       ) : (
         <div className="note-body min-h-0 flex-1 overflow-y-auto">
-          {shown.title && <h3 className="note-title mb-1">{shown.title}</h3>}
+          {shownTitle && <h3 className="note-title mb-1">{shownTitle}</h3>}
           {shown.body.trim() !== "" && (
             <Markdown breaks sources={note?.sources} notebookId={actions.notebookId}>
               {shown.body}

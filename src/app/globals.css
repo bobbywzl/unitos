@@ -3079,11 +3079,15 @@ li[data-checked] > .note-box::before {
 /* ── The note's title (SPEC.md §6) ─────────────────────────────────────────
    The first line of a note, when it is a heading, is its title: one row
    above the body, and the whole collapsed line. The editor's title field
-   has the same look, so the note keeps its shape when the editor opens. */
+   has the same look, so the note keeps its shape when the editor opens.
+   The row is a heading, and every heading is set in Caprasimo: at a
+   note's size its heavy letters run together, so the title is set in the
+   body's face, told from the body by its size and its weight. */
 .note-title {
   margin: 0;
+  font-family: var(--font-figtree), system-ui, sans-serif;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.005em;
   color: var(--ink);
@@ -3097,7 +3101,7 @@ li[data-checked] > .note-box::before {
   background: transparent;
   font: inherit;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.005em;
   color: var(--ink);

@@ -55,6 +55,7 @@ const en = {
   noteText: "Note text",
   // The note's title and body (SPEC.md §6).
   titlePlaceholder: "Title",
+  gistTitleTip: "Written by AI from the note\nEdit the note and type a title to set your own",
   noteTitleLabel: "Note title",
   // The note floats: dragged out of the tray, over the article, and back.
   dockBack: "Back to the tray",
@@ -316,6 +317,7 @@ const zh: Record<keyof typeof en, string> = {
   editTitle: "编辑",
   noteText: "笔记内容",
   titlePlaceholder: "标题",
+  gistTitleTip: "AI 根据笔记写的要旨\n编辑笔记并输入标题，即可换成你自己的",
   noteTitleLabel: "笔记标题",
   dockBack: "放回笔记栏",
   dockBackTitle: "把笔记放回笔记栏",

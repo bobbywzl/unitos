@@ -13,8 +13,8 @@ import { Highlight } from "@/components/highlight";
 import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { markdownPreview } from "@/lib/markdown-preview";
-import { useGist } from "@/lib/gist-client";
+import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { useWrittenGist } from "@/lib/gist-client";
 import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
@@ -23,7 +23,8 @@ import { useAnnotationSide } from "@/components/outline/annotation-side";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
 import { setTaskChecked } from "@/lib/note-markup";
-import { appendToBody, bodyLineOffset, editDraft, splitNote } from "@/lib/note-title";
+import { appendToBody, bodyLineOffset, editDraft, gistAsTitle, splitNote } from "@/lib/note-title";
+import { GIST_MAX_CHARS } from "@/lib/prompts/gist";
 import { searchHit } from "@/lib/search-hits";
 import type { CardDragEndDetail } from "@/lib/card-drag";
 import { CardDropShown, useCardDropTarget } from "@/components/outline/use-card-drop";
@@ -531,8 +532,24 @@ const NoteCardBody = memo(function NoteCardBody({
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.
   const preview = useMemo(() => markdownPreview(note.content), [note.content]);
-  const gist = useGist(note.id, note.gist, preview, (collapsed || floating) && !parts.title);
-  const line = parts.title || gist;
+  // An accepted note with no title of its own shows its gist as its title,
+  // open as well as collapsed, so an open one asks for it too. Not while its
+  // editor is open: every save is a new text, and each would ask.
+  const written = useWrittenGist(
+    note.id,
+    note.gist,
+    preview,
+    !parts.title && !editing && (collapsed || floating || note.status === "ACCEPTED"),
+  );
+  const line = parts.title || written || clipWords(preview, GIST_MAX_CHARS);
+  // The open note's title row: its own title, else its gist (gistAsTitle).
+  // The gist is drawn there, never written into the note.
+  const gistTitle = !parts.title && note.status === "ACCEPTED" ? gistAsTitle(written, preview) : "";
+  const title = parts.title || gistTitle;
+  // The title field of a note with no title of its own shows the gist the
+  // editor opened on as its placeholder: a title typed there is the note's own.
+  const [openedGist, setOpenedGist] = useState(gistTitle);
+  if (gistTitle && gistTitle !== openedGist) setOpenedGist(gistTitle);
   // Under a search, the row shows the line that holds the first match,
   // with the match lit, in place of the title or the gist.
   const found = useMemo(() => (hit ? matchLine(note.content, hit) : null), [hit, note.content]);
@@ -825,7 +842,7 @@ const NoteCardBody = memo(function NoteCardBody({
           aria-expanded={false}
           data-tip={t("outline.expandNote")}
           className={`note-merging-under flex min-w-0 flex-1 items-center gap-1.5 text-left text-[13px] leading-[18px] hover:text-clay-800 ${
-            parts.title ? "font-semibold text-ink" : "text-sand-800"
+            parts.title || written ? "font-semibold text-ink" : "text-sand-800"
           }`}
         >
           {foldable && (
@@ -1075,6 +1092,7 @@ const NoteCardBody = memo(function NoteCardBody({
               onChange={editTitle}
               onEnter={() => focusBodyEditor(editCardRef.current)}
               onEscape={() => void done()}
+              placeholder={openedGist || undefined}
               className="shrink-0"
             />
           }
@@ -1215,9 +1233,9 @@ const NoteCardBody = memo(function NoteCardBody({
           onClick={clamp ? () => setWhole(true) : undefined}
           data-tip={clamp && cut ? t("outline.expandNote") : undefined}
         >
-          {parts.title && (
-            <h3 className="note-title mb-1">
-              <Highlight text={parts.title} needle={hit} />
+          {title && (
+            <h3 className="note-title mb-1" data-gist-title={gistTitle ? "" : undefined} data-tip={gistTitle ? t("outline.gistTitleTip") : undefined}>
+              <Highlight text={title} needle={hit} />
             </h3>
           )}
           {/* A checklist item's box ticks without opening the editor. */}
