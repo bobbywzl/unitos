@@ -222,6 +222,7 @@ import {
   belowSlot,
   marginPlace,
   pageGeometry,
+  shownShift,
   slotAt,
   toolbarLeft,
   toolbarShift,
@@ -8083,7 +8084,11 @@ export function ReaderInteractions({
     let w = Number(el.dataset.width);
     const cw = container.clientWidth;
     const shift = docsShiftRef.current;
-    const geo = pageGeometry(container, shift);
+    // The page slides to the shift this box asked for, and the box is placed
+    // again before it is there: the page's place is read with the shift it
+    // shows now. Read with the shift asked for, the page seems not to have
+    // moved, the box asks for the same room again, and so on without end.
+    const geo = pageGeometry(container, shownShift(container, shift));
     let left: number | null = null;
     if (b.side === "right" && geo) {
       left = toolbarLeft(geo, shift, w);
