@@ -104,6 +104,7 @@ function prepare(): void {
             pages: [],
             transcript: transcript?.lines ?? null,
             figureBlockId: null,
+            web: c.web,
           }
         : null;
     const actUser = actCtx ? actPrompt(actCtx) : null;
@@ -135,6 +136,7 @@ function prepare(): void {
       continued: history.length > 0,
       actions: scope === "document",
       caretBlockId: scope === "document" && c.caret ? f.blocks[c.caret - 1].id : undefined,
+      web: c.web,
     });
     const turns = actUser !== null ? [] : history.map((turn) => (turn.role === "assistant" ? `${ASSISTANT}\n${turn.content}` : `${USER}\n${synthesisHistoryTurn({ content: turn.content })}`));
     const dir = dirOf(c.id);

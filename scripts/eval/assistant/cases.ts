@@ -100,6 +100,9 @@ export type AssistantCase = {
   // whole block when none are named). The answer is the act route's JSON.
   chat?: "selection";
   selection?: { block: number; text?: string };
+  // The reader's Web toggle is on: the prompt carries the web rules, and
+  // the model agent searches the web as the production model does.
+  web?: boolean;
   question: string;
   expect: Expect;
   good: string;
@@ -1942,6 +1945,42 @@ export const CASES: AssistantCase[] = [
     question: 'What might "a disciplined way" mean here, going by what Google has actually done with search ads so far?',
     expect: { change: false, answer: { cites: true } },
     good: "The same answer as the selection chat's: the core first, then labels in core points (what the call says, cited; what Google has done, from outside the document and marked so; the other side: pricing and auction changes; a bottom line for an investor). 120 to 280 words. No actions block.",
+  },
+  // ── what the document leaves open: answered from outside it, never a
+  //    section on what the document does not say ──────────────────────────
+  {
+    id: "open-call-fourth-ad-chat",
+    family: "act",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    chat: "selection",
+    selection: { block: 7, text: "the fourth ad shows only on a small share of queries" },
+    web: true,
+    question: "How does Google decide which queries get the fourth ad?",
+    expect: { change: false, answer: { cites: true, excludes: ["does not say", "doesn't say", "general knowledge"] } },
+    good: "No action. First the call: up to four ads for highly commercial queries, the fourth on a small share of queries, after long testing (cited). Then what the call leaves open, searched and sourced by name: what Google has said counts as a highly commercial query (queries that show an intent to buy, its own examples). No label, paragraph, or list of what the call does not say; one clause turns to the outside. No advice to look it up.",
+  },
+  {
+    id: "open-call-date-page",
+    family: "answer",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    web: true,
+    question: "What exact day in February did the desktop change roll out?",
+    expect: { change: false, answer: { includes: ["19"], cites: true, maxWords: 90, excludes: ["does not say", "doesn't say"] } },
+    good: "A lookup the call leaves open, still a lookup: the call says February (cited); the day, 19 February 2016, from the web with the source named. One to three sentences, no labels, no list of what the call does not say.",
+  },
+  {
+    id: "open-call-fourth-ad-page",
+    family: "answer",
+    fixture: "earnings-call-search-ads",
+    lang: "en",
+    profile: INVESTOR,
+    question: "How does Google decide which queries get the fourth ad?",
+    expect: { change: false, answer: { cites: true, excludes: ["does not say", "doesn't say"] } },
+    good: "The web is off. First the call: highly commercial queries, a small share, long testing (cited). Then what the call leaves open, from what the model knows, kept apart and marked as general knowledge with the line that Web on checks it. No label, paragraph, or list of what the call does not say.",
   },
   {
     id: "depth-call-cpc-lookup",

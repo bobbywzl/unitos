@@ -5,6 +5,7 @@ import {
   ANSWER_SHAPE,
   ASSISTANT_STYLE,
   beyondRule,
+  openPartRule,
   CONNECTION_RULE,
   CORE_RULE,
   languageName,
@@ -126,7 +127,7 @@ export function actRules(ctx: Pick<ActCtx, "profile" | "lang" | "hasSelection" |
     NEAREST_CHANGE_RULE("5a"),
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click. Several blocks named together take each block's tag, side by side: tags side by side render as one chip with their count.",
     `7. Write reply, every description, and every why in ${language}.`,
-    `8. reply, for a command that asks a question: the answer, as markdown inside the JSON string, each label and each bullet on a line of its own (\\n). ${ANSWER_SHAPE} ${CORE_RULE} ${beyondRule(ctx.web)} ${CONNECTION_RULE} ${ASSISTANT_STYLE} A question about the selected passage starts from the passage: the core says what the selected words state or mean, in plain words, with their block. Every claim about the document cites its block. Say plainly when the document does not answer, then say what the document does say about it. A sentence that could be written about any other document is deleted; a sentence that only restates the selection in other words is deleted. No point made twice, no account of how the answer was found. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
+    `8. reply, for a command that asks a question: the answer, as markdown inside the JSON string, each label and each bullet on a line of its own (\\n). ${ANSWER_SHAPE} ${CORE_RULE} ${beyondRule(ctx.web)} ${CONNECTION_RULE} ${ASSISTANT_STYLE} A question about the selected passage starts from the passage: the core says what the selected words state or mean, in plain words, with their block. Every claim about the document cites its block. ${openPartRule(ctx.web)} A sentence that could be written about any other document is deleted; a sentence that only restates the selection in other words is deleted. No point made twice, no account of how the answer was found. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",
