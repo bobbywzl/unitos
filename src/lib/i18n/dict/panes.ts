@@ -470,7 +470,7 @@ const en = {
   recommendScanNone: "No links to propose between these documents.",
   recommendedLinks: "Recommended links",
   recommendedLinksDesc:
-    "The AI scanned the documents against each other. Accept a link to make it real; dismiss what does not hold.",
+    "Links the AI proposed. Recommend links reads every document of the project against the others; Stitch proposes links only when a command asks for them, between the documents it read. Accept a link to make it real; dismiss what does not hold.",
   recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
   recommendedLinksEmpty: "No recommended links. Recommend links in a document's menu runs the scan.",
   openLinkEnd: "Open {title} at this link",
@@ -963,7 +963,7 @@ const zh: Record<keyof typeof en, string> = {
   recommendScanPartial: "已提出 {links}。本次未读：{docs}。再运行一次即可读到。",
   recommendScanNone: "这些文档之间没有可提出的链接。",
   recommendedLinks: "推荐链接",
-  recommendedLinksDesc: "AI 已将项目中的文档相互比对。接受即成为正式链接；不成立的可忽略。",
+  recommendedLinksDesc: "AI 提出的链接。“推荐链接”扫描会把项目中的每篇文档相互比对；缝合只在指令要求链接时，才在它所读的文档之间提出链接。接受即成为正式链接；不成立的可忽略。",
   recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",
   recommendedLinksEmpty: "没有推荐链接。在文档菜单中选择“扫描推荐链接”可运行扫描。",
   openLinkEnd: "在此链接处打开{title}",

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { STITCH_DEADLINE_MS, STREAM_ERROR_TOKEN } from "@/lib/derive/config";
 import { modelErrorMessage } from "@/lib/derive/json-call";
 import { stitch } from "@/lib/graph/stitch";
+import { STITCH_TURN_MAX } from "@/lib/graph/stitch-limits";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { kimiConfigured } from "@/lib/kimi";
 import { parseBody } from "@/lib/validate";
@@ -26,7 +27,9 @@ const requestSchema = z.object({
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(8_000),
+        // An answer can be a full extraction (lib/graph/stitch.ts); the box
+        // sends each turn cut to this (STITCH_TURN_MAX).
+        content: z.string().min(1).max(STITCH_TURN_MAX),
       }),
     )
     .max(20)
