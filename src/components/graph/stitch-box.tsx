@@ -8,6 +8,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { runHeartbeat } from "@/lib/derive/heartbeat-client";
+import { STITCH_TURN_MAX } from "@/lib/graph/stitch-limits";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
@@ -16,15 +17,15 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
 import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
 
-// Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
-// command across the project's documents — gather every passage on a
-// topic, connect the passages that answer a question, find the
-// contradictions, write a new page. The command reads the documents picked
-// in the graph, or every document when none is picked: the box says which,
-// lists the pick as chips, and Pick documents turns a node click into a
-// pick. Every turn is one command; the reply says what was done, links
-// await Accept under Recommended links, and a written page opens from
-// Generated content. Under every reply, what was read of each document: a
+// Stitch (SPEC.md §22): the box at the foot of the graph, a conversation
+// with the assistant across the project's documents. It answers in the box:
+// a question, or what the documents say on a topic, every point with the
+// block it rests on (a ¶ chip opens that document at the block). It makes
+// links or a new page only when the command asks for one. The command
+// reads the documents picked in the graph, or every document when none is
+// picked: the box says which, lists the pick as chips, and Pick documents
+// turns a node click into a pick. Links await Accept under Recommended
+// links, and a written page opens from Generated content. Under every reply, what was read of each document: a
 // video or audio document reads as its transcript, and a document with
 // nothing to read says why (the transcript still being written, or failed
 // with the stored reason). The conversation is kept for the account per
@@ -64,10 +65,12 @@ export function writeStitchPick(notebookId: string, ids: Set<string>) {
   }
 }
 
+// The first two are answered in the box; the third asks for links and the
+// fourth for a page, in so many words.
 const SUGGESTIONS = [
   "stitch.stitchSuggestGather",
-  "stitch.stitchSuggestConnect",
   "stitch.stitchSuggestContradict",
+  "stitch.stitchSuggestConnect",
   "stitch.stitchSuggestSynthesis",
 ] as const;
 
@@ -128,7 +131,7 @@ export function StitchBox({
     const history = turns
       .filter((turn) => turn.content.trim())
       .slice(-20)
-      .map((turn) => ({ role: turn.role, content: turn.content }));
+      .map((turn) => ({ role: turn.role, content: turn.content.slice(0, STITCH_TURN_MAX) }));
     setTurns((prev) => [...prev, { role: "user", content: text }]);
     const controller = kept.begin();
     try {
@@ -163,6 +166,36 @@ export function StitchBox({
     graphNavigate(router, `/n/${notebookId}?doc=${documentId}`);
     onOpenDocument();
   }
+
+  // A ¶ chip in a reply cites a block of one of the documents read, which
+  // is seldom the document open under the graph. A press on it opens that
+  // document at the block (?block=, the reader's jump), in place of the
+  // reader's own answer to the chip, which only looks in the open document.
+  // A reply kept before replies carried their documents has no entry: its
+  // chips go to the reader as before.
+  const turnsRef = useRef(turns);
+  useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
+  const openRef = useRef(onOpenDocument);
+  useEffect(() => {
+    openRef.current = onOpenDocument;
+  }, [onOpenDocument]);
+  useEffect(() => {
+    const onChip = (e: Event) => {
+      const blockId = (e as CustomEvent<{ blockId?: string }>).detail?.blockId;
+      if (!blockId) return;
+      let documentId: string | undefined;
+      for (const turn of turnsRef.current) documentId ??= turn.data?.result?.cited?.[blockId];
+      if (!documentId) return;
+      e.stopImmediatePropagation();
+      graphNavigate(router, `/n/${notebookId}?doc=${documentId}&block=${blockId}`);
+      openRef.current();
+    };
+    // Capture: before the reader's listener on the same window.
+    window.addEventListener("dissect:flash-block", onChip, true);
+    return () => window.removeEventListener("dissect:flash-block", onChip, true);
+  }, [notebookId, router]);
 
   const picked = nodes.filter((n) => selectedIds.has(n.id));
 
@@ -358,7 +391,9 @@ function ResultLine({ result, onOpen }: { result: StitchResult; onOpen: (id: str
   return (
     <div className="flex flex-col gap-1 text-xs text-sand-600">
       {!ran && <p className="text-red-500">{t("stitch.stitchNotEnoughRead")}</p>}
-      {ran && result.linkCount === 0 && !result.document && (
+      {/* An answer stores nothing and needs no line saying so; the line is
+          for a run that came back with no words at all. */}
+      {ran && result.linkCount === 0 && !result.document && !result.reply.trim() && (
         <p className="text-sand-500">{t("stitch.stitchNothingStored")}</p>
       )}
       {result.linkCount > 0 && (

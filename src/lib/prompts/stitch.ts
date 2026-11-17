@@ -6,8 +6,9 @@ import { languageName, profileLines, STYLE_RULE, type ReaderProfileCtx } from "@
 // part summaries and names the parts the command needs; the select pass
 // reads the skeletons' lines — every document's, or the named parts' —
 // and names the blocks; the answer pass reads those blocks whole and
-// answers the command as links between the documents, a generated document
-// built from them, or both. Each document's note says what of it is above — its blocks or its
+// answers the command in its reply, and makes links between the documents
+// or a generated document built from them only when the command asks for
+// them. Each document's note says what of it is above — its blocks or its
 // transcript lines, cut for length, or nothing and why. The model reads and
 // writes block aliases (the document's letter and the block's number: A1,
 // B12), never the stored ids; the route resolves every alias and every
@@ -103,6 +104,12 @@ export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
   ].join("\n");
 }
 
+// The answer pass (SPEC.md §22). Stitch answers, and makes links or a page
+// only when the reader's own words ask for them: `asked` is decided first,
+// and the route stores a link or a page only under it (lib/graph/stitch.ts,
+// which also holds links back when the command names no link at all). A
+// command to extract, find, or list what the documents say is answered in
+// reply, in full, every point with its block.
 export function stitchPrompt(ctx: StitchCtx): string {
   const name = languageName(ctx.lang);
   return [
@@ -118,15 +125,28 @@ export function stitchPrompt(ctx: StitchCtx): string {
     "The reader's command:",
     ctx.command,
     "",
-    "Read every document shown before answering: a passage in the last document counts as much as one in the first. Answer the command with these three outputs. Use only the outputs the command needs; leave the others empty.",
-    `1. links: connections between passages of different documents — passages that answer the same question, make the same claim, contradict each other, or use the same term. One link is one block in one document and one block in another document: fromBlockId and toBlockId, the aliases as tagged, in different documents. fromQuote and toQuote: the passage copied verbatim from the block text, 8 to 300 characters, never paraphrased; leave a quote out to link the whole block. reason: one plain sentence saying how the two passages relate, in ${name}. For a contradiction, say what each side claims. Up to 24 links. An empty list is a valid answer.`,
-    `2. document: a new page built from the documents, when the command asks for one — a page of every passage on a topic, the answers to a question gathered, the contradictions laid out, a synthesis. title: short, in ${name}. parts, in reading order:`,
+    "Read every document shown before answering: a passage in the last document counts as much as one in the first. Only the documents above are in reach: never name, cite, or link a document that is not above.",
+    "",
+    "First decide what the command asks you to make. You always answer in reply. You make links or a page only when the reader's own words ask for them:",
+    "- asked.links: true only when the command asks, in its own words, for links or connections between passages: to link, connect, relate, cross-reference, or tie passages together. A command to extract, find, gather, list, quote, summarise, compare, or explain, and any question, does not ask for links, however closely the passages relate.",
+    "- asked.page: true only when the command asks, in its own words, for something to keep: a page, a document, a write-up, a report, a guide. A command to extract, find, list, or summarise that names no page does not ask for one.",
+    "- A message that only confirms (\"yes\", \"do it\") asks for what the message before it asked for or what the reply before it offered.",
+    "- When in doubt, false. The reader can ask for links or a page in one more message; a link or a page nobody asked for clutters the project.",
+    "",
+    "Then answer with these outputs.",
+    `1. reply: always, in ${name}, as markdown. It is the answer itself, never a note that an answer exists elsewhere.`,
+    "   - A command to extract, find, gather, or list what the documents say on a topic, when asked.page is false, is answered here in full. One bold line per document that holds something: the document's title. Under it, one bullet (\"- \") per point: the point in one plain sentence, with who says it and the number or the name it carries; then, where the wording matters, the words that carry it in quotation marks, copied exactly from the block; then its [block <alias>] tag. Give every point the documents hold on the topic, in each document's reading order. No point without its tag, and nothing the documents do not say. A document read that holds nothing on the topic gets one line saying so. When the command spans several documents, end with one or two sentences on what the points share or how they change from document to document.",
+    "   - A question gets its answer: concrete, every claim with its [block <alias>] tag and the document it comes from named. A question about where the documents disagree names what each side claims, each with its tag.",
+    "   - A command that asked for links or a page gets one to three sentences on how many links and what they connect, or what the page holds. Never restate the page.",
+    "   - A document not read, or read only in part, gets one sentence saying so.",
+    `   As long as the command needs and no longer, 1,200 words at most. ${STYLE_RULE}`,
+    `2. links: only when asked.links is true; otherwise an empty list. Connections between passages of different documents: passages that answer the same question, make the same claim, contradict each other, or use the same term. One link is one block in one document and one block in another document: fromBlockId and toBlockId, the aliases as tagged, in different documents. fromQuote and toQuote: the passage copied verbatim from the block text, 8 to 300 characters, never paraphrased; leave a quote out to link the whole block. reason: one plain sentence saying how the two passages relate, in ${name}. For a contradiction, say what each side claims. Up to 24 links.`,
+    `3. document: only when asked.page is true; otherwise null. A new page built from the documents: a page of every passage on a topic, the answers to a question gathered, the contradictions laid out, a synthesis. title: short, in ${name}. parts, in reading order:`,
     '   - {"kind": "heading", "text": "…"}: a section heading. Use a document\'s title as a heading when the page groups passages by document.',
     '   - {"kind": "quote", "blockId": "<alias>"}: one whole block of a document, copied as it is. Add "quote": "…" with a verbatim part of the block to keep that part alone. Use quote parts for everything the command asks to gather, collect, or list from the documents; a quote part never rewrites.',
     `   - {"kind": "text", "markdown": "…", "sources": [{"blockId": "<alias>", "quote": "…"}]}: your own writing, in ${name}, in markdown (paragraphs, lists, bold). sources: the blocks the writing rests on, each with a verbatim quote of 8 to 300 characters. Every text part needs at least one source. Write nothing the documents do not support.`,
-    "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. null when the command asks for no page.",
-    `3. reply: the answer to the command in plain sentences, in ${name}. A question gets its answer here — concise, concrete, every claim with the document it comes from named — and a page only when the command asks for one. A command to gather, link, or write gets one to three sentences on what the page holds, how many links, or why the command could not be done with these documents. A document not read, or read only in part, gets one sentence saying so. Never restate the page. ${STYLE_RULE}`,
+    "   Up to 200 parts. A command that asks for a page that gathers and summarises gets both: the quote parts, then a text part with the summary.",
     "Rules: every blockId is an alias tagged above, copied exactly; never invent one. In reply, cite a block as [block <alias>]. Every quote is real text of the named block, copied exactly. When the command cannot be done with these documents, say so in reply and return empty links and a null document.",
-    'Return ONLY JSON: {"reply": "…", "links": [{"fromBlockId": "A3", "fromQuote": "…", "toBlockId": "B12", "toQuote": "…", "reason": "…"}], "document": {"title": "…", "parts": [{"kind": "heading", "text": "…"}, {"kind": "quote", "blockId": "A4"}, {"kind": "quote", "blockId": "B7", "quote": "…"}, {"kind": "text", "markdown": "…", "sources": [{"blockId": "A4", "quote": "…"}]}]}}',
+    'Return ONLY JSON, asked first: {"asked": {"links": false, "page": false}, "reply": "…", "links": [{"fromBlockId": "A3", "fromQuote": "…", "toBlockId": "B12", "toQuote": "…", "reason": "…"}], "document": {"title": "…", "parts": [{"kind": "heading", "text": "…"}, {"kind": "quote", "blockId": "A4"}, {"kind": "quote", "blockId": "B7", "quote": "…"}, {"kind": "text", "markdown": "…", "sources": [{"blockId": "A4", "quote": "…"}]}]}}',
   ].join("\n");
 }
