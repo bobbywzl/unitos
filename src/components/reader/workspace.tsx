@@ -61,6 +61,7 @@ import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
 import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
+import { OPEN_CONVERSATION_EVENT } from "@/lib/assistant/open-conversation";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useNoteScope } from "@/components/outline/note-groups";
@@ -597,11 +598,31 @@ export function Workspace({
         flash(`[data-annotation-source-id="${sourceId}"]`);
       }, 150);
     };
-    // The page editor's Show all comments opens the Annotations tab.
-    const onShowAnnotations = () => {
+    // The page editor's Show all comments opens the Annotations tab. With a
+    // note named (the assistant's line for the comments on its answers), the
+    // tab opens on that conversation's card: the card opens if it is
+    // collapsed, and its comments come into view and flash.
+    const onShowAnnotations = (e: Event) => {
+      const noteId = (e as CustomEvent<{ noteId?: string } | null>).detail?.noteId;
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
+      revealTray();
+      if (!noteId) return;
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation-note", { detail: { noteId } }));
+        flash(`[data-annotation-id="${CSS.escape(noteId)}"] [data-reply-thread]`);
+      }, 150);
+    };
+    // A sidebar conversation's card in the Annotations tab leads back to the
+    // assistant (lib/assistant/open-conversation.ts): the tray opens on it,
+    // and the panel opens the conversation.
+    const onOpenConversation = () => {
+      if (!canEdit) return;
+      setCollapsed(false);
+      setTab("assistant");
+      rememberTray({ collapsed: false, tab: "assistant" });
       openSheet();
       revealTray();
     };
@@ -613,14 +634,16 @@ export function Workspace({
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
     window.addEventListener("dissect:show-annotations", onShowAnnotations);
+    window.addEventListener(OPEN_CONVERSATION_EVENT, onOpenConversation);
     window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
+      window.removeEventListener(OPEN_CONVERSATION_EVENT, onOpenConversation);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, [revealTray, rememberTray, openSheet]);
+  }, [revealTray, rememberTray, openSheet, canEdit]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the

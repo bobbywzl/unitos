@@ -74,8 +74,7 @@ import {
   AnswerTint,
   AnswerToolbar,
   CommentBox,
-  CommentList,
-  deleteCommentWithUndo,
+  CommentsPointer,
   QuoteChip,
   quoteMessage,
   shownComments,
@@ -85,7 +84,6 @@ import {
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
 import { changeWindow } from "@/lib/assistant/diff-window";
-import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
@@ -1524,7 +1522,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium, ultra, billing, myId, people } = useCollab();
+  const { canEdit, premium, ultra, billing, myId } = useCollab();
   // Billing on (SPEC.md §24): the Ultra message offers the plan page.
   const plansAction = billing
     ? { label: tCtx("billing.plans"), run: () => window.open("/billing", "_blank", "noopener") }
@@ -2409,7 +2407,6 @@ export function ReaderInteractions({
     clear: clearAnswerSelection,
   } = useAnswerSelection();
   const [chatComments, setChatComments] = useState<AnswerComment[]>([]);
-  const [chatCommentPeople, setChatCommentPeople] = useState<Record<string, Person>>({});
   const [chatCommentQuote, setChatCommentQuote] = useState<string | null>(null);
   const [chatCommentBusy, setChatCommentBusy] = useState(false);
   const sideChatsLoadedFor = useRef<string | null>(null);
@@ -8620,7 +8617,8 @@ export function ReaderInteractions({
     };
   }, [assistantChat?.noteId]);
 
-  // The comments under the open thread.
+  // The comments on the open thread's answers, counted for the line that
+  // leads to them in the Annotations tab.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -8632,11 +8630,9 @@ export function ReaderInteractions({
         const res = await fetch(`/api/replies?noteId=${encodeURIComponent(chatNoteId)}`);
         const json = (await res.json().catch(() => null)) as {
           replies?: AnswerComment[];
-          people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
         setChatComments(shownComments(json.replies ?? []));
-        setChatCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
       }
@@ -8711,17 +8707,6 @@ export function ReaderInteractions({
       setChatCommentBusy(false);
     }
   }
-  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
-  function deleteChatComment(id: string) {
-    deleteCommentWithUndo({
-      list: chatComments,
-      id,
-      message: t("outline.commentDeleted"),
-      setList: setChatComments,
-      failed: () => showError(t("common.notSaved")),
-    });
-  }
-
   // A message of the assistant card that did not go (a failed request, Stop,
   // offline): its words go back to the box of the thread it was sent in, with
   // the reason under the box; with the card closed, to the thread's draft
@@ -10425,13 +10410,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         className={chipsClassName}
       />
     )}
-    <CommentList
-      comments={chatComments}
-      people={{ ...people, ...chatCommentPeople }}
-      myId={myId}
-      onDelete={deleteChatComment}
-      className={chipsClassName}
-    />
+    {/* The comments are in the Annotations tab, under the conversation:
+        one line here says how many and leads there. */}
+    <CommentsPointer count={chatComments.length} noteId={chatNoteId} className={chipsClassName} />
     {/* A side chat's header already shows the quote it started on. */}
     {chat.quote && !(chat.openKey && chat.quote === chatOpenSide?.quote) && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />

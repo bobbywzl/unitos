@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
-import type { Person } from "@/lib/person";
-import { PersonBadge } from "@/components/collab/person-badge";
+import { resumeDeletes } from "@/lib/deferred-delete";
 import { useT } from "@/components/lang-provider";
 import { ChevronDownIcon, SparkleIcon, CommentIcon } from "@/components/icons";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
@@ -33,6 +31,27 @@ export function quoteMessage(quote: string, text: string): string {
     .map((line) => `> ${line}`)
     .join("\n");
   return text.trim() ? `${quoted}\n\n${text.trim()}` : quoted;
+}
+
+/** A message written by quoteMessage, as its quote and the words under it;
+    a message with no quote is all words. */
+export function splitQuoteMessage(content: string): { quote: string; text: string } {
+  const lines = content.split("\n");
+  const quote = lines
+    .filter((l) => l.startsWith(">"))
+    .map((l) => l.replace(/^>\s?/, ""))
+    .join(" ");
+  const text = lines
+    .filter((l) => !l.startsWith(">"))
+    .join("\n")
+    .trim();
+  return { quote, text };
+}
+
+/** The Annotations tab opens on a conversation's card, at the comments on
+    its answers (workspace.tsx). */
+export function showCommentsInAnnotations(noteId: string) {
+  window.dispatchEvent(new CustomEvent("dissect:show-annotations", { detail: { noteId } }));
 }
 
 /** The quote cut to one line for a chip or a header. */
@@ -415,44 +434,6 @@ export function shownComments(list: AnswerComment[]): AnswerComment[] {
   return left.size > 0 ? list.filter((c) => !left.has(c.id)) : list;
 }
 
-/** Delete a comment on an answer with no ask (SPEC.md §7): it leaves the
-    list now, the Undo pill offers it back in its place, and the DELETE waits
-    for the pill to go (deleteWithUndo). failed: the delete did not land, the
-    comment is back. */
-export function deleteCommentWithUndo({
-  list,
-  id,
-  message,
-  setList,
-  failed,
-}: {
-  list: AnswerComment[];
-  id: string;
-  message: string;
-  setList: (update: (list: AnswerComment[]) => AnswerComment[]) => void;
-  failed: () => void;
-}) {
-  const index = list.findIndex((c) => c.id === id);
-  const comment = list[index];
-  if (!comment) return;
-  const putBack = () =>
-    setList((now) => {
-      if (now.some((c) => c.id === id)) return now;
-      const next = [...now];
-      next.splice(Math.min(index, next.length), 0, comment);
-      return next;
-    });
-  deleteWithUndo({
-    url: `/api/replies/${encodeURIComponent(id)}`,
-    method: "DELETE",
-    ids: [id],
-    message,
-    gone: () => setList((now) => now.filter((c) => c.id !== id)),
-    back: putBack,
-    failed,
-  });
-}
-
 /** The box a comment is written in: the quote it is on, then the words.
     `draft` and `onDraft` keep the words typed and not yet posted (SPEC.md
     §6): the box opens with them, and each keystroke hands them on, so
@@ -524,68 +505,30 @@ export function CommentBox({
   );
 }
 
-/** The comments on this conversation, oldest first, each with its author. */
-export function CommentList({
-  comments,
-  people,
-  myId,
-  onDelete,
+/** Where the comments on this conversation's answers are (SPEC.md §7): the
+    Annotations tab lists them under the conversation, so the thread shows
+    one line, their count, and a press opens the tab there. */
+export function CommentsPointer({
+  count,
+  noteId,
   className = "",
 }: {
-  comments: AnswerComment[];
-  people: Record<string, Person>;
-  myId: string | null;
-  onDelete: (id: string) => void;
+  count: number;
+  noteId: string | null;
   className?: string;
 }) {
   const t = useT();
-  if (comments.length === 0) return null;
+  if (count === 0 || !noteId) return null;
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
-        {t("assistant.comments")}
-      </span>
-      {comments.map((c) => {
-        const person = people[c.userId] ?? null;
-        // The comment's quote is its first lines, written as a quote.
-        const lines = c.content.split("\n");
-        const quoted = lines
-          .filter((l) => l.startsWith(">"))
-          .map((l) => l.replace(/^>\s?/, ""))
-          .join(" ");
-        const text = lines
-          .filter((l) => !l.startsWith(">"))
-          .join("\n")
-          .trim();
-        return (
-          <div key={c.id} className="rounded-xl bg-card px-2.5 py-1.5 shadow-soft">
-            <div className="flex items-center gap-1.5">
-              {person && <PersonBadge person={person} size={16} />}
-              <span className="text-[11px] font-semibold text-sand-600">{person?.name ?? ""}</span>
-              {c.userId === myId && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(c.id)}
-                  data-track="assistant-comment-delete"
-                  aria-label={t("assistant.commentDelete")}
-                  data-tip={t("assistant.commentDelete")}
-                  // The other cards' ✕ target (24 px, 36 on a coarse
-                  // pointer), drawn the same: the row keeps its height.
-                  className="-my-1 -mr-2 ml-auto flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] text-sand-500 hover:text-clay-800 pointer-coarse:-my-2.5 pointer-coarse:-mr-3.5 pointer-coarse:size-9"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            {quoted && (
-              <p className="mt-1 border-l-2 border-clay-300 pl-2 text-[11px] text-sand-600">
-                {quoteLine(quoted)}
-              </p>
-            )}
-            {text && <p className="mt-1 text-[12.5px] whitespace-pre-wrap text-sand-800">{text}</p>}
-          </div>
-        );
-      })}
-    </div>
+    <button
+      type="button"
+      onClick={() => showCommentsInAnnotations(noteId)}
+      data-track="assistant-comments-open"
+      data-tip={t("assistant.commentsOpenTitle")}
+      className={`flex items-center gap-1.5 self-start rounded-full bg-card px-2.5 py-1 text-[11.5px] font-semibold text-sand-600 shadow-soft hover:text-clay-800 pointer-coarse:py-2 ${className}`}
+    >
+      <CommentIcon size={12} />
+      {count === 1 ? t("assistant.commentsOne") : t("assistant.commentsMany", { n: count })}
+    </button>
   );
 }

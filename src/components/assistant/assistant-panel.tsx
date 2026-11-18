@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { OPEN_CONVERSATION_EVENT, takeRequestedConversation } from "@/lib/assistant/open-conversation";
 import { AssistantBoundary } from "@/components/assistant/assistant-boundary";
 import {
   attachmentKind,
@@ -22,7 +23,6 @@ import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { DRIVE_ASSISTANT_MIME_TYPES, type DrivePickedFile } from "@/lib/drive/types";
 import { useImeGuard } from "@/lib/ime";
 import { imageUrl, refuseImage, uploadImage } from "@/lib/images";
-import type { Person } from "@/lib/person";
 import type { AssistantAction, SummaryDepth, SummaryLevels } from "@/lib/types";
 import { UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import {
@@ -30,8 +30,7 @@ import {
   AnswerTint,
   AnswerToolbar,
   CommentBox,
-  CommentList,
-  deleteCommentWithUndo,
+  CommentsPointer,
   QuoteChip,
   quoteMessage,
   shownComments,
@@ -512,7 +511,7 @@ function AssistantPanelBody({
   const router = useRouter();
   const t = useT();
   const ime = useImeGuard();
-  const { premium, myId, people } = useCollab();
+  const { premium } = useCollab();
   // This page while a document is open, else Project: the panel remounts on
   // every document switch, so the default follows the open document.
   const [scope, setScope] = useState<Scope>(documentId ? "document" : "notebook");
@@ -618,7 +617,6 @@ function AssistantPanelBody({
   }, [quote]);
   const [commentQuote, setCommentQuote] = useState<string | null>(null);
   const [comments, setComments] = useState<AnswerComment[]>([]);
-  const [commentPeople, setCommentPeople] = useState<Record<string, Person>>({});
   const [commentBusy, setCommentBusy] = useState(false);
   /** Update the thread on screen — the side chat's turns, or the conversation's. */
   function setTurns(update: (turns: Turn[]) => Turn[]) {
@@ -920,6 +918,23 @@ function AssistantPanelBody({
     }
   }
 
+  // A conversation asked for from outside the panel (its card in the
+  // Annotations tab: lib/assistant/open-conversation.ts) opens as one from
+  // the list does: when the panel is drawn, or at once when it already is.
+  const openConversationRef = useRef(openConversation);
+  useEffect(() => {
+    openConversationRef.current = openConversation;
+  });
+  useEffect(() => {
+    const open = () => {
+      const id = takeRequestedConversation();
+      if (id) void openConversationRef.current(id);
+    };
+    open();
+    window.addEventListener(OPEN_CONVERSATION_EVENT, open);
+    return () => window.removeEventListener(OPEN_CONVERSATION_EVENT, open);
+  }, []);
+
   // Delete a conversation from the list (SPEC.md §7): no ask; the notes'
   // Undo pill offers Undo, and once it goes the note goes through
   // DELETE /api/notes/:id, its side chats and comments with it, all kept for
@@ -960,7 +975,8 @@ function AssistantPanelBody({
     });
   }
 
-  // The comments under the open thread, reloaded when the thread changes.
+  // The comments on the open thread's answers, counted for the line that
+  // leads to them in the Annotations tab; read again when the thread changes.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -972,13 +988,11 @@ function AssistantPanelBody({
         const res = await fetch(`/api/replies?noteId=${encodeURIComponent(activeNoteId)}`);
         const json = (await res.json().catch(() => null)) as {
           replies?: AnswerComment[];
-          people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
         setComments(shownComments(json.replies ?? []));
-        setCommentPeople(json.people ?? {});
       } catch {
-        // Offline: the thread reads the same, with no comments under it.
+        // Offline: the thread reads the same, with no line for its comments.
       }
     })();
     return () => {
@@ -1067,17 +1081,6 @@ function AssistantPanelBody({
       setCommentBusy(false);
     }
   }
-  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
-  function deleteComment(id: string) {
-    deleteCommentWithUndo({
-      list: comments,
-      id,
-      message: t("outline.commentDeleted"),
-      setList: setComments,
-      failed: () => setError(t("common.notSaved")),
-    });
-  }
-
   // A completed turn saves (SPEC.md §21): the first one creates the note,
   // every one after updates it in place. Fire-and-forget — a save that fails
   // costs the reader nothing they would notice this session; the thread
@@ -2268,12 +2271,9 @@ function AssistantPanelBody({
               ))}
             </div>
           )}
-          <CommentList
-            comments={comments}
-            people={{ ...people, ...commentPeople }}
-            myId={myId}
-            onDelete={deleteComment}
-          />
+          {/* The comments are in the Annotations tab, under the conversation:
+              one line here says how many and leads there. */}
+          <CommentsPointer count={comments.length} noteId={activeNoteId} />
         </div>
         {openSideChat ? (
           <SideChatHeader quote={openSideChat.quote} onBack={() => setOpenKey(null)} />

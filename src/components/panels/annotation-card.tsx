@@ -9,6 +9,8 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { stripSimplifyMarkers } from "@/lib/sentences";
+import { requestConversation } from "@/lib/assistant/open-conversation";
+import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { ChevronDownIcon, ChevronRightIcon, ExpandIcon } from "@/components/icons";
@@ -198,9 +200,20 @@ export function AnnotationCard({
     window.addEventListener("dissect:open-annotation", onOpen);
     return () => window.removeEventListener("dissect:open-annotation", onOpen);
   }, [collapsed, sourceId, annotation.id, toggle]);
+  // The same by the note's id: a sidebar conversation has no source, and the
+  // assistant's line for the comments on its answers opens its card here.
+  useEffect(() => {
+    if (!collapsed) return;
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<{ noteId: string }>).detail.noteId === annotation.id) toggle(annotation.id);
+    };
+    window.addEventListener("dissect:open-annotation-note", onOpen);
+    return () => window.removeEventListener("dissect:open-annotation-note", onOpen);
+  }, [collapsed, annotation.id, toggle]);
 
   return (
     <div
+      data-annotation-id={annotation.id}
       data-annotation-source-id={sourceId ?? undefined}
       data-annotation-kind={annotation.kind}
       className={`group/annotation ${card}`}
@@ -308,9 +321,12 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
     case "assistant":
       return (
         <>
-          {/* The sidebar assistant's conversation is anchored nowhere: the badge says so, and there is no anchor to jump to. */}
+          {/* The sidebar assistant's conversation is anchored nowhere: the badge says so. With no anchor to jump to, it leads back to the assistant. */}
           {a.sourceId === null && (
-            <p className="mb-1 text-[11px] font-semibold text-sand-500">{t("assistant.historyOriginSidebar")}</p>
+            <p className="mb-1 flex flex-wrap items-center gap-x-2 text-[11px] font-semibold text-sand-500">
+              {t("assistant.historyOriginSidebar")}
+              <OpenInAssistant noteId={a.id} />
+            </p>
           )}
           {/* The whole conversation, nothing to scroll inside the card. */}
           <div className="text-[13px]">
@@ -330,6 +346,26 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
         </>
       );
   }
+}
+
+/** A sidebar conversation's way back from its card: the tray opens on the
+    assistant, on this conversation (lib/assistant/open-conversation.ts). A
+    viewer has no assistant, so no button. */
+function OpenInAssistant({ noteId }: { noteId: string }) {
+  const t = useT();
+  const { canEdit } = useCollab();
+  if (!canEdit) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => requestConversation(noteId)}
+      data-track="annotation-open-in-assistant"
+      data-tip={t("assistant.openInAssistantTitle")}
+      className="text-clay-700 hover:text-clay-800"
+    >
+      {t("assistant.openInAssistant")}
+    </button>
+  );
 }
 
 export function AnnotationActions({

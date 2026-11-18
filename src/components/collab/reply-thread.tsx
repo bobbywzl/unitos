@@ -11,6 +11,7 @@ import { tabAccount } from "@/lib/tab-account";
 import { loadCardDrafts, writeCardDrafts } from "@/lib/toolbar-drafts";
 import type { ReplyView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
+import { quoteLine, splitQuoteMessage } from "@/components/assistant/answer-tools";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
@@ -208,6 +209,7 @@ export function ReplyThread({
   const row = (reply: ReplyView) => {
     const person = people[reply.userId];
     const isResolved = reply.resolvedById !== null;
+    const said = splitQuoteMessage(reply.content);
     return (
       <div key={reply.id} className={`flex items-start gap-2 ${isResolved ? "opacity-60" : ""}`}>
         {person && <PersonBadge person={person} size={16} />}
@@ -245,13 +247,20 @@ export function ReplyThread({
               )}
             </span>
           </div>
-          <p
-            className={`text-[12.5px] leading-relaxed whitespace-pre-wrap ${
-              isResolved ? "line-through decoration-sand-400" : ""
-            }`}
-          >
-            {reply.content}
-          </p>
+          {/* A comment on an answer (SPEC.md §7) opens with the words it is
+              on, as a quote: drawn as one, then the comment. */}
+          {said.quote && (
+            <p className="mb-0.5 border-l-2 border-clay-300 pl-2 text-[11px] text-sand-600">{quoteLine(said.quote)}</p>
+          )}
+          {(said.text || !said.quote) && (
+            <p
+              className={`text-[12.5px] leading-relaxed whitespace-pre-wrap ${
+                isResolved ? "line-through decoration-sand-400" : ""
+              }`}
+            >
+              {said.quote ? said.text : reply.content}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -259,6 +268,7 @@ export function ReplyThread({
 
   return (
     <div
+      data-reply-thread
       className={`flex flex-col gap-2 ${shown.length > 0 ? "mt-2.5 border-t border-line pt-2.5" : "mt-1.5"}`}
     >
       {openReplies.map(row)}
