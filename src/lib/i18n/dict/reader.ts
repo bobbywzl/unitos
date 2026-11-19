@@ -79,7 +79,7 @@ const en = {
   commentTitle: "Attach a comment to the selection, without a highlight",
   closeLinkTitle: "Make the selection the other end of the link you started",
   runTitle: "Send the command to the assistant (Enter)",
-  sendTitle: "Send the message (Enter)",
+  sendTitle: "Send the message (Enter). Shift+Enter starts a new line.",
   stopRunTitle: "Stop the run. What arrived so far stays.",
   // The assistant's commands (SPEC.md §29): a chip writes its change into
   // the text as suggestions
@@ -411,7 +411,7 @@ const zh: Record<keyof typeof en, string> = {
   commentTitle: "给选中内容附上评论，不加高亮",
   closeLinkTitle: "把选中内容作为你已开始的链接的另一端",
   runTitle: "把指令发给助手（Enter）",
-  sendTitle: "发送消息（Enter）",
+  sendTitle: "发送消息（Enter）。Shift+Enter 换行。",
   stopRunTitle: "停止运行。已到达的内容保留。",
   commandRephrase: "改写",
   commandShorten: "缩短",

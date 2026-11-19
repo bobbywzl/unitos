@@ -10,6 +10,7 @@ import { ThinkingChips } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { readThinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
+import { useImeGuard } from "@/lib/ime";
 import { splitStreamError, splitStreamPlan } from "@/lib/derive/config";
 
 // The phone page's Assistant tab (SPEC.md §33): one conversation with the
@@ -23,6 +24,7 @@ type Saved = { conversationNoteId: string | null; updatedAt: string | null };
 
 export function PhoneAssistant({ project }: { project: PhoneProject }) {
   const t = useT();
+  const ime = useImeGuard();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [question, setQuestion] = useState("");
   const [streamed, setStreamed] = useState<string | null>(null);
@@ -232,6 +234,17 @@ export function PhoneAssistant({ project }: { project: PhoneProject }) {
           data-phone-ask
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          {...ime.props}
+          onKeyDown={(e) => {
+            // Enter sends and Shift+Enter starts a new line, as in every
+            // assistant box (SPEC.md §7), where a keyboard with keys is
+            // likely: a mouse or a trackpad is attached. On a phone alone
+            // the on-screen keyboard's return starts a new line and Send
+            // sends, as in a chat app on a phone.
+            if (!ime.isSendEnter(e) || !window.matchMedia("(any-pointer: fine)").matches) return;
+            e.preventDefault();
+            void ask();
+          }}
           placeholder={t("phone.assistantPlaceholder")}
           rows={2}
           maxLength={4000}

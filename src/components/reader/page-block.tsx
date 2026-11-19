@@ -7,6 +7,7 @@ import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { api } from "@/lib/api";
+import { useImeGuard } from "@/lib/ime";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -76,6 +77,7 @@ export function PageBlock({
   hint: boolean; // first page only: the fading Highlight & ask hint
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const router = useRouter();
   // A mark whose annotation this tab deleted goes at once, before the
   // refresh brings the page without it; Undo brings it back the same way.
@@ -464,15 +466,15 @@ export function PageBlock({
                 autoFocus
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
+                {...ime.props}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void ask(question.trim().length > 0);
-                  }
+                  if (!ime.isSendEnter(e)) return;
+                  e.preventDefault();
+                  void ask(question.trim().length > 0);
                 }}
                 placeholder={t("panes.pageAskPlaceholder")}
                 rows={2}
-                className="mb-2 w-full resize-none rounded-xl bg-sand-100 px-3 py-2 text-[13px] outline-none placeholder:text-sand-500"
+                className="field-sizing-content mb-2 max-h-40 min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 px-3 py-2 text-[13px] outline-none placeholder:text-sand-500"
               />
             )}
             {answer !== null && (

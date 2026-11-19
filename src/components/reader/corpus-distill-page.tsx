@@ -425,15 +425,13 @@ export function CorpusDistillPage({
                 onChange={(e) => draft.change(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
-                  if (ime.isImeEnter(e)) return;
-                  if (e.key === "Enter" && !e.shiftKey && question.trim()) {
-                    e.preventDefault();
-                    void run(question);
-                  }
+                  if (!ime.isSendEnter(e)) return;
+                  e.preventDefault();
+                  if (question.trim()) void run(question);
                 }}
                 placeholder={t("panes.corpusAskPlaceholder")}
                 rows={2}
-                className="w-full resize-none rounded-2xl bg-card p-4 font-display text-[20px] leading-snug shadow-soft outline-none placeholder:text-sand-400"
+                className="field-sizing-content max-h-72 min-h-[calc(2lh+2rem)] w-full resize-none rounded-2xl bg-card p-4 font-display text-[20px] leading-snug shadow-soft outline-none placeholder:text-sand-400"
               />
               <p className="mt-2 text-xs text-sand-500">{t("panes.corpusAskHint")}</p>
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}

@@ -10247,7 +10247,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           message.role === "user" ? (
             <p
               key={i}
-              className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+              className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] whitespace-pre-wrap text-clay-800"
             >
               {message.content}
             </p>
@@ -12073,7 +12073,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 }}
                 placeholder={t(popover.figure ? "reader.figureBarPlaceholder" : "reader.assistantPlaceholder")}
                 rows={2}
-                className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+                // Two lines at rest, as rows draws it; Shift+Enter's lines
+                // show, to six, before the box scrolls.
+                className="field-sizing-content max-h-[calc(6lh+1rem)] min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
               {popover.figure && !aiBusy && (
                 <div className="flex flex-wrap items-center gap-1">
@@ -12339,7 +12341,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
             aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
             rows={2}
-            className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+            className="field-sizing-content max-h-[calc(6lh+1rem)] min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
           />
           {!barKey && !bar.busy && (
             <div className="flex flex-wrap items-center gap-1">
@@ -12735,7 +12737,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 line.role === "user" ? (
                   <li
                     key={i}
-                    className="ml-6 self-end rounded-2xl bg-clay-100 px-2.5 py-1 text-[12px] text-clay-800"
+                    className="ml-6 self-end rounded-2xl bg-clay-100 px-2.5 py-1 text-[12px] whitespace-pre-wrap text-clay-800"
                   >
                     {line.text}
                   </li>

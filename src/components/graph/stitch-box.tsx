@@ -298,7 +298,7 @@ export function StitchBox({
         <div ref={bodyRef} className="flex max-h-[40vh] flex-col gap-2.5 overflow-y-auto px-4 pt-3">
           {turns.map((turn, i) =>
             turn.role === "user" ? (
-              <p key={i} className="ml-auto max-w-[85%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800">
+              <p key={i} className="ml-auto max-w-[85%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] whitespace-pre-wrap text-sand-800">
                 {turn.content}
               </p>
             ) : (
@@ -343,15 +343,14 @@ export function StitchBox({
             onChange={(e) => setCommand(e.target.value)}
             {...ime.props}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !ime.isImeEnter(e)) {
-                e.preventDefault();
-                void send();
-              }
+              if (!ime.isSendEnter(e)) return;
+              e.preventDefault();
+              void send();
             }}
             placeholder={t("stitch.stitchPlaceholder")}
             rows={1}
             aria-label={t("stitch.stitch")}
-            className="min-h-[38px] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
+            className="field-sizing-content max-h-40 min-h-[38px] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
           />
           <VoiceTypingButton field={inputRef} track="stitch-voice-typing" className="size-[38px]" size={15} />
           {running ? (
@@ -369,6 +368,7 @@ export function StitchBox({
               type="submit"
               data-track="stitch-send"
               disabled={!command.trim()}
+              data-tip={t("reader.sendTitle")}
               className="h-[38px] rounded-full bg-clay px-5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("stitch.stitchSend")}

@@ -239,15 +239,20 @@ export function AskRange({
           e.preventDefault();
           void ask();
         }}
-        className="flex items-center gap-2"
+        className="flex items-end gap-2"
       >
-        <input
+        {/* Enter sends and Shift+Enter starts a new line, as in every
+            assistant box (SPEC.md §7); the box grows with its lines. */}
+        <textarea
           autoFocus
           value={question}
+          rows={1}
           onChange={(e) => setQuestion(e.target.value)}
           {...ime.props}
           onKeyDown={(e) => {
-            if (ime.isImeEnter(e)) e.preventDefault();
+            if (!ime.isSendEnter(e)) return;
+            e.preventDefault();
+            void ask();
           }}
           placeholder={
             hasTranscript
@@ -256,9 +261,9 @@ export function AskRange({
           }
           aria-label={t("video.askRange")}
           disabled={!hasTranscript}
-          className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
+          className="field-sizing-content max-h-32 min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
         />
-        {hasTranscript && <VoiceTypingButton track="video-ask-voice-typing" className="size-8" size={14} />}
+        {hasTranscript && <VoiceTypingButton track="video-ask-voice-typing" className="mb-[3.5px] size-8" size={14} />}
         <button
           type="submit"
           data-track="video-ask"
@@ -270,7 +275,7 @@ export function AskRange({
           disabled={!busy && (!question.trim() || !hasTranscript)}
           data-tip={busy ? t("video.stopAsk") : t("video.askTitle")}
           aria-label={busy ? t("video.stopAsk") : undefined}
-          className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className="mb-[3.5px] rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           {busy ? <StopIcon size={12} /> : t("video.ask")}
         </button>

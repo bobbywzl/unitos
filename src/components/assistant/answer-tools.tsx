@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { resumeDeletes } from "@/lib/deferred-delete";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { ChevronDownIcon, SparkleIcon, CommentIcon } from "@/components/icons";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
@@ -457,6 +458,7 @@ export function CommentBox({
   className?: string;
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const [text, setText] = useState(draft);
   return (
     <form
@@ -475,13 +477,14 @@ export function CommentBox({
           setText(e.target.value);
           onDraft?.(e.target.value);
         }}
+        {...ime.props}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          if (ime.isSendEnter(e)) {
             e.preventDefault();
             if (text.trim() && !busy) onSubmit(text);
           }
           // Escape closes this box and only this box: the card under it stays.
-          if (e.key === "Escape") {
+          if (e.key === "Escape" && !isImeKey(e)) {
             e.stopPropagation();
             onCancel();
           }
