@@ -6,7 +6,7 @@ import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
 import { NotesIcon, SparkleIcon, SpinnerIcon, StarIcon, ToBottomIcon, ToTopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { annotationKindColor } from "@/lib/annotations/kind";
+import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { PIECE_STARS_MAX, type PieceStars, type StructurePiece } from "@/lib/structure";
 import { handleId, isOpenConnectionEnd, PIECE_DRAG_TYPE, pieceHashOf, useStructure, type PieceAnnotation } from "@/components/structure/structure-context";
 
@@ -196,13 +196,20 @@ export function PieceRow({ piece, groupFirst, groupLast }: { piece: StructurePie
             </ul>
           )}
           {run && (
-            <div className="rounded-xl border border-line bg-card px-2.5 py-2 text-[12px]" style={{ borderLeftColor: annotationKindColor(run.kind, null), borderLeftWidth: 3 }}>
-              <p className="mb-1 flex items-center gap-1 text-[10.5px] font-semibold text-sand-600 uppercase">
-                <AnnotationKindIcon kind={run.kind} size={10} />
-                {t(run.kind === "explain" ? "reader.explain" : "reader.simplify")}
-                {run.streaming && <SpinnerIcon size={10} className="motion-safe:animate-spin" />}
+            // The kind box (globals.css .kind-box), as everywhere an annotation draws.
+            <div className="kind-box text-[12px]" style={{ "--kind": annotationKindColor(run.kind, null) } as React.CSSProperties}>
+              <p className="kind-box-head">
+                <span className="kind-box-name">
+                  <span className="kind-box-icon">
+                    <AnnotationKindIcon kind={run.kind} size={12} />
+                  </span>
+                  {t(ANNOTATION_KIND_KEY[run.kind])}
+                </span>
+                {run.streaming && <SpinnerIcon size={11} className="motion-safe:animate-spin" />}
               </p>
-              {run.error ? <p className="text-red-600">{run.error}</p> : <Markdown>{run.text}</Markdown>}
+              <div className="kind-box-body">
+                {run.error ? <p className="text-red-600">{run.error}</p> : <Markdown>{run.text}</Markdown>}
+              </div>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-1.5">
@@ -266,8 +273,9 @@ function AnnotationLine({ blockId, annotation }: { blockId: string; annotation: 
         onClick={() => openBlock(blockId, annotation.sourceId)}
         data-track="structure-open-annotation"
         data-tip={t("structure.openAnnotationTitle")}
-        className="flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11.5px] leading-snug text-sand-700 hover:bg-clay-100"
-        style={{ borderLeft: `3px solid ${color}` }}
+        // The kind box's frame, one line high (globals.css .kind-box).
+        className="kind-box flex w-full items-start gap-1.5 !rounded-lg px-2 py-1 text-left text-[11.5px] leading-snug text-sand-800 hover:brightness-[0.97]"
+        style={{ "--kind": color } as React.CSSProperties}
       >
         <span className="mt-0.5 shrink-0" style={{ color }}>
           {annotation.kind === "note" ? <NotesIcon size={10} /> : <AnnotationKindIcon kind={annotation.kind} size={10} />}

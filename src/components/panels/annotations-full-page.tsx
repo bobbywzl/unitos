@@ -101,6 +101,7 @@ export function AnnotationsFullPage({
       view={view}
       summary={annotationSummary(a)}
       showKind
+      notebookId={notebookId}
       menu={
         <AnnotationMenu
           annotation={a}

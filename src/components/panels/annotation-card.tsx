@@ -17,6 +17,7 @@ import { ChevronDownIcon, ChevronRightIcon, ExpandIcon } from "@/components/icon
 import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
+import { QuoteJump } from "@/components/quote-jump";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { NoteId } from "@/components/outline/note-id";
 import { WordLine } from "@/components/outline/word-line";
@@ -36,7 +37,8 @@ import type { CollapsedViewModel } from "@/components/use-collapsed-view";
 // (dissect:open-annotation) opens a collapsed card first.
 
 const label = "text-[11px] font-bold tracking-[0.08em] uppercase text-sand-600";
-const card = "rounded-2xl border bg-card p-3.5 shadow-soft";
+// The card is the kind box (globals.css .kind-box): the head band, then the body.
+const card = "kind-box shadow-soft";
 
 // The annotations view persists per browser and per project, like the notes
 // view; the tab and the annotations full page share it.
@@ -163,6 +165,7 @@ export function AnnotationCard({
   menu,
   showKind = false,
   jumpNotebookId,
+  notebookId = jumpNotebookId,
   children,
 }: {
   annotation: AnnotationItem;
@@ -178,6 +181,8 @@ export function AnnotationCard({
   /** In the reader (the Annotations tab): a press on the collapsed card's
       line opens the card and jumps to its mark in the text too. */
   jumpNotebookId?: string;
+  /** The project: the quote symbol in the head jumps to the anchored words. */
+  notebookId?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -217,9 +222,9 @@ export function AnnotationCard({
       data-annotation-source-id={sourceId ?? undefined}
       data-annotation-kind={annotation.kind}
       className={`group/annotation ${card}`}
-      style={{ borderColor: color }}
+      style={{ "--kind": color } as React.CSSProperties}
     >
-      <div className="flex min-h-[18px] items-center gap-1.5">
+      <div className="kind-box-head">
         {droppable && documentId && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
             <AnnotationGrip reference={annotationReferenceOf(annotation, documentId, t(ANNOTATION_KIND_KEY[annotation.kind]), gist)} />
@@ -231,17 +236,18 @@ export function AnnotationCard({
           aria-expanded={!collapsed}
           aria-label={collapseLabel}
           title={collapseLabel}
-          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-400 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:-mx-[9px] pointer-coarse:-my-[9px] pointer-coarse:size-9"
+          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-card hover:text-clay-800 pointer-coarse:-mx-[9px] pointer-coarse:-my-[9px] pointer-coarse:size-9"
         >
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
-        {annotation.kind === "highlight" && <ColorDot color={annotation.color} />}
-        {showKind && (
-          <span className={`${label} flex shrink-0 items-center gap-1`} style={{ color }}>
-            <AnnotationKindIcon kind={annotation.kind} size={11} />
-            {t(ANNOTATION_KIND_KEY[annotation.kind])}
+        {/* The kind's symbol in its color, on every card; its name where the
+            cards are not listed under their kind (the annotations full page). */}
+        <span className="kind-box-name shrink-0">
+          <span className="kind-box-icon">
+            {annotation.kind === "highlight" ? <ColorDot color={annotation.color} /> : <AnnotationKindIcon kind={annotation.kind} size={12} />}
           </span>
-        )}
+          {showKind && t(ANNOTATION_KIND_KEY[annotation.kind])}
+        </span>
         {/* The id is on the open card; a collapsed row is its line. */}
         {!collapsed && <NoteId id={annotation.id} annotation />}
         {collapsed && (
@@ -269,16 +275,32 @@ export function AnnotationCard({
             {annotation.figureLabel}
           </span>
         )}
-        {menu && <span className="ml-auto flex shrink-0 items-center">{menu}</span>}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {/* The words the annotation is anchored to: the quote symbol shows
+              them and jumps to them. A highlight's words are its content. */}
+          {annotation.quotedText && annotation.kind !== "highlight" && (
+            <QuoteJump
+              quote={annotation.quotedText}
+              onJump={
+                notebookId && sourceId && canJumpTo(annotation, documentId)
+                  ? () => jumpToAnnotation(router, notebookId, documentId, sourceId)
+                  : undefined
+              }
+              track="annotation-quote"
+            />
+          )}
+          {menu}
+        </span>
       </div>
-      {!collapsed && <div className="mt-1">{children}</div>}
+      {!collapsed && <div className="kind-box-body">{children}</div>}
     </div>
   );
 }
 
 /** The card's body by kind: the text, the conversation continued from a
-    tool's output, the anchored words, and, once the anchor is gone, what the
-    annotation was anchored to. */
+    tool's output, and, once the anchor is gone, what the annotation was
+    anchored to. The anchored words themselves are the quote symbol in the
+    card's head. */
 export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }) {
   const t = useT();
   const lost =
@@ -301,9 +323,7 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
           <div className="text-[13px]">
             <Markdown>{a.content}</Markdown>
           </div>
-          {a.quotedText && (
-            <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">{a.quotedText}</p>
-          )}
+          {lost}
         </>
       );
     case "simplify":
@@ -313,9 +333,7 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
             <Markdown>{stripSimplifyMarkers(a.content)}</Markdown>
           </div>
           <ToolConversation turns={a.conversation} />
-          {a.quotedText && (
-            <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">{a.quotedText}</p>
-          )}
+          {lost}
         </>
       );
     case "assistant":
