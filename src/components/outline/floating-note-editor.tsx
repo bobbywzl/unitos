@@ -196,32 +196,65 @@ function textColumn(pane: HTMLElement): { left: number; right: number; flows: bo
   return { left: r.left - origin, right: r.right - origin, flows: false };
 }
 
-/** The right edge of the page editor's own cards (comments, suggestions,
-    tool cards beside the page) that stand level with the card, in the
-    pane's content; null when none does. */
-function pageCardsRight(pane: HTMLElement, top: number, height: number): number | null {
+/** The cards the reader's tools stand beside the column: the page editor's
+    column of comments and suggestions, and the tool cards and comment cards
+    beside an article. They stand over a floating note (SPEC.md §6), so a
+    note keeps clear of them. */
+const PANE_CARDS =
+  "[data-comment-card], [data-suggestion-card], [data-side-card], [data-log-card], [data-annotation-card]";
+
+/** The pane's cards that stand level with the card, right of the column's
+    left edge, in the pane's content: their right edge and their lowest
+    bottom; null when none does. */
+function cardsLevel(
+  pane: HTMLElement,
+  columnLeft: number,
+  top: number,
+  height: number,
+): { right: number; bottom: number } | null {
   const paneRect = pane.getBoundingClientRect();
   const y0 = top - pane.scrollTop + paneRect.top;
-  let right: number | null = null;
-  for (const el of pane.querySelectorAll<HTMLElement>(".docs-column [data-side-card], .docs-column [data-annotation-card], .docs-column [data-docs-card]")) {
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const el of pane.querySelectorAll<HTMLElement>(PANE_CARDS)) {
+    if (el.closest("[data-floating-note]")) continue;
     const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.bottom <= y0 || r.top >= y0 + height) continue;
-    right = Math.max(right ?? -Infinity, r.right - paneRect.left + pane.scrollLeft);
+    const left = r.left - paneRect.left + pane.scrollLeft;
+    if (r.width === 0 || r.bottom <= y0 || r.top >= y0 + height || left < columnLeft) continue;
+    right = Math.max(right, left + r.width);
+    bottom = Math.max(bottom, r.bottom - paneRect.top + pane.scrollTop);
   }
-  return right;
+  return right === -Infinity ? null : { right, bottom };
 }
+const cardsRight = (pane: HTMLElement, columnLeft: number, top: number, height: number) =>
+  cardsLevel(pane, columnLeft, top, height)?.right ?? null;
 
-/** Where a card stands clear of the text column, and how wide: beside the
-    column, in the free room on its right, past the page editor's own cards
-    when the pane has room for both. Null when the card is clear already, or
-    the pane has no room beside the column (an article's lines then flow
-    around the card where it is). */
-function besideColumn(pane: HTMLElement, at: Pos, width: number, height: number): { left: number; width: number } | null {
+// A note with no room past the pane's cards goes under them, when that is
+// no further down than this.
+const UNDER_CARDS_MAX = 480;
+
+/** Where a card stands clear of the text column and of the pane's cards,
+    and how wide: beside the column, in the free room on its right, past the
+    pane's cards level with it when the pane has room for both. Null when
+    the card is clear already, or the pane has no room for it (an article's
+    lines then flow around the card where it is). text: false leaves a card
+    on an article's text where the reader put it, and moves it only off the
+    pane's cards. */
+function besideColumn(
+  pane: HTMLElement,
+  at: Pos,
+  width: number,
+  height: number,
+  text = true,
+): { left: number; width: number } | null {
   const column = textColumn(pane);
   if (!column) return null;
-  if (at.left >= column.right + BESIDE || at.left + width <= column.left - BESIDE) return null;
+  const cards = cardsRight(pane, column.left, at.top, height);
+  const onText = at.left < column.right + BESIDE && at.left + width > column.left - BESIDE;
+  const onCards = cards !== null && at.left < cards + MARGIN && at.left + width > column.left;
+  if (!(onText && (text || !column.flows)) && !onCards) return null;
   const end = pane.clientWidth - MARGIN;
-  for (const from of [pageCardsRight(pane, at.top, height), column.right]) {
+  for (const from of [cards === null ? null : cards - BESIDE + MARGIN, column.right]) {
     if (from === null) continue;
     const left = Math.max(at.left, from + BESIDE);
     const room = end - (from + BESIDE);
@@ -229,6 +262,9 @@ function besideColumn(pane: HTMLElement, at: Pos, width: number, height: number)
     // A page's lines cannot flow: a narrower card beside the page beats a
     // card on its words.
     if (!column.flows && room >= MIN_WIDTH) return { left: from + BESIDE, width: Math.floor(room) };
+    // An article's card that only met the pane's cards stays where it is
+    // when there is no room past them.
+    if (column.flows && !onText) return null;
   }
   return null;
 }
@@ -542,7 +578,7 @@ export function FloatingNoteEditor({
         const next = clampContent(toContent({ left: e.clientX - grab.dx, top: e.clientY - grab.dy }, pane), pane, w);
         home.current = next.left;
         wanted.current = { ...next, width: wanted.current.width };
-        settleRef.current("page", next);
+        settleRef.current("clear", next);
       }
     };
     window.addEventListener("pointermove", onMove);
@@ -575,11 +611,13 @@ export function FloatingNoteEditor({
   // column, when the pane has it and the card lies on the text
   // (besideColumn), so the text keeps its full width; when another card
   // stands there, the spot the reader let it go at, where an article's
-  // lines flow around it; else under the card it would lie on. "page": a
-  // card let go on a page of the page editor, or left on one by a narrower
-  // pane, goes beside the page. `from`: where the card would stand; unset,
-  // where it stands.
-  function settle(mode: "land" | "page", from?: Pos) {
+  // lines flow around it; else under the card it would lie on. "clear": a
+  // card let go, a pane that narrowed, or one of the pane's cards opening
+  // on it: a card on a page of the page editor goes beside the page, and a
+  // card under one of the pane's cards moves past it; a card the reader put
+  // on an article's text stays there. `from`: where the card would stand;
+  // unset, where it stands.
+  function settle(mode: "land" | "clear", from?: Pos) {
     const card = cardRef.current;
     if (!pane || !card) return;
     // The width the reader gave the card (the corner handle, below); a
@@ -588,8 +626,7 @@ export function FloatingNoteEditor({
     const h = card.offsetHeight;
     const dropped = from ?? at;
     const column = textColumn(pane);
-    if (mode === "page" && column?.flows !== false) return;
-    const place = besideColumn(pane, dropped, w, h);
+    const place = besideColumn(pane, dropped, w, h, mode === "land");
     let next = place ? { left: place.left, top: dropped.top } : dropped;
     // Clear of the text where it stands: a card a place narrowed takes back
     // the width the pane now has room for.
@@ -622,6 +659,18 @@ export function FloatingNoteEditor({
           }
         }
       }
+    }
+    // No room past the pane's cards (a comment beside a page in a narrow
+    // pane): the note goes under the cards it would lie on, when they end
+    // near; a column full of cards leaves it where it is.
+    if (column) {
+      let top = next.top;
+      for (let i = 0; i < 6; i++) {
+        const level = cardsLevel(pane, column.left, top, h);
+        if (!level || next.left >= level.right + MARGIN) break;
+        top = level.bottom + 12;
+      }
+      if (top !== next.top && top - next.top <= UNDER_CARDS_MAX) next = { left: next.left, top };
     }
     next = clampContent(next, pane, nextWidth);
     home.current = next.left;
@@ -708,11 +757,9 @@ export function FloatingNoteEditor({
         }
         const p = atRef.current;
         const next = clampContent({ left: home.current ?? p.left, top: p.top }, pane, cardRef.current?.offsetWidth ?? width);
-        if (textColumn(pane)?.flows === false) {
-          const kept = home.current;
-          settleRef.current("page", next);
-          home.current = kept;
-        } else if (next.left !== p.left || next.top !== p.top) setAt(next);
+        const kept = home.current;
+        settleRef.current("clear", next);
+        home.current = kept;
       });
     });
     observer.observe(pane);
@@ -721,6 +768,43 @@ export function FloatingNoteEditor({
       observer.disconnect();
     };
   }, [pane, width]);
+
+  // One of the pane's cards opens, moves, or closes (a comment, a tool
+  // card, a suggestion): a note it would lie on moves past it. Not while
+  // the reader holds the note.
+  const grabbed = useRef(false);
+  useEffect(() => {
+    grabbed.current = grab !== null;
+  }, [grab]);
+  useEffect(() => {
+    if (!pane) return;
+    let timer = 0;
+    // Only a change to one of the pane's cards counts: the document's own
+    // changes (typing in the page editor, a mark painted) are not looked at.
+    const aCard = (r: MutationRecord) => {
+      const target = r.target instanceof Element ? r.target : r.target.parentElement;
+      if (!target || target.closest("[data-floating-note]")) return false;
+      if (r.type === "attributes") return target.matches(PANE_CARDS);
+      for (const list of [r.addedNodes, r.removedNodes]) {
+        for (const node of list) {
+          if (node instanceof Element && (node.matches(PANE_CARDS) || node.querySelector(PANE_CARDS))) return true;
+        }
+      }
+      return false;
+    };
+    const observer = new MutationObserver((records) => {
+      if (!records.some(aCard)) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!grabbed.current && performance.now() >= landingUntil.current) settleRef.current("clear");
+      }, 250);
+    });
+    observer.observe(pane, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-placed", "data-side-card"] });
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [pane]);
 
   // With no document open the card is over the workspace. The tray folds as
   // the card lands (workspace.tsx); for a moment after the landing the card
