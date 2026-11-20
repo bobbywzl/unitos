@@ -271,12 +271,15 @@ export function FeedbackButton() {
 
   return (
     <>
-      {/* Above the mobile bottom bar; on md+ above the rail's More button,
-          which sits in the bottom-right corner. The reader has no floating
-          Feedback: it lay on the tray's last row, on the article's last
-          lines, and on a short screen on the rail's Extract. There it is in
-          the guide's head at md and up and a row of the bar's More menu
-          below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard, full
+      {/* Feedback stands at the bottom left of every page, always in view
+          (SPEC.md §18): a pill, above the mobile bottom bar. In the reader
+          it is a tab on the window's left edge at md and up, above the hint
+          line at the pane's foot: 24px wide, so it lies in the pane's
+          margin and on no word of the article, even with the column at the
+          pane's left edge (a floating note). Its paddings read crosswise:
+          in a vertical writing mode px runs down the tab. Below md the
+          reader's bottom bar has Feedback in More (FEEDBACK_OPEN_EVENT),
+          and the guide's head has it too. On a phone's dashboard, full
           pages, and Settings it is a button in the header. */}
       <button
         onClick={(e) => {
@@ -285,15 +288,22 @@ export function FeedbackButton() {
           setOpen(true);
         }}
         data-feedback-button=""
-        className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
-          inReader || onOffline ? "hidden" : ""
-        } ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
+        data-track="feedback-open"
+        className={`fixed z-20 bg-card text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 print:hidden ${
+          inReader
+            ? "bottom-14 left-0 rounded-r-xl px-3 py-1 text-xs leading-4 font-semibold [writing-mode:vertical-rl] max-md:hidden"
+            : "bottom-[calc(64px+env(safe-area-inset-bottom))] left-4 rounded-full px-4 py-2 text-sm md:bottom-6"
+        } ${onOffline ? "hidden" : ""} ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
       >
         {t("works.feedback")}
       </button>
       <Presence show={open} exit="pop">
       {open && (
-        <div className="pop-in fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
+        <div
+          className={`pop-in fixed bottom-16 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-[28px] bg-card p-5 shadow-float print:hidden ${
+            inReader ? "left-10" : "left-4"
+          }`}
+        >
           <form onSubmit={submit} className="space-y-2">
             <div className="flex items-center gap-1">
               {(["bug", "idea", "other"] as const).map((c) => (

@@ -1289,7 +1289,7 @@ ellipse.anchor-flash {
 /* The article column: 720px wide, centered in the pane; as wide as the pane
    below that. While a note floats over the article ([data-note-floating] on
    the workspace) the column moves to the pane's left edge, out from under the
-   card, and slides back when the card docks or closes. Below 720px there is
+   card, and slides back when the last card docks or closes. Below 720px there is
    no room to move, so the column stays put. --reader-cut (reader-panes.tsx,
    from the strip's --strip-cut) is how much of the pane's left is hidden
    behind the strip's edge — Top and Bottom with the tray in view: the column
@@ -1313,8 +1313,16 @@ ellipse.anchor-flash {
     calc(var(--reader-cut, 0px) / 2 + 50% - var(--reader-column-w) / 2 - var(--cards-room, 0px))
   );
 }
+/* The column stops right of the Contents button, which folds to its symbol
+   while a note floats (below), so no line runs under it. */
 [data-note-floating] .reader-column {
-  margin-left: min(0.5rem, max(0px, calc(50% - var(--reader-column-w) / 2)));
+  margin-left: min(2.75rem, max(0px, calc(50% - var(--reader-column-w) / 2)));
+}
+[data-note-floating] [data-contents] {
+  padding: 0.5rem;
+}
+[data-note-floating] [data-contents] .contents-label {
+  display: none;
 }
 @media (prefers-reduced-motion: no-preference) {
   .reader-column {

@@ -221,7 +221,7 @@ export function NotesTray({
   function onMerge(id: string, intoId: string) {
     const note = notesById.get(id);
     if (!note) return;
-    if (actions.floating?.id === intoId) {
+    if (actions.floating.some((f) => f.id === intoId)) {
       dropCardOn(intoId, { kind: "note", ids: [id], label: "" });
       return;
     }

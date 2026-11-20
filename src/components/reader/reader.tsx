@@ -19,8 +19,8 @@ import {
   type TextStyle,
   type ToggleStyle,
 } from "@/lib/text-style";
-import { NOTE_WRAP_EVENT, type NoteWrapSpacer } from "@/lib/note-wrap";
-import { NoteWrapGap } from "@/components/reader/note-wrap-gap";
+import { NOTE_WRAP_EVENT, wrapBands, type NoteWrapChange, type NoteWrapSpacer } from "@/lib/note-wrap";
+import { NoteWrapGaps } from "@/components/reader/note-wrap-gap";
 import { useT } from "@/components/lang-provider";
 import {
   BlockView,
@@ -969,27 +969,34 @@ export function Reader({
     "inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
   const keep = (e: React.MouseEvent) => e.preventDefault();
 
-  // A floating note in wrap mode (lib/note-wrap.ts): the gap its card needs,
-  // drawn before the block its top edge falls in. One note floats at a time.
-  const [wrapSpacer, setWrapSpacer] = useState<NoteWrapSpacer | null>(null);
+  // The floating notes (lib/note-wrap.ts): the gap each card needs, by its
+  // note, put together as bands down the article.
+  const [wrapSpacers, setWrapSpacers] = useState<NoteWrapSpacer[]>([]);
   useEffect(() => {
-    const onWrap = (e: Event) => setWrapSpacer((e as CustomEvent<NoteWrapSpacer | null>).detail);
+    const onWrap = (e: Event) => {
+      const { id, spacer } = (e as CustomEvent<NoteWrapChange>).detail;
+      setWrapSpacers((list) => {
+        const rest = list.filter((s) => s.id !== id);
+        if (!spacer && rest.length === list.length) return list;
+        return spacer ? [...rest, spacer] : rest;
+      });
+    };
     window.addEventListener(NOTE_WRAP_EVENT, onWrap);
     return () => window.removeEventListener(NOTE_WRAP_EVENT, onWrap);
   }, []);
+  const bands = useMemo(() => wrapBands(wrapSpacers), [wrapSpacers]);
 
-  // Which blocks clear the gap: the ones whose place overlaps the card's
+  // Which blocks clear a gap: the ones whose place overlaps a card's
   // height (SPEC.md §6). `clear` alone would push every figure, table, or
-  // video above the card below it — the gap's first float runs from the
-  // article's top to the card — so the blocks are measured against the gap
-  // once per gap, with no block cleared, and only the overlapping ones clear.
+  // video above the card below it — the floats run from the article's top
+  // down — so the blocks are measured against the gaps once per set of
+  // gaps, with no block cleared, and only the overlapping ones clear, on
+  // the side or sides the gap is on.
   const articleRef = useRef<HTMLElement>(null);
-  const spacerKey = wrapSpacer
-    ? `${wrapSpacer.side}|${wrapSpacer.offset}|${wrapSpacer.height}|${wrapSpacer.width}`
-    : "";
-  const [wrapClears, setWrapClears] = useState<{ key: string; ids: ReadonlySet<string> }>({
+  const spacerKey = bands.map((b) => `${b.top}|${b.height}|${b.left}|${b.right}`).join(";");
+  const [wrapClears, setWrapClears] = useState<{ key: string; ids: ReadonlyMap<string, string> }>({
     key: "",
-    ids: new Set(),
+    ids: new Map(),
   });
   const typeById = useMemo(() => new Map(blocks.map((b) => [b.id, b.type])), [blocks]);
   // An article with no mark on the Tab path is one Tab stop itself (SPEC.md
@@ -1004,33 +1011,38 @@ export function Reader({
   );
   const articleStop = mode === "read" && !embedded && !markStop;
   useLayoutEffect(() => {
-    if (!wrapSpacer) {
+    if (bands.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (wrapClears.key || wrapClears.ids.size > 0) setWrapClears({ key: "", ids: new Set() });
+      if (wrapClears.key || wrapClears.ids.size > 0) setWrapClears({ key: "", ids: new Map() });
       return;
     }
     if (wrapClears.key === spacerKey) return;
-    // A new gap: first a layout with no block cleared, so every block sits
+    // New gaps: first a layout with no block cleared, so every block sits
     // where the text alone puts it; then the measure.
     if (wrapClears.ids.size > 0) {
-      setWrapClears({ key: "", ids: new Set() });
+      setWrapClears({ key: "", ids: new Map() });
       return;
     }
     const article = articleRef.current;
     if (!article) return;
     const contentTop = article.getBoundingClientRect().top + parseFloat(getComputedStyle(article).paddingTop);
-    const gapTop = wrapSpacer.offset;
-    const gapBottom = wrapSpacer.offset + wrapSpacer.height;
-    const ids = new Set<string>();
+    const ids = new Map<string, string>();
     for (const [id, type] of typeById) {
       if (WRAP_FLOW_TYPES.has(type)) continue;
       const el = article.querySelector<HTMLElement>(`[data-block-id="${id}"]`);
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      if (r.bottom - contentTop > gapTop && r.top - contentTop < gapBottom) ids.add(id);
+      let left = false;
+      let right = false;
+      for (const band of bands) {
+        if (r.bottom - contentTop <= band.top || r.top - contentTop >= band.top + band.height) continue;
+        left ||= band.left > 0;
+        right ||= band.right > 0;
+      }
+      if (left || right) ids.set(id, left && right ? " clear-both" : left ? " clear-left" : " clear-right");
     }
     setWrapClears({ key: spacerKey, ids });
-  }, [wrapSpacer, spacerKey, wrapClears, typeById]);
+  }, [bands, spacerKey, wrapClears, typeById]);
 
   // A first open reveals the blocks as the reader scrolls (reveal.tsx);
   // reading mode only, never the transcript, never over a resume.
@@ -1180,12 +1192,7 @@ export function Reader({
   // A block that does not flow around the card, and whose place overlaps the
   // card, clears it, so it lands whole below the card rather than squeezed
   // beside it. A block above or below the card stays where it is.
-  const wrapClear = (id: string) =>
-    wrapSpacer && wrapClears.ids.has(id)
-      ? wrapSpacer.side === "left"
-        ? " clear-left"
-        : " clear-right"
-      : "";
+  const wrapClear = (id: string) => (bands.length > 0 ? (wrapClears.ids.get(id) ?? "") : "");
 
   // One block of the reading column (BlockRow): what it shows, drawn for
   // reading or for editing as the switch has reached it.
@@ -1462,7 +1469,7 @@ export function Reader({
         {/* The wrapped note's gap: the pair of floats sits at the article's
             content top, the one position the card can measure against exactly
             (lib/note-wrap.ts). */}
-        {wrapSpacer && <NoteWrapGap spacer={wrapSpacer} />}
+        {bands.length > 0 && <NoteWrapGaps bands={bands} />}
         {banner}
         {!embedded && (
           <p className="mb-2.5 text-[11px] font-bold tracking-[0.09em] text-clay-700 uppercase print:hidden">

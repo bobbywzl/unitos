@@ -46,6 +46,17 @@ async function float(x, y) {
   await page.mouse.move(x, y, { steps: 12 });
   await page.mouse.up();
   await page.waitForTimeout(600);
+  // The card lands beside the column when the pane has the room (SPEC.md
+  // §6): a hold puts it on the text at (x, y), where the lines flow around it.
+  await page.waitForTimeout(3000);
+  const card = await page.locator("[data-floating-note]").boundingBox();
+  await page.mouse.move(card.x + 120, card.y + 14);
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  await page.mouse.move(card.x + 100, card.y + 30, { steps: 5 });
+  await page.mouse.move(x + 120, y + 14, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(600);
 }
 
 /** The card, the gap and every line and block, measured together. */
@@ -102,8 +113,7 @@ async function run() {
   await float(180, 300);
   const floating = page.locator("[data-floating-note]");
   check("the note floats", (await floating.count()) === 1);
-  await floating.locator('button[data-track="note-wrap"]').click();
-  await page.waitForTimeout(600);
+  check("the card has no Wrap text button", (await floating.locator('button[data-track="note-wrap"]').count()) === 0);
   check("the gap is drawn once", (await page.locator("[data-note-wrap-gap]").count()) === 1);
 
   let s = await survey();
@@ -126,9 +136,6 @@ async function run() {
   await floating.locator('button[data-track="note-dock"]').click();
   await page.waitForTimeout(600);
   await float(560, 760);
-  await page.waitForTimeout(400);
-  const wrapBtn = page.locator("[data-floating-note]").locator('button[data-track="note-wrap"]');
-  if ((await wrapBtn.getAttribute("aria-pressed")) !== "true") await wrapBtn.click();
   await page.waitForTimeout(700);
   s = await survey();
   check("over a table and a figure: neither is squeezed", s.squeezed.length === 0, s.squeezed.join(", "));

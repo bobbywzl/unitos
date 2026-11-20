@@ -815,16 +815,22 @@ export function Workspace({
   // and they are gone. Docking opens the tray on notes on its own (onDock
   // below); this undoes only the fold it made, so a tray the reader had
   // folded stays folded.
-  const floatingId = actions.floating?.id ?? null;
+  // Several notes can float: the reader opens the tray again to take the
+  // next one out, and it folds again as that one lands. A note that docks
+  // folds nothing: docking opens the tray on the note.
+  const floatCount = actions.floating.length;
   const trayFold = useSyncExternalStore(subscribeTrayFold, readTrayFold, () => false);
-  const needsRoom = floatingId !== null || trayFold;
+  const needsRoom = floatCount > 0 || trayFold;
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
+  const roomFor = useRef({ floatCount: 0, trayFold: false });
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
+    const more = floatCount > roomFor.current.floatCount || (trayFold && !roomFor.current.trayFold);
+    roomFor.current = { floatCount, trayFold };
     if (needsRoom) {
+      if (!more) return;
       setMobileTray(false);
       if (!collapsedRef.current) {
         foldedForFloat.current = true;
@@ -834,8 +840,7 @@ export function Workspace({
       foldedForFloat.current = false;
       setCollapsed(false);
     }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [needsRoom]);
+  }, [needsRoom, floatCount, trayFold]);
 
   // The peek (SPEC.md §6), md+: the pointer on the rail of a folded tray
   // draws the tray over the reader, on the tab it was left on, and the
@@ -900,7 +905,7 @@ export function Workspace({
     <FunnelStepMark step="reader" />
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
-      data-note-floating={actions.floating ? "" : undefined}
+      data-note-floating={actions.floating.length > 0 ? "" : undefined}
       // The sheet is open (below md): the Reader view button moves to the
       // reader's bottom right (reader-panes.tsx).
       data-sheet-open={mobileTray ? "" : undefined}
@@ -1008,17 +1013,18 @@ export function Workspace({
         </button>
       </header>
 
-      {/* A note taken out of the tray, over the article. Docking it opens the
-          tray on notes, where the note's card takes it back. */}
-      {actions.floating && (
+      {/* The notes taken out of the tray, over the article, one card each.
+          Docking one opens the tray on notes, where the note's card takes
+          it back. */}
+      {actions.floating.map((edit) => (
         <FloatingNoteEditor
-          key={actions.floating.id}
-          edit={actions.floating}
-          note={flattenNotes(tree).find((n) => n.id === actions.floating?.id) ?? null}
+          key={edit.id}
+          edit={edit}
+          note={flattenNotes(tree).find((n) => n.id === edit.id) ?? null}
           actions={actions}
           onDock={() => show("notes")}
         />
-      )}
+      ))}
 
       <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block print:pb-0">
         {/* The strip: in a split view (globals.css .reader-strip) the reader

@@ -135,6 +135,13 @@
   isolation: isolate;
   cursor: text;
 }
+/* While a note floats over the document (workspace.tsx data-note-floating)
+   the page stands at the canvas's left, as the article's column does
+   (globals.css .reader-column): the room it leaves on its right is where
+   the floating cards stand, on no word of the page (SPEC.md §6). */
+[data-note-floating] .docs-page {
+  margin-left: 0;
+}
 .docs-page[data-white]:not([data-pageless]) {
   --docs-ground: var(--docs-page);
 }

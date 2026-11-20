@@ -84,10 +84,22 @@ check("article column moves left", articleAfter.x < articleBefore.x - 40, `x ${M
 check("tray card reads Editing in a floating card", (await page.locator('aside[data-track-surface="tray"]').getByText("Editing in a floating card").count()) === 1);
 check("floating card has no Pop out and says Done", (await page.locator("[data-floating-note]").getByText("Done").count()) === 1 && (await page.getByText("Pop out").count()) === 0);
 
-// 5. Wrap text: the card joins the reader pane, the gap lands, lines beside the card stop short of it, the card scrolls with the text.
+// 5. The lines flow around the card, always (no Wrap text button): the card stands in the reader pane; put on the
+// text by a hold, the gap lands, lines beside the card stop short of it, and the card scrolls with the text.
 const floating = page.locator("[data-floating-note]");
-await floating.locator('button[data-track="note-wrap"]').click();
-await page.waitForTimeout(400);
+check("the card has no Wrap text button", (await floating.locator('button[data-track="note-wrap"]').count()) === 0);
+await page.waitForTimeout(3000); // the card takes its place beside the column
+{
+  const card = await rect(floating);
+  const article = await rect(page.locator("article.reader-prose"));
+  await page.mouse.move(card.x + 120, card.y + 14);
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  await page.mouse.move(card.x + 100, card.y + 30, { steps: 5 });
+  await page.mouse.move(article.x + article.width / 2 + 120, card.y + 14, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+}
 check("wrapped card sits inside the reader pane", (await page.locator("[data-reader-root] [data-floating-note]").count()) === 1);
 check("wrapped card is positioned in the pane's content", (await floating.evaluate((el) => getComputedStyle(el).position)) === "absolute");
 check("wrap gap is drawn in the article", (await page.locator("article.reader-prose [data-note-wrap-gap]").count()) === 1);
@@ -123,11 +135,6 @@ check("wrapped card scrolls with the text", Math.abs(beforeScroll.y - afterScrol
 await page.locator("[data-reader-root]").first().evaluate((el) => el.scrollBy(0, -160));
 await page.waitForTimeout(200);
 
-// 6. Wrap off: the card returns to the viewport, the gap closes.
-await floating.locator('button[data-track="note-wrap"]').click();
-await page.waitForTimeout(300);
-check("unwrapped card is fixed again", (await floating.evaluate((el) => getComputedStyle(el).position)) === "fixed");
-check("wrap gap closes", (await page.locator("[data-note-wrap-gap]").count()) === 0);
 
 // 7. Dock by dropping the card on the rail: the tray opens with the note's editor.
 const grip = floating.locator(".cursor-grab").first();

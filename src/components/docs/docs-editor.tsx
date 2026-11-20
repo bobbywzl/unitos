@@ -881,13 +881,15 @@ export function DocsEditor({
   // editor's menus and dialogs. A press or the focus in the other pane, or
   // in this pane outside the page (the Extract page), fades it away
   // (css/layer.css). The notes tray and the app's top bar work on the open
-  // document: a press there leaves the header as it is.
+  // document: a press there leaves the header as it is, and so does a press
+  // on a floating note, which stands in the pane beside the page.
   const [away, setAway] = useState(false);
   useEffect(() => {
     const pane = editor?.view.dom.closest("[data-reader-root]");
     if (!pane) return;
     const onEnter = (e: Event) => {
       if (!(e.target instanceof Element)) return;
+      if (e.target.closest("[data-floating-note]")) return;
       const own = e.target.closest("[data-reader-root]");
       if (!own) {
         // One of the page editor's menus or dialogs, drawn over the app.

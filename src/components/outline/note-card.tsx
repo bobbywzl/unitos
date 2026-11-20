@@ -158,7 +158,7 @@ export const NoteCard = memo(function NoteCard({
       commands={commands}
       notebookId={actions.notebookId}
       focusedPending={actions.focusedPendingId === note.id}
-      floating={actions.floating?.id === note.id}
+      floating={actions.floating.some((f) => f.id === note.id)}
       selected={actions.selected.has(note.id)}
       selecting={actions.selected.size > 0}
       merging={actions.merging.has(note.id)}
@@ -1010,7 +1010,7 @@ const NoteCardBody = memo(function NoteCardBody({
         <div className="flex items-center gap-2">
           <span className="text-sand-600">{t("outline.floatingLabel")}</span>
           <button
-            onClick={() => commands.dockNote(true)}
+            onClick={() => commands.dockNote(note.id, true)}
             data-track="note-dock"
             data-tip={t("outline.dockBackTitle")}
             className="ml-auto shrink-0 text-xs text-sand-600 hover:text-clay-700"
