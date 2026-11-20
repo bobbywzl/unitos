@@ -7944,6 +7944,53 @@ export function ReaderInteractions({
     if (open) writeToolbarDraft("assistant", documentId, open.anchor, input);
     setBar((b) => (b ? { ...b, input } : b));
   }
+
+  // The starter (SPEC.md §7): the one question the bar's empty box shows
+  // about the words it opened on, from the cheapest model
+  // (POST /api/assistant/starter); Tab puts it in the box. Asked once per
+  // selection, a moment after the bar opens with nothing typed, and kept
+  // for the page, so the bar opened again on the same words asks nothing.
+  // null: no starter for these words (no key, an answer that did not fit).
+  const [starters, setStarters] = useState<Record<string, string | null>>({});
+  const starterQuote = bar && !bar.figure ? segmentsOf(bar.anchor).map((s) => s.quotedText).join("\n").trim() : "";
+  const starterKey =
+    bar && starterQuote && !bar.busy && bar.messages.length === 0 && bar.input === ""
+      ? `${bar.anchor.blockId}:${bar.anchor.startOffset}:${starterQuote.length}:${starterQuote.slice(0, 80)}`
+      : null;
+  const starterKnown = starterKey !== null && starterKey in starters;
+  useEffect(() => {
+    if (!starterKey || starterKnown) return;
+    const open = barRef.current;
+    if (!open) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch("/api/assistant/starter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          notebookId,
+          documentId,
+          quote: starterQuote.slice(0, 20_000),
+          before: open.anchor.prefix.slice(-2000),
+          after: open.anchor.suffix.slice(0, 2000),
+        }),
+      })
+        .then((res) => (res.ok ? (res.json() as Promise<{ question?: unknown }>) : null))
+        .then((answer) => {
+          const question = typeof answer?.question === "string" ? answer.question : null;
+          setStarters((all) => ({ ...all, [starterKey]: question }));
+        })
+        // Closed first, or offline: the next opening asks again.
+        .catch(() => {});
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+    // starterQuote follows starterKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starterKey, starterKnown, notebookId, documentId]);
   // A figure's bar opens from its block, with no selection under it: its
   // words' bottom is its top.
   function openBar(
@@ -11096,8 +11143,18 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   );
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
-  // The bar on an image (SPEC.md §7): its chips read the image.
+  // The bar on an image (SPEC.md §7).
   const barFigure = bar?.figure === true;
+  // The starter the bar's empty box shows; Tab takes it. On an image it is
+  // the image's own command (the words under it), with no model asked.
+  const barStarter =
+    !bar || bar.busy || barKey || bar.input !== ""
+      ? null
+      : barFigure
+        ? t(FIGURE_CHIPS[0].command)
+        : starterKey
+          ? (starters[starterKey] ?? null)
+          : null;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view's pane header (SPEC.md §6). On a transcript it carries
@@ -12334,44 +12391,29 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onChange={(e) => setBarInput(e.target.value)}
             {...ime.props}
             onKeyDown={(e) => {
-              if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter" || e.shiftKey) return;
+              if (ime.isImeEnter(e) || isImeKey(e)) return;
+              // Tab takes the starter the empty box shows; nothing is sent.
+              // With words in the box, Tab moves on as everywhere.
+              if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && barStarter) {
+                e.preventDefault();
+                setBarInput(barStarter);
+                return;
+              }
+              if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
               void runBar(bar);
             }}
-            placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
+            data-starter={barStarter ? "" : undefined}
+            aria-keyshortcuts={barStarter ? "Tab" : undefined}
+            placeholder={
+              barStarter
+                ? t("reader.barStarter", { question: barStarter })
+                : t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")
+            }
             aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
             rows={2}
             className="field-sizing-content max-h-[calc(6lh+1rem)] min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
           />
-          {!barKey && !bar.busy && (
-            <div className="flex flex-wrap items-center gap-1">
-              {barFigure
-                ? FIGURE_CHIPS.map((chip) => (
-                    <button
-                      key={chip.label}
-                      type="button"
-                      onClick={() => void runBar({ ...bar, input: t(chip.command) })}
-                      data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
-                      data-tip={t("reader.figureChipTitle")}
-                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                    >
-                      {t(chip.label)}
-                    </button>
-                  ))
-                : SUGGEST_CHIPS.map((c) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => void runBar(bar, c)}
-                      data-track={`assistant-command:${c.name}`}
-                      data-tip={t("reader.commandTitle")}
-                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                    >
-                      {t(c.key)}
-                    </button>
-                  ))}
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <ThinkingChips small />
             <WebChip small />

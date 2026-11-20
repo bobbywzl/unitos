@@ -93,6 +93,7 @@ export default async function AdminGatewayPage() {
     organize: t("admin.featOrganize"),
     "note-assistant": t("admin.featNoteAssistant"),
     suggest: t("admin.featSuggest"),
+    starter: t("admin.featStarter"),
     find: t("admin.featFind"),
     ask: t("admin.featAsk"),
     formalize: t("admin.featFormalize"),

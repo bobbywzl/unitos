@@ -360,6 +360,14 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
+// The starter of the assistant bar (SPEC.md §7): one short question about
+// the selected words, shown in the bar's empty box; Tab takes it. It runs
+// each time the bar opens on new words, before the reader has asked for
+// anything, so the cheapest Claude at the lowest effort.
+export const STARTER_MODEL = CLAUDE_HAIKU_5_5;
+export const STARTER_EFFORT: KimiEffort = "low";
+export const STARTER_MAX_OUTPUT_TOKENS = 512;
+
 // The grammar check of the page editor and the note editor (SPEC.md §29): a
 // few paragraphs per call, each paragraph's mistakes as the exact wrong
 // words, the replacement, and why. It runs in the background as the reader

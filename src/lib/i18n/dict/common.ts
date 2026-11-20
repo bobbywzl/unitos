@@ -21,7 +21,8 @@
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
 //   recommended link 推荐链接 · graph 图谱 · history 历史 ·
-//   floating card 浮动卡片 · wrap text(文本环绕笔记) 环绕文本 ·
+//   floating card 浮动卡片 ·
+//   starter(助手栏空框里的建议问题，按 Tab 采用) 开场问题 ·
 //   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
 //   define(选中一个词的工具) 定义 · definition 定义 ·

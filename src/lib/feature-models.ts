@@ -18,6 +18,7 @@ import {
   SKELETON_MODEL,
   STITCH_MODEL,
   STITCH_SELECT_MODEL,
+  STARTER_MODEL,
   SUGGEST_MODEL,
   SVG_CHART_MODEL,
   VISION_MODEL,
@@ -63,6 +64,7 @@ export type Feature =
   | "organize"
   | "note-assistant"
   | "suggest"
+  | "starter"
   | "visualize"
   | "assistant"
   | "act"
@@ -103,6 +105,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   organize: ORGANIZE_MODEL,
   "note-assistant": NOTE_ASSISTANT_MODEL,
   suggest: SUGGEST_MODEL,
+  starter: STARTER_MODEL,
   visualize: VISUALIZE_MODEL,
   assistant: DERIVATION_MODEL.SYNTHESIS,
   act: DERIVATION_MODEL.SYNTHESIS,
@@ -154,6 +157,7 @@ export const FEATURE_ORDER: Feature[] = [
   "organize",
   "note-assistant",
   "suggest",
+  "starter",
   "find",
   "ask",
   "formalize",

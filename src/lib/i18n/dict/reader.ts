@@ -92,6 +92,8 @@ const en = {
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
   barPlaceholder: "Ask about the selected words, or tell the assistant how to change them…",
+  // The starter in the assistant bar's empty box: the question, then the key that takes it.
+  barStarter: "{question}  ⇥\u00a0Tab",
   // Words from a figure (SPEC.md §7): the bar on an image.
   figureBarPlaceholder: "Ask about the image, or say what to put under it…",
   figureText: "The text",
@@ -422,6 +424,7 @@ const zh: Record<keyof typeof en, string> = {
   commandFix: "修正拼写和语法",
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
   barPlaceholder: "询问选中内容，或告诉助手如何修改它…",
+  barStarter: "{question}  ⇥\u00a0Tab",
   figureBarPlaceholder: "询问这张图片，或说明要在它下方放什么…",
   figureText: "文字",
   figureKeyPoints: "要点",
