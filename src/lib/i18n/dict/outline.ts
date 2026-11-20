@@ -140,6 +140,10 @@ const en = {
   // notes full page (annotation-side.tsx).
   annotationReference: "Annotation",
   annotationReferenceTitle: "Open this annotation",
+  // The quote symbol in an annotation reference's box (markdown.tsx): the
+  // words the annotation is anchored to, and the jump to them.
+  annotationQuoteJump: "Jump to this quote in the reader: “{quote}”",
+  annotationQuote: "The quote: “{quote}”",
   // The log lines an annotation reference lands (lib/annotation-reference.ts): who said each
   referenceYou: "You",
   referenceAssistant: "Assistant",
@@ -383,6 +387,8 @@ const zh: Record<keyof typeof en, string> = {
   dropAnnotation: "松开即把这条批注放进笔记：先是引文，再是批注内容",
   annotationReference: "批注",
   annotationReferenceTitle: "打开这条批注",
+  annotationQuoteJump: "跳到阅读器中这段引用的位置：“{quote}”",
+  annotationQuote: "引用：“{quote}”",
   referenceYou: "你",
   referenceAssistant: "助手",
   annotationJump: "跳到阅读器中的这条批注",

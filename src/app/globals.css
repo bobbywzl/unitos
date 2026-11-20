@@ -3764,6 +3764,73 @@ li[data-checked] > .note-box::before {
 .prose .note-annotation-ref .note-link-card-icon {
   color: var(--kind, var(--sage-700, #3f6b4a));
 }
+/* The box an annotation reference draws as in a rendered note (SPEC.md §6,
+   markdown.tsx): the annotation's kind in the head, the quote symbol at the
+   head's end, the annotation's text inside, all in the kind color. */
+.prose .note-annotation-box {
+  margin: 0.6em 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--kind, var(--sage-500)) 45%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--kind, var(--sage-500)) 6%, var(--card));
+}
+.note-annotation-box-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--sage-500)) 22%, transparent);
+  background: color-mix(in srgb, var(--kind, var(--sage-500)) 10%, transparent);
+}
+.prose .note-annotation-box-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--kind, var(--sage-700, #3f6b4a));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.prose .note-annotation-box-name:hover {
+  text-decoration: underline;
+}
+.note-annotation-box-icon {
+  display: flex;
+  flex: none;
+}
+.note-annotation-box-quote {
+  display: flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--kind, var(--sage-700, #3f6b4a));
+  transition: background-color 120ms;
+}
+.note-annotation-box-quote:hover {
+  background: color-mix(in srgb, var(--kind, var(--sage-500)) 22%, var(--card));
+}
+.note-annotation-box-quote[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+.note-annotation-box-body {
+  padding: 8px 12px 9px;
+}
+.prose .note-annotation-box-body > :first-child {
+  margin-top: 0;
+}
+.prose .note-annotation-box-body > :last-child {
+  margin-bottom: 0;
+}
 
 /* The New glow (SPEC.md §18, components/new-feature.tsx): a control a
    release added pulses in sage until it is pressed; the pill names it. The
