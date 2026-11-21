@@ -14,7 +14,7 @@ import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
-import { describeIngestError } from "@/lib/parse/ingest-error";
+import { describeIngestError, ingestFailure } from "@/lib/parse/ingest-error";
 import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
@@ -37,7 +37,10 @@ const bodySchema = z.object({
   uploadId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
   filename: z.string().min(1),
   notebookId: z.string().min(1),
-  kind: z.enum(["pdf", "video"]).default("pdf"),
+  // page: a page sent from the browser (SPEC.md §15), staged by
+  // /share/target; url is its address when known.
+  kind: z.enum(["pdf", "video", "page"]).default("pdf"),
+  url: z.url().optional(),
   // pages and convert are the PDF directives (SPEC.md §16), set by the
   // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
@@ -111,6 +114,8 @@ export async function POST(req: Request) {
     bytes.set(chunk.data, offset);
     offset += chunk.data.length;
   }
+
+  if (data.kind === "page") return completeSentPage(parse, data, bytes, access.user, t);
 
   let filename = data.filename;
   let pages = data.pages;
@@ -343,5 +348,48 @@ async function completeVideo(data: Body, user: User, t: TFunc) {
       throw new Error(err instanceof Error ? err.message : t("api.videoSaveFailed"));
     }
     return { id: document.id, title, deduped: false };
+  });
+}
+
+// A page sent from the browser (SPEC.md §15): the staged HTML parses as a
+// fetched page does, with its address as the document's source when known.
+// A page with an address the account already has asks first, as a link does.
+async function completeSentPage(
+  parse: typeof import("@/lib/parse/ingest"),
+  data: Body,
+  bytes: Uint8Array,
+  user: User,
+  t: Awaited<ReturnType<typeof serverT>>,
+) {
+  const userId = user.id;
+  const url = data.url ?? null;
+  if (url) {
+    const repeat = await duplicateAnswer(
+      user,
+      data.notebookId,
+      { url, splitMarker: parse.SPLIT_URL_MARKER },
+      data.confirmDuplicate,
+      t,
+    );
+    if (repeat) return repeat;
+  }
+  await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
+  const html = new TextDecoder().decode(bytes);
+  return progressResponse(async (onProgress) => {
+    try {
+      const { document, deduped } = await parse.ingestSentPage(
+        { html, url },
+        onProgress,
+        { deadline: parse.modelPassDeadline(maxDuration) },
+        userId,
+      );
+      await attachDocument(data.notebookId, document.id, data.folderId);
+      await bumpNotebook(data.notebookId);
+      if (!deduped) after(() => refreshSkeleton(document.id, userId).catch(() => {}));
+      return await addedResult(data.notebookId, document, deduped);
+    } catch (err) {
+      console.error("Sent page ingest failed:", err);
+      throw ingestFailure(err, t, "url");
+    }
   });
 }

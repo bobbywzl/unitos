@@ -6,6 +6,8 @@ import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 export const maxDuration = 60;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+// The most a sent page may hold (the bookmarklet drops scripts and styles first).
+const MAX_PAGE_HTML_CHARS = 4_000_000;
 
 // The share sheet's POST (manifest share_target): another app shares a URL,
 // text, or a file to Unitos. A file is staged into UploadChunk rows — the same
@@ -19,6 +21,37 @@ export async function POST(req: Request) {
     form = await req.formData();
   } catch {
     return to("/share");
+  }
+
+  // The bookmarklet (SPEC.md §15): the page's HTML as the reader's browser
+  // saw it, with its address and title. Staged like a file, then the reader
+  // picks the project on /share. The browser that posts it is on the site's
+  // origin, so no session cookie comes with the post (the middleware lets
+  // this route through); the staged page is only reachable by its id, and
+  // nothing is added until the signed-in reader says so.
+  const html = form.get("html");
+  if (typeof html === "string" && html.trim()) {
+    if (html.length > MAX_PAGE_HTML_CHARS) return to("/share?e=pageTooLarge");
+    await db.uploadChunk.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    });
+    const uploadId = crypto.randomUUID();
+    const bytes = new TextEncoder().encode(html);
+    for (let sent = 0; sent < bytes.length; sent += UPLOAD_CHUNK_BYTES) {
+      await db.uploadChunk.create({
+        data: {
+          uploadId,
+          index: Math.floor(sent / UPLOAD_CHUNK_BYTES),
+          data: bytes.slice(sent, sent + UPLOAD_CHUNK_BYTES),
+        },
+      });
+    }
+    const url = form.get("url");
+    const title = form.get("title");
+    const params = new URLSearchParams({ u: uploadId, k: "page" });
+    if (typeof url === "string" && /^https?:\/\//.test(url)) params.set("url", url.slice(0, 2000));
+    if (typeof title === "string" && title.trim()) params.set("name", title.trim().slice(0, 300));
+    return to(`/share?${params.toString()}`);
   }
 
   const file = form.get("file");

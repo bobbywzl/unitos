@@ -6,7 +6,7 @@ import { confirmNoteDraft, holdNoteDraft, setHeldNoteDrafts } from "@/lib/note-d
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
 import { forgetFailedPath, settleQueuedWrites } from "@/lib/save-state";
 import { readAccountCookie, tabAccount } from "@/lib/tab-account";
-import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
+import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/limits";
 
 // Offline work (SPEC.md §17, Unitos Premium): writes and uploads made while
 // offline queue in IndexedDB and sync in order when the browser is back

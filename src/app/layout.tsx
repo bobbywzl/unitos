@@ -4,6 +4,7 @@ import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
 import { LangProvider } from "@/components/lang-provider";
+import { LangProviderZh } from "@/components/lang-provider-zh";
 import { Nudges } from "@/components/nudges";
 import { QueueSync } from "@/components/offline/queue-sync";
 import { ServiceWorker } from "@/components/offline/service-worker";
@@ -53,6 +54,20 @@ export const viewport: Viewport = {
 // Applies the stored theme before paint; follows the system while theme is "system".
 const themeScript = `(function(){try{var m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=localStorage.getItem("theme");document.documentElement.classList.toggle("dark",t==="dark"||(t!=="light"&&m.matches));}a();m.addEventListener("change",a);}catch(e){}})();`;
 
+// Everything under the language provider: the page and the app-wide layers.
+function shell(children: React.ReactNode) {
+  return (
+    <>
+      {children}
+      <Nudges />
+      <FeedbackButton />
+      <TooltipLayer />
+      <ServiceWorker />
+      <QueueSync />
+    </>
+  );
+}
+
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const lang = await currentLang();
   return (
@@ -69,14 +84,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </Script>
       </head>
       <body className="min-h-full flex flex-col">
-        <LangProvider lang={lang}>
-          {children}
-          <Nudges />
-          <FeedbackButton />
-          <TooltipLayer />
-          <ServiceWorker />
-          <QueueSync />
-        </LangProvider>
+        {/* A page in Chinese renders the provider that carries the Chinese
+            strings; a page in English never downloads them. */}
+        {lang === "zh" ? (
+          <LangProviderZh>{shell(children)}</LangProviderZh>
+        ) : (
+          <LangProvider lang={lang}>{shell(children)}</LangProvider>
+        )}
       </body>
     </html>
   );

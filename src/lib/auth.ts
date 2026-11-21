@@ -546,11 +546,24 @@ export async function signOut(token: string | undefined): Promise<void> {
 }
 
 // Activity stamp, throttled to about one write per five minutes.
+// The last time this instance stamped each account, so the stamp's write
+// goes out once per interval per instance, not on every request: with one
+// pooled connection per instance (lib/db.ts), a write that updates no row
+// still holds the connection for a round trip ahead of the page's reads.
+const LAST_SEEN_INTERVAL_MS = 5 * 60_000;
+const lastSeenTouched = new Map<string, number>();
+
 async function touchLastSeen(userId: string): Promise<void> {
-  const cutoff = new Date(Date.now() - 5 * 60_000);
+  const now = Date.now();
+  const touched = lastSeenTouched.get(userId);
+  if (touched !== undefined && now - touched < LAST_SEEN_INTERVAL_MS) return;
+  lastSeenTouched.set(userId, now);
+  const cutoff = new Date(now - LAST_SEEN_INTERVAL_MS);
   await db.user
-    .updateMany({ where: { id: userId, lastSeenAt: { lt: cutoff } }, data: { lastSeenAt: new Date() } })
-    .catch(() => {});
+    .updateMany({ where: { id: userId, lastSeenAt: { lt: cutoff } }, data: { lastSeenAt: new Date(now) } })
+    .catch(() => {
+      lastSeenTouched.delete(userId);
+    });
 }
 
 // The signed-in account — or the local reader when sign-in is off.

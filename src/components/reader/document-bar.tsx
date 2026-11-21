@@ -849,7 +849,7 @@ export function DocumentBar({
   // add refreshes the open document instead of opening it again.
   const [assistantOpened, setAssistantOpened] = useState<string | null>(null);
   // What the last failed add handed back to Add a document.
-  const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
+  const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number; blocked?: boolean } | null>(null);
   // The links of an add stay in the browser until the add lands, so a
   // reload while it runs, while it waits its turn, or after it failed puts
   // them back in Add a document's field (CLAUDE.md rule zero 6). Files
@@ -1752,7 +1752,7 @@ export function DocumentBar({
             linksRef.current.running = [];
             keepLinks();
             if (back) {
-              setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
+              setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1, blocked: back.blocked }));
               if (back.edit) {
                 setError(back.error);
                 setDialog(true);

@@ -707,11 +707,26 @@ async function handle(req: Request, t: TFunc) {
   }
   const documentId = data.documentId;
 
-  const attachment = await db.notebookDocument.findUnique({
-    where: {
-      notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
-    },
-  });
+  // 1. Load the attachment, the document's blocks (the cached prompt prefix),
+  // the profile, the section skeleton, and the carried conversation: five
+  // reads that need only the ids, in one round trip. The model waits on
+  // nothing else, so every round trip here is time before the answer starts.
+  const [attachment, document, profile, skeleton, carried] = await Promise.all([
+    db.notebookDocument.findUnique({
+      where: {
+        notebookId_documentId: { notebookId: data.notebookId, documentId: documentId },
+      },
+    }),
+    db.document.findUnique({
+      where: { id: documentId },
+      include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } } },
+      // An import's rich text runs to megabytes: only a core anchor reads it (below).
+      omit: { richText: true },
+    }),
+    loadProfile(data.notebookId),
+    sectionSkeleton(data.notebookId),
+    data.conversationOf ? carriedConversation(data.conversationOf, data.notebookId, documentId) : null,
+  ]);
   if (!attachment) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
@@ -723,14 +738,6 @@ async function handle(req: Request, t: TFunc) {
   if (replaced && (replaced.regenerations ?? 0) >= DISTILL_REGENERATE_MAX) {
     return NextResponse.json({ error: t("api.distillRegenerateLimit") }, { status: 400 });
   }
-
-  // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
-  const document = await db.document.findUnique({
-    where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } } },
-    // An import's rich text runs to megabytes: only a core anchor reads it (below).
-    omit: { richText: true },
-  });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
 
@@ -767,13 +774,14 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.defineNeedsWord") }, { status: 400 });
   }
 
-  const [profile, skeleton, carried] = await Promise.all([
-    loadProfile(data.notebookId),
-    sectionSkeleton(data.notebookId),
-    data.conversationOf ? carriedConversation(data.conversationOf, data.notebookId, documentId) : null,
-  ]);
   // The new annotation takes the replaced one's turns (Regenerate, SPEC.md §4).
   const keptTurns = carried === null ? {} : { conversation: carried };
+  // EXPLAIN's corpus context (below) scores the other documents by the
+  // anchored text, known here: its reads start now, beside the figure and
+  // video reads that follow. ANALYZE scores by the figure's whole text,
+  // read below, so it waits.
+  const explainCorpus =
+    data.type === "EXPLAIN" && anchored ? corpusSection(data.notebookId, documentId, anchored.anchoredText) : null;
 
   const depth = data.depth ?? "layman";
   const ctx: PromptCtx = {
@@ -946,10 +954,12 @@ async function handle(req: Request, t: TFunc) {
     ) {
       return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
     }
-    if (!document.fileData) {
+    // The stored PDF, read by name here alone (lib/db.ts omits it by default).
+    const stored = await db.document.findUnique({ where: { id: documentId }, select: { fileData: true } });
+    if (!stored?.fileData) {
       return NextResponse.json({ error: t("api.noStoredPdf") }, { status: 400 });
     }
-    const pageImage = await renderPdfPage(new Uint8Array(document.fileData), pageBlock.page);
+    const pageImage = await renderPdfPage(new Uint8Array(stored.fileData), pageBlock.page);
     pageImages.push(pageImage);
     const crop = await cropPageRegion(pageImage, data.page.region);
     if (crop) pageImages.push(crop);
@@ -971,8 +981,9 @@ async function handle(req: Request, t: TFunc) {
   // system message after the cached prefix, so the prefix cache holds. The
   // whole block's text scores the related passages for ANALYZE: a table
   // selection alone is a few cells.
-  const corpus =
-    data.type === "EXPLAIN" || data.type === "ANALYZE"
+  const corpus = explainCorpus
+    ? await explainCorpus
+    : data.type === "EXPLAIN" || data.type === "ANALYZE"
       ? await corpusSection(
           data.notebookId,
           documentId,

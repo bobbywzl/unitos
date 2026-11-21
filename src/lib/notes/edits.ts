@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type Db } from "@/lib/db";
 
 // A note's own history (SPEC.md §12): every change to its text is recorded
 // with who made it and when. Auto-save writes every few keystrokes, so a
@@ -16,7 +16,7 @@ export async function recordNoteEdit(
   userId: string | null,
   content: string,
   // The transaction the note's write runs in, when it runs in one.
-  client: Prisma.TransactionClient = db,
+  client: Prisma.TransactionClient | Db = db,
   // before: the note's text before this write; fresh: never fold.
   opts: { before?: string; fresh?: boolean } = {},
 ): Promise<void> {

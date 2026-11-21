@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
-import { BlankDocumentIcon, DriveLogo, LibraryIcon, MoreIcon } from "@/components/icons";
+import { BlankDocumentIcon, CopyIcon, DriveLogo, LibraryIcon, MoreIcon } from "@/components/icons";
+import { sendPageBookmarklet } from "@/lib/send-page-bookmarklet";
+import { MAX_PASTE_CHARS } from "@/lib/parse/paste-limits";
 import { Presence } from "@/components/presence";
 import { useModalFocus } from "@/lib/escape-layers";
 import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
@@ -142,7 +144,7 @@ export function AddDocumentDialog({
   // What an add could not take, back from the upload box (CLAUDE.md rule
   // zero 6): one link goes into the field, more into the queue. seq tells
   // one return from the next.
-  returned?: { items: UploadItem[]; seq: number } | null;
+  returned?: { items: UploadItem[]; seq: number; blocked?: boolean } | null;
 }) {
   const t = useT();
   const ime = useImeGuard();
@@ -200,6 +202,15 @@ export function AddDocumentDialog({
   // queue, and each item's ✕ takes it out.
   // A failed add's links and files come back: a lone link into the field
   // (when the field is empty), the rest into the queue.
+  // The ways into a site that turns Unitos away (SPEC.md §15): the panel,
+  // and the paste view with what the reader pasted.
+  const [waysIn, setWaysIn] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  // The rich text the clipboard held with the words, when it did.
+  const [pasteHtml, setPasteHtml] = useState<string | null>(null);
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [pasteTitle, setPasteTitle] = useState("");
   const [prevReturned, setPrevReturned] = useState(returned?.seq ?? 0);
   if (returned && returned.seq !== prevReturned) {
     setPrevReturned(returned.seq);
@@ -207,6 +218,36 @@ export function AddDocumentDialog({
     const lone = back.length === 1 && (back[0].kind === "url" || back[0].kind === "video-url") ? back[0] : null;
     if (lone && !url.trim()) setUrl(lone.url);
     else setItems((current) => [...current, ...back]);
+    // A site turned the add away: the ways in open (SPEC.md §15).
+    if (returned.blocked) setWaysIn(true);
+  }
+  function openPaste() {
+    setPasteOpen(true);
+    setWaysIn(false);
+  }
+  // The paste goes into the queue as one item (SPEC.md §22): the rich text
+  // when the clipboard held it, else the words.
+  function queuePaste() {
+    const text = pasteText.trim();
+    if (!text) {
+      onError(t("panes.pasteEmpty"));
+      return;
+    }
+    if (text.length > MAX_PASTE_CHARS) {
+      onError(t("panes.pasteTooLong", { n: MAX_PASTE_CHARS.toLocaleString() }));
+      return;
+    }
+    const link = parseLinks(pasteUrl)[0] ?? null;
+    onError(null);
+    setItems((current) => [
+      ...current,
+      { kind: "paste", text, html: pasteHtml, url: link, title: pasteTitle.trim() || null },
+    ]);
+    setPasteText("");
+    setPasteHtml(null);
+    setPasteUrl("");
+    setPasteTitle("");
+    setPasteOpen(false);
   }
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
@@ -461,6 +502,103 @@ export function AddDocumentDialog({
               />
             </form>
 
+            {/* A site that turns Unitos away (SPEC.md §15): the three ways in. */}
+            <button
+              type="button"
+              onClick={() => setWaysIn((v) => !v)}
+              data-track="add-ways-in"
+              aria-expanded={waysIn}
+              className="self-start text-xs text-sand-600 underline-offset-2 hover:text-clay-800 hover:underline"
+            >
+              {t("panes.waysInToggle")}
+            </button>
+            {waysIn && (
+              <div className="flex flex-col gap-2 rounded-2xl bg-sand-100 p-3 text-xs text-sand-800">
+                <span className="text-[13px] font-semibold">{t("panes.waysInTitle")}</span>
+                <span className="text-sand-600">{t("panes.waysInLead")}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    // React refuses a javascript: href as a prop; the link is
+                    // a bookmarklet, so the attribute is set on the element.
+                    ref={(el) => el?.setAttribute("href", sendPageBookmarklet(window.location.origin))}
+                    onClick={(e) => e.preventDefault()}
+                    draggable
+                    data-track="add-send-page-bookmarklet"
+                    data-tip={t("panes.waysInSend")}
+                    className={secondaryButton}
+                  >
+                    {t("panes.waysInSendButton")}
+                  </a>
+                  <span className="min-w-0 flex-1">{t("panes.waysInSend")}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={openPaste} data-track="add-ways-in-paste" className={secondaryButton}>
+                    <CopyIcon size={14} />
+                    {t("panes.waysInPasteButton")}
+                  </button>
+                  <span className="min-w-0 flex-1">{t("panes.waysInPaste")}</span>
+                </div>
+                <span>{t("panes.waysInPdf")}</span>
+              </div>
+            )}
+
+            {/* The paste view (SPEC.md §15): the article's words, the rich
+                text the clipboard carried with them, the address and the
+                title when the reader has them. */}
+            {pasteOpen && (
+              <div className="flex flex-col gap-2 rounded-2xl border border-line p-3">
+                <span className="text-[13px] font-semibold text-sand-800">{t("panes.pasteTitle")}</span>
+                <textarea
+                  value={pasteText}
+                  onChange={(e) => {
+                    setPasteText(e.target.value);
+                    // Typing after a paste changes the words: the rich text no
+                    // longer says the same, so the words stand alone.
+                    setPasteHtml(null);
+                  }}
+                  onPaste={(e) => {
+                    const html = e.clipboardData.getData("text/html");
+                    const plain = e.clipboardData.getData("text/plain");
+                    if (!html.trim() || !plain.trim()) return;
+                    e.preventDefault();
+                    setPasteText(plain);
+                    setPasteHtml(html);
+                  }}
+                  placeholder={t("panes.pastePlaceholder")}
+                  data-track="add-paste-text"
+                  rows={8}
+                  className="min-h-[120px] w-full resize-y rounded-2xl bg-sand-100 px-4 py-3 text-sm outline-none placeholder:text-sand-500"
+                />
+                <input
+                  value={pasteUrl}
+                  onChange={(e) => setPasteUrl(e.target.value)}
+                  placeholder={t("panes.pasteUrlPlaceholder")}
+                  data-track="add-paste-url"
+                  className="min-w-0 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+                />
+                <input
+                  value={pasteTitle}
+                  onChange={(e) => setPasteTitle(e.target.value)}
+                  placeholder={t("panes.pasteTitlePlaceholder")}
+                  data-track="add-paste-title"
+                  className="min-w-0 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+                />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={queuePaste} data-track="add-paste-queue" className={submitButton}>
+                    {t("panes.pasteQueue")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasteOpen(false)}
+                    data-track="add-paste-cancel"
+                    className={secondaryButton}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* The queue (SPEC.md §22): every link and file waiting for Continue. */}
             {items.length > 0 && (
               <div className="flex flex-col gap-1.5">
@@ -537,6 +675,17 @@ export function AddDocumentDialog({
               >
                 <BlankDocumentIcon size={14} />
                 {t("panes.blankDocument")}
+              </button>
+              <button
+                type="button"
+                onClick={openPaste}
+                data-track="add-paste"
+                data-tip={t("panes.waysInPaste")}
+                disabled={busy}
+                className={secondaryButton}
+              >
+                <CopyIcon size={14} />
+                {t("panes.waysInPasteButton")}
               </button>
               {onImportDrive && (
                 <button

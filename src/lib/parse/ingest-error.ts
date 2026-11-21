@@ -6,6 +6,25 @@ import { PdfPagesError } from "@/lib/pdf-pages";
 // ingest, upload review, and re-parse routes send this instead of the raw
 // error, so the reader never sees a bare "Could not ingest this URL". An
 // error nothing here recognizes keeps its own text after a plain lead.
+/** An add that failed, with its words and, when the site turned the add
+    away (a bot wall, a human check, a consent, sign-in, or subscription
+    page), the code "blocked": the dialog then offers the ways in
+    (SPEC.md §15). The stream's last line carries the code. */
+export class IngestFailure extends Error {
+  constructor(
+    message: string,
+    readonly code: "blocked" | null = null,
+  ) {
+    super(message);
+    this.name = "IngestFailure";
+  }
+}
+
+export function ingestFailure(err: unknown, t: TFunc, kind: "url" | "pdf" | "file" | "reparse"): IngestFailure {
+  const blocked = err instanceof FetchPageError && (err.failure === "blocked" || err.failure === "wall");
+  return new IngestFailure(describeIngestError(err, t, kind), blocked ? "blocked" : null);
+}
+
 export function describeIngestError(
   err: unknown,
   t: TFunc,
