@@ -6943,6 +6943,9 @@ export function ReaderInteractions({
       // error token with the reason.
       const { text, error } = splitStreamError(await res.text());
       if (error) throw new Error(error);
+      // Heartbeat spaces and nothing else: the host ended the run before it
+      // answered (the route's maxDuration).
+      if (!text.trim()) throw new Error(t("reader.visualizeOutOfTime"));
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(text.trim());
