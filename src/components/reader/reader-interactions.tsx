@@ -163,7 +163,7 @@ import {
   referenceWords,
   type AnnotationReference,
 } from "@/lib/annotation-reference";
-import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
+import { ANNOTATION_KIND_KEY, annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import dynamic from "next/dynamic";
 import type { PieceAnnotation } from "@/components/structure/structure-context";
@@ -1088,6 +1088,10 @@ type SuggestionRun = {
 // the selected words run from a box at the words, where the toolbox stood.
 // Its conversation is the selection chat's, anchored to the words; yTop
 // places the chat card it can go on in.
+/** A card's kind color as its --kind: the card over the article draws as
+    the kind box does (globals.css .kind-card). */
+const kindVar = (color: string) => ({ "--kind": color }) as React.CSSProperties;
+
 type AssistantBar = {
   key: string;
   anchor: Anchor;
@@ -11509,13 +11513,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           // The block reader docks it like a tool card (SPEC.md §6).
           data-side-card={richText ? undefined : "annotation"}
           onPointerDown={holdAnnotation(annotationCardReference)}
-          className={`group/hlcard pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float${underView}`}
+          className={`group/hlcard kind-card pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float${underView}`}
           // The card's border and label carry the annotation's kind color (SPEC.md §6).
           style={{
             top: annotationCard.top,
             left: annotationCard.left,
             width: annotationCard.width,
-            borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
+            ...kindVar(annotationKindColor(annotationCard.kind, annotationCard.color)),
           }}
         >
           {/* The head is the card's handle, as on every tool card: a drag
@@ -11530,7 +11534,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={annotationCardReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between select-none"
+            className="kind-card-head flex cursor-move items-center justify-between select-none"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -12442,13 +12446,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="explain"
           onPointerDown={holdAnnotation(bubbleReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          className={`kind-card bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: bubble.left,
             top: bubble.top,
             width: bubble.width,
             maxHeight: cardHeight("explain"),
-            borderColor: annotationKindColor(bubble.kind, null),
+            ...kindVar(annotationKindColor(bubble.kind, null)),
           }}
         >
           <div
@@ -12460,7 +12464,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={bubbleReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between gap-2"
+            className="kind-card-head flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -12607,13 +12611,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="simplify"
           onPointerDown={holdAnnotation(simplifyReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          className={`kind-card bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
             width: simplifyCard.width,
             maxHeight: cardHeight("simplify"),
-            borderColor: annotationKindColor("simplify", null),
+            ...kindVar(annotationKindColor("simplify", null)),
           }}
         >
           <div
@@ -12625,7 +12629,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={simplifyReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between gap-2"
+            className="kind-card-head flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -12755,16 +12759,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div
           data-log-card="log"
           data-selection-popover
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          className={`kind-card bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: logCard.left,
             top: logCard.top,
             width: logCard.width,
             maxHeight: cardMaxHeight,
-            borderColor: annotationKindColor(logCard.tool, null),
+            ...kindVar(annotationKindColor(logCard.tool, null)),
           }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="kind-card-head flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
               <ToolSymbol tool={logCard.tool} plus={logCard.tool !== "assistant"} size={12} />
               {logCard.tool === "assistant" ? t("reader.assistant") : t(TOOL_PLUS_KEY[logCard.tool])}
@@ -12830,13 +12834,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="comment"
           onPointerDown={holdAnnotation(commentReference)}
-          className={`group/cmcard bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          className={`group/cmcard kind-card bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
             width: commentCard.width,
             maxHeight: cardHeight("comment"),
-            borderColor: annotationKindColor("comment", null),
+            ...kindVar(annotationKindColor("comment", null)),
           }}
         >
           <div
@@ -12848,7 +12852,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={commentReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between"
+            className="kind-card-head flex cursor-move items-center justify-between"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -12958,8 +12962,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div
           data-selection-popover
           data-side-card="link"
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card p-4 shadow-float${underView}`}
-          style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardHeight("link") }}
+          className={`kind-card bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardHeight("link"), ...kindVar(LINK_KIND_VAR) }}
         >
           <div
             onPointerDown={dragCard(
@@ -12969,9 +12973,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={t("reader.dragToMove")}
-            className="mb-2 flex cursor-move items-center justify-between"
+            className="kind-card-head flex cursor-move items-center justify-between"
           >
-            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sage-800 uppercase">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase" style={{ color: LINK_KIND_VAR }}>
               <LinkIcon size={12} />
               {t("reader.linkCard")}
             </span>
@@ -13039,7 +13043,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="assistant"
           onPointerDown={holdAnnotation(assistantReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card shadow-float${underView}`}
+          className={`kind-card kind-card-flush bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card shadow-float${underView}`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
@@ -13047,7 +13051,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             minWidth: 260,
             maxWidth: paneWidth > 0 ? Math.max(260, Math.min(680, paneWidth - assistantChat.left - 8)) : 680,
             maxHeight: cardHeight("assistant"),
-            borderColor: annotationKindColor("assistant", null),
+            ...kindVar(annotationKindColor("assistant", null)),
           }}
         >
           <div
@@ -13059,7 +13063,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             style={{ touchAction: "none" }}
             data-no-drag
             data-tip={assistantReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
-            className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
+            className="kind-card-head flex cursor-move items-center justify-between"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"

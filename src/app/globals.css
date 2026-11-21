@@ -3772,25 +3772,38 @@ li[data-checked] > .note-box::before {
 .prose .note-annotation-ref .note-link-card-icon {
   color: var(--kind, var(--sage-700, #3f6b4a));
 }
-/* The box an annotation reference draws as in a rendered note (SPEC.md §6,
-   markdown.tsx): the annotation's kind in the head, the quote symbol at the
-   head's end, the annotation's text inside, all in the kind color. */
-.prose .note-annotation-box {
-  margin: 0.6em 0;
-  overflow: hidden;
+/* The kind box (SPEC.md §6): how an annotation draws on every surface — an
+   annotation reference in a note (markdown.tsx), a card of the Annotations
+   tab and of the annotations full page (annotation-card.tsx), the
+   annotation beside a note (annotation-side.tsx), a tool's output on a
+   Breakwork piece (piece-row.tsx), and the cards over the article
+   (.kind-card, below). One frame in the annotation's kind color (--kind):
+   a head band that names the kind, with the quote symbol at its end, and
+   the annotation's text inside. A head with nothing under it (a collapsed
+   card) is the whole box. */
+.kind-box {
   border: 1px solid color-mix(in srgb, var(--kind, var(--sage-500)) 45%, transparent);
   border-radius: 14px;
   background: color-mix(in srgb, var(--kind, var(--sage-500)) 6%, var(--card));
 }
-.note-annotation-box-head {
+.prose .kind-box {
+  margin: 0.6em 0;
+}
+.kind-box-head {
   display: flex;
+  min-height: 34px;
   align-items: center;
   gap: 8px;
   padding: 5px 6px 5px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--sage-500)) 22%, transparent);
+  border-radius: 13px;
   background: color-mix(in srgb, var(--kind, var(--sage-500)) 10%, transparent);
 }
-.prose .note-annotation-box-name {
+.kind-box-head:not(:last-child) {
+  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--sage-500)) 22%, transparent);
+  border-radius: 13px 13px 0 0;
+}
+.kind-box-name,
+.prose .kind-box-name {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -3803,19 +3816,19 @@ li[data-checked] > .note-box::before {
   text-decoration: none;
   text-transform: uppercase;
 }
-.prose .note-annotation-box-name:hover {
+a.kind-box-name:hover,
+button.kind-box-name:hover {
   text-decoration: underline;
 }
-.note-annotation-box-icon {
+.kind-box-icon {
   display: flex;
   flex: none;
 }
-.note-annotation-box-quote {
+.kind-box-quote {
   display: flex;
   flex: none;
   width: 24px;
   height: 24px;
-  margin-left: auto;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
@@ -3823,20 +3836,47 @@ li[data-checked] > .note-box::before {
   color: var(--kind, var(--sage-700, #3f6b4a));
   transition: background-color 120ms;
 }
-.note-annotation-box-quote:hover {
+.kind-box-quote:hover {
   background: color-mix(in srgb, var(--kind, var(--sage-500)) 22%, var(--card));
 }
-.note-annotation-box-quote[aria-disabled="true"] {
+.kind-box-quote[aria-disabled="true"] {
   cursor: default;
   opacity: 0.55;
 }
-.note-annotation-box-body {
+.kind-box-body {
   padding: 8px 12px 9px;
 }
-.prose .note-annotation-box-body > :first-child {
+/* A card over the article (reader-interactions.tsx): the kind box's frame
+   and head band on a card that keeps its own padding (--kind-pad) and
+   round corners. The head band runs to the card's edges. */
+.kind-card {
+  --kind-pad: 16px;
+  border-color: color-mix(in srgb, var(--kind, var(--sand-400)) 45%, transparent);
+  background: color-mix(in srgb, var(--kind, var(--sand-400)) 6%, var(--card));
+}
+.kind-card.p-3 {
+  --kind-pad: 12px;
+}
+.kind-card.kind-card-flush {
+  --kind-pad: 0px;
+}
+.kind-card-head {
+  margin: calc(var(--kind-pad) * -1) calc(var(--kind-pad) * -1) 10px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--sand-400)) 22%, transparent);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  background: color-mix(in srgb, var(--kind, var(--sand-400)) 10%, transparent);
+}
+.kind-card-flush > .kind-card-head {
+  margin-bottom: 4px;
+}
+.kind-box-body > :first-child,
+.prose .kind-box-body > :first-child {
   margin-top: 0;
 }
-.prose .note-annotation-box-body > :last-child {
+.kind-box-body > :last-child,
+.prose .kind-box-body > :last-child {
   margin-bottom: 0;
 }
 

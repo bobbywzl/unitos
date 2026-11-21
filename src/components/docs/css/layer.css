@@ -200,6 +200,15 @@
   color: var(--docs-icon);
   font: 400 14px/20px var(--docs-ui-font);
 }
+/* The kind box's frame (globals.css .kind-box), as everywhere an annotation
+   draws: the comment's kind color at 45% on the border and 6% under the
+   words, at rest and open. The card's own border color (set inline) gives
+   way to it. */
+.docs-comment,
+[data-page-editor] .docs-comment[data-side-card="comment"] {
+  border-color: color-mix(in srgb, var(--kind-comment) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--kind-comment) 6%, var(--card));
+}
 /* The focused card shows as the card in use, lifted. */
 .docs-comment:focus-visible {
   outline: none;

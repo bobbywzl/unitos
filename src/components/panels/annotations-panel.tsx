@@ -37,7 +37,8 @@ import { inLayer, LayerSwitch, useAnnotationLayer } from "@/components/panels/la
 import { stripSimplifyMarkers } from "@/lib/sentences";
 
 // A link's card carries the link kind color (lib/annotations/kind.ts).
-const card = "rounded-2xl border bg-card p-3.5 shadow-soft";
+// A link's card: the kind box's frame in the link's color (globals.css .kind-box).
+const card = "kind-box p-3.5 shadow-soft";
 const chip =
   "rounded-full bg-clay-100 px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-200";
 
@@ -356,7 +357,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<LinkIcon size={12} />}>{t("panels.links")}</GroupLabel>
           {acceptedOut.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} className={card} style={{ "--kind": LINK_KIND_VAR } as React.CSSProperties}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
               {l.targetQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
@@ -403,7 +404,7 @@ export function AnnotationsPanel({
             </div>
           ))}
           {acceptedIn.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} className={card} style={{ "--kind": LINK_KIND_VAR } as React.CSSProperties}>
               <p className="line-clamp-2 text-[13px]">{l.hereQuotedText ?? l.quotedText}</p>
               {l.hereQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
