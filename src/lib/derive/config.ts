@@ -177,13 +177,25 @@ export const NOTE_ASSISTANT_MODEL = CLAUDE_SONNET_5_5;
 export const NOTE_ASSISTANT_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 export const NOTE_ASSISTANT_MAX_OUTPUT_TOKENS = 32768;
 
-// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5.5 at its highest
+// VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5.5 at high
 // reasoning effort: the model first judges whether a picture can carry the
 // passage's core idea with certainty, and draws only then. Opus 5.5 leads the
 // board for vector graphics written as code, which is what a visualization
-// is, and costs half of Claude Fable 5.1 for the same drawing.
+// is, and costs half of Claude Fable 5.1 for the same drawing. Not "max":
+// at max the draw alone often took most of the route's 300 s, the check then
+// ran past it, and the host ended the function with nothing sent, which the
+// card read as an empty response.
 export const VISUALIZE_MODEL = CLAUDE_OPUS_5_5;
-export const VISUALIZE_EFFORT: ClaudeEffort = "max";
+export const VISUALIZE_EFFORT: ClaudeEffort = "high";
+
+// The time budget of one Visualize run (the derive route's maxDuration is
+// 300 s). Every model call aborts at the deadline, so the run always answers
+// before the host ends the function: with the picture, or with a line that
+// says the time ran out. The margin is for the save after the calls.
+export const VISUALIZE_DEADLINE_MARGIN_MS = 20_000;
+// The check starts only with this much time left; with less, the picture
+// stands as drawn, as when the check fails.
+export const VISUALIZE_CHECK_MIN_MS = 75_000;
 
 // The check (SPEC.md §20): a second call on the same model and effort, after
 // the picture is drawn and laid out. It is the one pass that sees the
