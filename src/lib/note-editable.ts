@@ -11,7 +11,7 @@
 // Offsets in this module's API are source offsets — positions in the
 // markdown — so the editor's line commands patch the markdown directly.
 
-import { isHeicFile } from "@/lib/heic";
+import { isHeicFile } from "@/lib/image-jpeg";
 import {
   TEXT_COLORS,
   isAtom,
@@ -255,17 +255,48 @@ function revealCaret(el: HTMLElement) {
   if (shift !== 0) window.scrollBy(0, shift);
 }
 
+/** Make the element's document `html`, touching only the blocks that
+    differ: the blocks at the start and at the end that are already as the
+    html has them keep their nodes, and the ones between are put in anew. A
+    key changes one line of a note, so one block is drawn again, not the
+    whole note: the browser lays out and spell-checks that block alone, and
+    typing in a long note stays as quick as in a short one. The document
+    reads the same as after `el.innerHTML = html`. */
+function setDocHtml(el: HTMLElement, html: string) {
+  if (el.childNodes.length === 0) {
+    el.innerHTML = html;
+    return;
+  }
+  const parsed = document.createElement("template");
+  parsed.innerHTML = html;
+  const want = Array.from(parsed.content.childNodes);
+  const have = Array.from(el.childNodes);
+  let head = 0;
+  while (head < have.length && head < want.length && have[head].isEqualNode(want[head])) head++;
+  let tail = 0;
+  while (
+    tail < have.length - head &&
+    tail < want.length - head &&
+    have[have.length - 1 - tail].isEqualNode(want[want.length - 1 - tail])
+  )
+    tail++;
+  if (head === have.length && head === want.length) return;
+  const after = tail > 0 ? have[have.length - tail] : null;
+  for (let i = head; i < have.length - tail; i++) el.removeChild(have[i]);
+  for (let i = head; i < want.length - tail; i++) el.insertBefore(want[i], after);
+}
+
 // Painting normalizes: the document reads back in the serializer's own form
 // ("1)" as "1.", a stray indent dropped), and the text follows the document,
 // so offsets read from the document always fit the text.
 function render(el: HTMLElement, text: string): { text: string; lines: NoteLine[] } {
   let lines = parseNote(text);
-  el.innerHTML = noteDocHtml(lines);
+  setDocHtml(el, noteDocHtml(lines));
   const normalized = serializeNoteDoc(el);
   if (normalized !== text) {
     text = normalized;
     lines = parseNote(text);
-    el.innerHTML = noteDocHtml(lines);
+    setDocHtml(el, noteDocHtml(lines));
   }
   if (text === "") el.setAttribute("data-empty", "");
   else el.removeAttribute("data-empty");
@@ -899,8 +930,15 @@ export function attachNoteEditable(
   function onCompositionEnd() {
     composing = false;
     // Chrome fires input before compositionend, Safari after: sync once
-    // both are past.
-    setTimeout(() => sync(false), 0);
+    // both are past. A reader who types on at once starts the next
+    // composition before this runs (the browser hands a waiting key over
+    // before a waiting timer): painting then would take the document out
+    // from under the IME, and the letters being composed would go. The
+    // document keeps every word meanwhile, and the end of that composition
+    // reads all of them.
+    setTimeout(() => {
+      if (!composing) sync(false);
+    }, 0);
   }
 
   el.addEventListener("beforeinput", onBeforeInput);

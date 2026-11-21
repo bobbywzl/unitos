@@ -19,9 +19,9 @@ import {
 // - Video: the reader marked a moment of a video document (SPEC.md §11);
 //   the paused frame is attached when the client could capture it.
 // - Audio: the reader marked a moment of an audio document; no frame.
-// - Page: the reader circled a spot on a handwritten page (SPEC.md §16);
-//   the page and the circled part are attached. With a question typed
-//   (Circle & ask's Ask) the model answers it; without one (Explain) the
+// - Page: the reader highlighted a spot on a handwritten page (SPEC.md §16);
+//   the page and the highlighted part are attached. With a question typed
+//   (Highlight & ask's Ask) the model answers it; without one (Explain) the
 //   model explains the spot.
 export function explainPrompt(ctx: PromptCtx): string {
   if (ctx.video?.audio) {
@@ -95,23 +95,23 @@ export function explainPrompt(ctx: PromptCtx): string {
     return [
       profileLines(ctx.profile),
       "",
-      `The reader circled a spot on page ${page.number} of the handwritten document "${ctx.documentTitle}". The document's converted text, when it has any, is above.`,
+      `The reader highlighted a spot on page ${page.number} of the handwritten document "${ctx.documentTitle}". The document's converted text, when it has any, is above.`,
       "",
       page.hasCrop
-        ? "The first attached image is the whole page. The second is the circled part, enlarged."
-        : "The attached image is the whole page; find the circled spot on it.",
+        ? "The first attached image is the whole page. The second is the highlighted part, enlarged."
+        : "The attached image is the whole page; find the highlighted spot on it.",
       "",
       ...(page.question
         ? [
             "The reader asks:",
             page.question,
             "",
-            "Answer the question from the circled spot and the page.",
-            "1. Start with the answer. Then the evidence: transcribe the words, name the shapes, read the numbers at the circled spot that the answer rests on.",
+            "Answer the question from the highlighted spot and the page.",
+            "1. Start with the answer. Then the evidence: transcribe the words, name the shapes, read the numbers at the highlighted spot that the answer rests on.",
             "2. Place it: how the spot fits the rest of the page and the document, when that changes the answer.",
           ]
         : [
-            "Explain the circled spot for this reader.",
+            "Explain the highlighted spot for this reader.",
             "1. Start with what is written or drawn there: transcribe the words, name the shapes, read the numbers.",
             "2. Then place it: how the spot fits the rest of the page and the document.",
           ]),

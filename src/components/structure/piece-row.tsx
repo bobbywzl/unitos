@@ -1,24 +1,28 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Handle, Position } from "reactflow";
 import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
-import { NotesIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
+import { NotesIcon, SparkleIcon, SpinnerIcon, StarIcon, ToBottomIcon, ToTopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { annotationKindColor } from "@/lib/annotations/kind";
-import type { StructurePiece } from "@/lib/structure";
+import { PIECE_STARS_MAX, type PieceStars, type StructurePiece } from "@/lib/structure";
 import { handleId, isOpenConnectionEnd, PIECE_DRAG_TYPE, pieceHashOf, useStructure, type PieceAnnotation } from "@/components/structure/structure-context";
 
 // One piece (SPEC.md §32): a block placed in a bucket. Folded, the row shows
 // the label and the block's first words; a click opens it: the whole block,
 // its annotations and notes, and the actions — Open in reader, Explain,
-// Simplify. The row drags to another bucket, to another place in its own,
-// or to the tray (unsorted). Its handles at the sides take a connection. A
-// block whose text changed since the piece was placed says so; a block
-// that is gone shows the words the piece kept.
+// Simplify. At the right of the row, its tools: the three stars (how much
+// the piece matters in its bucket; the bucket lists the most-starred first)
+// and two arrows that move the piece to the top or the bottom of its group.
+// The tools show on hover, on focus, and while the row is open; the stars a
+// piece has show always. The row drags to another bucket, to another place
+// in its own, or to the tray (unsorted). Its handles at the sides take a
+// connection. A block whose text changed since the piece was placed says
+// so; a block that is gone shows the words the piece kept.
 
-export function PieceRow({ piece }: { piece: StructurePiece }) {
+export function PieceRow({ piece, groupFirst, groupLast }: { piece: StructurePiece; groupFirst: boolean; groupLast: boolean }) {
   const t = useT();
   const { structure, selectedConnectionId, blocks, annotationsByBlock, canEdit, ops, setDragging, openBlock, runTool, toolRuns } = useStructure();
   const block = blocks.get(piece.blockId);
@@ -32,49 +36,128 @@ export function PieceRow({ piece }: { piece: StructurePiece }) {
   // An end of the open connection: the ring says what its curve joins.
   const joined = isOpenConnectionEnd(structure, selectedConnectionId, end);
 
+  // A press on a handle starts a connection, never a drag of the row: the
+  // row is draggable, and the browser would start its drag on the first
+  // move, which stops the pointer moves reactflow's connection reads. The
+  // drag event's target is the row, so the press is remembered instead.
+  const handlePressed = useRef(false);
+  function onPointerDown(e: PointerEvent<HTMLElement>) {
+    handlePressed.current = Boolean((e.target as HTMLElement).closest?.(".react-flow__handle"));
+  }
   function onDragStart(e: DragEvent) {
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (handlePressed.current || under?.closest(".react-flow__handle")) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData(PIECE_DRAG_TYPE, piece.blockId);
     e.dataTransfer.effectAllowed = "move";
     setDragging({ blockId: piece.blockId });
   }
 
+  const starTitle = (n: number) => (n === 1 ? t("structure.pieceStarTitleOne") : t("structure.pieceStarTitle", { n }));
+
   return (
     <div
-      data-piece-row
+      data-piece-row={piece.blockId}
+      data-end={`piece|${piece.blockId}`}
+      data-open={open ? "" : undefined}
       draggable={canEdit}
+      onPointerDown={onPointerDown}
       onDragStart={onDragStart}
       onDragEnd={() => setDragging(null)}
       className={`nodrag relative rounded-xl border bg-paper/70 ${joined ? "border-clay ring-2 ring-clay/30" : open ? "border-line" : "border-transparent hover:border-line"} ${canEdit ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       <Handle type="target" position={Position.Left} id={handleId("l", end)} className="structure-handle" />
       <Handle type="source" position={Position.Right} id={handleId("r", end)} className="structure-handle" />
-      <button
-        onClick={() => setOpen((v) => !v)}
-        data-track="piece-toggle"
-        aria-expanded={open}
-        className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left"
-      >
-        <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-sand-400" aria-hidden />
-        <span className="min-w-0 flex-1">
-          {piece.label && <span className="block truncate text-[12.5px] font-semibold text-ink">{piece.label}</span>}
-          <span className={`block text-[12px] leading-snug text-sand-700 ${open ? "" : "line-clamp-2"} ${gone ? "line-through" : ""}`}>
-            {block ? (open ? block.text : piece.preview) : piece.preview}
+      <div className="flex items-start">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          data-track="piece-toggle"
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-start gap-2 py-1.5 pl-2.5 pr-1 text-left"
+        >
+          <span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-sand-400" aria-hidden />
+          <span className="min-w-0 flex-1">
+            {piece.label && <span className="block truncate text-[12.5px] font-semibold text-ink">{piece.label}</span>}
+            <span className={`block text-[12px] leading-snug text-sand-700 ${open ? "" : "line-clamp-2"} ${gone ? "line-through" : ""}`}>
+              {block ? (open ? block.text : piece.preview) : piece.preview}
+            </span>
           </span>
-        </span>
-        {(annotations.length > 0 || block?.type === "FIGURE" || block?.type === "TABLE") && (
-          <span className="mt-0.5 flex shrink-0 items-center gap-1">
-            {block && (block.type === "FIGURE" || block.type === "TABLE" || block.type === "EQUATION" || block.type === "CODE" || block.type === "HEADING") && (
-              <span className="rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-600 uppercase">{blockKindLabel(block.type, t)}</span>
+          {(annotations.length > 0 || block?.type === "FIGURE" || block?.type === "TABLE") && (
+            <span className="mt-0.5 flex shrink-0 items-center gap-1">
+              {block && (block.type === "FIGURE" || block.type === "TABLE" || block.type === "EQUATION" || block.type === "CODE" || block.type === "HEADING") && (
+                <span className="rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-600 uppercase">{blockKindLabel(block.type, t)}</span>
+              )}
+              {annotations.length > 0 && (
+                <span className="flex items-center gap-0.5 rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-700">
+                  <NotesIcon size={9} />
+                  {annotations.length}
+                </span>
+              )}
+            </span>
+          )}
+        </button>
+        {(canEdit || piece.stars > 0) && (
+          <div className="flex shrink-0 items-center pt-[3px] pr-1" role="group" aria-label={t("structure.pieceStars")}>
+            {Array.from({ length: PIECE_STARS_MAX }, (_, i) => (i + 1) as PieceStars).map((n) => {
+              const filled = n <= piece.stars;
+              return canEdit ? (
+                <button
+                  key={n}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ops.starPiece(piece.blockId, piece.stars === n ? 0 : n);
+                  }}
+                  data-track={`piece-star:${piece.stars === n ? 0 : n}`}
+                  data-tip={piece.stars === n ? t("structure.pieceStarsClearTitle") : starTitle(n)}
+                  aria-label={starTitle(n)}
+                  aria-pressed={filled}
+                  data-on={filled ? "" : undefined}
+                  className={`piece-tool flex size-5 items-center justify-center rounded-full ${filled ? "text-star" : "text-sand-400 hover:text-star"}`}
+                >
+                  <StarIcon size={12} filled={filled} />
+                </button>
+              ) : (
+                <span key={n} data-on={filled ? "" : undefined} className={`piece-tool flex size-5 items-center justify-center ${filled ? "text-star" : "hidden"}`}>
+                  <StarIcon size={12} filled={filled} />
+                </span>
+              );
+            })}
+            {canEdit && (
+              <>
+                <span className="piece-tool mx-0.5 h-3 w-px bg-line" aria-hidden />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ops.movePiece(piece.blockId, "top");
+                  }}
+                  disabled={groupFirst}
+                  data-track="piece-top"
+                  data-tip={t("structure.pieceToTopTitle")}
+                  aria-label={t("structure.pieceToTop")}
+                  className="piece-tool flex size-5 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-sand-500"
+                >
+                  <ToTopIcon size={12} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ops.movePiece(piece.blockId, "bottom");
+                  }}
+                  disabled={groupLast}
+                  data-track="piece-bottom"
+                  data-tip={t("structure.pieceToBottomTitle")}
+                  aria-label={t("structure.pieceToBottom")}
+                  className="piece-tool flex size-5 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-sand-500"
+                >
+                  <ToBottomIcon size={12} />
+                </button>
+              </>
             )}
-            {annotations.length > 0 && (
-              <span className="flex items-center gap-0.5 rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-700">
-                <NotesIcon size={9} />
-                {annotations.length}
-              </span>
-            )}
-          </span>
+          </div>
         )}
-      </button>
+      </div>
       {open && (
         <div className="flex flex-col gap-2 px-2.5 pb-2.5">
           {gone && <p className="text-[11px] text-red-600">{t("structure.pieceGone")}</p>}

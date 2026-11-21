@@ -55,7 +55,14 @@ export type StructurePiece = {
   order: number;
   /** The label the reader or the assistant gave the piece; "" for none. */
   label: string;
+  /** The piece's stars: how much it matters in its bucket, 0 (none) to 3.
+      A bucket lists its pieces by stars, the most first, then by order. */
+  stars: PieceStars;
 };
+
+/** The stars a piece can carry: none, or one to three. */
+export const PIECE_STARS_MAX = 3;
+export type PieceStars = 0 | 1 | 2 | 3;
 
 export type StructureConnection = {
   id: string;
@@ -99,6 +106,14 @@ export const pieceSchema = z.object({
   bucketId: idSchema,
   order: z.number().int(),
   label: z.string().max(TEXT_MAX),
+  // A row written before stars existed has none: it reads as 0.
+  stars: z
+    .number()
+    .int()
+    .min(0)
+    .max(PIECE_STARS_MAX)
+    .default(0)
+    .transform((n) => n as PieceStars),
 });
 
 export const connectionSchema = z.object({
@@ -236,12 +251,25 @@ export function tidy(body: StructureBody): StructureBody {
       p = byId.get(p)?.parentId ?? null;
     }
   }
-  const pieces: StructurePiece[] = [];
+  const kept: StructurePiece[] = [];
   const seenBlocks = new Set<string>();
   for (const p of body.pieces) {
     if (seenBlocks.has(p.blockId) || !byId.has(p.bucketId)) continue;
     seenBlocks.add(p.blockId);
-    pieces.push(p);
+    kept.push(p);
+  }
+  // Each bucket's pieces numbered as they list: by stars, the most first,
+  // then by order. The order a reader gave pieces with the same stars stays.
+  const pieces: StructurePiece[] = [];
+  const byBucket = new Map<string, StructurePiece[]>();
+  for (const p of kept) {
+    const list = byBucket.get(p.bucketId) ?? [];
+    list.push(p);
+    byBucket.set(p.bucketId, list);
+  }
+  for (const list of byBucket.values()) {
+    list.sort(comparePieces);
+    list.forEach((p, i) => pieces.push(p.order === i ? p : { ...p, order: i }));
   }
   const ends = new Set<string>([
     ...buckets.map((b) => `bucket:${b.id}`),
@@ -280,9 +308,14 @@ export function childBuckets(structure: StructureBody, parentId: string | null):
   return structure.buckets.filter((b) => b.parentId === parentId).sort((a, b) => a.order - b.order);
 }
 
-/** The pieces of one bucket, in order. */
+/** How a bucket lists its pieces: by stars, the most first, then by order. */
+export function comparePieces(a: StructurePiece, b: StructurePiece): number {
+  return b.stars - a.stars || a.order - b.order;
+}
+
+/** The pieces of one bucket, as it lists them: by stars, the most first, then by order. */
 export function bucketPieces(structure: StructureBody, bucketId: string): StructurePiece[] {
-  return structure.pieces.filter((p) => p.bucketId === bucketId).sort((a, b) => a.order - b.order);
+  return structure.pieces.filter((p) => p.bucketId === bucketId).sort(comparePieces);
 }
 
 /** The top bucket a bucket sits under (itself when it is on the canvas). */
@@ -309,7 +342,9 @@ export function newId(prefix: "b" | "c", taken: Set<string>): string {
 // right, each column stacked. The assistant's proposal lands this way; the
 // reader then drags them where they belong.
 export const BUCKET_WIDTH = 360;
-export const BUCKET_GAP = 40;
+// Between a new top bucket and the one it lands beside: room for a
+// connection's chip between them.
+export const BUCKET_GAP = 100;
 const LAYOUT_COLUMNS = 3;
 // A piece row folded: its label and two lines of preview, with the gap.
 const ROW_HEIGHT_PER_PIECE = 76;

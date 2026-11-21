@@ -2,13 +2,15 @@ import { actionLines, insertParagraphLine, NEAREST_CHANGE_RULE, TRANSCRIPT_RULE,
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import {
-  ANSWER_LENGTH,
+  ANSWER_SHAPE,
+  ASSISTANT_STYLE,
+  beyondRule,
+  openPartRule,
   CONNECTION_RULE,
   CORE_RULE,
   languageName,
   profileLines,
   readerNotesText,
-  STYLE_RULE,
   WEB_LINES,
   type ReaderProfileCtx,
 } from "@/lib/prompts/types";
@@ -17,9 +19,13 @@ import {
 // The reader's message becomes a plan: reply (the answer), actions (edits,
 // highlights, notes the reader approves), and matches (the passages across
 // the document that deal with the selection's topic, the work the old
-// Match-it tool did). The document is the cached system prefix; this is the
-// user message. Not in promptTemplates: the route is the assistant's, not
-// /api/derive.
+// Match-it tool did). The call goes in the context layers
+// (lib/assistant/context.ts): the document, then the rules (actRules: the
+// action types and how the reply reads), then the material (actMaterial:
+// the project's sections, its other documents, the reader's notes), all
+// read from the cache by the next message; actPrompt is the user message,
+// what is new each time: the selection, the conversation, the command. Not
+// in promptTemplates: the route is the assistant's, not /api/derive.
 // What makes a reply worth reading: it answers in its first sentence, every
 // claim in it rests on a cited block, the matches are the passages a reader
 // would have found by reading the whole document with the selection in mind,
@@ -71,24 +77,41 @@ export function textSelectionBlock(blockId: string, text: string, core = false):
   return `This is the selection chat. The reader has selected this text in ${where}:\n"${text.slice(0, 2000)}"\nThe command applies to this selection unless it says otherwise.`;
 }
 
-export function actPrompt(ctx: ActCtx): string {
+/** The material layer of the selection chat (lib/assistant/context.ts):
+    what the project holds beside the open document. It is the same from
+    message to message until the reader adds a note or a section, so it
+    follows the document and is read from the cache. What the document
+    itself fixes comes first (its sheets, its pages, its voices), then the
+    project's sections and documents, then the notes, which change most. */
+export function actMaterial(ctx: Pick<ActCtx, "sections" | "otherDocuments" | "notes" | "sheets" | "pages" | "transcript">): string {
+  return [
+    "The project this document is in: its sections, its other documents, and the reader's notes and annotations.",
+    ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
+    ...(ctx.pages?.length ? ["", `Pages (each page's picture, then the blocks that hold its words):\n${ctx.pages.join("\n")}`] : []),
+    ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
+    "",
+    `Sections in the corpus (id — title):\n${ctx.sections.length > 0 ? ctx.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
+    "",
+    `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    "",
+    `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
+  ].join("\n");
+}
+
+/** The rules layer of the selection chat (lib/assistant/context.ts): what
+    the plan may hold and how the reply reads. The same for every message
+    of a conversation, and for every conversation on the document in the
+    same mode (how the document changes, the language, the web, a selection
+    or none), so it follows the document and is read from the cache; the
+    message after it holds only what is new. */
+export function actRules(ctx: Pick<ActCtx, "profile" | "lang" | "hasSelection" | "edits" | "transcript" | "web">): string {
   const language = languageName(ctx.lang);
   return [
     "Convert the reader's command into a plan of actions on this document and notebook. The reader approves the plan before anything runs.",
     "",
     profileLines(ctx.profile),
     "",
-    ctx.selectionBlock || "The reader has no text selected. The command applies to the document.",
-    ...(ctx.toolBlock ? ["", ctx.toolBlock] : []),
-    "",
-    `Sections in the corpus (id — title):\n${ctx.sections.length > 0 ? ctx.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
-    "",
-    `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
-    ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
-    ...(ctx.pages?.length ? ["", `Pages (each page's picture, then the blocks that hold its words):\n${ctx.pages.join("\n")}`] : []),
-    ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
-    "",
-    `The reader's notes and annotations across the project ([note <id>] section or kind: text):\n${readerNotesText(ctx.notes)}`,
+    "Each message of the reader gives what the reader selected, the conversation so far when there is one, and the command. The project's sections, its other documents, and the reader's notes and annotations follow these rules.",
     "",
     "Action types (each action is a JSON object whose \"type\" is the type's name, with the fields its line names):",
     ...actionLines(ctx.edits ?? "blocks", Boolean(ctx.transcript)),
@@ -104,7 +127,7 @@ export function actPrompt(ctx: ActCtx): string {
     NEAREST_CHANGE_RULE("5a"),
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click. Several blocks named together take each block's tag, side by side: tags side by side render as one chip with their count.",
     `7. Write reply, every description, and every why in ${language}.`,
-    `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. ${ANSWER_LENGTH} ${CORE_RULE} ${CONNECTION_RULE} ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted. Stop at the answer: no context the question did not ask for, no point made twice, no account of how the answer was found. In the selection chat the whole reply to a question is one paragraph of at most three sentences, each under 25 words and each claim with its block, unless the message asks for detail. A question about the selected passage is answered from the passage first: what it states, in its own terms, and the conclusion it draws itself, in one sentence with its block. A second sentence only for what the question needs and the passage lacks; other blocks' findings only when the question asks for them. Each block is cited once. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
+    `8. reply, for a command that asks a question: the answer, as markdown inside the JSON string, each label and each bullet on a line of its own (\\n). ${ANSWER_SHAPE} ${CORE_RULE} ${beyondRule(ctx.web)} ${CONNECTION_RULE} ${ASSISTANT_STYLE} A question about the selected passage starts from the passage: the core says what the selected words state or mean, in plain words, with their block. Every claim about the document cites its block. ${openPartRule(ctx.web)} A sentence that could be written about any other document is deleted; a sentence that only restates the selection in other words is deleted. No point made twice, no account of how the answer was found. Never quote the selection back: it is \"the selected sentence\" (or line, or words).`,
     ...(ctx.hasSelection
       ? [
           "9. matches: the passages across the document that deal with what the selection focuses on. Do this before you write reply, and answer from them:",
@@ -112,9 +135,7 @@ export function actPrompt(ctx: ActCtx): string {
           "   b. Find 3 to 8 passages, from anywhere in the document, that reveal the most about that topic: a claim about it, its definition, evidence for it, a number about it, a counterpoint to it. Most revealing first. Never the selection itself. Skip passages that merely mention the topic.",
           "   c. quote: one contiguous verbatim span of one block, a sentence, at most two, copied exactly. blockId: the block it sits in. why: one sentence on what the passage says about the topic, with its number or its named mechanism, and how it bears on the reader's question when it does.",
           "   d. Every claim in reply that rests on a passage cites it as [block <id>].",
-          ctx.history.length > 0
-            ? "   e. This message continues the conversation: return matches only when the message asks where else the document deals with something. Otherwise return an empty list."
-            : "   e. This is the first message of the conversation: return matches, except where rule 10 asks for an empty list.",
+          "   e. The first message of a conversation: return matches, except where rule 10 asks for an empty list. A message that continues a conversation (it gives the conversation so far): return matches only when the message asks where else the document deals with something; otherwise return an empty list.",
         ]
       : ["9. matches: return an empty list. The reader has no selection."]),
     ...(ctx.edits === "suggestions"
@@ -131,6 +152,14 @@ export function actPrompt(ctx: ActCtx): string {
           ]),
     "12. A command that asks for a new document (make, create, or write a document, a page, or a doc: a summary, a study guide, action items, an outline, a glossary) is one create_document action, never notes or sections in its place, and never words added to the open document. Its markdown is the whole new document, written from the material: ## headings for its parts, the points in plain words with the material's own numbers and names, and under each point the passage that supports it as a > quote line: the one sentence that states the point, of one block, copied word for word. Each point is written from its quote: every fact the point states (a number, a name, a mechanism) is in that quote's words, and a fact from another sentence gets that sentence as its own quote line. A point holds the facts of one or two sentences, so it takes one or two quote lines; a point that would need more is two points, or loses the facts that matter least. A part that summarizes a named part of the document draws on every block under that heading and keeps every number of it. A summary's own words stay under a third of the length of what it sums up, and the whole summary, its quote lines too, under half: a point holds what several lines say, and a line that adds nothing to a point is left out. The steps of a process go in the order the process runs, which the steps' own words give, not the order the material lists them. An answer under a question (an FAQ, a study guide) is in the reader's words and shorter than its quote, never the quote retyped. A document for a named audience (the sales team, a client, a manager) holds only what that audience will say or do: test figures and the debate behind a decision stay out unless the message asks for them. reply: one sentence that names the document and what it holds.",
     "13. A message that asks for one note, one mark, or one entry per X the document names (each risk, every limit, each decision, every term): before writing the plan, list every block of the whole document that states an X, under any heading, and write one action per X, even when two X share a block. A heading named X holds some of them, not all. The key X (key numbers, key terms) are the few the document's main point rests on, never every X it gives.",
+    ...(ctx.web ? ["", ...WEB_LINES] : []),
+  ].join("\n");
+}
+
+export function actPrompt(ctx: ActCtx): string {
+  return [
+    ctx.selectionBlock || "The reader has no text selected. The command applies to the document.",
+    ...(ctx.toolBlock ? ["", ctx.toolBlock] : []),
     ...(ctx.figureBlockId && ctx.edits !== "none" ? ["", ...figureWordsRules(ctx.figureBlockId, ctx.edits ?? "blocks")] : []),
     "",
     ...(ctx.history.length > 0
@@ -142,7 +171,7 @@ export function actPrompt(ctx: ActCtx): string {
       : []),
     `Command: ${ctx.command}`,
     "",
-    ...(ctx.web ? ["", ...WEB_LINES, ""] : []),
+    "Answer with the plan, by the rules and the action types given after the document.",
     "JSON strings escape a backslash: write \\\\ for every \\ (TeX \\frac is \"\\\\frac\", \\text is \"\\\\text\").",
     'Return ONLY JSON: {"reply": string or null, "actions": [...], "matches": [{"blockId": "<id>", "quote": "<verbatim>", "why": "<sentence>"}]}',
   ].join("\n");

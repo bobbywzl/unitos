@@ -43,8 +43,9 @@ const CRITERIA: Record<CheckTool, Criterion[]> = {
   ],
   assistant: [
     { key: "answer_first", holds: "The answer is in the first one or two sentences, before the evidence.", fails: "The output opens with context, method, or a restatement of the question." },
-    { key: "honest", holds: "Where the material does not answer, the output says so, and does not fill the gap from general knowledge.", fails: "The output fills a gap in the material from general knowledge without saying so." },
-    { key: "style", holds: "The output answers directly and first, in short sentences and plain words, with no idioms, no preamble, and no closing summary.", fails: "The output has a preamble, a closing summary, an idiom, or long winding sentences." },
+    { key: "honest", holds: "Where the material does not answer, the output says so, and anything from outside the material stands apart from what the material says, marked as from outside it.", fails: "The output states something from outside the material as if the material said it." },
+    { key: "depth", holds: "The depth follows the question: a question of who, which, when, where, or how many gets one to three sentences; a question the material answers in one place gets a short answer with its reason and its limit; a question of meaning gets the answer first, then a few labeled points that add what the passage implies, what cuts against it, or what it comes to.", fails: "A question of meaning gets only the passage restated in other words, or a simple lookup gets a long answer under labels." },
+    { key: "style", holds: "The output answers directly and first, in short sentences and plain words, with no idioms, no preamble, and no point made twice.", fails: "The output has a preamble, an idiom, a point made twice, or long winding sentences." },
   ],
 };
 

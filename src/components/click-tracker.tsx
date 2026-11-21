@@ -20,6 +20,15 @@ import { tabAccount } from "@/lib/tab-account";
 
 const FLUSH_MS = 4000;
 const PENDING_MAX = 500;
+// The controls pressed last, kept in the tab alone: the error page shows
+// them, so a report of a page that stopped says what led to it.
+const TRAIL_MAX = 8;
+let trail: string[] = [];
+
+/** The controls pressed last in this tab, oldest first. */
+export function lastControls(): string[] {
+  return [...trail];
+}
 
 let pending: ClickRecord[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -78,6 +87,9 @@ export function ClickTracker({ notebookId }: { notebookId: string }) {
     const onClick = (e: MouseEvent) => {
       const record = recordFor(e.target, notebookId);
       if (record) trackClick(record);
+      // The trail takes every named control, on a surface or not.
+      const name = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-track]")?.dataset.track : undefined;
+      if (name) trail = [...trail, name].slice(-TRAIL_MAX);
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flushClicks(true);

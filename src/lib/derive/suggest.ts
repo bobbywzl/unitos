@@ -3,7 +3,7 @@ import type { ModelMessage } from "ai";
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, pageNames, type PageName } from "@/lib/derive/context";
+import { pageNames, type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { ResolvedOp, SuggestResult } from "@/lib/docs/assistant-suggestions";
 import type { RichNode } from "@/lib/docs/schema";
@@ -26,6 +26,7 @@ import { suggestCheckPrompt, type CheckedOp } from "@/lib/prompts/suggest-check"
 import { z } from "zod";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { figureWordsMarkdown, type FigureWords } from "@/lib/assistant/plan";
+import { documentLayer } from "@/lib/assistant/context";
 
 // The assistant's suggestions (SPEC.md §29), the one code path: the command
 // and its scope → lib/prompts/suggest.ts under the cached document prefix →
@@ -212,11 +213,7 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
   // The document is the cached system prefix: every window and every command
   // on the same document reads it from the cache.
   const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content: documentPrefix(document.title, document.rows, document.references, document.pageName),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-    },
+    documentLayer(document.title, document.rows, document.references, document.pageName),
     { role: "user", content: prompt },
   ];
   const call = await featureCall("suggest", SUGGEST_EFFORT[run.thinking]);

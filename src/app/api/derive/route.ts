@@ -58,7 +58,8 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { kimiConfigured, WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -178,7 +179,7 @@ const deriveSchema = z
         .optional(),
     })
     .optional(),
-  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The PAGE block,
+  // EXPLAIN on a handwritten page (SPEC.md §16): Highlight & ask. The PAGE block,
   // the drawn region, and the reader's question when one was typed. The server
   // renders the page and the circled part from the stored PDF.
   page: z
@@ -935,7 +936,7 @@ async function handle(req: Request, t: TFunc) {
     }
   }
 
-  // EXPLAIN on a handwritten page (SPEC.md §16): Circle & ask. The server
+  // EXPLAIN on a handwritten page (SPEC.md §16): Highlight & ask. The server
   // renders the page and the circled part from the stored PDF and attaches
   // both — the page carries the context, the crop carries the circled spot.
   let pageAnchor: { blockId: string; quotedText: string; region: unknown } | null = null;
@@ -1004,21 +1005,21 @@ async function handle(req: Request, t: TFunc) {
   // feature's model, which reads the source whole (lib/derive/svg-chart.ts).
   const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
   // Web access (SPEC.md §7): an explanation, an analysis, or an answer about
-  // a range may search the web, as the assistant does — the same tool, the
-  // same rules (WEB_LINES), on the web feature's model. A call with an image
-  // or an SVG chart goes to the model that reads it, without the web.
+  // a range may search the web, as the assistant does — the same search, the
+  // same rules (WEB_LINES): Gemini with Google Search (lib/web-search.ts). A
+  // call with an image or an SVG chart goes to the model that reads it,
+  // without the web.
   const web =
     (data.web ?? true) &&
     (data.type === "EXPLAIN" || data.type === "ANALYZE" || data.type === "ASK") &&
     attachedImages.length === 0 &&
     !svgChart;
   ctx.web = web;
+  const webTurn = web ? await webCall(DERIVATION_EFFORT[data.type]) : null;
   const chat =
     svgChart ??
-    (await featureCall(
-      web ? "web" : attachedImages.length > 0 ? "vision" : derivationFeature(data.type),
-      DERIVATION_EFFORT[data.type],
-    ));
+    webTurn?.call ??
+    (await featureCall(attachedImages.length > 0 ? "vision" : derivationFeature(data.type), DERIVATION_EFFORT[data.type]));
   usageMeta.model = chat.modelId;
   const messages: ModelMessage[] = [
     {
@@ -1193,10 +1194,11 @@ async function handle(req: Request, t: TFunc) {
     data.type === "ASK" ||
     data.type === "DEFINE"
   ) {
-    const searchUsd = web ? webSearchUsd(usageMeta.model) : 0;
+    const searchUsd = webTurn?.searchUsd ?? 0;
+    const pages = new WebSources();
     // The stream on one model: the call's own, or the fallback's when the
     // first failed before any text came (below).
-    const startStream = (call: ModelCall) => {
+    const startStream = (call: ModelCall, withWeb = true, streamMessages: ModelMessage[] = messages) => {
       usageMeta.model = call.modelId;
       return streamText({
         model: call.model,
@@ -1204,10 +1206,10 @@ async function handle(req: Request, t: TFunc) {
         providerOptions: call.providerOptions,
         headers: gatewayHeaders(usageMeta),
         allowSystemInMessages: true,
-        messages,
-        ...(web
+        messages: streamMessages,
+        ...(webTurn && withWeb
           ? {
-              tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+              tools: webTurn.tools,
               stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
             }
           : {}),
@@ -1292,7 +1294,14 @@ async function handle(req: Request, t: TFunc) {
           send(chunk);
         };
         try {
-          text = await streamTextTo(result, sendCounted, { t });
+          text = await streamTextTo(result, sendCounted, { t, onPart: (part) => pages.read(part) });
+          // The pages the search read, under the answer, kept with it
+          // (lib/web-search.ts).
+          const sources = pages.section(text, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
+          if (sources) {
+            send(sources);
+            text += sources;
+          }
         } catch (err) {
           failure = err;
         }
@@ -1300,6 +1309,37 @@ async function handle(req: Request, t: TFunc) {
         // balance spent): the call runs again on the fallback model, once
         // (lib/feature-models.ts fallbackCall). With web search on, the
         // search is the model's provider's, so the call stays on its model.
+        // The web turn failed before any text came (the search refused, the
+        // model refused the tool): the answer runs again without the web, on
+        // the tool's own model, under one line that says the search failed
+        // and why.
+        if (failure !== null && !req.signal.aborted && sent === 0 && web) {
+          const reason = modelErrorMessage(failure);
+          console.error(`[derive stream] ${data.type} web turn failed, running without the web:`, reason);
+          failure = null;
+          const note = `${t("assistant.webFailed", { reason })}\n\n`;
+          // The tool's own model first, then a fallback model with a key.
+          const own = await featureCall(derivationFeature(data.type), DERIVATION_EFFORT[data.type]);
+          const plainCalls = [own, ...(await retryCalls(own.modelId, DERIVATION_EFFORT[data.type], false, false)).map((r) => r.call)];
+          for (const plain of plainCalls) {
+            let head = note;
+            const sendAfterHead = (chunk: string) => {
+              if (head && chunk.trim()) {
+                sendCounted(head);
+                head = "";
+              }
+              sendCounted(chunk);
+            };
+            try {
+              text = note + (await streamTextTo(startStream(plain, false, [...messages, NO_WEB_MESSAGE]), sendAfterHead, { t }));
+              failure = null;
+              break;
+            } catch (err) {
+              failure = err;
+              if (req.signal.aborted || sent > 0) break;
+            }
+          }
+        }
         if (failure !== null && !req.signal.aborted && sent === 0 && !web) {
           const fallback = await fallbackCall(chat.modelId, DERIVATION_EFFORT[data.type], attachedImages.length > 0);
           if (fallback) {

@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { useSpeech } from "@/components/voice/use-speech";
-import { glueBefore, recognitionCtor, spokenPieces, VOICE_LANGUAGES } from "@/lib/voice-typing";
+import { voiceTypingAvailable } from "@/lib/voice/dictation";
+import { glueBefore, spokenPieces, VOICE_LANGUAGES } from "@/lib/voice-typing";
 import { CloseIcon } from "@/components/docs/icons";
 import { keepFocus } from "@/components/docs/menu";
 import { DragIcon } from "@/components/docs/insert/icons";
@@ -13,16 +14,18 @@ import { DragIcon } from "@/components/docs/insert/icons";
 // Voice typing (Ctrl+Shift+S), as Google Docs does it (SPEC.md §29, typing):
 // the toolbar's microphone starts listening at once, as every other
 // surface's microphone does, and opens the box at the left of the page as
-// its listening card; the toolbar's microphone again, or the box's, stops. What the browser's speech service hears goes in at the caret;
-// "period", "comma", "new line", and the like type what they name. The
+// its listening card; the toolbar's microphone again, or the box's, stops. What is heard goes in at the caret: written out by the voice
+// model after each pause where the server has it, else by the browser's
+// speech service as it is said, where "period", "comma", "new line", and
+// the like type what they name. The
 // listening and the words are shared with every surface's microphone
 // button (lib/voice-typing.ts, components/voice/use-speech.ts).
 
 /** Types a heard phrase at the editor's caret. */
-export function typeHeard(editor: Editor, phrase: string, english: boolean): void {
+export function typeHeard(editor: Editor, phrase: string, english: boolean, written = false): void {
   const before = editor.state.selection.$from.nodeBefore?.text?.slice(-1) ?? "";
   let first = true;
-  for (const piece of spokenPieces(phrase.trim(), english)) {
+  for (const piece of spokenPieces(phrase.trim(), english, written)) {
     if ("lineBreak" in piece) editor.chain().setHardBreak().run();
     else if ("paragraph" in piece) editor.chain().splitBlock().run();
     else editor.chain().insertContent((first ? glueBefore(before, piece.text) : "") + piece.text).run();
@@ -32,8 +35,8 @@ export function typeHeard(editor: Editor, phrase: string, english: boolean): voi
 
 export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: boolean; onClose: () => void }) {
   const t = useT();
-  const speech = useSpeech((phrase, english) => typeHeard(editor, phrase, english));
-  const { listening, status, setStatus, interim, language, stop } = speech;
+  const speech = useSpeech((phrase, english, written) => typeHeard(editor, phrase, english, written));
+  const { listening, status, setStatus, interim, pending, language, stop } = speech;
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const start = () => {
     if (speech.start()) editor.commands.focus();
@@ -51,7 +54,7 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
       const page = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
       const rect = page?.getBoundingClientRect();
       setPos({ left: Math.max(12, (rect?.left ?? 80) - 150), top: Math.max(80, (rect?.top ?? 120) + 24) });
-      if (!recognitionCtor()) setStatus("unsupported");
+      if (!voiceTypingAvailable()) setStatus("unsupported");
       else startRef.current();
     });
     return () => {
@@ -81,9 +84,11 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
         ? t("docsTyping.voiceBlocked")
         : status === "trouble"
           ? t("docsTyping.voiceTrouble")
-          : listening
-            ? interim || t("docsTyping.listening")
-            : "";
+          : pending
+            ? t("docsTyping.writing")
+            : listening
+              ? interim || t("docsTyping.listening")
+              : "";
   return createPortal(
     <div
       className="docs-voice"

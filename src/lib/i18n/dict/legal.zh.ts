@@ -2,7 +2,7 @@ import type { en } from "@/lib/i18n/dict/legal";
 
 export const zh: Record<keyof typeof en, string> = {
   // Shared
-  updated: "最后更新：2026年9月6日",
+  updated: "最后更新：2026年11月13日",
   backToApp: "返回 Unitos",
   privacyTitle: "隐私政策",
   termsTitle: "服务条款",
@@ -45,6 +45,8 @@ export const zh: Record<keyof typeof en, string> = {
   pAiMoonshot:
     "当你使用简化、提取、分析、摘要或助手时，Moonshot AI（Kimi）会收到文档文字、你的笔记和批注，以及你的背景。",
   pAiOpenAI: "OpenAI 会收到你要求朗读的文字。OpenAI 和 Groq 会收到你上传的视频、或你添加的没有字幕的 YouTube 视频的音频，用于转写。",
+  pAiXai:
+    "xAI（Grok Voice Transcribe）会收到音频，用于把它写成文字：你上传的视频和录音的音频、你添加的没有字幕的 YouTube 视频的音频、你说出的语音指令或笔记的音频，以及语音输入麦克风开启时你所说的话。未使用 xAI 时，语音输入由你的浏览器自带的语音服务完成。",
   pAiGoogle:
     "Google（Gemini）会收到你上传的视频，或你添加的 YouTube 视频链接，用于转写以及描述你所询问的画面。",
   pAiYouTube: "当你添加 YouTube 视频时，YouTube 会收到获取字幕和预览画面的请求；视频没有字幕时，还会收到获取音频的请求。",
@@ -112,7 +114,7 @@ export const zh: Record<keyof typeof en, string> = {
 
   tThirdHeading: "Unitos 依赖的服务",
   tThird:
-    "登录使用 Google，AI 功能使用 Anthropic、Moonshot AI、OpenAI、Groq、Google 和 YouTube。它们各自的条款适用于其承担的部分，其中任何一方中断或变更都可能影响 Unitos。",
+    "登录使用 Google，AI 功能使用 Anthropic、Moonshot AI、OpenAI、Groq、xAI、Google 和 YouTube。它们各自的条款适用于其承担的部分，其中任何一方中断或变更都可能影响 Unitos。",
 
   tAvailabilityHeading: "可用性",
   tAvailability:

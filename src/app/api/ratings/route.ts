@@ -8,7 +8,7 @@ import { parseBody } from "@/lib/validate";
 // A rating of one AI tool's output (SPEC.md §25): the reader's thumb, with
 // the input the tool ran on and the output it gave. The tool quality loop
 // (scripts/eval/import-ratings.ts) reads the thumbs down as eval cases.
-export const RATING_TOOLS = [
+const RATING_TOOLS = [
   "define",
   "simplify",
   "analyze",

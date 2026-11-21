@@ -86,7 +86,7 @@ export const en = {
   guideCircleBody:
     "Hold and circle any part of a figure or equation. The Assistant reads the visual and answers; Analyze reads a figure or table in three sections; Explain deciphers the visual; a color marks it; Comment and Link work as on text.",
   guideCirclePagesBody:
-    "Handwritten PDFs import as pages, and every page is a figure: circle a formula, a sketch, or a margin note, then Ask, Explain, Comment, or pick a color.",
+    "Handwritten PDFs import as pages: drag the highlighter over a formula, a sketch, or a margin note — the haze is what the AI reads — then Ask, Explain, Comment, or pick a color to keep the highlight.",
   guideSelectHeader: "Select text and use the AI toolbar",
   guideDefine: "Define",
   guideDefineBody:
@@ -130,13 +130,13 @@ export const en = {
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
   guideCollapseHeader: "Collapse — every block to its core",
   guideCollapseBody:
-    "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
+    "The Collapse button at the top right of the article, beside Read aloud. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
     "The button to the right of a collapsed block reads it whole; the same button collapses it to its core again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
   // Breakwork (SPEC.md §32): the document's blocks sorted into buckets on a canvas.
   guideStructureHeader: "Breakwork — the document sorted into buckets",
   guideStructureBody:
-    "The Breakwork button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag a bucket by its header, drag a block between buckets or back to Unsorted, open a block to read it whole with its annotations, and drag from the dot at the side of a bucket or a block to another to connect them with a label and a comment.",
+    "The Breakwork button in the side bar at the right, under Extract. The document's blocks sorted into buckets on a canvas: drag a bucket by its header, drag a block between buckets or back to Unsorted, open a block to read it whole with its annotations, and drag from the dot at the side of a bucket or a block to another to connect them with a label and a comment.",
   guideStructureAssistantBody:
     "The Breakwork assistant on the left: say how to sort the document — by its parts, by keywords, by what the paragraphs share — then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and Undo takes it back.",
   // The reading position and the left-off mark (SPEC.md §6).
@@ -147,7 +147,7 @@ export const en = {
   guideKeyUndo: "Undo the last edit in the article.",
   guideKeyRedo: "Redo it.",
   guideKeyCopy: "Copy the selected passage while the toolbar is open.",
-  guideKeyEnter: "Send in the Assistant box and the Stitch box. Shift + Enter starts a new line.",
+  guideKeyEnter: "Send the message in every assistant box. Shift + Enter starts a new line.",
   guideKeySaveNote: "Save the note you are editing.",
   guideKeyIndent: "Indent or outdent the list lines of a note.",
   guideKeyPick: "Pick a document in the graph for Stitch, or drop it from the pick.",
@@ -176,6 +176,15 @@ export const en = {
   release20261013Title: "New: Breakwork",
   release20261013Body:
     "- **Breakwork** — the button at the top right of the article, beside Collapse. The document's blocks sorted into buckets on a canvas: drag blocks between buckets, nest buckets, label blocks, and draw labeled connections between buckets or blocks. Every block opens whole with its annotations and the Explain and Simplify tools.\n- **The Breakwork assistant** — talk about how to sort the document, then ask for a structure. It proposes the buckets, places every block, and draws connections; you apply it or discard it, and it changes the structure as much as you ask.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
+  release20261103Title: "New: Read aloud for the whole document",
+  release20261103Body:
+    "- **Read aloud** — the button at the top right of the article, beside Collapse. It reads the document aloud from where you are to the end, in the same natural voice as Read aloud on a selection. The paragraph being read is marked, and the page follows it. Press it again to pause; ✕ stops.\n\nThe controls that are new glow until you press them.",
+  release20261116Title: "New: write on a document with a pen",
+  release20261116Body:
+    "- **Jot** — on an iPad, or any screen with a pen, press Jot at the foot of the reader and write over the document. The jottings stay with the paragraph they are written on. A finger still scrolls and selects. The bar holds the pen, the eraser, five colors, two widths, and Undo.\n- **Finger selection** — on a touch screen, draw a finger along a line to select its words. The tools open when the finger lifts.",
+  release20261105Title: "New: Stars in Breakwork, and the highlighter on pages",
+  release20261105Body:
+    "- **Stars** — in Breakwork, every block in a bucket takes one to three stars, at the right of its row. The bucket lists the three-star blocks first, then two, then one, then the rest, each group under its own line. Two arrows move a block to the top or the bottom of its group.\n- **Connections** — the dot at the side of a bucket or a block is easier to grab, every dot shows while you drag a connection, a click anywhere on a curve opens it, and a curve to a block scrolled out of view ends at the edge of its bucket.\n- **The highlighter on pages** — on a handwritten page, a drag now paints a haze instead of drawing a loop. Drag again for more lines. The haze is what Ask, Explain, and Comment read, and a color keeps it as a highlight. Loops drawn before stay as they are.",
   // Feedback button
   feedback: "Feedback",
   feedbackBug: "bug",

@@ -10,8 +10,8 @@ import {
   readPageImageDrag,
   type PageImageDrag,
 } from "@/lib/image-drop";
-import { isHeicFile, jpegsFromHeic } from "@/lib/heic";
-import { imageUrl, refuseImage, storedImageId, uploadImage, type ImageRefusal } from "@/lib/images";
+import { isHeicFile, jpegsWhereNeeded, needsJpeg } from "@/lib/image-jpeg";
+import { FREE_IMAGE_BYTES, MAX_IMAGE_BYTES, imageUrl, refuseImage, storedImageId, uploadImage, type ImageRefusal } from "@/lib/images";
 import { hasDroppedLinks, readDroppedLinks, type DroppedLink } from "@/lib/note-links";
 import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 
@@ -77,6 +77,9 @@ export function useNoteDrop({
   onError: (message: string) => void;
 }) {
   const [over, setOver] = useState<DropKind>(null);
+  /** The photo being made a JPEG now, by name (lib/image-jpeg.ts): the
+      surface says so, since a 12 MP photo takes seconds. */
+  const [reading, setReading] = useState<string | null>(null);
   const busy = useRef(false);
 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
@@ -174,15 +177,20 @@ export function useNoteDrop({
   }
 
   /** Store `files` and hand them on, or say why not: a pasted image takes
-      this path too. A HEIC photo goes in as a JPEG (lib/heic.ts). */
+      this path too. A HEIC photo, or a photo over the tier's size cap, goes
+      in as a JPEG that fits (lib/image-jpeg.ts). */
   async function takeFiles(files: File[]) {
     if (busy.current) return;
-    if (files.some(isHeicFile)) {
+    const maxBytes = premium ? MAX_IMAGE_BYTES : FREE_IMAGE_BYTES;
+    const needs = files.find((f) => needsJpeg(f, maxBytes));
+    if (needs) {
       busy.current = true;
-      const converted = await jpegsFromHeic(files);
+      setReading(needs.name);
+      const converted = await jpegsWhereNeeded(files, maxBytes);
+      setReading(null);
       busy.current = false;
       if (converted.unread) {
-        onError(t("api.heicNotRead", { name: converted.unread.name }));
+        onError(t("api.imageNotRead", { name: converted.unread.name }));
         return;
       }
       files = converted.files;
@@ -228,5 +236,5 @@ export function useNoteDrop({
     }
   }
 
-  return { over, handlers: { onDragOver, onDragLeave, onDrop }, takeFiles };
+  return { over, reading, handlers: { onDragOver, onDragLeave, onDrop }, takeFiles };
 }

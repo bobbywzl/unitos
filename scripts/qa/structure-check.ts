@@ -6,7 +6,7 @@
 // connections kept, positions kept for the buckets that stay.
 // Run: npx tsx scripts/qa/structure-check.ts
 import { resolveProposal, structureAnswerSchema } from "@/lib/structure-assist";
-import { emptyStructure, joinsOwnBucket, pieceHash, placeNewBuckets, readStructure, tidy, type Structure } from "@/lib/structure";
+import { bucketPieces, emptyStructure, joinsOwnBucket, pieceHash, placeNewBuckets, readStructure, tidy, type Structure } from "@/lib/structure";
 
 let failed = 0;
 const check = (name: string, got: unknown, want: unknown) => {
@@ -25,7 +25,15 @@ const bucket = (id: string, parentId: string | null = null, x = 0, y = 0) => ({
   color: null,
   order: 0,
 });
-const piece = (blockId: string, bucketId: string, label = "") => ({ blockId, hash: "h", preview: blockId, bucketId, order: 0, label });
+const piece = (blockId: string, bucketId: string, label = "", order = 0, stars: 0 | 1 | 2 | 3 = 0) => ({
+  blockId,
+  hash: "h",
+  preview: blockId,
+  bucketId,
+  order,
+  label,
+  stars,
+});
 
 // ── tidy ──────────────────────────────────────────────────────────────────
 {
@@ -65,6 +73,41 @@ const piece = (blockId: string, bucketId: string, label = "") => ({ blockId, has
   check("tidy: a cycle of parents breaks", out.buckets.some((b) => b.parentId === null), true);
 }
 
+// ── stars ─────────────────────────────────────────────────────────────────
+{
+  // A bucket lists its pieces by stars, the most first, then by order; tidy
+  // numbers them as they list, and keeps the order of pieces with the same stars.
+  const out = tidy({
+    buckets: [bucket("a")],
+    pieces: [piece("p", "a", "", 0, 0), piece("q", "a", "", 1, 3), piece("r", "a", "", 2, 1), piece("s", "a", "", 3, 3)],
+    connections: [],
+  });
+  check(
+    "stars: the bucket lists the most-starred first, then by order",
+    bucketPieces(out, "a").map((p) => `${p.blockId}:${p.stars}:${p.order}`),
+    ["q:3:0", "s:3:1", "r:1:2", "p:0:3"],
+  );
+  // A row written before stars existed reads with none, in its order.
+  const old = readStructure({
+    v: 1,
+    rev: 2,
+    buckets: [bucket("a")],
+    pieces: [
+      { blockId: "x", hash: "h", preview: "x", bucketId: "a", order: 1, label: "" },
+      { blockId: "y", hash: "h", preview: "y", bucketId: "a", order: 0, label: "" },
+    ],
+    connections: [],
+  });
+  check(
+    "stars: a stored row without stars reads as none, in its order",
+    bucketPieces(old, "a").map((p) => `${p.blockId}:${p.stars}`),
+    ["y:0", "x:0"],
+  );
+  // Stars past three, or under none, are no structure: the row reads empty rather than wrong.
+  const bad = readStructure({ v: 1, rev: 1, buckets: [bucket("a")], pieces: [{ ...piece("x", "a"), stars: 7 }], connections: [] });
+  check("stars: a row with stars past three reads as an empty structure", bad.pieces.length, 0);
+}
+
 // ── readStructure ─────────────────────────────────────────────────────────
 check("readStructure: null is an empty structure", readStructure(null), emptyStructure());
 check("readStructure: another version is an empty structure", readStructure({ v: 9, buckets: [bucket("a")] }).buckets, []);
@@ -100,7 +143,7 @@ const current: Structure = {
   v: 1,
   rev: 3,
   buckets: [{ ...bucket("keep", null, 500, 120), title: "Kept bucket", color: "sage" }],
-  pieces: [{ blockId: "b2", hash: pieceHash("First paragraph of the document."), preview: "First…", bucketId: "keep", order: 0, label: "The reader's label" }],
+  pieces: [{ blockId: "b2", hash: pieceHash("First paragraph of the document."), preview: "First…", bucketId: "keep", order: 0, label: "The reader's label", stars: 2 }],
   connections: [
     { id: "mine", from: { kind: "bucket", id: "keep" }, to: { kind: "piece", id: "b2" }, label: "mine", comment: "", byAssistant: false },
     { id: "old", from: { kind: "bucket", id: "keep" }, to: { kind: "piece", id: "b2" }, label: "old", comment: "", byAssistant: true },
@@ -137,6 +180,7 @@ const answer = (structure: unknown) => structureAnswerSchema.parse({ reply: "don
     ["b2@Kept bucket", "b3@Findings", "b4@Evidence"],
   );
   check("resolveProposal: a label the model left out is kept from the piece", structure.pieces.find((p) => p.blockId === "b2")?.label, "The reader's label");
+  check("resolveProposal: the reader's stars stay", structure.pieces.find((p) => p.blockId === "b2")?.stars, 2);
   check("resolveProposal: a label asked for lands", structure.pieces.find((p) => p.blockId === "b3")?.label, "Second");
   check("resolveProposal: a new piece carries the hash of its block", structure.pieces.find((p) => p.blockId === "b3")?.hash, pieceHash("Second paragraph."));
   check("resolveProposal: the reader's connection stays", structure.connections.some((c) => c.id === "mine"), true);

@@ -55,6 +55,7 @@ export const en = {
   noteText: "Note text",
   // The note's title and body (SPEC.md §6).
   titlePlaceholder: "Title",
+  gistTitleTip: "Written by AI from the note\nEdit the note and type a title to set your own",
   noteTitleLabel: "Note title",
   // The note floats: dragged out of the tray, over the article, and back.
   dockBack: "Back to the tray",
@@ -63,8 +64,6 @@ export const en = {
   floatingLabel: "In a floating card over the article",
   floatingTitle: "Note",
   dropLinkIntoNote: "Drop the link into this note",
-  wrapText: "Wrap text",
-  wrapTextTitle: "Flow the article's text around this note; the note scrolls with the text",
   copy: "Copy",
   copied: "Copied",
   copyTitle: "Copy the note text",
@@ -139,6 +138,10 @@ export const en = {
   // notes full page (annotation-side.tsx).
   annotationReference: "Annotation",
   annotationReferenceTitle: "Open this annotation",
+  // The quote symbol in an annotation reference's box (markdown.tsx): the
+  // words the annotation is anchored to, and the jump to them.
+  annotationQuoteJump: "Jump to this quote in the reader: “{quote}”",
+  annotationQuote: "The quote: “{quote}”",
   // The log lines an annotation reference lands (lib/annotation-reference.ts): who said each
   referenceYou: "You",
   referenceAssistant: "Assistant",

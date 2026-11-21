@@ -21,7 +21,8 @@
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
 //   recommended link 推荐链接 · graph 图谱 · history 历史 ·
-//   floating card 浮动卡片 · wrap text(文本环绕笔记) 环绕文本 ·
+//   floating card 浮动卡片 ·
+//   starter(助手栏空框里的建议问题，按 Tab 采用) 开场问题 ·
 //   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
 //   define(选中一个词的工具) 定义 · definition 定义 ·
@@ -30,7 +31,7 @@
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·
 //   upload assistant 上传助手 · review(上传审阅) 审阅 · page 页面 ·
 //   split 拆分 · handwritten 手写 ·
-//   conversion(手写转文本) 转换 · Circle & ask 圈选并提问 · image 图片 ·
+//   conversion(手写转文本) 转换 · Highlight & ask(页面上的工具：荧光笔划过一处，再提问) 高亮并提问 · highlighter(页面上的笔) 荧光笔 · haze(荧光笔划出的半透明一片) 高亮雾层 · image 图片 ·
 //   offline 离线 · sync(离线同步) 同步 · offline copy(离线保存的项目) 离线副本 ·
 //   Save for offline 离线保存 · Unitos Premium 不翻译 ·
 //   Unitos Ultra 不翻译 · plan(账户方案) 方案 · trial 试用 ·
@@ -43,6 +44,11 @@
 //   account 账户 · notification 通知 · recipient 收件人 ·
 //   dismiss(通知) 关闭 · update(通知类型) 更新 · account change 账户变更 ·
 //   gist 要旨 · checklist 清单 · dash list 短横线列表 ·
+//   jotting(用笔在文档上写下的一笔) 笔迹 · Jot(写笔迹的工具) 写画 · pen 笔 · eraser 橡皮擦 ·
+//   finger selection(手指沿一行划过选中词) 划选 · phone page(iPhone 应用的页面) 手机页面 ·
+//   note box(手机页面上写笔记的输入框) 笔记框 ·
+//   voice model(把录音写成文字的那个模型) 语音模型 · voice typing 语音输入 ·
+//   phrase(语音输入中两次停顿之间说的话) 一句话 ·
 //   quote(笔记格式，> 行) 引用 · notes full page 整页笔记 ·
 //   conversation 对话 · attachment 附件 · file 文件 ·
 //   stitch 缝合 · generated document 生成文档 · pick(为缝合选中节点) 选取 ·
@@ -79,7 +85,7 @@
 //   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记 ·
 //   Breakwork(把文档的块归入画布上类别的工具) 不翻译 · structure(文档的块归入画布上的类别) 结构 · bucket(结构里的一个框) 类别 ·
 //   piece(归入类别的一个块) 片块 · connection(类别或片块之间的关联) 关联 ·
-//   unsorted(尚未归类的块) 未归类 · Breakwork assistant Breakwork 助手
+//   unsorted(尚未归类的块) 未归类 · stars(片块在类别里的重要程度，一到三颗) 星 · Breakwork assistant Breakwork 助手
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 export const en = {
@@ -127,6 +133,10 @@ export const en = {
   // Offline work (SPEC.md §17, Unitos Premium)
   // The one failure line of a write (SPEC.md §17, lib/api.ts): "Not saved"
   // and what the reader can do. A write that retries by itself shows no line.
+  pageError: "This page stopped on an error.",
+  pageErrorTrail: "Last pressed: {trail}",
+  reload: "Reload",
+  tryAgain: "Try again",
   notSaved: "Not saved. Try again.",
   // A read that failed (a list, a conversation, an attachment): the same shape.
   notLoaded: "Not loaded. Try again.",

@@ -524,16 +524,6 @@ export function PageCanvas({
   const scrollWidth = side + pageVisual + padRight;
   const barRef = useRef<HTMLDivElement>(null);
 
-  // A new, empty document opens the outline, as Google Docs does, when the
-  // pane has the room for it beside the page.
-  const autoOpened = useRef(false);
-  useEffect(() => {
-    if (autoOpened.current || store.outlineChosen || canvasWidth === 0) return;
-    autoOpened.current = true;
-    const room = (canvasWidth - pageVisual) / 2 >= outlineLeft + outlineWidth + 16;
-    if (editor.isEmpty && room && !pageless) store.set({ outlineOpen: true });
-  }, [canvasWidth, editor, store, pageVisual, outlineLeft, outlineWidth, pageless]);
-
   const closeDialog = () => {
     store.set({ dialog: null });
     if (!store.get().editing) editor.commands.focus();

@@ -58,11 +58,13 @@ import { TranslationBar } from "@/components/reader/translation-bar";
 import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import { isHeicFile } from "@/lib/heic";
+import { isHeicFile } from "@/lib/image-jpeg";
+import { SPEECH_WAIT_MS, speakText } from "@/lib/voice/browser-voice";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, refreshWhenOnline } from "@/lib/offline/queue";
+import { REPLICA_NOTICE_EVENT, REPLICA_SAVE_EVENT, type ReplicaNotice, type ReplicaSave } from "@/components/reader/replica-edit";
 import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
 import { rememberCollapsedDocument } from "@/lib/collapse-memory";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
@@ -72,8 +74,7 @@ import {
   AnswerTint,
   AnswerToolbar,
   CommentBox,
-  CommentList,
-  deleteCommentWithUndo,
+  CommentsPointer,
   QuoteChip,
   quoteMessage,
   shownComments,
@@ -83,7 +84,6 @@ import {
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
 import { changeWindow } from "@/lib/assistant/diff-window";
-import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
@@ -115,6 +115,9 @@ import {
   SummaryIcon,
   UnlinkIcon,
   VolumeIcon,
+  PlayIcon,
+  PauseIcon,
+  PlusIcon,
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
@@ -122,6 +125,10 @@ import { Collapse, Presence } from "@/components/presence";
 import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { useUnderDocsHeader } from "@/components/reader/under-docs-header";
+import { FingerSelect } from "@/components/reader/finger-select";
+import { JottingLayer } from "@/components/reader/jotting-layer";
+import { hasReadableBlocks, ReadAloudMark, readPieces, useReadAloud } from "@/components/reader/read-aloud";
+import { OPEN_STRUCTURE_EVENT } from "@/components/reader/open-structure";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
@@ -213,6 +220,7 @@ import {
   belowSlot,
   marginPlace,
   pageGeometry,
+  shownShift,
   slotAt,
   toolbarLeft,
   toolbarShift,
@@ -1514,7 +1522,7 @@ export function ReaderInteractions({
   const tCtx = useT();
   // Viewers on a shared corpus read only: no selection tools, no edit mode,
   // no assistant. The server rejects their writes; this keeps the surface honest.
-  const { canEdit, premium, ultra, billing, myId, people } = useCollab();
+  const { canEdit, premium, ultra, billing, myId } = useCollab();
   // Billing on (SPEC.md §24): the Ultra message offers the plan page.
   const plansAction = billing
     ? { label: tCtx("billing.plans"), run: () => window.open("/billing", "_blank", "noopener") }
@@ -2399,7 +2407,6 @@ export function ReaderInteractions({
     clear: clearAnswerSelection,
   } = useAnswerSelection();
   const [chatComments, setChatComments] = useState<AnswerComment[]>([]);
-  const [chatCommentPeople, setChatCommentPeople] = useState<Record<string, Person>>({});
   const [chatCommentQuote, setChatCommentQuote] = useState<string | null>(null);
   const [chatCommentBusy, setChatCommentBusy] = useState(false);
   const sideChatsLoadedFor = useRef<string | null>(null);
@@ -2732,9 +2739,13 @@ export function ReaderInteractions({
   const [editHint, setEditHint] = useState(false);
   // Where the hint shows: beside the article, or as a row under the pane.
   const [hintBeside, setHintBeside] = useState(true);
-  // Slides and sheets have no edit mode and no figure: the hint's words are
-  // not true there, so it waits for the next article.
+  // Slides and sheets are edited a line or a cell at a time (replica-edit.ts)
+  // and have no figure: the hint says their own words, and is its own hint
+  // (a reader who learned the article's hint has not learned this one).
   const officeDocument = blocks.some((b) => b.type === "SLIDE" || b.type === "SHEET");
+  const officeHint: TKey = blocks.some((b) => b.type === "SLIDE") ? "reader.editHintSlides" : "reader.editHintSheets";
+  const hintKey = officeDocument ? "unitos-edit-hint-office" : "unitos-edit-hint";
+  const hintWords = () => (officeDocument ? t(officeHint) : t(coarse ? "reader.touchHint" : "reader.editHint"));
 
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
@@ -2841,7 +2852,7 @@ export function ReaderInteractions({
     // The passage: every block the selection touches, in reading order, one
     // segment per block (lib/anchors/passage.ts). A rendered equation's DOM
     // text is not the stored TeX, and a page's DOM text is its label and the
-    // Circle & ask card, not stored text: neither takes a span, and a
+    // Highlight & ask card, not stored text: neither takes a span, and a
     // selection that crosses one leaves it out (truncated says so).
     const blockEls = Array.from(
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
@@ -4474,13 +4485,13 @@ export function ReaderInteractions({
   const hintPlayed = () => {
     setEditHint(false);
     try {
-      localStorage.setItem("unitos-edit-hint", "done");
+      localStorage.setItem(hintKey, "done");
     } catch {
       // Storage blocked: the hint shows again on the next open.
     }
   };
   useEffect(() => {
-    if (localStorage.getItem("unitos-edit-hint") === "done") return;
+    if (localStorage.getItem(hintKey) === "done") return;
     // Beside the article when its right margin holds the card (with its
     // 20px from the pane's edge); else a row under the pane.
     const container = containerRef.current;
@@ -4493,7 +4504,7 @@ export function ReaderInteractions({
     // Post-hydration reveal on purpose: localStorage is client-only, so the
     // SSR pass must render without the hint.
     setEditHint(true);
-  }, [documentId]);
+  }, [documentId, hintKey]);
 
   // Hold-and-circle gesture on figures and equations opens their tools.
   useEffect(() => {
@@ -5533,6 +5544,29 @@ export function ReaderInteractions({
   // Breakwork (SPEC.md §32): the overlay over the reader, and its glow.
   const [structureOpen, setStructureOpen] = useState(false);
   const structureNew = useNewFeature("structure");
+  // The side bar's Breakwork button names the open document: its reader
+  // opens the structure (open-structure.ts).
+  useEffect(() => {
+    if (transcript || embedded) return;
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<{ documentId: string | null }>).detail?.documentId !== documentId) return;
+      setStructureOpen(true);
+    };
+    window.addEventListener(OPEN_STRUCTURE_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_STRUCTURE_EVENT, onOpen);
+  }, [documentId, transcript, embedded]);
+  // Read aloud for the whole document (read-aloud.tsx, SPEC.md §6 Voice):
+  // the button beside Breakwork, its glow, and the reading.
+  const readAloudNew = useNewFeature("readAloud");
+  const readable = !transcript && !embedded && hasReadableBlocks(blocks);
+  const readAloud = useReadAloud({
+    onError: (message) => showError(message),
+    failedLine: (status) => (status ? t("reader.voiceFailedStatus", { status }) : t("reader.voiceFailed")),
+    unavailableLine: t("reader.voiceUnavailable"),
+  });
+  const stopReadAloud = readAloud.stop;
+  // Another document in the pane: its reading stops.
+  useEffect(() => stopReadAloud, [documentId, stopReadAloud]);
   // What each block carries, for the pieces of the structure: every
   // annotation and note anchored in it, its kind and its words.
   const structureAnnotations = useMemo<Record<string, PieceAnnotation[]>>(() => {
@@ -6347,6 +6381,23 @@ export function ReaderInteractions({
     clearToolbarDraft("add", documentId, anchor);
     window.getSelection()?.removeAllRanges();
     refreshWhenOnline(router);
+  }
+
+  // New section from the toolbox (Add to notes ▾): its name while it is
+  // typed; null while the row is a button.
+  const [newSection, setNewSection] = useState<string | null>(null);
+  async function addToNewSection(title: string) {
+    const name = title.trim();
+    if (!name || !popover || busy) return;
+    try {
+      const section = await api<{ id: string }>("/api/sections", "POST", { notebookId, title: name });
+      setNewSection(null);
+      await addToSection(section.id);
+      // The new section joins the choices and the tray.
+      router.refresh();
+    } catch (err) {
+      addFailed(err);
+    }
   }
 
   async function addToSection(sectionId: string) {
@@ -7396,47 +7447,23 @@ export function ReaderInteractions({
     setVoice("idle");
   }
 
-  // The most natural voice the browser has for the language. The default is
-  // often robotic; neural voices ("Natural", Edge) rank first, then Google's,
-  // then premium local ones, then any voice matching the language.
-  function pickBrowserVoice(lang: string): SpeechSynthesisVoice | null {
-    const prefix = lang.split("-")[0];
-    const candidates = (window.speechSynthesis?.getVoices() ?? []).filter((v) =>
-      v.lang.replace("_", "-").toLowerCase().startsWith(prefix),
-    );
-    const score = (v: SpeechSynthesisVoice) => {
-      const name = v.name.toLowerCase();
-      if (name.includes("natural") || name.includes("online")) return 4;
-      if (name.includes("google")) return 3;
-      if (name.includes("premium") || name.includes("enhanced") || name.includes("siri")) return 2;
-      if (v.lang.replace("_", "-").toLowerCase() === lang.toLowerCase()) return 1;
-      return 0;
-    };
-    return candidates.sort((a, b) => score(b) - score(a))[0] ?? null;
-  }
-
   // The browser voice reads when /api/speech fails. The utterance language
   // follows the text: Chinese characters → zh-CN, else en-US.
-  function browserSpeak(text: string, run: number) {
-    const synth = window.speechSynthesis;
-    if (!synth) {
+  async function browserSpeak(text: string, run: number) {
+    const spoken = await speakText(text, {
+      onEnd: (error) => {
+        if (voiceRunRef.current !== run) return;
+        setVoice("idle");
+        // The voice made no sound: say so, never a silent end.
+        if (error) showToast(t("reader.voiceUnavailable"));
+      },
+    });
+    if (voiceRunRef.current !== run) return;
+    if (!spoken) {
       setVoice("idle");
       showToast(t("reader.voiceUnavailable"));
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(text);
-    const lang = /[一-鿿]/.test(text) ? "zh-CN" : "en-US";
-    utterance.lang = lang;
-    const voice = pickBrowserVoice(lang);
-    if (voice) utterance.voice = voice;
-    utterance.onend = () => {
-      if (voiceRunRef.current === run) setVoice("idle");
-    };
-    utterance.onerror = () => {
-      if (voiceRunRef.current === run) setVoice("idle");
-    };
-    synth.cancel();
-    synth.speak(utterance);
     setVoice("playing");
   }
 
@@ -7448,19 +7475,30 @@ export function ReaderInteractions({
     if (!popover) return;
     const text = passageText(popover.anchor).slice(0, 4000);
     if (!text.trim()) return;
+    // One voice at a time: the document's reading stops.
+    readAloud.stop();
     const run = ++voiceRunRef.current;
     setVoice("loading");
     // Warm the voice list: if the route fails, browserSpeak needs it loaded.
     window.speechSynthesis?.getVoices();
     try {
-      const res = await fetch("/api/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: AbortSignal.timeout(SPEECH_WAIT_MS),
+        });
+      } catch (err) {
+        // No answer in time, or no network: the browser voice reads.
+        console.warn("[voice] /api/speech did not answer; the browser voice reads:", err);
+        if (voiceRunRef.current === run) await browserSpeak(text, run);
+        return;
+      }
       if (voiceRunRef.current !== run) return;
       if (res.status === 503) {
-        browserSpeak(text, run);
+        await browserSpeak(text, run);
         return;
       }
       if (!res.ok) {
@@ -7477,9 +7515,25 @@ export function ReaderInteractions({
         voiceAudioRef.current = null;
         setVoice("idle");
       };
+      // Audio the browser cannot play is read by the browser voice instead,
+      // never dropped without a sound.
+      // The error event and a refused play can both come: once.
+      let fellBack = false;
+      const instead = () => {
+        if (fellBack || voiceRunRef.current !== run) return;
+        fellBack = true;
+        URL.revokeObjectURL(audio.src);
+        voiceAudioRef.current = null;
+        void browserSpeak(text, run);
+      };
       audio.onended = done;
-      audio.onerror = done;
-      await audio.play();
+      audio.onerror = instead;
+      try {
+        await audio.play();
+      } catch {
+        instead();
+        return;
+      }
       if (voiceRunRef.current === run) setVoice("playing");
     } catch (err) {
       if (voiceRunRef.current !== run) return;
@@ -7890,6 +7944,53 @@ export function ReaderInteractions({
     if (open) writeToolbarDraft("assistant", documentId, open.anchor, input);
     setBar((b) => (b ? { ...b, input } : b));
   }
+
+  // The starter (SPEC.md §7): the one question the bar's empty box shows
+  // about the words it opened on, from the cheapest model
+  // (POST /api/assistant/starter); Tab puts it in the box. Asked once per
+  // selection, a moment after the bar opens with nothing typed, and kept
+  // for the page, so the bar opened again on the same words asks nothing.
+  // null: no starter for these words (no key, an answer that did not fit).
+  const [starters, setStarters] = useState<Record<string, string | null>>({});
+  const starterQuote = bar && !bar.figure ? segmentsOf(bar.anchor).map((s) => s.quotedText).join("\n").trim() : "";
+  const starterKey =
+    bar && starterQuote && !bar.busy && bar.messages.length === 0 && bar.input === ""
+      ? `${bar.anchor.blockId}:${bar.anchor.startOffset}:${starterQuote.length}:${starterQuote.slice(0, 80)}`
+      : null;
+  const starterKnown = starterKey !== null && starterKey in starters;
+  useEffect(() => {
+    if (!starterKey || starterKnown) return;
+    const open = barRef.current;
+    if (!open) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch("/api/assistant/starter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          notebookId,
+          documentId,
+          quote: starterQuote.slice(0, 20_000),
+          before: open.anchor.prefix.slice(-2000),
+          after: open.anchor.suffix.slice(0, 2000),
+        }),
+      })
+        .then((res) => (res.ok ? (res.json() as Promise<{ question?: unknown }>) : null))
+        .then((answer) => {
+          const question = typeof answer?.question === "string" ? answer.question : null;
+          setStarters((all) => ({ ...all, [starterKey]: question }));
+        })
+        // Closed first, or offline: the next opening asks again.
+        .catch(() => {});
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+    // starterQuote follows starterKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starterKey, starterKnown, notebookId, documentId]);
   // A figure's bar opens from its block, with no selection under it: its
   // words' bottom is its top.
   function openBar(
@@ -8027,7 +8128,11 @@ export function ReaderInteractions({
     let w = Number(el.dataset.width);
     const cw = container.clientWidth;
     const shift = docsShiftRef.current;
-    const geo = pageGeometry(container, shift);
+    // The page slides to the shift this box asked for, and the box is placed
+    // again before it is there: the page's place is read with the shift it
+    // shows now. Read with the shift asked for, the page seems not to have
+    // moved, the box asks for the same room again, and so on without end.
+    const geo = pageGeometry(container, shownShift(container, shift));
     let left: number | null = null;
     if (b.side === "right" && geo) {
       left = toolbarLeft(geo, shift, w);
@@ -8559,7 +8664,8 @@ export function ReaderInteractions({
     };
   }, [assistantChat?.noteId]);
 
-  // The comments under the open thread.
+  // The comments on the open thread's answers, counted for the line that
+  // leads to them in the Annotations tab.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -8571,11 +8677,9 @@ export function ReaderInteractions({
         const res = await fetch(`/api/replies?noteId=${encodeURIComponent(chatNoteId)}`);
         const json = (await res.json().catch(() => null)) as {
           replies?: AnswerComment[];
-          people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
         setChatComments(shownComments(json.replies ?? []));
-        setChatCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
       }
@@ -8650,17 +8754,6 @@ export function ReaderInteractions({
       setChatCommentBusy(false);
     }
   }
-  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
-  function deleteChatComment(id: string) {
-    deleteCommentWithUndo({
-      list: chatComments,
-      id,
-      message: t("outline.commentDeleted"),
-      setList: setChatComments,
-      failed: () => showError(t("common.notSaved")),
-    });
-  }
-
   // A message of the assistant card that did not go (a failed request, Stop,
   // offline): its words go back to the box of the thread it was sent in, with
   // the reason under the box; with the card closed, to the thread's draft
@@ -9624,6 +9717,50 @@ export function ReaderInteractions({
       showError(err instanceof Error ? err.message : t("reader.editFailed"));
     }
   }
+  // A slide's line or a sheet's cell edited in place (replica-edit.ts): the
+  // same text route, the same Undo step. The piece hears whether the server
+  // took the words, and goes back to what it was when it did not.
+  async function saveReplicaEdit(blockId: string, text: string): Promise<boolean> {
+    const before = blocksRef.current.find((b) => b.id === blockId)?.text;
+    try {
+      await api(`/api/blocks/${blockId}`, "PATCH", { text });
+      if (before !== undefined && before !== text) {
+        record({
+          undo: () => saveBlockEdit(blockId, before),
+          redo: () => saveBlockEdit(blockId, text),
+        });
+      }
+      hintPlayed();
+      refreshWhenOnline(router);
+      return true;
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.editFailed"));
+      return false;
+    }
+  }
+  const saveReplicaEditRef = useRef(saveReplicaEdit);
+  saveReplicaEditRef.current = saveReplicaEdit;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  useEffect(() => {
+    const onSave = (e: Event) => {
+      const { blockId, text, settle } = (e as CustomEvent<ReplicaSave>).detail;
+      // Only this pane's block: a split view has two readers listening.
+      if (!blocksRef.current.some((b) => b.id === blockId)) return;
+      void saveReplicaEditRef.current(blockId, text).then(settle);
+    };
+    // A piece that does not open (a formula's cell) says why.
+    const onNotice = (e: Event) => {
+      const { blockId, text } = (e as CustomEvent<ReplicaNotice>).detail;
+      if (blocksRef.current.some((b) => b.id === blockId)) showToastRef.current(text);
+    };
+    window.addEventListener(REPLICA_SAVE_EVENT, onSave);
+    window.addEventListener(REPLICA_NOTICE_EVENT, onNotice);
+    return () => {
+      window.removeEventListener(REPLICA_SAVE_EVENT, onSave);
+      window.removeEventListener(REPLICA_NOTICE_EVENT, onNotice);
+    };
+  }, []);
 
 /** The format a stored block is in, for a step that puts it back. */
 /** A block's format as Undo restores it: a code block is code again. */
@@ -10157,7 +10294,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           message.role === "user" ? (
             <p
               key={i}
-              className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] text-clay-800"
+              className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] whitespace-pre-wrap text-clay-800"
             >
               {message.content}
             </p>
@@ -10320,13 +10457,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         className={chipsClassName}
       />
     )}
-    <CommentList
-      comments={chatComments}
-      people={{ ...people, ...chatCommentPeople }}
-      myId={myId}
-      onDelete={deleteChatComment}
-      className={chipsClassName}
-    />
+    {/* The comments are in the Annotations tab, under the conversation:
+        one line here says how many and leads there. */}
+    <CommentsPointer count={chatComments.length} noteId={chatNoteId} className={chipsClassName} />
     {/* A side chat's header already shows the quote it started on. */}
     {chat.quote && !(chat.openKey && chat.quote === chatOpenSide?.quote) && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
@@ -10688,6 +10821,64 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {collapseNew.isNew && <NewPill />}
     </button>
   );
+  // Read aloud (read-aloud.tsx): the button at the top right, before
+  // Breakwork. Pressed, the document is read from the block at the reading
+  // position to the end (from the start when the reader is past the last
+  // words); pressed while reading, it pauses, then resumes; ✕ stops.
+  function startReadAloud() {
+    readAloudNew.seen();
+    // One voice at a time: the selection's reading stops.
+    stopVoice();
+    const container = containerRef.current;
+    const position = container ? readReadingPosition(container, Date.now()) : null;
+    const at = position && "blockId" in position ? position.blockId : null;
+    const fromHere = readPieces(blocks, at);
+    readAloud.start(fromHere.length > 0 ? fromHere : readPieces(blocks, null));
+  }
+  const readAloudActive = readAloud.state !== "idle";
+  const readAloudButton = !readable ? null : readAloudActive ? (
+    <span className="flex items-center rounded-full bg-ink text-xs font-semibold text-paper shadow-soft">
+      <button
+        onClick={() => (readAloud.state === "paused" ? readAloud.resume() : readAloud.pause())}
+        data-track={readAloud.state === "paused" ? "read-document-resume" : "read-document-pause"}
+        data-tip={t(readAloud.state === "paused" ? "reader.readResume" : "reader.readPause")}
+        className="flex items-center gap-1.5 rounded-l-full py-1.5 pr-2 pl-3.5 max-sm:gap-1 max-sm:pl-3"
+      >
+        {readAloud.state === "loading" ? (
+          <SpinnerIcon size={13} className="motion-safe:animate-spin" />
+        ) : readAloud.state === "paused" ? (
+          <PlayIcon size={13} />
+        ) : (
+          <PauseIcon size={13} />
+        )}
+        <span className="max-[380px]:sr-only">
+          {t(readAloud.state === "paused" ? "reader.readResume" : "reader.readPause")}
+        </span>
+      </button>
+      <button
+        onClick={readAloud.stop}
+        data-track="read-document-stop"
+        aria-label={t("reader.stopReading")}
+        data-tip={t("reader.stopReading")}
+        className="rounded-r-full py-1.5 pr-3 pl-1.5 opacity-80 hover:opacity-100"
+      >
+        ✕
+      </button>
+    </span>
+  ) : (
+    <button
+      onClick={startReadAloud}
+      data-track="read-document"
+      data-tip={t("reader.readDocumentTitle")}
+      className={`flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800 max-sm:gap-1 max-sm:px-3${
+        readAloudNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
+      }`}
+    >
+      <VolumeIcon size={13} />
+      <span className="max-[380px]:sr-only">{t("reader.readDocument")}</span>
+      {readAloudNew.isNew && <NewPill />}
+    </button>
+  );
   // Breakwork (SPEC.md §32): the button at the top right, beside Collapse.
   // Pressed, the structure opens over the reader.
   const structureButton = (
@@ -10952,8 +11143,18 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   );
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
-  // The bar on an image (SPEC.md §7): its chips read the image.
+  // The bar on an image (SPEC.md §7).
   const barFigure = bar?.figure === true;
+  // The starter the bar's empty box shows; Tab takes it. On an image it is
+  // the image's own command (the words under it), with no model asked.
+  const barStarter =
+    !bar || bar.busy || barKey || bar.input !== ""
+      ? null
+      : barFigure
+        ? t(FIGURE_CHIPS[0].command)
+        : starterKey
+          ? (starters[starterKey] ?? null)
+          : null;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view's pane header (SPEC.md §6). On a transcript it carries
@@ -11020,6 +11221,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* A blank document has no Contents. */}
           {!richText && articleMenu}
           <div className="relative ml-auto flex shrink-0 items-center gap-2">
+            {readAloudButton}
             {!richText && structureButton}
             {!richText && collapseButton}
             {distillButton}
@@ -11030,6 +11232,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           </div>
         </div>
       )}
+
+      {/* The block being read aloud (read-aloud.tsx). */}
+      {readAloud.blockId && <ReadAloudMark container={containerRef} blockId={readAloud.blockId} />}
 
       {/* The drop line: where an image dropped on the text lands. */}
       {dropLine && (
@@ -11087,9 +11292,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {t("common.done")}
           </button>
         )}
-        {!split && !transcript && !embedded && !richText && structureButton}
+        {/* Breakwork and Extract are in the side bar (workspace.tsx). */}
+        {!split && !transcript && !embedded && !richText && readAloudButton}
         {!split && !transcript && !embedded && !richText && collapseButton}
-        {!split && !transcript && !embedded && !richText && distillButton}
       </div>
       {/* A pending link's banner: under the controls, beside the toast, so
           it covers no control; in the block reader it stands in the band,
@@ -11134,14 +11339,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
             coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
           }${popover ? " invisible" : ""}`}
         >
-          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+          {hintWords()}
         </div>
       )}
 
@@ -11176,14 +11381,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             ? {
                 ...richText,
                 canEdit,
-                // Breakwork, Collapse, and Extract: under the toolbar's
-                // right end, as at the article's top right. In a split view
-                // Extract stays in the pane header.
+                // Read aloud and Collapse: under the toolbar's right end, as
+                // at the article's top right; Breakwork and Extract are in
+                // the side bar (workspace.tsx). In a split view each pane
+                // keeps its own Breakwork here and its Read aloud and Extract
+                // in the pane header.
                 aiControls: !embedded ? (
                   <>
-                    {structureButton}
+                    {!split && readAloudButton}
+                    {split && structureButton}
                     {collapseButton}
-                    {!split && distillButton}
                   </>
                 ) : null,
                 notebookId,
@@ -11803,6 +12010,42 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     </div>
                   </>
                 )}
+                {/* A new section, named here: the words go in as its first note. */}
+                {newSection === null ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => setNewSection("")}
+                    data-track="add-to-notes-new-section"
+                    data-tip={t("reader.addNewSectionTitle")}
+                    className={`flex items-center gap-1.5 rounded-full ${toolRow} text-left text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                  >
+                    <PlusIcon size={coarse ? 13 : 11} />
+                    {t("reader.addNewSection")}
+                  </button>
+                ) : (
+                  <input
+                    autoFocus
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (isImeKey(e)) return;
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void addToNewSection(newSection);
+                      }
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setNewSection(null);
+                      }
+                    }}
+                    placeholder={t("reader.newSectionPlaceholder")}
+                    aria-label={t("reader.newSectionPlaceholder")}
+                    data-track="add-to-notes-new-section-name"
+                    className={`w-full rounded-full bg-sand-100 ${
+                      coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                    } outline-none placeholder:text-sand-500`}
+                  />
+                )}
                 {hasNotes && (
                   <>
                     <span
@@ -11887,7 +12130,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 }}
                 placeholder={t(popover.figure ? "reader.figureBarPlaceholder" : "reader.assistantPlaceholder")}
                 rows={2}
-                className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+                // Two lines at rest, as rows draws it; Shift+Enter's lines
+                // show, to six, before the box scrolls.
+                className="field-sizing-content max-h-[calc(6lh+1rem)] min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
               {popover.figure && !aiBusy && (
                 <div className="flex flex-wrap items-center gap-1">
@@ -12146,44 +12391,29 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onChange={(e) => setBarInput(e.target.value)}
             {...ime.props}
             onKeyDown={(e) => {
-              if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter" || e.shiftKey) return;
+              if (ime.isImeEnter(e) || isImeKey(e)) return;
+              // Tab takes the starter the empty box shows; nothing is sent.
+              // With words in the box, Tab moves on as everywhere.
+              if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && barStarter) {
+                e.preventDefault();
+                setBarInput(barStarter);
+                return;
+              }
+              if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
               void runBar(bar);
             }}
-            placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
+            data-starter={barStarter ? "" : undefined}
+            aria-keyshortcuts={barStarter ? "Tab" : undefined}
+            placeholder={
+              barStarter
+                ? t("reader.barStarter", { question: barStarter })
+                : t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")
+            }
             aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
             rows={2}
-            className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
+            className="field-sizing-content max-h-[calc(6lh+1rem)] min-h-[calc(2lh+1rem)] w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
           />
-          {!barKey && !bar.busy && (
-            <div className="flex flex-wrap items-center gap-1">
-              {barFigure
-                ? FIGURE_CHIPS.map((chip) => (
-                    <button
-                      key={chip.label}
-                      type="button"
-                      onClick={() => void runBar({ ...bar, input: t(chip.command) })}
-                      data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
-                      data-tip={t("reader.figureChipTitle")}
-                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                    >
-                      {t(chip.label)}
-                    </button>
-                  ))
-                : SUGGEST_CHIPS.map((c) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => void runBar(bar, c)}
-                      data-track={`assistant-command:${c.name}`}
-                      data-tip={t("reader.commandTitle")}
-                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
-                    >
-                      {t(c.key)}
-                    </button>
-                  ))}
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <ThinkingChips small />
             <WebChip small />
@@ -12549,7 +12779,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 line.role === "user" ? (
                   <li
                     key={i}
-                    className="ml-6 self-end rounded-2xl bg-clay-100 px-2.5 py-1 text-[12px] text-clay-800"
+                    className="ml-6 self-end rounded-2xl bg-clay-100 px-2.5 py-1 text-[12px] whitespace-pre-wrap text-clay-800"
                   >
                     {line.text}
                   </li>
@@ -13006,12 +13236,29 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
+      {/* Jottings (SPEC.md §33): the pen's handwriting over the pane, and the
+          Jot bar at the pane's foot. An embedded layer has none: the pane
+          around it carries them. */}
+      {/* The finger selection (SPEC.md §33): a finger drawn along a line
+          selects its words; the toolbar opens when it lifts. */}
+      {!embedded && <FingerSelect container={containerRef} />}
+      {!embedded && (
+        <JottingLayer
+          key={`${notebookId}:${documentId}`}
+          container={containerRef}
+          documentId={documentId}
+          notebookId={notebookId}
+          canEdit={canEdit}
+          myId={myId}
+          hidden={distillOpen || conversationView !== null}
+        />
+      )}
     </div>
       {/* The hint where the article's margin cannot hold it (a tablet, a
           phone, a narrow window): a row under the pane, which takes its
           height from the pane's foot, so it covers no word and the lines
           the reader reads stay where they are. */}
-      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           data-edit-hint
           onAnimationEnd={hintPlayed}
@@ -13019,7 +13266,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             coarse ? "text-[13px]" : "text-[12px]"
           }`}
         >
-          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+          {hintWords()}
         </div>
       )}
     </div>

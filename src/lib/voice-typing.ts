@@ -82,12 +82,16 @@ export type Piece = { text: string } | { lineBreak: true } | { paragraph: true }
 
 /** A heard phrase as what to type: text, line breaks, new paragraphs.
     "period", "comma", "new line", and the like type what they name, in
-    English. */
-export function spokenPieces(phrase: string, english: boolean): Piece[] {
+    English. `written`: the voice model wrote the phrase out, with its
+    punctuation: "period" and "comma" stay the words they are, and "new
+    line" and "new paragraph" still break the line, with the punctuation the
+    model put around them dropped ("First point. New line. Second point."). */
+export function spokenPieces(phrase: string, english: boolean, written = false): Piece[] {
   let text = phrase;
-  if (english) for (const [re, mark] of SPOKEN) text = text.replace(re, mark);
+  if (english && !written) for (const [re, mark] of SPOKEN) text = text.replace(re, mark);
   const out: Piece[] = [];
-  const parts = english ? text.split(/\s*\b(new line|new paragraph)\b\s*/i) : [text];
+  const command = written ? /[\s,;]*\b(new line|new paragraph)\b[.,!?;]*\s*/i : /\s*\b(new line|new paragraph)\b\s*/i;
+  const parts = english ? text.split(command) : [text];
   for (const part of parts) {
     const lower = part.toLowerCase();
     if (lower === "new line") out.push({ lineBreak: true });

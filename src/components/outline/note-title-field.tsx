@@ -43,6 +43,7 @@ export function NoteTitleField({
   onEnter,
   onEscape,
   autoFocus,
+  placeholder,
   className,
 }: {
   value: string;
@@ -51,6 +52,9 @@ export function NoteTitleField({
   onEnter?: () => void;
   onEscape?: () => void;
   autoFocus?: boolean;
+  /** The gist an open note showed as its title, where the note has no title
+      of its own; without it the field says Title. */
+  placeholder?: string;
   className?: string;
 }) {
   const t = useT();
@@ -67,7 +71,7 @@ export function NoteTitleField({
         }
         if (e.key === "Escape") onEscape?.();
       }}
-      placeholder={t("outline.titlePlaceholder")}
+      placeholder={placeholder ?? t("outline.titlePlaceholder")}
       aria-label={t("outline.noteTitleLabel")}
       autoFocus={autoFocus}
       data-no-drag

@@ -652,8 +652,11 @@ export const VideoPlayer = forwardRef<
                   ry={a.region.ry}
                   {...shared}
                 />
-              ) : (
+              ) : a.region.kind === "path" ? (
                 <path key={a.sourceId} d={regionPathD(a.region.points)} {...shared} />
+              ) : (
+                // A stroke is the page highlighter's (SPEC.md §16); a frame never carries one.
+                null
               );
             })}
             {draw && draw.points.length > 1 && (
@@ -672,7 +675,9 @@ export const VideoPlayer = forwardRef<
                 d={
                   pendingRegion.kind === "path"
                     ? regionPathD(pendingRegion.points)
-                    : ellipsePathD(pendingRegion)
+                    : pendingRegion.kind === "ellipse"
+                      ? ellipsePathD(pendingRegion)
+                      : ""
                 }
                 fill="rgba(246, 160, 107, 0.08)"
                 stroke="var(--clay-400)"

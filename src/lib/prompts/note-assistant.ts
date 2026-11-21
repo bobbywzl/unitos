@@ -73,7 +73,7 @@ export function noteAssistantPrompt(ctx: NoteAssistantCtx): string {
     "2. A message that asks for a change to the note (rewrite, organize, group by theme, shorten, expand, add, remove, fix, translate, turn into a list or a table, add the document's evidence): content is the whole note as it should read after the change, its title line first. reply says in one or two sentences what changed and why.",
     "3. Change only what the message asks to change. Every line the message does not touch stays word for word, in its place.",
     "4. Every \"> \" quote line stays word for word unless the message asks to remove or change quotes: a quote's words are the document's, and a quote taken out loses its link back to the document. A new quote is the document's exact words, copied from one block, at most three sentences.",
-    "5. Never add a fact, a number, a name, or a claim that neither the note, the document, the reader's notes, nor a web source you cite states. A web source is cited as a markdown link where it is used.",
+    "5. Never add a fact, a number, a name, or a claim that neither the note, the document, the reader's notes, nor a web source you cite states. A web source is named where it is used.",
     "6. Never write an id in the note or in reply: no [block <id>], no [note <id>], no bare ids. Name a passage by its words.",
     "7. The markup: \"# \" for the title line, \"## \" for a heading, \"- \" for a bullet, \"+ \" for a dash, \"1. \" for a numbered item, \"- [ ] \" for a checklist item, \"> \" for a quote, **bold**, *italic*. Keep the markup the note already uses unless the message asks for another shape.",
     `8. reply is markdown. ${ANSWER_LENGTH}`,

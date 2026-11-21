@@ -33,8 +33,9 @@ import { cellValue, computeFormula, formulaFormat, movedFormula, shows } from "@
     table that keeps its html keeps its rows and columns (cells) and the
     words a table keeps: a formula, the break between a cell's paragraphs,
     a cell a merge covers (held). A sheet keeps a row or a column a formula
-    it computes reads alone, not in a range (reads). */
-export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held" | "reads";
+    it computes reads alone, not in a range (reads). A sheet too large to
+    read whole takes new words in its cells and nothing else (large). */
+export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held" | "reads" | "large";
 
 /** What the reader is told for each refusal. */
 export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
@@ -48,6 +49,7 @@ export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
   cells: "api.replicaCells",
   held: "api.replicaHeld",
   reads: "api.replicaReads",
+  large: "api.replicaLarge",
 };
 
 // A node's place in the html, as jsdom gives it.
@@ -765,11 +767,12 @@ const wordsOf = (el: Element): string =>
     `sheet-clip`, marked `data-over` — and run over again once it is empty.
     Only a class and the mark change, in place, so an edit taken back gives
     the same bytes. */
-function cellClasses(was: string, html: string): string {
+function cellClasses(was: string, html: string, sheet: string = html): string {
   const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
   const before = new JSDOM(`${PREFIX}${was}</body></html>`).window.document.querySelectorAll("tbody td");
-  // The cell styles that set the alignment themselves.
-  const aligned = new Set([...html.matchAll(/\.(x\d+)\{[^}]*text-align:/g)].map((m) => m[1]));
+  // The cell styles that set the alignment themselves (`sheet`: the html
+  // that holds the styles, when `html` is one row of it).
+  const aligned = new Set([...sheet.matchAll(/\.(x\d+)\{[^}]*text-align:/g)].map((m) => m[1]));
   const splices: { start: number; end: number; source: string }[] = [];
   dom.window.document.querySelectorAll("tbody td").forEach((td, i) => {
     const loc = dom.nodeLocation(td) as Location | null;
@@ -807,6 +810,49 @@ function cellClasses(was: string, html: string): string {
   let out = html;
   for (const { start, end, source } of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, start) + source + out.slice(end);
   return out;
+}
+
+// A sheet past this size (about 5,000 cells) is not read whole for an edit:
+// the whole-sheet path below parses the replica a dozen times, which for a
+// sheet of 20,000 cells is half a minute and more memory than a server has.
+export const LARGE_SHEET_CHARS = 400_000;
+const ROW_OPEN = "<table><tbody>";
+const ROW_CLOSE = "</tbody></table>";
+
+/** A large sheet with `next` for its words: only the rows whose line
+    changed are read, each on its own, so one cell changed in a sheet of
+    3,000 rows costs one row. The edit this path takes is new words in
+    cells — every line keeps its cells, and the sheet keeps its lines. A
+    sheet that computes formulas, has text after its rows (a chart's data),
+    or holds a cell with a line break is not read row by row, and neither is
+    an edit that adds or removes a row or a column: `large`. */
+function largeSheetWithText(html: string, prev: string, next: string): { html: string; cut: null } | { refused: ReplicaRefusal } {
+  if (/<td\b[^>]*\stitle="=/.test(html)) return { refused: "large" };
+  const open = html.indexOf("<tbody");
+  const bodyStart = open < 0 ? -1 : html.indexOf(">", open) + 1;
+  const bodyEnd = html.lastIndexOf("</tbody>");
+  if (open < 0 || bodyStart <= 0 || bodyEnd < bodyStart) return { refused: "large" };
+  const body = html.slice(bodyStart, bodyEnd);
+  const starts = [...body.matchAll(/<tr[\s>]/g)].map((m) => m.index);
+  const before = prev.split("\n");
+  const after = next.split("\n");
+  if (starts.length === 0 || starts[0] !== 0 || starts.length !== before.length || before.length !== after.length) return { refused: "large" };
+  const rows = starts.map((start, i) => body.slice(start, starts[i + 1] ?? body.length));
+  for (let i = 0; i < rows.length; i++) {
+    if (before[i] === after[i]) continue;
+    if (before[i].split("\t").length !== after[i].split("\t").length) return { refused: "large" };
+    // A row's last cell holds the line's break; the last row has none.
+    const gap = i < rows.length - 1 ? "\n" : "";
+    const row = `${ROW_OPEN}${rows[i]}${ROW_CLOSE}`;
+    const edited = replicaWithText(row, before[i] + gap, after[i] + gap);
+    // A row that does not read as its line (a cell with a line break moved
+    // the lines) is a sheet this path cannot take.
+    if ("refused" in edited) return { refused: edited.refused === "stale" ? "large" : edited.refused === "lines" ? "grid" : edited.refused };
+    const drawn = cellClasses(row, edited.html, html);
+    if (!drawn.startsWith(ROW_OPEN) || !drawn.endsWith(ROW_CLOSE)) return { refused: "large" };
+    rows[i] = drawn.slice(ROW_OPEN.length, drawn.length - ROW_CLOSE.length);
+  }
+  return { html: html.slice(0, bodyStart) + rows.join("") + html.slice(bodyEnd), cut: null };
 }
 
 /** The formulas of a sheet's grid: each formula's cell, its formula, its
@@ -897,6 +943,7 @@ function formulaWords(html: string, formulas: { r: number; c: number; formula: s
     computed. `cut` is what the edit this one takes back took out: its rows
     or columns come back as they were. */
 export function sheetWithText(html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null; text?: string } | { refused: ReplicaRefusal } {
+  if (html.length > LARGE_SHEET_CHARS) return largeSheetWithText(html, prev, next);
   if (readReplica(html).text !== prev) return { refused: "stale" };
   const grid = readGrid(html);
   const was = grid ? gridWords(grid) : [];

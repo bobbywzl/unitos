@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { appShellOf, PHONE_PATH } from "@/lib/app-shell";
 import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE, VISITOR_COOKIE } from "@/lib/constants";
 import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 
@@ -59,7 +60,16 @@ function withVisitor(request: NextRequest, response: NextResponse): NextResponse
 }
 
 export function middleware(request: NextRequest) {
-  return withVisitor(request, gate(request));
+  return withVisitor(request, phoneStart(request) ?? gate(request));
+}
+
+// The iPhone app (SPEC.md §33) opens on the phone page, not the dashboard:
+// its start address, and where every sign-in ends, is "/". Only the app on
+// an iPhone is sent there; a browser on a phone keeps the dashboard.
+function phoneStart(request: NextRequest): NextResponse | null {
+  if (request.nextUrl.pathname !== "/") return null;
+  if (appShellOf(request.headers.get("user-agent"))?.device !== "iphone") return null;
+  return NextResponse.redirect(new URL(PHONE_PATH, request.url));
 }
 
 function gate(request: NextRequest): NextResponse {
@@ -113,6 +123,9 @@ function gate(request: NextRequest): NextResponse {
     pathname === "/reset" ||
     pathname === "/offline" ||
     pathname === "/sw.js" ||
+    // The app's universal-links file (SPEC.md §33): iOS fetches it with no
+    // session. It names the app and two addresses and nothing of an account.
+    pathname === "/.well-known/apple-app-site-association" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
     pathname === "/billing" ||

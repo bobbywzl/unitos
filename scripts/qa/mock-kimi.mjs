@@ -152,6 +152,26 @@ function buildResponse(all) {
       ],
     });
   }
+  // Breakwork (SPEC.md §32): a structure of two top buckets over the
+  // numbered blocks, halves in reading order, with one connection.
+  if (all.includes("The reader sorts this document into buckets")) {
+    const numbers = [...all.matchAll(/\[block (\d+)\]/g)].map((m) => Number(m[1]));
+    const max = numbers.length ? Math.max(...numbers) : 0;
+    if (max < 2) return JSON.stringify({ reply: "Mock: nothing to sort yet.", structure: null });
+    const half = Math.ceil(max / 2);
+    console.log("[mock structure]", max, "blocks");
+    return JSON.stringify({
+      reply: "Mock: two buckets, the first half and the second half of the document.",
+      structure: {
+        buckets: [
+          { id: "new1", title: "First half", description: "The opening blocks.", parent: null, blocks: `1-${half}` },
+          { id: "new2", title: "Second half", description: "The closing blocks.", parent: null, blocks: `${half + 1}-${max}` },
+        ],
+        labels: { 1: "Opening" },
+        connections: [{ from: "bucket new1", to: "bucket new2", label: "leads to", comment: "The first half sets up the second." }],
+      },
+    });
+  }
   if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
   if (all.includes("Check each paragraph below for grammar and wording problems.")) return grammarIssues(all);
   // The panel at This page scope: the answer, then the actions fence.
@@ -229,20 +249,34 @@ function buildResponse(all) {
     return JSON.stringify({ blockIds });
   }
 
-  // Stitch, the answer pass: one link between the first two documents (one
-  // end a verbatim quote, one end the whole block), a page of one whole-block
-  // quote part per document and one text part with sources, and a reply.
+  // Stitch, the answer pass. The stand-in always returns one link between
+  // the first two documents (one end a verbatim quote, one end the whole
+  // block) and a page of one whole-block quote part per document and one
+  // text part with sources, whatever the command asks: a careless model.
+  // What it says the command asked for (`asked`) follows the command's
+  // words, so the route's own rule is what a check sees: links for a
+  // command that says link or connect, a page for one that says page or
+  // document. Markers in the command bend it for the checks:
+  //   MOCK-CLAIMS-L / MOCK-CLAIMS-P  asked says true whatever the words
+  //   MOCK-NO-ASKED                       the answer carries no `asked`
+  //   MOCK-OUTSIDE:<blockId>              one more link, to a block that is
+  //                                       not among the documents read
+  // The reply cites blocks the ways a model does: one tag, a tag naming two
+  // blocks, and a tag that names no block.
   if (all.includes('"reply"') && all.includes('"parts"') && /\[document [^\]]+\] "/.test(all)) {
     const headers = [...all.matchAll(/\[document ([^\]]+)\] "/g)];
     const firstParagraph = headers.map((h, i) => {
       const end = i + 1 < headers.length ? headers[i + 1].index : all.length;
       return parseBlocks(all.slice(h.index, end)).find((b) => b.type === "PARAGRAPH" && b.text.length > 40);
     });
+    const command = /The reader's command:\n([^\n]*)/.exec(all)?.[1] ?? "";
     const [one, two] = firstParagraph;
     const links =
       one && two
         ? [{ fromBlockId: one.id, fromQuote: one.text.slice(0, 60), toBlockId: two.id, reason: "Mock: both passages make the same claim." }]
         : [];
+    const outside = /MOCK-OUTSIDE:(\S+)/.exec(command)?.[1];
+    if (one && outside) links.push({ fromBlockId: one.id, toBlockId: outside, reason: "Mock: a link to a block that was not read." });
     const parts = [];
     firstParagraph.forEach((b, i) => {
       if (!b) return;
@@ -256,9 +290,20 @@ function buildResponse(all) {
         sources: [{ blockId: one.id, quote: one.text.slice(0, 40) }],
       });
     }
-    console.log("[mock stitch]", links.length, "links,", parts.length, "parts");
+    const asked = {
+      links: /\b(link|connect)/i.test(command) || command.includes("MOCK-CLAIMS-L"),
+      page: /\b(page|document)\b/i.test(command) || command.includes("MOCK-CLAIMS-P"),
+    };
+    const reply = [
+      "**Mock document one**",
+      `- Mock point one [block ${one?.id ?? "A1"}].`,
+      `- Mock point two [block ${one?.id ?? "A1"}, ${two?.id ?? "B1"}].`,
+      "- Mock point three [block ZZ999].",
+    ].join("\n");
+    console.log("[mock stitch]", JSON.stringify(asked), links.length, "links,", parts.length, "parts");
     return JSON.stringify({
-      reply: `Mock: ${links.length} link proposed and a page of ${parts.length} parts written.`,
+      ...(command.includes("MOCK-NO-ASKED") ? {} : { asked }),
+      reply,
       links,
       document: parts.length > 0 ? { title: "Mock stitched page", parts } : null,
     });
@@ -481,6 +526,17 @@ function buildResponse(all) {
     return JSON.stringify({ parts });
   }
 
+  // HABITS (lib/prompts/habits.ts): asks named for the open project.
+  if (all.includes('"habits"') && all.includes("The open project:")) {
+    const project = /The open project: ([^\n]*)/.exec(all)?.[1] ?? "this project";
+    return JSON.stringify({
+      habits: [
+        { kind: "plain meaning", ask: `Explain the main claim of ${project} in one plain sentence` },
+        { kind: "business angle", ask: "What is the business reason behind this?" },
+        { kind: "check my reading", ask: "Would you say my reading of the argument is right?" },
+      ],
+    });
+  }
   if (all.includes('"gists"')) {
     const gists = [...all.matchAll(/\[note ([^\]]+)\]\n([^\n]*)/g)].map((m) => ({
       id: m[1],

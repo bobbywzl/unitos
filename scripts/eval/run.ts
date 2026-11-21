@@ -43,7 +43,7 @@ import {
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
-import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, actRules, textSelectionBlock } from "@/lib/prompts/act";
 import { askPrompt } from "@/lib/prompts/ask";
 import { definable } from "@/lib/define";
 import { definePrompt } from "@/lib/prompts/define";
@@ -383,7 +383,7 @@ const adapters: Record<EvalTool, Adapter> = {
     const checks: Check[] = [
       tagCheck(r.text, f),
       { name: "cites at least one block", ok: blockTags(r.text).length > 0 },
-      capCheck(r.text, 250),
+      capCheck(r.text, 320),
       languageCheck(r.text, c.lang),
       openerCheck(r.text),
     ];
@@ -393,7 +393,7 @@ const adapters: Record<EvalTool, Adapter> = {
   async act(c, f) {
     if (!c.selection) throw new Error("act needs a selection");
     const anchor = selectionOf(f, c.selection);
-    const prompt = actPrompt({
+    const ctx = {
       profile: c.profile,
       lang: c.lang,
       selectionBlock: textSelectionBlock(anchor.blockId, anchor.quotedText),
@@ -404,8 +404,10 @@ const adapters: Record<EvalTool, Adapter> = {
       notes: [],
       history: [],
       command: c.question ?? "Explain this.",
-    });
-    const r = await callTool({ messages: [system(f), { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
+    };
+    const prompt = actPrompt(ctx);
+    // The document, the rules, then the material, as the route sends them (lib/assistant/context.ts).
+    const r = await callTool({ messages: [system(f), { role: "system", content: actRules(ctx) }, { role: "system", content: actMaterial(ctx) }, { role: "user", content: prompt }], effort: DERIVATION_EFFORT.SYNTHESIS, maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS });
     const planSchema = z.object({
       reply: z.string().nullable(),
       actions: z.array(z.unknown()).optional(),
@@ -429,7 +431,7 @@ const adapters: Record<EvalTool, Adapter> = {
       { name: "never the selection itself", ok: resolved.every((m) => !m.self) },
       { name: "reply cites blocks", ok: blockTags(reply).length > 0 },
       tagCheck(reply, f),
-      capCheck(reply, 150),
+      capCheck(reply, 320),
       languageCheck(reply, c.lang),
       openerCheck(reply),
     ];

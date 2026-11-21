@@ -14,7 +14,7 @@ export const CROP_PAD = 0.15;
     region's bounding box, `pad` percent of the page wider on every side,
     clamped to the page. */
 export function cropBox(region: Region, width: number, height: number, pad: number) {
-  const b = regionBounds(region);
+  const b = regionBounds(region, width / height);
   const x1 = (Math.max(0, b.x1 - pad) / 100) * width;
   const y1 = (Math.max(0, b.y1 - pad) / 100) * height;
   const x2 = (Math.min(100, b.x2 + pad) / 100) * width;

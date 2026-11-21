@@ -8,7 +8,8 @@ import { CommentIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
-import { bodyLineOffset, splitNote } from "@/lib/note-title";
+import { markdownPreview } from "@/lib/markdown-preview";
+import { bodyLineOffset, gistAsTitle, splitNote } from "@/lib/note-title";
 import { setTaskChecked } from "@/lib/note-markup";
 import { NoteId } from "@/components/outline/note-id";
 import { sourcesTip } from "@/components/outline/sources-tip";
@@ -75,6 +76,8 @@ export function NoteTile({
   const { canEdit, shared, people } = useCollab();
   const parts = splitNote(note.content);
   const pending = note.status === "PENDING";
+  // A note with no title of its own shows its gist as its title (SPEC.md §6).
+  const title = parts.title || (pending ? "" : gistAsTitle(note.gist, markdownPreview(note.content)));
   const isMergeTarget = useIsMergeTarget(note.id) && note.status === "ACCEPTED";
   const selectable = note.status === "ACCEPTED" && canEdit;
   const isSelected = actions.selected.has(note.id);
@@ -198,7 +201,7 @@ export function NoteTile({
           )}
         </span>
       </div>
-      {parts.title && <h3 className="note-title mt-2 shrink-0">{parts.title}</h3>}
+      {title && <h3 className="note-title mt-2 shrink-0">{title}</h3>}
       <div ref={bodyRef} className={`note-tile-body mt-1.5 min-h-0 flex-1 overflow-hidden${cut ? " note-tile-cut" : ""}`}>
         {parts.body.trim() !== "" && (
           <Markdown

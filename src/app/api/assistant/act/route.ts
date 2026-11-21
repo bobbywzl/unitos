@@ -19,6 +19,8 @@ import {
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
+import { cropPageRegion, pageBlockText, renderPdfPage } from "@/lib/handwritten/pages";
+import { parseRegion } from "@/lib/video/types";
 
 // A revise action reads its windows within the route's time: those not
 // started by then are reported (lib/assistant/revise.ts).
@@ -32,7 +34,6 @@ import { runTargetPass } from "@/lib/assistant/target";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import {
   annotationsSection,
-  documentPrefix,
   loadProfile,
   pageNames,
   passageContext,
@@ -42,13 +43,15 @@ import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figu
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, fitActions, planShape, splitFigureWords, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
-import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, actRules, textSelectionBlock } from "@/lib/prompts/act";
+import { documentLayer, materialLayer, rulesLayer } from "@/lib/assistant/context";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
@@ -262,7 +265,7 @@ async function handle(req: Request, t: TFunc) {
     kind: ToolKind;
     content: string;
     turns: ChatTurn[];
-    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string; layer: string | null }[];
+    sources: { blockId: string; startOffset: number; endOffset: number; quotedText: string; prefix: string; suffix: string; layer: string | null; region: unknown }[];
   } | null = null;
   if (data.toolNoteId) {
     const note = await db.note.findUnique({
@@ -275,7 +278,7 @@ async function handle(req: Request, t: TFunc) {
         section: { select: { notebookId: true } },
         sources: {
           where: { documentId: data.documentId },
-          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true, layer: true },
+          select: { blockId: true, startOffset: true, endOffset: true, quotedText: true, prefix: true, suffix: true, layer: true, region: true },
         },
       },
     });
@@ -297,12 +300,20 @@ async function handle(req: Request, t: TFunc) {
   // source for charts — same treatment as EXPLAIN (SPEC.md §4: one pipeline).
   let selectionBlock = "";
   let attachedImage: FigureImage | null = null;
+  // Images after the first: a highlighted page's whole page, after its crop.
+  const extraImages: FigureImage[] = [];
   let svgSource: string | null = null;
+  // A tool conversation on a highlighted spot of a handwritten page (SPEC.md
+  // §16): the tool's source is a region on a PAGE block, not words, so it
+  // resolves to no text. The spot's crop and the page go to the model
+  // instead, as the first Explain sent them.
+  const pageRegion = toolNote ? parseRegion(toolNote.sources[0]?.region) : null;
+  const pageSource = toolNote && pageRegion ? { blockId: toolNote.sources[0].blockId, region: pageRegion } : null;
   // The anchor resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document. A
   // re-parse gives every block a new id while an open reader still sends the
   // old ones; the quote carries the selection across.
-  const anchorInput = toolNote ? toolNote.sources[0] : data.anchor;
+  const anchorInput = pageSource ? null : toolNote ? toolNote.sources[0] : data.anchor;
   const segmentsInput = toolNote ? toolNote.sources : data.segments;
   // A core anchor (SPEC.md §28) resolves against the cores, its context the
   // cores around it.
@@ -361,6 +372,26 @@ async function handle(req: Request, t: TFunc) {
     if (!(await selectFigure(anchor.blockId))) selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText);
   } else if (data.figureBlockId) {
     if (!(await selectFigure(data.figureBlockId))) return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+  } else if (pageSource) {
+    const pageBlock = document.blocks.find((b) => b.id === pageSource.blockId);
+    const file =
+      pageBlock?.type === "PAGE" && pageBlock.page !== null
+        ? await db.document.findUnique({ where: { id: document.id }, select: { fileData: true } })
+        : null;
+    if (!pageBlock || pageBlock.type !== "PAGE" || pageBlock.page === null || !file?.fileData) {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    }
+    const pageImage = await renderPdfPage(new Uint8Array(file.fileData), pageBlock.page);
+    const crop = await cropPageRegion(pageImage, pageSource.region);
+    attachedImage = { bytes: crop ?? pageImage, mediaType: "image/png" };
+    if (crop) extraImages.push({ bytes: pageImage, mediaType: "image/png" });
+    selectionBlock = [
+      `The reader highlighted a spot on page ${pageBlock.page} ("${pageBlockText(pageBlock.page)}", block ${pageSource.blockId}) of this handwritten document.`,
+      crop
+        ? "The first attached image is the highlighted part, enlarged. The second is the whole page."
+        : "The attached image is the whole page; find the highlighted spot on it.",
+      "The command applies to this spot unless it says otherwise. Never state anything about the image you cannot actually see; where the handwriting is illegible, say so plainly.",
+    ].join("\n");
   } else if (data.video) {
     // A circled spot of a video document: the frame is attached when the
     // client could capture it; the transcript for the range grounds the words.
@@ -422,7 +453,7 @@ async function handle(req: Request, t: TFunc) {
   const lang = await currentLang();
   // A video's or an audio's voices, chapters, and anchored words (SPEC.md §11).
   const transcript = await transcriptContext(document.id);
-  const userPrompt = actPrompt({
+  const promptCtx = {
     profile,
     lang,
     selectionBlock,
@@ -446,19 +477,24 @@ async function handle(req: Request, t: TFunc) {
     pages: pageLines(document.blocks),
     transcript: transcript?.lines ?? null,
     figureBlockId,
-  });
+  };
+  const userPrompt = actPrompt(promptCtx);
 
+  // The context layers (lib/assistant/context.ts): the document, which every
+  // surface on this document reads from one cache entry; the rules, the
+  // same for every message; the project's material, the same until the
+  // reader adds a note; then this message, which holds only what is new.
   const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
-    },
+    documentLayer(document.title, document.blocks, document.references, pageNames(document)),
+    rulesLayer(actRules(promptCtx)),
+    materialLayer(actMaterial(promptCtx)),
     attachedImage
       ? {
           role: "user",
           content: [
             { type: "text", text: userPrompt },
             { type: "file", data: attachedImage.bytes, mediaType: attachedImage.mediaType },
+            ...extraImages.map((image) => ({ type: "file" as const, data: image.bytes, mediaType: image.mediaType })),
           ],
         }
       : { role: "user", content: userPrompt },
@@ -467,17 +503,17 @@ async function handle(req: Request, t: TFunc) {
   // A video frame goes to a model that reads images (SPEC.md §2): the act's
   // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
-  // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
+  // a turn with the web on to Gemini with Google Search (lib/web-search.ts).
   // How hard this command runs (SPEC.md §7): the reader's choice, or Auto's
   // reading of the command (lib/assistant/depth.ts).
   const depthInput = { message: data.command, turns: history.length, attachments: attachedImage ? 1 : 0, scope: "document" as const };
-  const chatCall = await featureCall(
-    web ? "web" : attachedImage ? await pictureFeature("act") : "act",
-    thinkingEffort(data.thinking, depthInput),
-  );
+  const effort = thinkingEffort(data.thinking, depthInput);
+  const webTurn = web ? await webCall(effort) : null;
+  const chatCall = webTurn ? webTurn.call : await featureCall(attachedImage ? await pictureFeature("act") : "act", effort);
   const chat = svgChart ?? chatCall;
+  const pages = new WebSources();
   // A chip asks the chat model nothing: its command is fixed.
-  const result = chip
+  let result = chip
     ? { ok: true as const, data: { reply: null, actions: { actions: [], unreadable: [] } as ReadActions } }
     : await callForJson({
         model: chat.model,
@@ -490,14 +526,47 @@ async function handle(req: Request, t: TFunc) {
         // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
         // model call, not just the response the client would have read.
         abortSignal: req.signal,
-        ...(web
+        // The search goes with the web turn's model, never with the SVG
+        // chart's (Claude reads the chart's source, with no search).
+        ...(webTurn && !svgChart
           ? {
-              tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatCall.modelId) },
+              tools: webTurn.tools,
               stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-              toolCallUsd: webSearchUsd(chatCall.modelId),
+              toolCallUsd: webTurn.searchUsd,
+              pages,
             }
           : {}),
       });
+  // The model failed (the search refused, the provider out of service or
+  // out of balance): the command runs again on the next call of retryCalls
+  // (lib/web-search.ts) — after a web turn, the web feature's model with
+  // its own search, then a fallback model without the web. A reply without
+  // the web opens with one line that says the search failed and why.
+  let webFailed: string | null = null;
+  if (!result.ok && !chip && !svgChart && !req.signal.aborted) {
+    const firstReason = result.error;
+    for (const retry of await retryCalls(chatCall.modelId, effort, webTurn !== null, attachedImage !== null)) {
+      console.error(`[assistant:act] ${chatCall.modelId} failed, running again on ${retry.call.modelId}:`, result.ok ? "" : result.error);
+      const withoutWeb = webTurn !== null && retry.tools === null;
+      result = await callForJson({
+        model: retry.call.model,
+        messages: withoutWeb ? [...messages, NO_WEB_MESSAGE] : messages,
+        maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
+        providerOptions: retry.call.providerOptions,
+        schema: planSchema,
+        label: "assistant:act",
+        usage: { userId: user.id, feature: "act", model: retry.call.modelId },
+        abortSignal: req.signal,
+        ...(retry.tools ? { tools: retry.tools, stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1), pages } : {}),
+      });
+      if (result.ok) {
+        // After a failed web turn the reply says why, whichever model answered.
+        if (webTurn !== null) webFailed = t(withoutWeb ? "assistant.webFailed" : "assistant.webRetried", { reason: firstReason });
+        break;
+      }
+      if (req.signal.aborted) break;
+    }
+  }
   if (!result.ok) {
     const error = wordedReason(t, result.error)
       ? t("api.planFailed", { reason: result.error })
@@ -728,7 +797,8 @@ async function handle(req: Request, t: TFunc) {
       : actions.length > 0
         ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed."));
-  const replyText = answer;
+  // The pages the search read, under the reply (lib/web-search.ts).
+  const replyText = (webFailed ? `${webFailed}\n\n` : "") + answer + pages.section(answer, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
   // The stored turn names the actions it proposed, so a later "implement"
   // reads which change it confirms; a suggest that ran is not proposed, its
   // suggestions are in the document, and the turn says so.

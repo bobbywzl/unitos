@@ -1,4 +1,5 @@
 import { JSDOM, VirtualConsole } from "jsdom";
+import { publicRequestCheck } from "@/lib/public-url";
 import { browserConfigured, launchBrowser, sessionLengthOf, withTimeout } from "@/lib/browser";
 import { db } from "@/lib/db";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -168,10 +169,13 @@ async function renderInBrowser(
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1280, height: 900 } });
     try {
       // Scripts and stylesheets draw the figures; media, images, and fonts
-      // never load.
-      await context.route("**/*", (route) => {
+      // never load. The page and what it loads are public addresses only
+      // (lib/public-url.ts).
+      const isPublic = publicRequestCheck();
+      await context.route("**/*", async (route) => {
         const type = route.request().resourceType();
         if (type === "media" || type === "image" || type === "font") return route.abort();
+        if (!(await isPublic(route.request().url()))) return route.abort("blockedbyclient");
         return route.continue();
       });
       const page = await context.newPage();

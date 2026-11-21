@@ -580,17 +580,24 @@ export default async function NotebookPage(props: {
 
     // Annotations anchored in this document: highlights, comments, EXPLAIN,
     // SIMPLIFY, ANALYZE — all notes in the hidden Annotations section with a
-    // source here — and the sidebar assistant's conversations (SPEC.md §7):
-    // anchored nowhere, so they list on every document of the project, with
-    // no anchor to jump to, and the comments on their answers under them. A
-    // side chat stays out, as everywhere but its chat box.
+    // source here — and the sidebar assistant's conversations started in
+    // this document (SPEC.md §7, `Note.documentId`): anchored nowhere, so
+    // with no anchor to jump to, and the comments on their answers under
+    // them. The tab lists this document's annotations alone; the
+    // annotations full page lists the project's. A conversation from before
+    // the document was recorded (null) lists on every document, as it did.
+    // A side chat stays out, as everywhere but its chat box.
     const annotations: AnnotationItem[] = notebook!.sections
       .filter((s) => s.hidden)
       .flatMap((s) => s.notes)
       .map((n): AnnotationItem | null => {
         const source = n.sources.find((src) => src.documentId === document.id);
         if (!source) {
-          const sidebar = n.sources.length === 0 && n.derivationType === "SYNTHESIS" && n.sideChatOfId === null;
+          const sidebar =
+            n.sources.length === 0 &&
+            n.derivationType === "SYNTHESIS" &&
+            n.sideChatOfId === null &&
+            (n.documentId === null || n.documentId === document.id);
           if (!sidebar || (!n.content.trim() && n.replies.length === 0)) return null;
           return {
             id: n.id,
@@ -1039,7 +1046,7 @@ export default async function NotebookPage(props: {
     }
 
     // ── Handwritten documents (SPEC.md §16) ─────────────────────────────────
-    // The stored marks per PAGE block — Circle & ask answers and page comments
+    // The stored marks per PAGE block — Highlight & ask answers and page comments
     // — and the conversion status for the strip under the pages. Built from
     // the resolved sources, so a mark healed onto a rebuilt page paints in the
     // same render.

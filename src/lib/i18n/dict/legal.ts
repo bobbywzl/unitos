@@ -4,7 +4,7 @@
 
 export const en = {
   // Shared
-  updated: "Last updated: 6 September 2026",
+  updated: "Last updated: 13 November 2026",
   backToApp: "Back to Unitos",
   privacyTitle: "Privacy Policy",
   termsTitle: "Terms of Service",
@@ -50,6 +50,8 @@ export const en = {
     "Moonshot AI (Kimi) receives document text, your notes and annotations, and your context, when you use Simplify, Extract, Analyze, Summarize, or the assistant.",
   pAiOpenAI:
     "OpenAI receives the text you ask to be read aloud. OpenAI and Groq receive the audio of videos you upload, or of YouTube videos you add that have no captions, for transcription.",
+  pAiXai:
+    "xAI (Grok Voice Transcribe) receives audio to write it out as text: the audio of videos and recordings you upload, of YouTube videos you add that have no captions, of a voice command or a note you speak, and of what you say while the voice typing microphone is on. Where xAI is not in use, voice typing is done by your browser's own speech service.",
   pAiGoogle:
     "Google (Gemini) receives videos you upload, or the link to a YouTube video you add, for transcription and for describing a frame you ask about.",
   pAiYouTube:
@@ -119,7 +121,7 @@ export const en = {
 
   tThirdHeading: "Services Unitos relies on",
   tThird:
-    "Signing in uses Google, and the AI features use Anthropic, Moonshot AI, OpenAI, Groq, Google, and YouTube. Their own terms apply to their part of the work, and an outage or change at any of them can affect Unitos.",
+    "Signing in uses Google, and the AI features use Anthropic, Moonshot AI, OpenAI, Groq, xAI, Google, and YouTube. Their own terms apply to their part of the work, and an outage or change at any of them can affect Unitos.",
 
   tAvailabilityHeading: "Availability",
   tAvailability:

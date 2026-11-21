@@ -17,6 +17,7 @@ import { en as panels } from "@/lib/i18n/dict/panels";
 import { en as panes } from "@/lib/i18n/dict/panes";
 import { en as plans } from "@/lib/i18n/dict/plans";
 import { en as stitch } from "@/lib/i18n/dict/stitch";
+import { en as phone } from "@/lib/i18n/dict/phone";
 import { en as structure } from "@/lib/i18n/dict/structure";
 import { en as video } from "@/lib/i18n/dict/video";
 import { en as settings } from "@/lib/i18n/dict/settings";
@@ -43,6 +44,7 @@ export const EN = {
   panes,
   plans,
   stitch,
+  phone,
   structure,
   video,
   settings,

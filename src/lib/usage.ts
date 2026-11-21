@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 // is locked to the price at call time. Writes are fire-and-forget and fully
 // guarded — telemetry never breaks or slows a user-facing response.
 
-type Price = { input: number; output: number; cacheRead: number; cacheWrite: number };
+// cacheWrite1h: a write the provider keeps for an hour (Anthropic, 2× the
+// input price); absent where a provider has one cache price.
+type Price = { input: number; output: number; cacheRead: number; cacheWrite: number; cacheWrite1h?: number };
 
 // Moonshot serves a cache hit at 0.1× the input price and charges nothing to
 // write the cache, so a cache write counts as plain input; close enough for
@@ -18,17 +20,22 @@ const price = (input: number, output: number): Price => ({
 });
 
 // Anthropic serves a cache hit at 0.1× the input price and charges 1.25× to
-// write the cache. Claude Fable 5.1 serves a cache hit at $0.25 flat.
+// write the cache for five minutes, 2× for an hour (the document layer,
+// lib/assistant/context.ts). Claude Fable 5.1 serves a cache hit at $0.25
+// flat; Claude Sonnet 5.5 at 0.05× the input price.
 const anthropicPrice = (input: number, output: number, cacheRead = input * 0.1): Price => ({
   input,
   output,
   cacheRead,
   cacheWrite: input * 1.25,
+  cacheWrite1h: input * 2,
 });
 
 /** Exact-match list prices, USD per 1M tokens. */
 const MODEL_PRICING: Record<string, Price> = {
   "claude-fable-5-1": anthropicPrice(10, 50, 0.25),
+  // Claude Sonnet 5.5, the assistant: $2 in, $10 out, a cache hit $0.10.
+  "claude-sonnet-5-5": anthropicPrice(2, 10, 0.1),
   // Z.ai serves a cache hit at about 0.2× the input price (GLM 5.3: $0.26 on
   // $1.40; Flash: $0.03 on $0.15) and charges nothing to write the cache.
   "glm-5.3": { input: 1.4, output: 4.4, cacheRead: 0.26, cacheWrite: 1.4 },
@@ -47,7 +54,13 @@ const MODEL_PRICING: Record<string, Price> = {
   // Deepgram: per-second transcription — its caller passes costUsd directly
   // (lib/video/deepgram.ts). inputTokens on these rows is seconds of audio.
   "nova-3": price(0, 0),
+  // xAI Grok Voice Transcribe: per-second transcription — its caller passes
+  // costUsd directly (lib/video/grok.ts). inputTokens is seconds of audio.
+  "grok-voice-transcribe-2.0": price(0, 0),
   "gpt-4o-mini-tts": price(0.6, 12),
+  // Claude Haiku 5.5: $0.10 in, $0.50 out per 1M tokens up to a 100K-token
+  // prompt ($0.50 and $2.50 beyond it); the family rule below is Haiku 4.5's.
+  "claude-haiku-5-5": anthropicPrice(0.1, 0.5),
   // Microsoft Edge read-aloud voice: free, no key.
   "edge-tts": price(0, 0),
   "text-embedding-3-small": price(0.02, 0),
@@ -96,16 +109,30 @@ export type TokenCounts = {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  // The part of cacheWriteTokens written for an hour, at its own price.
+  cacheWrite1hTokens?: number;
 };
 
 export function computeCostUsd(model: string, t: TokenCounts): number {
   const p = priceFor(model);
+  const hour = Math.min(t.cacheWrite1hTokens ?? 0, t.cacheWriteTokens ?? 0);
   return (
     ((t.inputTokens ?? 0) / 1_000_000) * p.input +
     ((t.outputTokens ?? 0) / 1_000_000) * p.output +
     ((t.cacheReadTokens ?? 0) / 1_000_000) * p.cacheRead +
-    ((t.cacheWriteTokens ?? 0) / 1_000_000) * p.cacheWrite
+    ((t.cacheWriteTokens ?? 0) / 1_000_000) * p.cacheWrite +
+    (hour / 1_000_000) * ((p.cacheWrite1h ?? p.cacheWrite) - p.cacheWrite)
   );
+}
+
+/** The tokens a call wrote to the cache for an hour, from the provider's
+    own usage (Anthropic: usage.cache_creation.ephemeral_1h_input_tokens);
+    0 where the provider reports none. */
+function hourWriteTokens(providerMetadata: unknown): number {
+  const anthropic = (providerMetadata as { anthropic?: { usage?: unknown } } | undefined)?.anthropic;
+  const creation = (anthropic?.usage as { cache_creation?: { ephemeral_1h_input_tokens?: unknown } } | undefined)?.cache_creation;
+  const n = creation?.ephemeral_1h_input_tokens;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** The AI SDK's usage shape → plain token counts. The SDK's inputTokens is
@@ -115,19 +142,26 @@ export function computeCostUsd(model: string, t: TokenCounts): number {
     priced every cached token twice, at the input price and at the cache
     price: a call on a cached document cost more here than the provider
     billed. */
-export function sdkTokens(usage: {
-  inputTokens?: number;
-  outputTokens?: number;
-  inputTokenDetails?: { noCacheTokens?: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
-}): TokenCounts {
+export function sdkTokens(
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    inputTokenDetails?: { noCacheTokens?: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  },
+  // The call's provider metadata, where the caller has it: it says how much
+  // of the cache write was for an hour.
+  providerMetadata?: unknown,
+): TokenCounts {
   const cacheRead = usage.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWrite = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   const input = usage.inputTokenDetails?.noCacheTokens ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite);
+  const hour = Math.min(hourWriteTokens(providerMetadata), cacheWrite);
   return {
     inputTokens: input,
     outputTokens: usage.outputTokens ?? 0,
     cacheReadTokens: cacheRead,
     cacheWriteTokens: cacheWrite,
+    ...(hour > 0 ? { cacheWrite1hTokens: hour } : {}),
   };
 }
 
@@ -138,6 +172,7 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
     outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
     cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
     cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+    cacheWrite1hTokens: (a.cacheWrite1hTokens ?? 0) + (b.cacheWrite1hTokens ?? 0),
   };
 }
 
@@ -158,6 +193,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/^(gemini|gemini-files)/, "google"],
   [/^(whisper-large|distil-whisper)/, "groq"],
   [/^nova-/, "deepgram"],
+  [/^grok-/, "xai"],
   [/^(whisper-1|gpt-|text-embedding-|o[0-9])/, "openai"],
   [/^edge-tts$/, "microsoft"],
   [/^deepl$/, "deepl"],

@@ -374,6 +374,10 @@ export type StitchResult = {
   linkCount: number;
   document: { id: string; title: string } | null;
   documents: StitchDocument[];
+  /** Each block the reply cites, by stored id, with its document: a chip in
+      the Stitch box opens the document at the block. Absent on a result
+      kept before replies carried it. */
+  cited?: Record<string, string>;
 };
 
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──

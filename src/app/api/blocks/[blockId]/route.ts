@@ -13,9 +13,14 @@ import { REPLICA_REFUSAL, replicaEdit, sheetCutSchema, slidePicture, type SheetC
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
+const BLOCK_TEXT_MAX = 50_000;
+const REPLICA_TEXT_MAX = 4_000_000;
+
 const patchSchema = z
   .object({
-    text: z.string().max(50_000).optional(),
+    // A sheet is one block with every cell in its text, so its limit is the
+    // limit of a sheet; every other block keeps BLOCK_TEXT_MAX (below).
+    text: z.string().max(REPLICA_TEXT_MAX).optional(),
     // code: a code block again (Undo of a code block's format change).
     kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered", "code"]).optional(),
   })
@@ -117,6 +122,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
   if (kindChanges && !blockTakes.kind(block.type, shape)) {
     return NextResponse.json({ error: t("api.blockKindFixed") }, { status: 400 });
+  }
+  if (data.text !== undefined && data.text.length > BLOCK_TEXT_MAX && block.type !== "SHEET" && block.type !== "SLIDE") {
+    return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
   }
   // A list conversion sent without text re-marks the stored text.
   const text = data.text ?? (kindChanges ? convertedText(block.text, fromKind, data.kind!) : undefined);

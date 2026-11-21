@@ -5,7 +5,7 @@ import type { Thinking } from "@/lib/assistant/thinking";
 import { blockTakes, type DocumentShape } from "@/lib/block-takes";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, type PageName } from "@/lib/derive/context";
+import { type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { isAssistantSuggestion, type ResolvedOp } from "@/lib/docs/assistant-suggestions";
 import { withoutSuggestions } from "@/lib/docs/blocks";
@@ -17,6 +17,7 @@ import { reorderPrompt } from "@/lib/prompts/reorder";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import type { AssistantAction } from "@/lib/types";
 import type { BlockKind } from "@/lib/block-kind";
+import { documentLayer } from "@/lib/assistant/context";
 
 // The order pass on the server (SPEC.md §7, lib/assistant/reorder.ts): one
 // model call over the whole document, under the same cached document prefix
@@ -124,11 +125,7 @@ export async function runOrderPass(run: OrderRun): Promise<OrderResult> {
   });
   // The document is the cached system prefix the windows read too.
   const messages: ModelMessage[] = [
-    {
-      role: "system",
-      content: documentPrefix(document.title, document.rows, document.references, document.pageName),
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-    },
+    documentLayer(document.title, document.rows, document.references, document.pageName),
     { role: "user", content: prompt },
   ];
   const call = await featureCall("suggest", SUGGEST_EFFORT[run.thinking]);

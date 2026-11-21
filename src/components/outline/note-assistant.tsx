@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { NoteAssistantAnswer } from "@/app/api/notes/[noteId]/assistant/route";
 import { api } from "@/lib/api";
-import { isImeKey } from "@/lib/ime";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { splitNote } from "@/lib/note-title";
 import { quotesOf } from "@/lib/notes/quote-sources";
 import { failureLine } from "@/components/assistant/failure";
@@ -119,6 +119,7 @@ export function NoteAssistant({
   className?: string;
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const thinking = useThinking();
   const web = useWeb();
   const [open, setOpen] = useState(false);
@@ -328,11 +329,12 @@ export function NoteAssistant({
           onChange={(e) => type(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          {...ime.props}
           onKeyDown={(e) => {
-            if (isImeKey(e)) return;
+            if (ime.isImeEnter(e) || isImeKey(e)) return;
             // The note editor's own keys stay the note's: Enter sends here.
             e.stopPropagation();
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (ime.isSendEnter(e)) {
               e.preventDefault();
               void send();
             }

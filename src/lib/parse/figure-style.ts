@@ -1,5 +1,5 @@
 import { JSDOM, VirtualConsole } from "jsdom";
-import { outboundFetch } from "@/lib/outbound-fetch";
+import { publicFetch } from "@/lib/public-url";
 import { ancestorTest } from "@/lib/parse/dom-text";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 
@@ -224,7 +224,8 @@ type PageTokens = { classes: Set<string>; ids: Set<string>; tags: Set<string> };
 
 async function fetchCss(url: string): Promise<string | null> {
   try {
-    const res = await outboundFetch(url, {
+    // A page names its own stylesheets: public addresses only.
+    const res = await publicFetch(url, {
       headers: { Accept: "text/css,*/*;q=0.1" },
       signal: AbortSignal.timeout(SHEET_TIMEOUT_MS),
     });

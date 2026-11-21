@@ -113,7 +113,7 @@ export const en = {
   dropImageIntoArticle: "Drop the image into the article here",
   driveAuthFailed: "Could not connect to Google Drive. Try again.",
   driveUnsupportedFile: "{name} isn't a file type this app can read yet.",
-  pageHighlightTitle: "Highlight the circled spot in this color. Typed text rides on the highlight.",
+  pageHighlightTitle: "Keep the highlight in this color. Typed text rides on the highlight.",
   driveLink: "Link Google Drive",
   driveLinked: "Google Drive is linked.",
   driveLinkedAll: "Google Drive is linked: all files.",
@@ -215,18 +215,20 @@ export const en = {
   reparseLosesAnnotationsOne: "1 annotation marks words added since the import. It will lose its place:",
   reparseLosesMore: "and {n} more",
 
-  // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
-  circleAsk: "Circle & ask",
+  // Handwritten documents (SPEC.md §16): pages, conversion, Highlight & ask.
+  // The highlighter: a drag paints a haze over a spot of the page; the haze is
+  // what Ask, Explain, and Comment read. Code identifiers keep circleAsk.
+  circleAsk: "Highlight & ask",
   pageDrawHint:
-    "Hold the mouse and circle a spot on the page — then ask, explain, comment, or pick a color to highlight",
-  pageAskPlaceholder: "Ask about the circled spot",
+    "Drag the highlighter over a spot on the page, more than once for more lines — then ask, explain, comment, or pick a color to keep the highlight",
+  pageAskPlaceholder: "Ask about the highlighted spot",
   pageAsk: "Ask",
-  pageAskTitle: "Ask the question about the circled spot",
+  pageAskTitle: "Ask the question about the highlighted spot",
   pageExplain: "Explain",
-  pageExplainTitle: "Explain the circled spot",
-  pageRegenerateTitle: "Run this again on the circled spot. The new answer replaces this one.",
+  pageExplainTitle: "Explain the highlighted spot",
+  pageRegenerateTitle: "Run this again on the highlighted spot. The new answer replaces this one.",
   pageComment: "Comment",
-  pageCommentTitle: "Comment on the circled spot",
+  pageCommentTitle: "Comment on the highlighted spot",
   convertedText: "Converted text",
   converting: "Converting the pages to text…",
   convertFailed: "Conversion failed. {reason}",
@@ -487,7 +489,7 @@ export const en = {
   recommendScanNone: "No links to propose between these documents.",
   recommendedLinks: "Recommended links",
   recommendedLinksDesc:
-    "The AI scanned the documents against each other. Accept a link to make it real; dismiss what does not hold.",
+    "Links the AI proposed. Recommend links reads every document of the project against the others; Stitch proposes links only when a command asks for them, between the documents it read. Accept a link to make it real; dismiss what does not hold.",
   recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
   recommendedLinksEmpty: "No recommended links. Recommend links in a document's menu runs the scan.",
   openLinkEnd: "Open {title} at this link",

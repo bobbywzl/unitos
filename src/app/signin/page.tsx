@@ -260,11 +260,15 @@ export default async function SignInPage({
                           className={inputCls}
                         />
                         <UnitosButton label={t("signin.startNow")} />
-                        <p className="text-center text-xs text-sand-600">
-                          <Link href="/signin?mode=in" className={link}>
-                            {t("signin.toSignin")}
-                          </Link>
-                        </p>
+                        {/* Someone with an account sees where to go at once:
+                            a button as tall as Start now, right under it, on
+                            every device and in the app. */}
+                        <Link
+                          href="/signin?mode=in"
+                          className="flex h-[50px] w-full items-center justify-center rounded-full border border-white/25 bg-white/[0.07] text-[15px] font-bold text-ink hover:bg-white/[0.14] active:scale-[0.99]"
+                        >
+                          {t("signin.signIn")}
+                        </Link>
                       </form>
                     )}
                     {emailEnabled() && mode === "in" && (

@@ -5,15 +5,17 @@ import { resolvedThinking, thinkingSchema } from "@/lib/assistant/thinking";
 import { noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { NOTE_ASSISTANT_EFFORT, NOTE_ASSISTANT_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix, loadProfile, pageNames } from "@/lib/derive/context";
+import { loadProfile, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
 import { checkNoteQuotes } from "@/lib/notes/assistant-check";
 import { noteAssistantPrompt } from "@/lib/prompts/note-assistant";
 import { parseBody } from "@/lib/validate";
+import { documentLayer } from "@/lib/assistant/context";
 
 export const maxDuration = 180;
 
@@ -101,18 +103,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
   ]);
 
   const history = data.history.slice(-MAX_HISTORY).filter((turn) => turn.content.trim());
-  // With the web on, the web feature's model answers, with its provider's
-  // search (SPEC.md §7); else the note's assistant's own.
+  // With the web on, Gemini with Google Search answers (lib/web-search.ts,
+  // SPEC.md §7); else the note's assistant's own model.
   const web = data.web ?? true;
-  const call = await featureCall(web ? "web" : "note-assistant", NOTE_ASSISTANT_EFFORT[resolvedThinking(data.thinking, { message: data.message })]);
+  const effort = NOTE_ASSISTANT_EFFORT[resolvedThinking(data.thinking, { message: data.message })];
+  const webTurn = web ? await webCall(effort) : null;
+  const call = webTurn ? webTurn.call : await featureCall("note-assistant", effort);
+  const pages = new WebSources();
   const messages: ModelMessage[] = [
     ...(document
       ? [
-          {
-            role: "system" as const,
-            content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
-            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-          },
+          documentLayer(document.title, document.blocks, document.references, pageNames(document)),
         ]
       : []),
     ...history.map((turn) => ({ role: turn.role, content: turn.content }) as ModelMessage),
@@ -135,7 +136,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
       }),
     },
   ];
-  const result = await callForJson({
+  let result = await callForJson({
     model: call.model,
     messages,
     maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
@@ -144,14 +145,45 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
     label: "note-assistant",
     usage: { userId: access.user.id, feature: "note-assistant", model: call.modelId },
     abortSignal: req.signal,
-    ...(web
+    ...(webTurn
       ? {
-          tools: { [WEB_SEARCH_TOOL]: webSearchTool(call.modelId) },
+          tools: webTurn.tools,
           stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-          toolCallUsd: webSearchUsd(call.modelId),
+          toolCallUsd: webTurn.searchUsd,
+          pages,
         }
       : {}),
   });
+  // The model failed (the search refused, the provider out of service or
+  // out of balance): with the web, the note's own assistant answers without
+  // it; then the next call of retryCalls (lib/web-search.ts). A reply
+  // without the web opens with one line that says the search failed and why.
+  let webFailed: string | null = null;
+  if (!result.ok && !req.signal.aborted) {
+    const firstReason = result.error;
+    const retries = [
+      ...(webTurn ? [{ call: await featureCall("note-assistant", effort), tools: null }] : []),
+      ...(await retryCalls(webTurn ? (await featureCall("note-assistant", effort)).modelId : call.modelId, effort, false, false)),
+    ];
+    for (const retry of retries) {
+      console.error(`[note-assistant] ${call.modelId} failed, running again on ${retry.call.modelId}:`, result.ok ? "" : result.error);
+      result = await callForJson({
+        model: retry.call.model,
+        messages: webTurn ? [...messages, NO_WEB_MESSAGE] : messages,
+        maxOutputTokens: NOTE_ASSISTANT_MAX_OUTPUT_TOKENS,
+        providerOptions: retry.call.providerOptions,
+        schema: answerSchema,
+        label: "note-assistant",
+        usage: { userId: access.user.id, feature: "note-assistant", model: retry.call.modelId },
+        abortSignal: req.signal,
+      });
+      if (result.ok) {
+        if (webTurn) webFailed = t("assistant.webFailed", { reason: firstReason });
+        break;
+      }
+      if (req.signal.aborted) break;
+    }
+  }
   if (!result.ok) {
     return NextResponse.json({ error: t("api.noteAssistantFailed", { reason: result.error }) }, { status: 422 });
   }
@@ -185,5 +217,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ noteId: string
       if (fact) warnings.push(t("api.noteAssistantUngrounded", { fact }));
     }
   }
-  return NextResponse.json({ reply: result.data.reply.trim(), content, warnings } satisfies NoteAssistantAnswer);
+  // The pages the search read, under the reply (lib/web-search.ts).
+  const reply = (webFailed ? `${webFailed}\n\n` : "") + result.data.reply.trim();
+  return NextResponse.json({
+    reply: reply + pages.section(reply, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code })),
+    content,
+    warnings,
+  } satisfies NoteAssistantAnswer);
 }

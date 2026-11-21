@@ -24,7 +24,7 @@ import { z } from "zod";
 import { actionsSchema, enrichActions, parseActionsFence, planShape, splitActionsFence, type PlanContext, type ReadActions } from "@/lib/assistant/plan";
 import { documentPrefix } from "@/lib/derive/context";
 import { parseJson } from "@/lib/derive/json";
-import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { actMaterial, actPrompt, actRules, textSelectionBlock } from "@/lib/prompts/act";
 import { changeWindow } from "@/lib/assistant/diff-window";
 import { runRevise } from "@/lib/assistant/revise";
 import { longestIncreasing } from "@/lib/assistant/reorder";
@@ -35,7 +35,7 @@ import { corpusSystem } from "@/lib/digest/render";
 import { translatorFor } from "@/lib/i18n/dictionaries";
 import "@/lib/i18n/register-all";
 import { parseMarkdown } from "@/lib/parse/markdown";
-import { synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesis";
+import { synthesisActions, synthesisAskPrompt, synthesisHistoryTurn } from "@/lib/prompts/synthesis";
 import type { AssistantAction } from "@/lib/types";
 import { blockTags, cjkShare, loadFixtures, wordCount, type Fixture } from "../lib";
 import { CASES, type ActionExpect, type AssistantCase, type Family } from "./cases";
@@ -85,12 +85,12 @@ function prepare(): void {
     const transcript = fixtureTranscript(f);
     const history = c.history ?? [];
     // The selection chat's own prompt (src/app/api/assistant/act/route.ts):
-    // the document prefix as the system message, the act prompt as the user
-    // message, the conversation inside it.
+    // the document and the material as the system layers, the act prompt as
+    // the user message, the conversation inside it.
     const picked = c.chat === "selection" && c.selection ? rowSelection(blocks, c.selection, c, f) : null;
-    const actUser =
+    const actCtx =
       c.chat === "selection"
-        ? actPrompt({
+        ? {
             profile: c.profile,
             lang: c.lang,
             selectionBlock: picked ? textSelectionBlock(picked.blockId, picked.quotedText) : "",
@@ -101,31 +101,43 @@ function prepare(): void {
             notes: notes.map((n, i) => ({ id: `note-${i + 1}`, sectionTitle: n.section, content: n.content })),
             history: history.map((turn) => ({ role: turn.role, content: turn.content })),
             command: c.question,
-            edits: c.edits ?? "blocks",
+            edits: c.edits ?? ("blocks" as const),
             pages: [],
             transcript: transcript?.lines ?? null,
             figureBlockId: null,
-          })
+            web: c.web,
+          }
         : null;
-    const system = actUser !== null ? documentPrefix(f.title, blocks as never, null, null) : scope === "document" ? fixtureSystem(f, notes, blocks) : corpusSystem(fixtureParts(f, notes, blocks));
+    const actUser = actCtx ? actPrompt(actCtx) : null;
+    // The sidebar's rules layer at This page scope (synthesisActions), as the route builds it.
+    const askActions =
+      actCtx === null && scope === "document"
+        ? synthesisActions({
+            sections: fixtureSections(notes),
+            otherDocuments: [],
+            edits: c.edits ?? "blocks",
+            sheets: [],
+            pages: [],
+            transcript: transcript?.lines ?? null,
+          })
+        : "";
+    // The context layers (lib/assistant/context.ts), as each route sends
+    // them: the document, the rules, the material.
+    const system =
+      actCtx !== null
+        ? [documentPrefix(f.title, blocks as never, null, null), actRules(actCtx), actMaterial(actCtx)].join("\n\n")
+        : scope === "document"
+          ? fixtureSystem(f, notes, blocks, askActions)
+          : corpusSystem(fixtureParts(f, notes, blocks));
     const prompt = actUser ?? synthesisAskPrompt({
       profile: c.profile,
       lang: c.lang,
       scopeLabel: scope === "document" ? DOCUMENT_SCOPE_LABEL : PROJECT_SCOPE_LABEL,
       question: c.question,
       continued: history.length > 0,
-      act:
-        scope === "document"
-          ? {
-              sections: fixtureSections(notes),
-              otherDocuments: [],
-              edits: c.edits ?? "blocks",
-              caretBlockId: c.caret ? f.blocks[c.caret - 1].id : undefined,
-              sheets: [],
-              pages: [],
-              transcript: transcript?.lines ?? null,
-            }
-          : undefined,
+      actions: scope === "document",
+      caretBlockId: scope === "document" && c.caret ? f.blocks[c.caret - 1].id : undefined,
+      web: c.web,
     });
     const turns = actUser !== null ? [] : history.map((turn) => (turn.role === "assistant" ? `${ASSISTANT}\n${turn.content}` : `${USER}\n${synthesisHistoryTurn({ content: turn.content })}`));
     const dir = dirOf(c.id);

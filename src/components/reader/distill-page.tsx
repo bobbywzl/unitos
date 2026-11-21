@@ -7,7 +7,8 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { useExtractDraft } from "@/components/reader/extract-draft";
 import { ExtractionList } from "@/components/reader/extraction-list";
-import { ChevronLeftIcon } from "@/components/icons";
+import { ChevronLeftIcon, TrashIcon } from "@/components/icons";
+import { DELETE_BUTTON_CLASS } from "@/components/reader/card-more";
 import { useLang, useT } from "@/components/lang-provider";
 import { jumpUnlessSelecting as jump, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -159,9 +160,10 @@ export function DistillPage({
               <button
                 onClick={() => onDelete(shown.id)}
                 data-track="distill-page-delete"
-                className="text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:py-2.5"
+                className={DELETE_BUTTON_CLASS}
                 data-tip={t("panes.deleteDistillation")}
               >
+                <TrashIcon size={13} />
                 {t("common.delete")}
               </button>
             )}
@@ -263,15 +265,13 @@ export function DistillPage({
                 onChange={(e) => draft.change(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
-                  if (ime.isImeEnter(e)) return;
-                  if (e.key === "Enter" && !e.shiftKey && question.trim()) {
-                    e.preventDefault();
-                    ask(question);
-                  }
+                  if (!ime.isSendEnter(e)) return;
+                  e.preventDefault();
+                  if (question.trim()) ask(question);
                 }}
                 placeholder={t("panes.askPlaceholder")}
                 rows={2}
-                className="w-full resize-none rounded-2xl bg-card p-4 font-display text-[20px] leading-snug shadow-soft outline-none placeholder:text-sand-400"
+                className="field-sizing-content max-h-72 min-h-[calc(2lh+2rem)] w-full resize-none rounded-2xl bg-card p-4 font-display text-[20px] leading-snug shadow-soft outline-none placeholder:text-sand-400"
               />
               <p className="mt-2 text-xs text-sand-500">{t("panes.askHint")}</p>
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}

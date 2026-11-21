@@ -184,8 +184,16 @@ export function useNoteDraft({
   active: boolean;
   canEdit: boolean;
 }) {
-  const [draft, setDraft] = useState(initial);
+  const [draft, setDraftState] = useState(initial);
   const draftRef = useRef(draft);
+  // The editor's text is in draftRef with the key that typed it, not a
+  // render later: a save that answers between the key and the render reads
+  // the text the editor shows, so the text it puts in the editor (a note
+  // changed elsewhere) never lacks the last keys.
+  const setDraft = useCallback((next: string) => {
+    draftRef.current = next;
+    setDraftState(next);
+  }, []);
   const lastSavedRef = useRef(original);
   // Kept from the moment the editor opens: a sync refresh mid-edit replaces
   // the note's content with the auto-saved draft, and Cancel must still
@@ -393,7 +401,7 @@ export function useNoteDraft({
       chainRef.current = run.catch(() => {});
       return run;
     },
-    [noteId],
+    [noteId, setDraft],
   );
 
   useEffect(() => {
@@ -475,7 +483,7 @@ export function useNoteDraft({
           if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
         });
     };
-  }, [active, canEdit, noteId, save]);
+  }, [active, canEdit, noteId, save, setDraft]);
 
   useEffect(() => {
     if (!active || !canEdit) return;

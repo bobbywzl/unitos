@@ -63,6 +63,10 @@ export const en = {
   highlightInWithNote: "Highlight in {color} with the comment",
   readAloud: "Read the selection aloud",
   stopReading: "Stop reading",
+  readDocument: "Read aloud",
+  readDocumentTitle: "Read the document aloud, from where you are",
+  readPause: "Pause",
+  readResume: "Resume",
   defineTitle:
     "The AI defines the selected word as this sentence uses it, tuned to your background. Nothing is saved.",
   assistantTitle:
@@ -75,7 +79,7 @@ export const en = {
   commentTitle: "Attach a comment to the selection, without a highlight",
   closeLinkTitle: "Make the selection the other end of the link you started",
   runTitle: "Send the command to the assistant (Enter)",
-  sendTitle: "Send the message (Enter)",
+  sendTitle: "Send the message (Enter). Shift+Enter starts a new line.",
   stopRunTitle: "Stop the run. What arrived so far stays.",
   // The assistant's commands (SPEC.md §29): a chip writes its change into
   // the text as suggestions
@@ -88,6 +92,8 @@ export const en = {
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
   barPlaceholder: "Ask about the selected words, or tell the assistant how to change them…",
+  // The starter in the assistant bar's empty box: the question, then the key that takes it.
+  barStarter: "{question}  ⇥\u00a0Tab",
   // Words from a figure (SPEC.md §7): the bar on an image.
   figureBarPlaceholder: "Ask about the image, or say what to put under it…",
   figureText: "The text",
@@ -156,7 +162,20 @@ export const en = {
   editHint:
     "Double-click any paragraph to edit it. Click the title to edit it. Click a figure, or hold and draw a small circle on a table, for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Tap a figure, or hold and draw a small circle on a table, for its tools.",
+    "Draw a finger along a line to select its words, or hold a word and drag the handles. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Tap a figure, or hold and draw a small circle on a table, for its tools.",
+  jot: "Jot",
+  jotOnHint: "Write on the document with a pen. A finger still scrolls and selects.",
+  jotPen: "Pen",
+  jotEraser: "Eraser",
+  jotColorInk: "ink",
+  jotWidthFine: "Fine pen. Press for a bold pen.",
+  jotWidthBold: "Bold pen. Press for a fine pen.",
+  jotUndo: "Undo",
+  jotDone: "Done",
+  jotOffHint: "Put the pen away. The jottings stay on the document.",
+  editHintSlides: "Double-click a line of a slide to edit it. Enter saves, Esc puts it back. Click the title to edit it.",
+  editHintSheets: "Double-click a cell to edit it. Enter saves, Esc puts it back. Click the title to edit it.",
+  formulaCell: "This cell is a formula: it computes its value. Edit the cells it reads.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -289,6 +308,9 @@ export const en = {
   distillUnfinished: "Extract did not finish. Try again.",
   distilledToast: "Extracted — open Extract to read it",
   addSectionFirstDot: "Add a section first.",
+  addNewSection: "New section…",
+  addNewSectionTitle: "Add the words as a note in a new section",
+  newSectionPlaceholder: "Name of the new section",
   addSectionFirst: "Add a section first",
   // Add to notes makes an accepted note (POST /api/notes): the words say so.
   addPendingNote: "Add a note in {section}",

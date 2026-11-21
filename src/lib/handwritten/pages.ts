@@ -5,7 +5,7 @@ import { cropBox } from "@/lib/figure-crop";
 
 // Handwritten documents (SPEC.md §16): page rendering from the stored PDF
 // bytes. One place renders pages for the page image route, the classifier,
-// conversion, and Circle & ask — same width rules everywhere.
+// conversion, and Highlight & ask — same width rules everywhere.
 // unpdf loads per call, not with the module: routes import this file at the
 // top level, and loading the parse chain with a route module broke responses
 // on Vercel before (see /api/documents). The same holds for pdfjs-dist.

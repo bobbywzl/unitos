@@ -16,10 +16,10 @@ export const en = {
 
   // The Stitch box (stitch-box.tsx)
   stitch: "Stitch",
-  stitchTitle: "Stitch: the assistant works across the project's documents — gathers passages, draws links, finds contradictions, writes a new page",
+  stitchTitle: "Stitch: the assistant works across the project's documents — answers and extracts, and when asked draws links or writes a new page",
   stitchPlaceholder: "What should the assistant do across these documents?",
   stitchHint:
-    "The assistant reads every document whole; a video or audio document as its transcript. It draws links between passages, or writes a new page from them, or both. Links await Accept in Recommended links; a page lands under Generated content. Every reply says what was read of each document.",
+    "The assistant reads the documents picked in the graph, or every document when none is picked; a video or audio document as its transcript. It answers here: ask a question, or ask it to extract what the documents say on a topic. It draws links between passages or writes a new page only when you ask for one. Links await Accept in Recommended links; a page lands under Generated content. Every reply says what was read of each document.",
   stitchSend: "Send",
   stitchRunning: "Reading the documents…",
   stitchStop: "Stop",
@@ -36,12 +36,16 @@ export const en = {
   stitchPickClear: "Clear",
   stitchPickClearTitle: "Read every document again",
   stitchUnpick: "Remove {title} from the pick",
-  stitchSuggestGather: "Gather every paragraph that mentions…",
-  stitchSuggestConnect: "Connect the passages that answer…",
+  // The chips. Each says what it makes: the first two answer in the box,
+  // the third asks for links, the fourth for a page.
+  stitchSuggestGather: "Extract the points on…",
   stitchSuggestContradict: "Find where these documents contradict each other",
+  stitchSuggestConnect: "Link the passages that answer…",
   stitchSuggestSynthesis: "Write one page that combines what they say about…",
-  stitchLinksMade1: "{n} link proposed. Accept it under Recommended links.",
-  stitchLinksMadeN: "{n} links proposed. Accept them under Recommended links.",
+  stitchLinksMade1: "{n} link proposed, between the documents read. Accept it under Recommended links.",
+  stitchLinksMadeN: "{n} links proposed, between the documents read. Accept them under Recommended links.",
+  // Added to a reply when the model wanted to make links and the command named none.
+  stitchLinksHeld: "No links were made: this command did not ask for links. Say \"link these passages\" to get them.",
   stitchDocumentMade: "Page written: {title}",
   stitchOpenDocument: "Open",
   stitchNothingStored: "Nothing was stored.",

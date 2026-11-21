@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { Logo } from "@/components/logo";
@@ -119,6 +120,13 @@ export function BetaNotice() {
               >
                 {t("signin.betaContinue")}
               </button>
+              {/* A reader with an account goes straight to Sign in. */}
+              <Link
+                href="/signin?mode=in"
+                className="mt-2.5 flex h-11 w-full items-center justify-center rounded-full border border-line text-sm font-semibold text-ink hover:bg-clay-100 active:scale-[0.99]"
+              >
+                {t("signin.signIn")}
+              </Link>
             </div>
           </div>
         </div>

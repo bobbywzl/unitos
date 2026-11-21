@@ -1,7 +1,7 @@
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The four highlight colors (SPEC.md §6), shared by the selection popover's
-// color bubble and the Circle & ask card's lasso highlight (SPEC.md §16).
+// color bubble and the Highlight & ask card's lasso highlight (SPEC.md §16).
 export const HIGHLIGHT_HUES = ["clay", "sage", "gold", "plum"] as const;
 export type HighlightHue = (typeof HIGHLIGHT_HUES)[number];
 

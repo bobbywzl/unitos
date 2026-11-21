@@ -1,4 +1,4 @@
-import { isStepCount, streamText, type ModelMessage } from "ai";
+import { isStepCount, streamText, type ModelMessage, type ToolSet } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -19,7 +19,7 @@ import {
   STREAM_PLAN_TOKEN,
   SUGGEST_DEADLINE_MS,
 } from "@/lib/derive/config";
-import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
+import { loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
 import {
   scanActionsFence,
   enrichActions,
@@ -29,23 +29,28 @@ import {
   type DocumentEdits,
 } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
-import { callForJson } from "@/lib/derive/json-call";
+import { callForJson, httpFailure, modelErrorMessage } from "@/lib/derive/json-call";
 import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
-import { corpusPickedSystem, corpusSystem, documentSystem } from "@/lib/digest/render";
+import { corpusLayers, corpusPickedLayers, documentMaterial, documentReadsWhole, documentSystem } from "@/lib/digest/render";
+import { documentLayer, markConversation, materialLayer, rulesLayer, stableLayer } from "@/lib/assistant/context";
+import { steadyRequest, turnEffortFailed } from "@/lib/claude";
+import { isClaudeId } from "@/lib/model-call";
 import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
-import { featureCall, pictureFeature } from "@/lib/feature-models";
+import { WEB_SEARCH_MAX_USES } from "@/lib/kimi";
+import { isSearchCall, NO_WEB_MESSAGE, retryCalls, webCall, WebSources } from "@/lib/web-search";
+import type { ModelCall } from "@/lib/model-call";
+import { featureCall, featureConfigured, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
+import { synthesisActions, synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
@@ -114,7 +119,8 @@ export async function POST(req: Request) {
 
 async function handle(req: Request, t: TFunc) {
   const started = Date.now();
-  if (!kimiConfigured()) {
+  // The assistant's own model needs its key (Claude Sonnet 5.5: ANTHROPIC_API_KEY).
+  if (!(await featureConfigured("assistant"))) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
   const { data, error } = await parseBody(req, assistantSchema);
@@ -147,20 +153,47 @@ async function handle(req: Request, t: TFunc) {
   const depthInput = { message: question, turns: data.history?.length ?? 0, attachments: images.length + files.length, scope: data.scope };
   const effort = thinkingEffort(data.thinking, depthInput);
 
-  // The digest is the scope context: deterministic until the content changes,
-  // so the prompt prefix caches across questions (SPEC.md §2).
-  let system: string;
+  // The digest is the scope context, sent in the context layers (SPEC.md §2,
+  // lib/assistant/context.ts): what changes least first, each layer marked
+  // for the cache, so the next message reads them at the cache's price.
+  let layers: ModelMessage[];
+  // Where the rules layer goes among them: after the documents, which are
+  // kept as long, and before what the reader made.
+  let rulesAt: number;
   let scopeLabel: string;
   const digest = await ensureDigest(data.notebookId);
   if (!digest) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
   if (data.scope === "document") {
-    // This page: the open document from the project's digest, whole, with
-    // its layers and the notes that cite it.
-    const rendered = documentSystem(digest.parts, data.documentId!);
-    if (rendered === null) {
+    // This page: the open document, whole, then the project and everything
+    // the reader made on the document. The document layer is rendered from
+    // the document's blocks as the selection chat renders it, byte for
+    // byte, so the two read one cache entry; a new note costs the material
+    // layer again and never the document.
+    const material = documentMaterial(digest.parts, data.documentId!);
+    if (material === null) {
       return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
     }
-    system = rendered;
+    const open = documentReadsWhole(digest.parts, data.documentId!)
+      ? await db.document.findUnique({
+          where: { id: data.documentId! },
+          select: {
+            title: true,
+            references: true,
+            importRev: true,
+            pageLabels: true,
+            blocks: {
+              orderBy: { order: "asc" },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
+            },
+          },
+        })
+      : null;
+    // A document past the text budget is cut by the digest, as before: one
+    // layer, the text and the material together.
+    layers = open
+      ? [documentLayer(open.title, open.blocks, open.references, pageNames(open)), materialLayer(material)]
+      : [materialLayer(documentSystem(digest.parts, data.documentId!) ?? material)];
+    rulesAt = open ? 1 : 0;
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
@@ -180,18 +213,25 @@ async function handle(req: Request, t: TFunc) {
       return null;
     });
     if (picks) {
-      system = corpusPickedSystem(digest.parts, picks);
+      // What the reader made is the same for every message; the picked
+      // blocks are this message's alone, so they follow it unmarked.
+      const picked = corpusPickedLayers(digest.parts, picks);
+      layers = [materialLayer(picked.material), { role: "system", content: picked.picked }];
+      rulesAt = 0;
       scopeLabel =
         "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
     } else {
       // Past the text budget, the documents render in the order the question
       // needs them (lib/digest/rank.ts), so the cut falls on the rest.
       const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
-      system = corpusSystem({ ...digest.parts, documents });
+      const whole = corpusLayers({ ...digest.parts, documents });
+      layers = [stableLayer(whole.documents), materialLayer(whole.material)];
+      rulesAt = 1;
       scopeLabel =
         "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
     }
   }
+  const systemChars = layers.reduce((n, layer) => n + (typeof layer.content === "string" ? layer.content.length : 0), 0);
 
   const lang = await currentLang();
   // This page scope (SPEC.md §7): the assistant may propose actions on the
@@ -237,8 +277,27 @@ async function handle(req: Request, t: TFunc) {
           return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript, pages };
         })()
       : null;
-  const messages: ModelMessage[] = [{ role: "system", content: system }];
+  const messages: ModelMessage[] = [...layers];
   if (data.task === "ask") {
+    // The rules layer (lib/assistant/context.ts), at This page scope: the
+    // action types and the rules for actions, the same for every message,
+    // so the cache reads them. The rules of the answer stay in the message.
+    if (act) {
+      messages.splice(
+        rulesAt,
+        0,
+        rulesLayer(
+          synthesisActions({
+            sections: act.sections,
+            otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
+            edits: act.edits,
+            sheets: act.sheets,
+            pages: act.pages,
+            transcript: act.transcript?.lines ?? null,
+          }),
+        ),
+      );
+    }
     // The conversation (SPEC.md §7): the turns so far go in as messages, the
     // reader's with the images they carried, then this message with the
     // rules. A turn with no text is skipped: a stopped answer left nothing.
@@ -283,6 +342,11 @@ async function handle(req: Request, t: TFunc) {
         content: parts.length > 0 ? [{ type: "text", text }, ...parts] : text,
       });
     }
+    // The turns so far are the same in the next request: the conversation
+    // layer ends here. This message, with its rules, is new every time.
+    // A request takes four markers: with the web on, the search's own
+    // cache write takes the place of this one.
+    if (history.length > 0 && data.web !== true) markConversation(messages);
     const parts = imageParts(images);
     const text = synthesisAskPrompt({
       profile,
@@ -293,17 +357,8 @@ async function handle(req: Request, t: TFunc) {
       continued: history.length > 0,
       files,
       imageCount: parts.length,
-      act: act
-        ? {
-            sections: act.sections,
-            otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
-            edits: act.edits,
-            caretBlockId: data.caretBlockId,
-            sheets: act.sheets,
-            pages: act.pages,
-            transcript: act.transcript?.lines ?? null,
-          }
-        : undefined,
+      actions: act !== null,
+      caretBlockId: act ? data.caretBlockId : undefined,
     });
     messages.push({
       role: "user",
@@ -327,10 +382,9 @@ async function handle(req: Request, t: TFunc) {
       Array.isArray(m.content) &&
       m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
   );
-  const chat = await featureCall(
-    data.web === true ? "web" : pictured ? await pictureFeature("assistant") : "assistant",
-    effort,
-  );
+  // With the web on: Gemini with Google Search (lib/web-search.ts).
+  const webTurn = data.web === true ? await webCall(effort) : null;
+  const chat = webTurn ? webTurn.call : await featureCall(pictured ? await pictureFeature("assistant") : "assistant", effort);
   usageMeta.model = chat.modelId;
   const model = chat.model;
 
@@ -339,31 +393,46 @@ async function handle(req: Request, t: TFunc) {
     // provider (lib/kimi.ts), reads the result, and answers with the pages
     // it used as links; the answer streams as before.
     const web = data.web === true;
-    const searchUsd = webSearchUsd(usageMeta.model);
-    const turns = messages.length - 2;
+    const searchUsd = webTurn?.searchUsd ?? 0;
+    const pages = new WebSources();
+    // The layers, the rules layer among them, and this message are not turns.
+    const turns = messages.length - layers.length - (act ? 1 : 0) - 1;
     let searches = 0;
-    const result = streamText({
-      model,
+    // Whether the last call carried the turn's effort in a message of its
+    // own (steadyRequest, lib/claude.ts): a 400 on it runs again plain.
+    let steady = false;
+    // The answer on one model: with the web, or without it when the web
+    // turn failed before any words came (below). plain: the request as it
+    // was built, the effort at its top.
+    const startAsk = (call: ModelCall, tools: ToolSet | null, askMessages: ModelMessage[], plain = false) => {
+      usageMeta.model = call.modelId;
+      const request =
+        !plain && isClaudeId(call.modelId)
+          ? steadyRequest(call.modelId, call.providerOptions, askMessages)
+          : { providerOptions: call.providerOptions, messages: askMessages, headers: {}, steady: false };
+      steady = request.steady;
+      return streamText({
+      model: call.model,
       maxOutputTokens,
-      providerOptions: chat.providerOptions,
-      headers: gatewayHeaders(usageMeta),
+      providerOptions: request.providerOptions,
+      headers: { ...gatewayHeaders(usageMeta), ...request.headers },
       allowSystemInMessages: true,
-      messages,
-      ...(web
+      messages: request.messages,
+      ...(tools
         ? {
-            tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+            tools,
             stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
           }
         : {}),
       // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
       // model call, not just the response the client would have read.
       abortSignal: req.signal,
-      onEnd: ({ usage }) => {
+      onEnd: ({ usage, providerMetadata }) => {
         console.log(
-          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${system.length} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
+          `[assistant] ask scope=${data.scope} thinking=${depthNote(data.thinking, depthInput)} web=${web} turns=${turns} images=${images.length} files=${files.length} searches=${searches} chars=${systemChars} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} output=${usage.outputTokens ?? 0}`,
         );
-        const tokens = sdkTokens(usage);
+        const tokens = sdkTokens(usage, providerMetadata);
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
       // Stop (SPEC.md §6): the steps that finished were billed, so they are
@@ -377,7 +446,9 @@ async function handle(req: Request, t: TFunc) {
         );
         recordUsage(usageMeta, tokens, computeCostUsd(usageMeta.model, tokens) + searches * searchUsd);
       },
-    });
+      });
+    };
+    const result = startAsk(chat, webTurn?.tools ?? null, messages);
     // A model failure must reach the reader: the stream ends with
     // STREAM_ERROR_TOKEN + the reason, never a silent empty 200
     // (lib/derive/text-stream.ts, the derive route's pattern: heartbeat spaces
@@ -491,16 +562,70 @@ async function handle(req: Request, t: TFunc) {
           sent = Math.max(sent, end);
         };
         try {
-          const full = await streamTextTo(result, relay, {
-            t,
-            onPart: (part) => {
-              if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
-            },
-          });
+          const onPart = (part: Parameters<NonNullable<Parameters<typeof streamTextTo>[2]["onPart"]>>[0]) => {
+            if (isSearchCall(part)) searches++;
+            pages.read(part);
+          };
+          let full: string;
+          try {
+            full = await streamTextTo(result, relay, { t, onPart }).catch((err: unknown) => {
+              // The API refused the per-message effort before any words
+              // came: the same call again, the effort at its top.
+              if (req.signal.aborted || relayed.trim() !== "" || !steady) throw err;
+              if (!turnEffortFailed(httpFailure(err)?.status, "assistant:ask")) throw err;
+              return streamTextTo(startAsk(chat, webTurn?.tools ?? null, messages, true), relay, { t, onPart });
+            });
+          } catch (err) {
+            // The model failed before any words came (the search refused, the
+            // provider out of service or out of balance): the turn runs again
+            // on the next call of retryCalls (lib/web-search.ts) — after a
+            // web turn, the web feature's model with its own search, then a
+            // fallback model without the web. An answer without the web
+            // opens with one line that says the search failed and why.
+            if (req.signal.aborted || relayed.trim() !== "") throw err;
+            const firstReason = modelErrorMessage(err);
+            let failure: unknown = err;
+            let answered: string | null = null;
+            for (const retry of await retryCalls(chat.modelId, effort, webTurn !== null, pictured)) {
+              console.error(
+                `[assistant] ${usageMeta.model} failed, running again on ${retry.call.modelId}${retry.tools ? " with its search" : ""}:`,
+                modelErrorMessage(failure),
+              );
+              const withoutWeb = webTurn !== null && retry.tools === null;
+              // After a failed web turn the answer says why, whichever model answers.
+              let head =
+                webTurn === null
+                  ? ""
+                  : `${t(withoutWeb ? "assistant.webFailed" : "assistant.webRetried", { reason: firstReason })}\n\n`;
+              const relayAfterHead = (chunk: string) => {
+                if (head && chunk.trim()) {
+                  relay(head);
+                  head = "";
+                }
+                relay(chunk);
+              };
+              try {
+                answered = await streamTextTo(
+                  startAsk(retry.call, retry.tools, withoutWeb ? [...messages, NO_WEB_MESSAGE] : messages),
+                  relayAfterHead,
+                  { t, onPart },
+                );
+                break;
+              } catch (retryErr) {
+                failure = retryErr;
+                if (req.signal.aborted || relayed.trim() !== "") throw retryErr;
+              }
+            }
+            if (answered === null) throw failure;
+            full = answered;
+          }
           const { text, content } = splitActionsFence(full);
           // The text before the fence, whole: the relay held back what could
           // have been the fence's start.
           flush();
+          // The pages the search read, under the answer (lib/web-search.ts).
+          const sources = pages.section(text, t("assistant.webSources"), (code) => t("assistant.webSearchError", { code }));
+          if (sources) send(sources);
           if (act && content !== null) {
             send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
           }
@@ -521,7 +646,8 @@ async function handle(req: Request, t: TFunc) {
           // Stopped by the reader: nobody is listening.
           if (req.signal.aborted) return;
           console.error("[assistant] stream error:", err);
-          send(`${STREAM_ERROR_TOKEN}${t("assistant.failedServer")}`);
+          // The reason rides with the line, so the owner can tell what to fix.
+          send(`${STREAM_ERROR_TOKEN}${t("assistant.failedReason", { reason: modelErrorMessage(err) })}`);
         } finally {
           if (!cancelled) controller.close();
         }

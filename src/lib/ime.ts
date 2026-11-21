@@ -27,7 +27,16 @@ export function isImeKey(e: KeyboardEvent | React.KeyboardEvent): boolean {
         }}
       />
 
-    One instance serves every input in a component: only one composes at a time. */
+    One instance serves every input in a component: only one composes at a time.
+
+    Every box that sends a message to the assistant has one rule for Enter
+    (SPEC.md §7): Enter sends, Shift+Enter starts a new line, and the IME's
+    Enter does neither. isSendEnter is that rule:
+      onKeyDown={(e) => {
+        if (!ime.isSendEnter(e)) return;
+        e.preventDefault();
+        send();
+      }} */
 export function useImeGuard() {
   const composing = useRef(false);
   const endedAt = useRef(0);
@@ -49,10 +58,16 @@ export function useImeGuard() {
     return e.timeStamp - endedAt.current < 50;
   }, []);
 
+  /** True when this keydown sends the box: Enter without Shift, and not the IME's. */
+  const isSendEnter = useCallback(
+    (e: React.KeyboardEvent) => e.key === "Enter" && !e.shiftKey && !isImeEnter(e),
+    [isImeEnter],
+  );
+
   const props = useMemo(() => ({ onCompositionStart, onCompositionEnd }), [
     onCompositionStart,
     onCompositionEnd,
   ]);
 
-  return { props, isImeEnter };
+  return { props, isImeEnter, isSendEnter };
 }

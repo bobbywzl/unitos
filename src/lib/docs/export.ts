@@ -84,7 +84,7 @@ import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
-import { outboundFetch } from "@/lib/outbound-fetch";
+import { publicFetch } from "@/lib/public-url";
 import { parseRegion, type Region } from "@/lib/video/types";
 
 // File > Download > Microsoft Word (.docx) (SPEC.md §29): one walk of the
@@ -821,7 +821,8 @@ async function imageBytes(src: string): Promise<Uint8Array | null> {
   }
   if (!/^https?:\/\//i.test(src)) return null;
   try {
-    const res = await outboundFetch(src, { signal: AbortSignal.timeout(15_000) });
+    // The address comes from the document: public addresses only.
+    const res = await publicFetch(src, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok || Number(res.headers.get("content-length")) > MAX_IMAGE_BYTES) return null;
     const bytes = new Uint8Array(await res.arrayBuffer());
     return bytes.length <= MAX_IMAGE_BYTES ? bytes : null;

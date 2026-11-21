@@ -12,6 +12,7 @@ import { recordUsage } from "@/lib/usage";
 import { browserCaptions } from "@/lib/video/browser-transcript";
 import { youtubeCaptions } from "@/lib/video/captions";
 import { deepgramConfigured, deepgramTranscribe } from "@/lib/video/deepgram";
+import { grokConfigured, grokTranscribe } from "@/lib/video/grok";
 import { geminiCall, geminiConfigured, geminiCountTokens } from "@/lib/video/gemini";
 import { splitFmp4, type ByteRange } from "@/lib/video/fmp4";
 import { uploadGeminiFile, type GeminiFile } from "@/lib/video/gemini-files";
@@ -34,10 +35,14 @@ export { groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/
 //                   reads the video by URL, last: about 100 tokens a second
 //                   of video, three times the audio's, and one call over an
 //                   hour of video outruns the ladder's clock.
-//   Uploaded video or audio: Deepgram Nova-3 (one call over the whole file,
+//   Uploaded video or audio: Grok Voice Transcribe 2.0 (the voice model,
+//                   lib/video/grok.ts: one call over the whole file, 500 MB
+//                   allowed; the words with their times and voices from the
+//                   audio itself; the most accurate per dollar, $0.10 an
+//                   hour) → Deepgram Nova-3 (one call over the whole file,
 //                   2 GB allowed; timestamps and the voice on every utterance
-//                   from the audio itself, $0.26 an hour) → Groq Whisper (best
-//                   quality per dollar among the rest; free tier) → OpenAI
+//                   from the audio itself, $0.26 an hour) → Groq Whisper (the
+//                   cheapest of the rest, $0.04 an hour; free tier) → OpenAI
 //                   Whisper → Gemini, with the bytes inline when they are small
 //                   enough and through Gemini's file store when they are not
 //                   — an hour of media is far past every other rung's cap,
@@ -100,6 +105,17 @@ export type TranscribeOptions = {
   geminiFile?: GeminiFile | null;
   /** Called when a file lands in the store, so a retry can reuse it. */
   onGeminiFile?: (file: GeminiFile) => void;
+  /** Tell the voices apart, where the rung can (Grok). Default true; false
+      for one person speaking a command, a note, or a phrase to type. */
+  speakers?: boolean;
+  /** The language the speaker most likely speaks, as a hint for the rung
+      that takes one (Grok): voice typing names the reader's choice. */
+  language?: string;
+  /** A rung that finds no speech in the audio ends the ladder (NoSpeech):
+      for a phrase of voice typing, where a cough or a door is common and
+      asking three more providers about it is waste. A transcript's ladder
+      goes on, since a rung can miss speech another hears. */
+  noSpeechEnds?: boolean;
 };
 
 const RUNG_MIN_MS = 20_000;
@@ -122,6 +138,14 @@ export class LadderOutOfTime extends Error {
         `out of time before ${remaining.join(", ")}`,
       ].join(" · "),
     );
+  }
+}
+
+/** A rung found no speech in the audio, and the caller asked the ladder to
+    end there (`noSpeechEnds`). */
+export class NoSpeech extends Error {
+  constructor(public rung: string) {
+    super(`${rung}: no speech found`);
   }
 }
 
@@ -165,6 +189,16 @@ function uploadRungs(
 ): Rung[] {
   return [
     [
+      "Grok Voice Transcribe",
+      () =>
+        grokTranscribe(bytes, mimeType, {
+          signal: deadlineSignal(opts),
+          userId: opts.userId ?? null,
+          speakers: opts.speakers,
+          language: opts.language,
+        }),
+    ],
+    [
       "Deepgram",
       () =>
         deepgramTranscribe(bytes, mimeType, {
@@ -200,6 +234,7 @@ async function runLadder(
     } catch (err) {
       if (err instanceof LadderOutOfTime) throw new LadderOutOfTime(failures, remaining());
       const message = err instanceof Error ? err.message : String(err);
+      if (opts.noSpeechEnds && /no speech/i.test(message)) throw new NoSpeech(name);
       console.warn(`[transcribe] ${name} failed:`, message);
       failures.push({ rung: name, reason: message });
     }
@@ -212,14 +247,14 @@ async function runLadder(
 // for Gemini alone.
 function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<TranscriptSegment[]> {
   const whisper = whisperConfigured();
-  if (!whisper && !geminiConfigured() && !deepgramConfigured()) {
+  if (!transcriptionConfigured()) {
     return Promise.reject(new Error(TRANSCRIPTION_KEYS_UNSET));
   }
   return youtubeAudio(youtubeId, {
-    // Deepgram and Gemini's file store take what the Whisper rungs cannot:
-    // with either key set, the stream only has to fit the app's own upload
-    // ceiling.
-    maxBytes: geminiConfigured() || deepgramConfigured()
+    // Grok, Deepgram, and Gemini's file store take what the Whisper rungs
+    // cannot: with any of their keys set, the stream only has to fit the
+    // app's own upload ceiling.
+    maxBytes: wholeFileConfigured()
       ? GEMINI_FILE_MAX_BYTES
       : whisper
         ? TRANSCRIBE_MAX_BYTES
@@ -307,9 +342,20 @@ export function whisperConfigured(): boolean {
   return providerConfigured("groq") || providerConfigured("openai");
 }
 
+/** A rung that takes a file of any size the app accepts is set: Grok,
+    Deepgram, or Gemini's file store. */
+export function wholeFileConfigured(): boolean {
+  return grokConfigured() || deepgramConfigured() || geminiConfigured();
+}
+
+/** Some rung of the upload ladder is set, so a recording can be written out. */
+export function transcriptionConfigured(): boolean {
+  return wholeFileConfigured() || whisperConfigured();
+}
+
 /** The reason when no transcription provider is set at all. */
 export const TRANSCRIPTION_KEYS_UNSET =
-  "Set LITELLM_BASE_URL and LITELLM_API_KEY, or DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.";
+  "Set XAI_API_KEY, DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY. Transcription needs one.";
 
 // One OpenAI-compatible transcription call.
 async function whisperCall(

@@ -167,7 +167,7 @@ export function StructureBox({
         )}
         {turns.map((turn, i) =>
           turn.role === "user" ? (
-            <p key={i} className="ml-auto max-w-[88%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800">
+            <p key={i} className="ml-auto max-w-[88%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] whitespace-pre-wrap text-sand-800">
               {turn.content}
             </p>
           ) : (
@@ -244,15 +244,14 @@ export function StructureBox({
             onChange={(e) => setMessage(e.target.value)}
             {...ime.props}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !ime.isImeEnter(e)) {
-                e.preventDefault();
-                void send();
-              }
+              if (!ime.isSendEnter(e)) return;
+              e.preventDefault();
+              void send();
             }}
             placeholder={t("structure.assistantPlaceholder")}
             rows={2}
             aria-label={t("structure.assistant")}
-            className="min-h-[38px] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
+            className="field-sizing-content max-h-40 min-h-[calc(2lh+1.25rem)] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
           />
           <VoiceTypingButton field={inputRef} track="structure-voice-typing" className="size-[38px]" size={15} />
           {running ? (
@@ -270,6 +269,7 @@ export function StructureBox({
               type="submit"
               data-track="structure-send"
               disabled={!message.trim()}
+              data-tip={t("reader.sendTitle")}
               className="h-[38px] rounded-full bg-clay px-5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("structure.assistantSend")}

@@ -4,7 +4,7 @@
 // piece 片块 · connection 关联 · unsorted 未归类 · Breakwork 不翻译.
 
 export const en = {
-  // The button beside Collapse (reader-interactions.tsx)
+  // The side bar's button (workspace.tsx); in a split view, the pane's (reader-interactions.tsx)
   structure: "Breakwork",
   structureButtonTitle:
     "Breakwork: sort the document's blocks into buckets on a canvas, by hand or with the assistant, and draw connections between them",
@@ -20,7 +20,7 @@ export const en = {
     "No buckets yet. Add a bucket and drag blocks into it from Unsorted, or ask the assistant on the left to sort the document for you.",
   emptyViewer: "No buckets yet. An editor can sort the document here.",
   canvasHint:
-    "Drag a bucket by its header. Drag a block between buckets, or back to Unsorted. Drag from the dot at the side of a bucket or a block to another to connect them; click a connection's label to name it.",
+    "Drag a bucket by its header. Drag a block between buckets, or back to Unsorted. Drag from the dot at the side of a bucket or a block to another to connect them; click a connection to name it. Star a block to list it first.",
   // Buckets
   bucketUntitled: "Untitled bucket",
   bucketTitle: "Bucket title",
@@ -46,6 +46,19 @@ export const en = {
   pieceRelabel: "Change the label",
   pieceUnplace: "Unsort",
   pieceUnplaceTitle: "Take this block out of its bucket, back to Unsorted",
+  // Stars: how much a piece matters in its bucket. A bucket lists the three-star
+  // pieces first, then two, then one, then the rest, each group under a line.
+  pieceStars: "Stars",
+  pieceStarTitle: "{n} stars: the bucket lists this block with the others that have {n}. Press the same star again to clear.",
+  pieceStarTitleOne: "1 star: the bucket lists this block with the others that have 1. Press the same star again to clear.",
+  pieceStarsClearTitle: "Clear the stars",
+  pieceStarsGroup: "{n} stars",
+  pieceStarsGroupOne: "1 star",
+  pieceStarsGroupNone: "No stars",
+  pieceToTop: "Move to the top",
+  pieceToTopTitle: "Move this block to the top of its group in the bucket",
+  pieceToBottom: "Move to the bottom",
+  pieceToBottomTitle: "Move this block to the bottom of its group in the bucket",
   openBlock: "Open in reader",
   openBlockTitle: "Close the structure and jump to this block in the reader",
   openAnnotationTitle: "Open this in the reader",
@@ -63,6 +76,7 @@ export const en = {
   // Connections
   connectionTitle: "Open this connection: its label and comment",
   connectionUnlabeled: "Unlabeled",
+  connectionAddLabel: "Add a label",
   // The card's first line: the two ends by name, in the arrow's direction.
   connectionBetween: "From {from} to {to}",
   connectionEndBucket: "the bucket “{name}”",

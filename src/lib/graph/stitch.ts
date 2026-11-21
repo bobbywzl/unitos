@@ -19,6 +19,7 @@ import {
 import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
+import { translate } from "@/lib/i18n/dictionaries";
 import { featureCall } from "@/lib/feature-models";
 import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
@@ -45,7 +46,9 @@ import { transcriptIsStale } from "@/lib/video/types";
 // they still run past the budget the lines are ranked against the command
 // (lib/graph/rank.ts) and cut to it. The answer pass reads the picked
 // blocks' real text, in document order with the gaps declared, and answers
-// with links, a generated document, or both. Documents under
+// in its reply; it makes links or a generated document only when the
+// command asks for them (`asked`, and for links the reader's own words:
+// commandNamesLinks). Documents under
 // STITCH_WHOLE_THRESHOLD together skip the reading passes: the answer pass
 // reads them whole.
 // With Jev configured (lib/jev.ts, TYPESAFE_API_KEY) the route and select
@@ -79,6 +82,10 @@ const MAX_ROUTED = 80; // parts the route pass may name
 const MAX_LINKS = 24;
 const MAX_PARTS = 200;
 const MAX_HISTORY = 20;
+// The reply is the answer itself for a command to extract or find (every
+// point with its block), so it has room for that: about 1,200 words asked
+// for, and no run fails on a reply somewhat past it.
+const STITCH_REPLY_MAX = 30_000;
 
 const quote = z.string().max(2_000).optional();
 const sourceSchema = z.object({ blockId: z.string().min(1), quote });
@@ -98,7 +105,11 @@ const routeSchema = z.object({
   parts: z.array(z.string().min(1)).max(MAX_ROUTED * 2).default([]),
 });
 const outputSchema = z.object({
-  reply: z.string().max(4_000).default(""),
+  // What the command asks Stitch to make, decided before anything is
+  // written. Absent reads as nothing asked: no link and no page is stored
+  // on an answer that does not say the reader asked for one.
+  asked: z.object({ links: z.boolean().default(false), page: z.boolean().default(false) }).default({ links: false, page: false }),
+  reply: z.string().max(STITCH_REPLY_MAX).default(""),
   links: z
     .array(
       z.object({
@@ -664,13 +675,86 @@ function opening(r: Rendered, share: number): string[] {
   return picked;
 }
 
+// The words that ask for links, in the languages a command is most often
+// typed in. A link is stored only when the model says the command asks for
+// links AND the reader's own words name one: the model's reading alone is
+// not enough to put links in the project. The list is wide on the verbs for
+// linking and leaves out words a command to extract uses ("related to",
+// "about the relation between").
+const LINK_WORDS: RegExp[] = [
+  /\b(?:inter|hyper)?link(?:s|ed|ing)?\b/i,
+  /\bconnect(?:s|ed|ing|ion|ions)?\b/i,
+  /\bcross[-\s]?referenc(?:e|es|ed|ing)\b/i,
+  /\btie\b[^.?!\n]{0,60}\btogether\b/i,
+  /链接|連結|连接|連接|关联|關聯|串联|串聯|连起来|連起來|联系起来|聯繫起來/,
+  /\b(?:enlaza\w*|enlace\w*|vincul\w*|conect\w*)/i, // es, pt
+  /\b(?:relie\w*|lien|liens|lier|connecte\w*)\b/i, // fr
+  /\b(?:verkn(?:ü|ue)pf\w*|verbind\w*|verlink\w*)/i, // de
+  /リンク|関連付け|結びつけ|つなげ|つなぐ/, // ja
+  /링크|연결/, // ko
+];
+
+/** The text names a link: one of the words that ask for links is in it. */
+export function namesLinks(text: string): boolean {
+  return LINK_WORDS.some((rx) => rx.test(text));
+}
+
+// A command this short leans on the turn before it ("yes", "do it", "link
+// them then"): the reader's last command and the reply to it are read too.
+const FOLLOW_UP_CHARS = 40;
+
+/** The reader's own words ask for links: the command names one, or the
+    command is a short follow-up and the turn before it does. */
+export function commandNamesLinks(command: string, history: StitchTurn[]): boolean {
+  if (namesLinks(command)) return true;
+  if (command.trim().length > FOLLOW_UP_CHARS) return false;
+  // The last exchange: the reader's command before this one and its reply.
+  const before = history.filter((turn) => turn.content.trim()).slice(-2);
+  return before.some((turn) => namesLinks(turn.content));
+}
+
+// One tag of a reply: [block B12], and the forms a model also writes for
+// blocks named together, [block B12, B14] and [block B10-B12].
+const REPLY_TAG = /\[blocks? ([A-Za-z]+\d+(?:\s*(?:[,;]|-|–|and)\s*[A-Za-z]*\d+)*)\]/g;
+// A range in a reply cites a few blocks, not a page of them.
+const REPLY_RANGE_MAX = 12;
+// Stands where a tag that names no block was, until its space is taken out.
+const GONE = "\u0000";
+
 /** The reply's block tags as the stored ids: the model writes [block B12],
-    the reader's chips need [block <id>] (components/markdown.tsx). */
-export function replyWithIds(reply: string, blockByRef: Map<string, DocBlock>): string {
-  return reply.replace(/\[block ([A-Za-z]+\d+)\]/g, (tag, alias: string) => {
-    const block = blockByRef.get(alias.toUpperCase());
-    return block ? `[block ${block.id}]` : tag;
+    the reader's chips need [block <id>] (components/markdown.tsx). A tag
+    that names several blocks becomes one tag per block, and a tag that
+    names no block of the documents read is taken out: a chip never leads
+    nowhere. cited: each stored block id in the reply with its document, so
+    a chip in the Stitch box opens the document it cites. */
+export function replyWithIds(
+  reply: string,
+  blockByRef: Map<string, DocBlock>,
+): { reply: string; cited: Record<string, string> } {
+  const cited: Record<string, string> = {};
+  const text = reply.replace(REPLY_TAG, (tag, inner: string) => {
+    // A stored id that happens to read like an alias stands as it is.
+    if (blockByRef.get(inner)?.id === inner) return tag;
+    const aliases = inner
+      .split(/\s*(?:[,;]|and)\s*/i)
+      .flatMap((pick) => expandPick(pick.replace(/–/g, "-")).slice(0, REPLY_RANGE_MAX));
+    const tags: string[] = [];
+    for (const alias of aliases) {
+      const block = blockByRef.get(alias);
+      if (!block || tags.includes(`[block ${block.id}]`)) continue;
+      cited[block.id] = block.documentId;
+      tags.push(`[block ${block.id}]`);
+    }
+    // A tag taken out takes the space before it along (GONE, below).
+    return tags.length > 0 ? tags.join(" ") : GONE;
   });
+  const out = text.replace(new RegExp(`[ \\t]*${GONE}`, "g"), "").trim();
+  // A tag the model wrote with a stored id stands as it is, and is cited too.
+  for (const m of out.matchAll(/\[block ([a-zA-Z0-9]+)\]/g)) {
+    const block = blockByRef.get(m[1]);
+    if (block) cited[block.id] = block.documentId;
+  }
+  return { reply: out, cited };
 }
 
 /** The documents as the reading passes and the answer pass see them: every
@@ -916,6 +1000,20 @@ export async function stitch(input: {
   });
   if (!result.ok) throw input.onFailure(result.error);
 
+  // ── What the command asked for ───────────────────────────────────────────
+  // Stitch always answers in its reply. A link is stored only when the model
+  // says the command asks for links and the reader's own words name one; a
+  // page only when the model says the command asks for one. Everything else
+  // the model returned is left out: an answer never puts into the project
+  // what the reader did not ask for.
+  const { asked } = result.data;
+  const wordsAskLinks = commandNamesLinks(input.command, input.history);
+  const proposed = asked.links && wordsAskLinks ? result.data.links : [];
+  // The model read the command as asking for links, and the reader's words
+  // name none: no link is made, and the reply says how to ask.
+  const linksHeld = asked.links && !wordsAskLinks && result.data.links.length > 0;
+  const page = asked.page ? result.data.document : null;
+
   // ── Links: block to block across docs, stored recommended ─────────────
   const existing = await db.docLink.findMany({
     where: { fromDocumentId: { in: docs.map((m) => m.id) } },
@@ -923,7 +1021,7 @@ export async function stitch(input: {
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));
   let linkCount = 0;
-  for (const link of result.data.links) {
+  for (const link of proposed) {
     if (linkCount >= MAX_LINKS) break;
     const from = resolveQuote(blockByRef, link.fromBlockId, link.fromQuote);
     const to = resolveQuote(blockByRef, link.toBlockId, link.toQuote);
@@ -957,19 +1055,28 @@ export async function stitch(input: {
 
   // ── The generated document ───────────────────────────────────────────────
   let document: StitchResult["document"] = null;
-  if (result.data.document) {
+  if (page) {
     document = await materializeGenerated({
       notebookId: input.notebookId,
       userId: input.userId,
       command: input.command,
-      title: result.data.document.title.trim(),
-      parts: result.data.document.parts.slice(0, MAX_PARTS),
+      title: page.title.trim(),
+      parts: page.parts.slice(0, MAX_PARTS),
       blockById: blockByRef,
     });
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  return { reply: replyWithIds(result.data.reply.trim(), blockByRef), linkCount, document, documents: coverage };
+  const { reply, cited } = replyWithIds(result.data.reply, blockByRef);
+  return {
+    // The held line is part of the reply, so a "yes" that follows it reads
+    // it in the conversation and gets the links.
+    reply: linksHeld ? [reply, translate(input.lang, "stitch.stitchLinksHeld")].filter(Boolean).join("\n\n") : reply,
+    linkCount,
+    document,
+    documents: coverage,
+    cited,
+  };
 }
 
 type Part = z.infer<typeof partSchema>;

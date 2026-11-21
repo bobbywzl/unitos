@@ -50,6 +50,30 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20261013Body",
     features: ["structure"],
   },
+  {
+    // Read aloud for the whole document (SPEC.md §6, Voice): the button beside Collapse glows.
+    id: "2026-11-03",
+    date: "2026-11-03",
+    titleKey: "works.release20261103Title",
+    bodyKey: "works.release20261103Body",
+    features: ["readAloud"],
+  },
+  {
+    // Stars and the connections in Breakwork (SPEC.md §32): the stars sit on every piece row, so nothing glows.
+    id: "2026-11-05",
+    date: "2026-11-05",
+    titleKey: "works.release20261105Title",
+    bodyKey: "works.release20261105Body",
+    features: [],
+  },
+  {
+    // Jottings and the finger selection (SPEC.md §33): the Jot button at the reader's foot glows where it shows.
+    id: "2026-11-16",
+    date: "2026-11-16",
+    titleKey: "works.release20261116Title",
+    bodyKey: "works.release20261116Body",
+    features: ["jot"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

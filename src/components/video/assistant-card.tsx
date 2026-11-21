@@ -108,7 +108,7 @@ export function MediaAssistant({
   const [held, setHeld] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // The running send() or skill lives with the kept conversation, so Stop
   // works from a card opened again: the reply never lands, but the sent
   // message stays in the transcript.
@@ -349,7 +349,7 @@ export function MediaAssistant({
             message.role === "user" ? (
               <p
                 key={i}
-                className="self-end rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800"
+                className="self-end rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] whitespace-pre-wrap text-sand-800"
               >
                 {message.content}
               </p>
@@ -380,22 +380,27 @@ export function MediaAssistant({
           e.preventDefault();
           void send();
         }}
-        className="flex items-center gap-2"
+        className="flex items-end gap-2"
       >
-        <input
+        {/* Enter sends and Shift+Enter starts a new line, as in every
+            assistant box (SPEC.md §7); the box grows with its lines. */}
+        <textarea
           ref={inputRef}
           autoFocus
           value={input}
+          rows={1}
           onChange={(e) => setInput(e.target.value)}
           {...ime.props}
           onKeyDown={(e) => {
-            if (ime.isImeEnter(e)) e.preventDefault();
+            if (!ime.isSendEnter(e)) return;
+            e.preventDefault();
+            void send();
           }}
           placeholder={t(busy ? "assistant.queuePlaceholder" : "video.assistantPlaceholder")}
           aria-label={t("video.assistant")}
-          className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500"
+          className="field-sizing-content max-h-32 min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500"
         />
-        <VoiceTypingButton field={inputRef} track="video-assistant-voice-typing" className="size-8" size={14} />
+        <VoiceTypingButton field={inputRef} track="video-assistant-voice-typing" className="mb-[3.5px] size-8" size={14} />
         {/* While an answer runs the button is Stop, or Queue once a message is
             composed (SPEC.md §7). */}
         <button
@@ -407,9 +412,9 @@ export function MediaAssistant({
             stopSend();
           }}
           disabled={!busy && input.trim() === ""}
-          data-tip={busy ? t(input.trim() ? "assistant.queueTitle" : "video.stopAssistant") : undefined}
+          data-tip={busy ? t(input.trim() ? "assistant.queueTitle" : "video.stopAssistant") : t("reader.sendTitle")}
           aria-label={busy && !input.trim() ? t("video.stopAssistant") : undefined}
-          className="rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className="mb-[3.5px] rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           {busy ? (input.trim() ? t("assistant.queue") : <StopIcon size={12} />) : t("video.assistantSend")}
         </button>

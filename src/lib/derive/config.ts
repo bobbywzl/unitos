@@ -4,9 +4,11 @@ import { translate } from "@/lib/i18n/dictionaries";
 import type { AssistantAction } from "@/lib/types";
 
 // The models (SPEC.md §2). The assistant — its answers and its edit
-// commands — runs on Gemini 3.8 Flash (GEMINI_3_8_FLASH below; the client is
-// lib/gemini.ts); where no Gemini key is set it falls back to GLM 5.3
-// (lib/feature-models.ts). GLM 5.3, Z.ai's flagship, is behind the reader's
+// commands — runs on Claude Sonnet 5.5 (CLAUDE_SONNET_5_5 below): it reads
+// pictures, and it is the model the assistant's other surfaces already run
+// on (the note's assistant, Save as note, the assistant's suggestions);
+// Gemini 3.8 Flash ran it while GEMINI_ROUTING was on (the client is
+// lib/gemini.ts), and Claude Haiku 5.5 after Gemini went off. GLM 5.3, Z.ai's flagship, is behind the reader's
 // tools, the assistant with Web on, Stitch's answer, and the merge of notes; GLM 5.3
 // Flash, its small sibling, behind every reading but the parse — the
 // readings copy claims into structure, and Flash reads a million tokens for
@@ -27,19 +29,37 @@ export const GLM_5_3_FLASH = "glm-5.3-flash";
 export const CLAUDE_FABLE_5_1 = "claude-fable-5-1";
 export const CLAUDE_OPUS_5_5 = "claude-opus-5-5";
 // Kimi K3 is off: Moonshot refused every call at a balance of zero (20 Oct
-// 2026, exceeded_current_quota_error), and Circle & ask answered nothing.
+// 2026, exceeded_current_quota_error), and Highlight & ask answered nothing.
 // The features it served run elsewhere (VISION_MODEL, DISTILL below, the
 // Chinese reader's rule in lib/feature-models.ts, the fallbacks) until this
 // is true again.
 export const KIMI_ROUTING = false;
+// Gemini is off: its API refused every call when the credit ran out (Nov
+// 2026). Off, no call goes to Gemini (geminiConfigured() in
+// lib/video/gemini.ts answers false whatever key is set): the assistant and
+// its commands run on Claude Sonnet 5.5, Web on searches with Claude's web
+// search (lib/web-search.ts), the video's text passes (naming the speakers,
+// tidying a transcript) run on Claude Haiku 5.5, and the passes that watch
+// or hear the media itself (a transcription rung, a clip's description, the
+// speakers by voice) step aside for the rungs that need no Gemini. True
+// routes all of it back.
+export const GEMINI_ROUTING = false;
+// Claude Haiku 5.5: Anthropic's fast, low-cost model ($0.10 in, $0.50 out
+// per million tokens), with pictures and a 1M context. It has no
+// server-side refusal fallback (claudeOptions in lib/claude.ts sends none).
+// It runs the video's text passes while Gemini is off, and stands in the
+// fallback lists (lib/feature-models.ts).
+export const CLAUDE_HAIKU_5_5 = "claude-haiku-5-5";
 // The assistant with Web on runs on GLM 5.3, the same model as with Web
 // off. The search follows the model that answers (lib/kimi.ts): Z.ai's Web
 // Search API under GLM, Moonshot's web-search formula under Kimi K3 — which
 // is what a GLM id resolves to without the gateway.
 export const WEB_SEARCH_MODEL = GLM_5_3;
-// The voice command (SPEC.md §6) runs on Claude Sonnet 5.5 (VOICE_MODEL below).
+// Claude Sonnet 5.5 ($2 in, $10 out per million tokens, pictures, a 1M
+// context): the assistant while Gemini is off (DERIVATION_MODEL.SYNTHESIS),
+// and the voice command (SPEC.md §6, VOICE_MODEL below).
 export const CLAUDE_SONNET_5_5 = "claude-sonnet-5-5";
-// GLM 5.3 takes text alone. A call that carries an image — Circle & ask on
+// GLM 5.3 takes text alone. A call that carries an image — Highlight & ask on
 // a figure, a page image, a picture attached to the assistant, a video
 // frame — goes to the vision model instead, whatever the feature's model:
 // Claude Sonnet 5.5, which reads small print and numbers in a figure at
@@ -100,7 +120,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SALIENCE: GLM_5_3_FLASH,
   EXTRACT: GLM_5_3_FLASH,
   SUMMARIZE: GLM_5_3,
-  SYNTHESIS: GEMINI_3_8_FLASH,
+  SYNTHESIS: GEMINI_ROUTING ? GEMINI_3_8_FLASH : CLAUDE_SONNET_5_5,
   FIND: GLM_5_3_FLASH,
   DISTILL: KIMI_ROUTING ? KIMI_K3 : GLM_5_3, // Extract: the reader's question and the quotes that answer it
   FORMALIZE: GLM_5_3,
@@ -339,6 +359,14 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // five-word label from a short text, so the lowest effort.
 export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
+
+// The starter of the assistant bar (SPEC.md §7): one short question about
+// the selected words, shown in the bar's empty box; Tab takes it. It runs
+// each time the bar opens on new words, before the reader has asked for
+// anything, so the cheapest Claude at the lowest effort.
+export const STARTER_MODEL = CLAUDE_HAIKU_5_5;
+export const STARTER_EFFORT: KimiEffort = "low";
+export const STARTER_MAX_OUTPUT_TOKENS = 512;
 
 // The grammar check of the page editor and the note editor (SPEC.md §29): a
 // few paragraphs per call, each paragraph's mistakes as the exact wrong

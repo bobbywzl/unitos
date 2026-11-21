@@ -1,4 +1,6 @@
-import { GEMINI_FLASH } from "@/lib/derive/config";
+import { generateText } from "ai";
+import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
+import { CLAUDE_HAIKU_5_5, GEMINI_FLASH, GEMINI_ROUTING } from "@/lib/derive/config";
 import { gatewayConfigured, gatewayHeaders, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { currentModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
@@ -27,9 +29,50 @@ export function geminiApiKey(): string | undefined {
   return keyFor("gemini");
 }
 
-/** The gateway or a key is set, so the video features are on. */
+/** The gateway or a key is set, so the video features are on — and Gemini
+    is routed at all (GEMINI_ROUTING in lib/derive/config.ts): off, every
+    Gemini path steps aside as when no key is set. */
 export function geminiConfigured(): boolean {
-  return providerConfigured("gemini");
+  return GEMINI_ROUTING && providerConfigured("gemini");
+}
+
+/** A text pass for the video (naming the speakers from the lines, tidying
+    a transcript) can run: on Gemini, or on Claude Haiku 5.5 while Gemini is
+    off (geminiCall). A pass that reads the media itself needs Gemini. */
+export function videoTextConfigured(): boolean {
+  return geminiConfigured() || claudeConfigured();
+}
+
+/** A call whose parts are text alone. */
+function textOnly(parts: unknown[]): string | null {
+  const texts: string[] = [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object" || Object.keys(p).length !== 1 || typeof (p as { text?: unknown }).text !== "string") return null;
+    texts.push((p as { text: string }).text);
+  }
+  return texts.join("\n");
+}
+
+/** A text pass on Claude Haiku 5.5, as geminiCall would run it on Gemini:
+    the same prompt, the same parse. */
+async function claudeTextCall<T>(
+  prompt: string,
+  opts: { json?: boolean; maxOutputTokens: number; usage?: GeminiUsageMeta },
+  parse: (text: string) => T,
+): Promise<T> {
+  const result = await generateText({
+    model: await claude(CLAUDE_HAIKU_5_5),
+    providerOptions: claudeOptions("low", CLAUDE_HAIKU_5_5),
+    maxOutputTokens: Math.min(opts.maxOutputTokens, 64000),
+    prompt: opts.json ? `${prompt}\n\nAnswer with the JSON alone: no fence, no words before or after it.` : prompt,
+  });
+  if (opts.usage) {
+    recordUsage(
+      { userId: opts.usage.userId, feature: opts.usage.feature, model: CLAUDE_HAIKU_5_5 },
+      { inputTokens: result.usage.inputTokens ?? 0, outputTokens: result.usage.outputTokens ?? 0 },
+    );
+  }
+  return parse(result.text);
 }
 
 // Gemini calls for video (SPEC.md §11): transcription segments and clip
@@ -51,6 +94,13 @@ export async function geminiCall<T>(
   opts: { json?: boolean; maxOutputTokens: number; lowResolution?: boolean; usage?: GeminiUsageMeta },
   parse: (text: string) => T,
 ): Promise<T> {
+  // Gemini off: a text pass runs on Claude Haiku 5.5; a pass that reads the
+  // media itself cannot run (its callers check geminiConfigured first).
+  if (!geminiConfigured()) {
+    const prompt = textOnly(parts);
+    if (prompt !== null && claudeConfigured()) return claudeTextCall(prompt, opts, parse);
+    throw new Error("Gemini is off (GEMINI_ROUTING)");
+  }
   const key = geminiApiKey();
   if (!key) throw new Error("GEMINI_API_KEY is not set");
   const failures: string[] = [];

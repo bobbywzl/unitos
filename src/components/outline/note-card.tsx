@@ -10,11 +10,11 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { Highlight } from "@/components/highlight";
-import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, LocateIcon, PencilIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { markdownPreview } from "@/lib/markdown-preview";
-import { useGist } from "@/lib/gist-client";
+import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { useWrittenGist } from "@/lib/gist-client";
 import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
@@ -23,7 +23,8 @@ import { useAnnotationSide } from "@/components/outline/annotation-side";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
 import { setTaskChecked } from "@/lib/note-markup";
-import { appendToBody, bodyLineOffset, editDraft, splitNote } from "@/lib/note-title";
+import { appendToBody, bodyLineOffset, editDraft, gistAsTitle, splitNote } from "@/lib/note-title";
+import { GIST_MAX_CHARS } from "@/lib/prompts/gist";
 import { searchHit } from "@/lib/search-hits";
 import type { CardDragEndDetail } from "@/lib/card-drag";
 import { CardDropShown, useCardDropTarget } from "@/components/outline/use-card-drop";
@@ -157,7 +158,7 @@ export const NoteCard = memo(function NoteCard({
       commands={commands}
       notebookId={actions.notebookId}
       focusedPending={actions.focusedPendingId === note.id}
-      floating={actions.floating?.id === note.id}
+      floating={actions.floating.some((f) => f.id === note.id)}
       selected={actions.selected.has(note.id)}
       selecting={actions.selected.size > 0}
       merging={actions.merging.has(note.id)}
@@ -531,8 +532,24 @@ const NoteCardBody = memo(function NoteCardBody({
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.
   const preview = useMemo(() => markdownPreview(note.content), [note.content]);
-  const gist = useGist(note.id, note.gist, preview, (collapsed || floating) && !parts.title);
-  const line = parts.title || gist;
+  // An accepted note with no title of its own shows its gist as its title,
+  // open as well as collapsed, so an open one asks for it too. Not while its
+  // editor is open: every save is a new text, and each would ask.
+  const written = useWrittenGist(
+    note.id,
+    note.gist,
+    preview,
+    !parts.title && !editing && (collapsed || floating || note.status === "ACCEPTED"),
+  );
+  const line = parts.title || written || clipWords(preview, GIST_MAX_CHARS);
+  // The open note's title row: its own title, else its gist (gistAsTitle).
+  // The gist is drawn there, never written into the note.
+  const gistTitle = !parts.title && note.status === "ACCEPTED" ? gistAsTitle(written, preview) : "";
+  const title = parts.title || gistTitle;
+  // The title field of a note with no title of its own shows the gist the
+  // editor opened on as its placeholder: a title typed there is the note's own.
+  const [openedGist, setOpenedGist] = useState(gistTitle);
+  if (gistTitle && gistTitle !== openedGist) setOpenedGist(gistTitle);
   // Under a search, the row shows the line that holds the first match,
   // with the match lit, in place of the title or the gist.
   const found = useMemo(() => (hit ? matchLine(note.content, hit) : null), [hit, note.content]);
@@ -759,14 +776,16 @@ const NoteCardBody = memo(function NoteCardBody({
       }
     : {};
 
-  // The header row, the same in every state: collapse chevron and id at the
-  // left; edit, jump, pin, and select at the right. Collapsed, the title (or
-  // the gist) and the source count sit between them.
-  // At rest on a pointer that hovers, a row shows its line and its pencil:
-  // the id waits for the hover (the open note shows it), and the select
-  // circle too, until some note is selected. On touch the circle stays.
+  // The header row. Open, it holds the collapse chevron and the id at the
+  // left; edit, jump, pin, and select at the right. Collapsed, the row is
+  // its line: the chevron and the title (or the gist) across the whole
+  // width, so the reader reads as much of the title as fits. A click opens
+  // the note and a hold drags it; the id, the source count, the pencil,
+  // and the jump are on the open note. The row keeps only what says a
+  // state or must be answered: the author on a shared project, not saved,
+  // pinned, a pending note's Accept and Reject, and the select circle once
+  // some note is selected.
   const row = collapsed && !editing;
-  const restHidden = "pointer-fine:hidden pointer-fine:group-hover/note:flex pointer-fine:group-focus-within/note:flex";
   const header = (
     <div className="flex min-h-[18px] items-center gap-1.5">
       {foldable && !editing && !merging && !collapsed && (
@@ -786,7 +805,15 @@ const NoteCardBody = memo(function NoteCardBody({
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
       )}
-      <NoteId id={note.id} className={row ? "hidden group-hover/note:inline-flex group-focus-within/note:inline-flex" : ""} />
+      {!row && <NoteId id={note.id} />}
+      {/* How many sources the note has, on the open note: the row is its
+          line alone. */}
+      {!row && !merging && note.sources.length > 0 && (
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500" data-tip={sourcesTip(note.sources, t)}>
+          <AnchorIcon />
+          {note.sources.length}
+        </span>
+      )}
       {/* The AI is writing the note that takes this one and the merged notes'
           place (SPEC.md §6). It takes the row: the line is about to be
           rewritten, and every control here acts on a note still being
@@ -815,7 +842,7 @@ const NoteCardBody = memo(function NoteCardBody({
           aria-expanded={false}
           data-tip={t("outline.expandNote")}
           className={`note-merging-under flex min-w-0 flex-1 items-center gap-1.5 text-left text-[13px] leading-[18px] hover:text-clay-800 ${
-            parts.title ? "font-semibold text-ink" : "text-sand-800"
+            parts.title || written ? "font-semibold text-ink" : "text-sand-800"
           }`}
         >
           {foldable && (
@@ -877,24 +904,6 @@ const NoteCardBody = memo(function NoteCardBody({
           )}
         </span>
       )}
-      {row && note.sources.length > 0 && (
-        <span
-          className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
-          data-tip={sourcesTip(note.sources, t)}
-        >
-          <AnchorIcon />
-          {note.sources.length}
-        </span>
-      )}
-      {row && note.replies.length > 0 && (
-        <span
-          className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
-          data-tip={t("outline.repliesTitle", { n: note.replies.length })}
-        >
-          <CommentIcon size={11} />
-          {note.replies.length}
-        </span>
-      )}
       {row && author && <PersonBadge person={author} size={14} />}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
@@ -905,7 +914,7 @@ const NoteCardBody = memo(function NoteCardBody({
         {!editing && !note.queued && note.unsaved && (
           <SaveStateLabel state="failed" compact={collapsed} tip={canEdit ? undefined : t("common.notSavedNoEdit")} />
         )}
-        {canEdit && !editing && !merging && (
+        {canEdit && !editing && !merging && !row && (
           <button
             onClick={openEditor}
             data-track="note-edit"
@@ -918,7 +927,7 @@ const NoteCardBody = memo(function NoteCardBody({
             <PencilIcon size={16} />
           </button>
         )}
-        {jumpSource && !editing && !merging && (
+        {jumpSource && !editing && !merging && !row && (
           <button
             onClick={() => jumpTo(jumpSource)}
             data-track="note-jump"
@@ -970,7 +979,7 @@ const NoteCardBody = memo(function NoteCardBody({
             </button>
           </>
         )}
-        {selectable && !editing && !merging && (
+        {selectable && !editing && !merging && (!row || isSelected || selecting) && (
           <button
             onClick={() => commands.toggleSelect(note.id)}
             data-track="note-select"
@@ -978,9 +987,7 @@ const NoteCardBody = memo(function NoteCardBody({
             aria-checked={isSelected}
             aria-label={t("outline.selectNote")}
             data-tip={t(tray ? "outline.selectNoteTitle" : "outline.selectNoteTitleCompare")}
-            className={`h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${TOUCH_HIT} ${
-              isSelected || selecting ? "flex" : `flex ${restHidden}`
-            } ${
+            className={`flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${TOUCH_HIT} ${
               isSelected
                 ? "border-clay bg-clay text-clay-fg opacity-100"
                 : "border-sand-400 bg-card text-transparent opacity-50 hover:border-clay-500 hover:opacity-100"
@@ -1003,7 +1010,7 @@ const NoteCardBody = memo(function NoteCardBody({
         <div className="flex items-center gap-2">
           <span className="text-sand-600">{t("outline.floatingLabel")}</span>
           <button
-            onClick={() => commands.dockNote(true)}
+            onClick={() => commands.dockNote(note.id, true)}
             data-track="note-dock"
             data-tip={t("outline.dockBackTitle")}
             className="ml-auto shrink-0 text-xs text-sand-600 hover:text-clay-700"
@@ -1058,6 +1065,7 @@ const NoteCardBody = memo(function NoteCardBody({
       >
         {header}
         {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
+        {noteDrop.reading && <p className="mt-1 text-[11px] text-sand-600">{t("api.imageReading", { name: noteDrop.reading })}</p>}
         {/* The bar, then the title field, then the body (SPEC.md §6). On a
             touch screen with the note's assistant open, the card scrolls as
             one column and nothing shrinks under its words, so the
@@ -1084,6 +1092,7 @@ const NoteCardBody = memo(function NoteCardBody({
               onChange={editTitle}
               onEnter={() => focusBodyEditor(editCardRef.current)}
               onEscape={() => void done()}
+              placeholder={openedGist || undefined}
               className="shrink-0"
             />
           }
@@ -1214,6 +1223,7 @@ const NoteCardBody = memo(function NoteCardBody({
     >
       {header}
       {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
+      {noteDrop.reading && <p className="mt-1 text-[11px] text-sand-600">{t("api.imageReading", { name: noteDrop.reading })}</p>}
 
       {!collapsed && (
         <div
@@ -1223,9 +1233,9 @@ const NoteCardBody = memo(function NoteCardBody({
           onClick={clamp ? () => setWhole(true) : undefined}
           data-tip={clamp && cut ? t("outline.expandNote") : undefined}
         >
-          {parts.title && (
-            <h3 className="note-title mb-1">
-              <Highlight text={parts.title} needle={hit} />
+          {title && (
+            <h3 className="note-title mb-1" data-gist-title={gistTitle ? "" : undefined} data-tip={gistTitle ? t("outline.gistTitleTip") : undefined}>
+              <Highlight text={title} needle={hit} />
             </h3>
           )}
           {/* A checklist item's box ticks without opening the editor. */}

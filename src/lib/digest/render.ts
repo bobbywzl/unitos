@@ -302,34 +302,96 @@ const SHARED_INSTRUCTIONS = [
   "The material is complete except where a cut is declared in [brackets]. Questions about counts, spread, or absence are answerable from it. Say plainly when the material does not answer the question.",
 ];
 
-// The assistant's system prefix at Corpus scope: instructions + the digest.
-export function corpusSystem(parts: DigestParts, budget: RenderBudget = corpusBudget()): string {
-  return [
-    "You assist a reader working through their project: every document in full, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
-    ...SHARED_INSTRUCTIONS,
-    "",
-    renderCorpusDigest(parts, budget),
-  ].join("\n");
+// The line a document's text, or what the reader made on it, stands under.
+const documentHead = (doc: DigestDocument): string => `## Document: ${doc.title} [document ${doc.id}]${documentMeta(doc)}`;
+
+// What the reader made in a project (the material layer,
+// lib/assistant/context.ts): the sections, each document's layers, the
+// notes, the loose annotations. It changes when the reader works; the
+// documents' text does not, so the text is rendered apart from it.
+function corpusMaterial(parts: DigestParts, budget: RenderBudget): string {
+  const chunks: string[] = [`Sections: ${parts.sections.join("; ") || "(none)"}`];
+  for (const doc of parts.documents) {
+    const layers = spend(layerItems(doc), budget, "lines of this document's notes and layers");
+    if (layers.length > 0) chunks.push([`## On document: ${doc.title} [document ${doc.id}]`, layers.join("\n")].join("\n\n"));
+  }
+  const notes = spend(parts.notes.map(noteBlock), budget, "notes");
+  chunks.push(["## Notes in this project", notes.length > 0 ? notes.join("\n\n") : "(no notes)"].join("\n\n"));
+  if (parts.looseAnnotations.length > 0) {
+    const loose = spend(parts.looseAnnotations.map(annotationBlock), budget, "annotations");
+    chunks.push(["## Annotations not anchored in an attached document", ...loose].join("\n\n"));
+  }
+  return chunks.join("\n\n");
 }
 
-// The assistant's system prefix at Project scope past the whole threshold
-// (lib/assistant/project-reading.ts): each document's gist and the blocks
-// the reading passes picked for this message, every note and layer as in
-// the whole digest. A document the picks do not name renders whole.
+/** The assistant's context at Project scope, in layers (SPEC.md §2,
+    lib/assistant/context.ts): the documents, each whole, which change only
+    when a document does; then what the reader made on them, which changes
+    as the reader works. Deterministic: same parts, same text. */
+export function corpusLayers(parts: DigestParts, budget: RenderBudget = corpusBudget()): { documents: string; material: string } {
+  const documents = [
+    [
+      "You assist a reader working through their project: every document in full, and every note, annotation, distillation, extraction, and summary they made on it. The documents come first, each whole; what the reader made on them follows the documents.",
+      ...SHARED_INSTRUCTIONS,
+    ].join("\n"),
+    `# Project: ${parts.corpusTitle} [project ${parts.corpusId}]`,
+    ...(parts.documents.length === 0
+      ? ["(no documents attached)"]
+      : parts.documents.map((doc) => [documentHead(doc), documentText(doc, budget)].join("\n\n"))),
+  ].join("\n\n");
+  const material = ["# What the reader made in this project", corpusMaterial(parts, budget)].join("\n\n");
+  return { documents, material };
+}
+
+// The assistant's system prefix at Corpus scope, as one text: the layers
+// joined (the admin digest page, the checks).
+export function corpusSystem(parts: DigestParts, budget: RenderBudget = corpusBudget()): string {
+  const layers = corpusLayers(parts, budget);
+  return [layers.documents, layers.material].join("\n\n");
+}
+
+/** The assistant's context at Project scope past the whole threshold
+    (lib/assistant/project-reading.ts), in layers: what the reader made,
+    whole, which is the same for every message until the reader works; then
+    each document's gist and the blocks the reading passes picked for this
+    message, which no other message shares. A document the picks do not
+    name renders whole. */
+export function corpusPickedLayers(
+  parts: DigestParts,
+  picks: Map<string, DocumentPick>,
+  budget: RenderBudget = corpusBudget(),
+): { material: string; picked: string } {
+  const material = [
+    [
+      "You assist a reader working through their project: its documents, and every note, annotation, distillation, extraction, and summary they made on it.",
+      "What the reader made comes first, whole: every note, and every layer on each document. The documents follow it. The project is too long to read whole for each message: each document shows its gist and the blocks a first read of every document picked for this message; a gap between two shown blocks is declared.",
+      "Every document block starts with its id in the form [block <id>]; every note with [note <id>].",
+      "When you answer from a document, cite the block tag exactly as written ([block <id>]) and quote the exact words — precise recall over paraphrase.",
+      "A question about counts, spread, or absence in the documents' text may need blocks that are not shown: answer from what is shown and say that the rest of the text was not read for this message. Say plainly when the material does not answer the question.",
+    ].join("\n"),
+    `# Project: ${parts.corpusTitle} [project ${parts.corpusId}]`,
+    corpusMaterial(parts, budget),
+  ].join("\n\n");
+  const picked = [
+    "# The documents, as read for this message",
+    ...(parts.documents.length === 0
+      ? ["(no documents attached)"]
+      : parts.documents.map((doc) => {
+          const pick = picks.get(doc.id);
+          return [documentHead(doc), pick ? pickedText(doc, pick, budget) : documentText(doc, budget)].join("\n\n");
+        })),
+  ].join("\n\n");
+  return { material, picked };
+}
+
+// The picked reading as one text: the layers joined (the checks).
 export function corpusPickedSystem(
   parts: DigestParts,
   picks: Map<string, DocumentPick>,
   budget: RenderBudget = corpusBudget(),
 ): string {
-  return [
-    "You assist a reader working through their project: its documents, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
-    "The project is too long to read whole for each message. Each document shows its gist and the blocks a first read of every document picked for this message; a gap between two shown blocks is declared. Every note and layer is whole.",
-    "Every document block starts with its id in the form [block <id>]; every note with [note <id>].",
-    "When you answer from a document, cite the block tag exactly as written ([block <id>]) and quote the exact words — precise recall over paraphrase.",
-    "A question about counts, spread, or absence in the documents' text may need blocks that are not shown: answer from what is shown and say that the rest of the text was not read for this message. Say plainly when the material does not answer the question.",
-    "",
-    renderCorpusDigest(parts, budget, new Map(), picks),
-  ].join("\n");
+  const layers = corpusPickedLayers(parts, picks, budget);
+  return [layers.material, layers.picked].join("\n\n");
 }
 
 // The assistant's system prefix at Corpora scope: instructions + every digest.
@@ -397,4 +459,49 @@ export function documentSystem(
     "",
     rendered,
   ].join("\n");
+}
+
+/** The open document's text is under the text budget, so it renders whole
+    and the document layer (lib/assistant/context.ts) can stand for it. */
+export function documentReadsWhole(parts: DigestParts, documentId: string, budget: RenderBudget = corpusBudget()): boolean {
+  const doc = parts.documents.find((d) => d.id === documentId);
+  return doc !== undefined && doc.text.length <= budget.text;
+}
+
+/** The material layer at This page scope (SPEC.md §2, §7): the project and
+    everything the reader made on the open document, which the document
+    layer shows above. Null = the document is not in the digest. The
+    document's own text is never in it: a new note costs this layer again
+    and never the document. */
+export function documentMaterial(
+  parts: DigestParts,
+  documentId: string,
+  budget: RenderBudget = corpusBudget(),
+): string | null {
+  const doc = parts.documents.find((d) => d.id === documentId);
+  if (!doc) return null;
+  const layers = spend(layerItems(doc), budget, "lines of this document's notes and layers");
+  const chunks: string[] = [
+    [
+      "The document above is one document of the reader's project. The project follows, and everything the reader made on the document: every note, annotation, distillation, extraction, and summary.",
+      ...SHARED_INSTRUCTIONS,
+    ].join("\n"),
+    [
+      `# Project: ${parts.corpusTitle} [project ${parts.corpusId}]`,
+      `Sections: ${parts.sections.join("; ") || "(none)"}`,
+      `This is one document of the project. The project holds ${parts.documents.length} document${parts.documents.length === 1 ? "" : "s"}.`,
+    ].join("\n"),
+    [documentHead(doc), "Its text is above, whole.", ...(layers.length > 0 ? [layers.join("\n")] : [])].join("\n\n"),
+  ];
+  const cites = (n: DigestNote) => n.sources.some((s) => s.documentId === documentId);
+  const notes = spend(parts.notes.filter(cites).map(noteBlock), budget, "notes");
+  chunks.push(
+    ["## Notes in this project that cite this document", notes.length > 0 ? notes.join("\n\n") : "(no notes)"].join("\n\n"),
+  );
+  // The reader's other notes, after the citing notes, so the cut falls here first.
+  const others = spend(parts.notes.filter((n) => !cites(n)).map(noteBlock), budget, "notes");
+  if (others.length > 0) {
+    chunks.push(["## The reader's other notes in this project", others.join("\n\n")].join("\n\n"));
+  }
+  return chunks.join("\n\n");
 }

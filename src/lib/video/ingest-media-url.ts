@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { PublicUrlError, publicFetch } from "@/lib/public-url";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 import { sniffMedia } from "@/lib/video/storage";
@@ -25,7 +26,14 @@ export async function ingestMediaUrl(
   opts?: { headers?: Record<string, string>; title?: string; fetchUrl?: string },
 ) {
   onProgress?.("fetch");
-  const res = await outboundFetch(opts?.fetchUrl ?? url, { headers: opts?.headers });
+  // A reader's link is a public address or it is refused (lib/public-url.ts);
+  // a Drive download is an address the app wrote, with its token.
+  const res = opts?.fetchUrl || opts?.headers
+    ? await outboundFetch(opts.fetchUrl ?? url, { headers: opts.headers })
+    : await publicFetch(url).catch((err: unknown) => {
+        if (err instanceof PublicUrlError) throw new Error(t(err.refusal === "scheme" ? "api.fetchScheme" : "api.fetchPrivate"));
+        throw err;
+      });
   if (!res.ok || !res.body) throw new Error(t("api.mediaUnavailable"));
   const declared = Number(res.headers.get("content-length") ?? "0");
   if (declared > MAX_VIDEO_BYTES) throw new Error(t("api.videoTooLarge"));

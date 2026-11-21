@@ -40,6 +40,10 @@ export const zh: Record<keyof typeof en, string> = {
   tierTrial: "Unitos Premium · 试用至 {date}",
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
+  pageError: "此页面因出错而停止。",
+  pageErrorTrail: "最后按下：{trail}",
+  reload: "重新加载",
+  tryAgain: "重试",
   notSaved: "未保存。请重试。",
   notLoaded: "未加载。请重试。",
   conversationCleared: "对话已清除",

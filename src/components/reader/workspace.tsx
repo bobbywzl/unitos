@@ -24,7 +24,9 @@ import {
   QuestionIcon,
   QuoteIcon,
   SparkleIcon,
+  StructureIcon,
 } from "@/components/icons";
+import { NEW_GLOW_CLASS, useNewFeature } from "@/components/new-feature";
 import { ClickTracker } from "@/components/click-tracker";
 import { FunnelStepMark } from "@/components/funnel-step";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
@@ -43,6 +45,7 @@ import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
 import { LoadingDots } from "@/components/thinking";
 import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
+import { OPEN_STRUCTURE_EVENT } from "@/components/reader/open-structure";
 import {
   listSaved,
   noSaves,
@@ -58,6 +61,7 @@ import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
 import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
+import { OPEN_CONVERSATION_EVENT } from "@/lib/assistant/open-conversation";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useNoteScope } from "@/components/outline/note-groups";
@@ -100,6 +104,16 @@ const TAB_TITLES: Record<Tab, TKey> = {
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// The peek (md+): how long the pointer rests on the rail before the folded
+// tray draws, how long off the rail and the tray before it folds, and the
+// tray column's slide (globals.css .tray-column). The column lies over the
+// reader, its right edge at the rail's left (the rail is 52px wide), one
+// layer over the page editor's header (z-index 35, docs/css/page.css) and
+// under the app's menus (40) and dialogs (50).
+const PEEK_OPEN_MS = 140;
+const PEEK_CLOSE_MS = 260;
+const PEEK_SLIDE_MS = 320;
+const PEEK_COLUMN = "md:absolute md:inset-y-0 md:right-[52px] md:z-[36] md:shadow-[-14px_0_36px_-14px_rgb(0_0_0/0.22)]";
 // A row of the bar's More menu (below md).
 const MORE_ROW =
   "flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800";
@@ -233,6 +247,26 @@ export function Workspace({
     }).catch(() => {
       // offline, or the network dropped: the project opens the older document
     });
+  }, [notebook.id, activeDocumentId]);
+  // Each tab keeps its own document. An address with no document (the
+  // dashboard's card, Back to the project) opens LastDocument, which every
+  // tab of the account moves; the tab's next render (a refresh when the
+  // project changes, or when the tab comes back into view) would open
+  // another tab's document. So the address names the open document at once.
+  // The router must take the new address, or its refresh puts the old one
+  // back (next/dist/client/components/app-router.js): the state is null,
+  // and the call waits a task, because on the first load this effect runs
+  // before the router's own effect starts watching replaceState. The
+  // router then renders this same page again, with no request.
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      if (url.pathname !== `/n/${notebook.id}` || url.searchParams.has("doc")) return;
+      url.searchParams.set("doc", activeDocumentId);
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [notebook.id, activeDocumentId]);
   const [collapsed, setCollapsed] = useState(false);
   // Set while the tray is folded for a floating note (below), so that fold is
@@ -564,11 +598,31 @@ export function Workspace({
         flash(`[data-annotation-source-id="${sourceId}"]`);
       }, 150);
     };
-    // The page editor's Show all comments opens the Annotations tab.
-    const onShowAnnotations = () => {
+    // The page editor's Show all comments opens the Annotations tab. With a
+    // note named (the assistant's line for the comments on its answers), the
+    // tab opens on that conversation's card: the card opens if it is
+    // collapsed, and its comments come into view and flash.
+    const onShowAnnotations = (e: Event) => {
+      const noteId = (e as CustomEvent<{ noteId?: string } | null>).detail?.noteId;
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
+      revealTray();
+      if (!noteId) return;
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("dissect:open-annotation-note", { detail: { noteId } }));
+        flash(`[data-annotation-id="${CSS.escape(noteId)}"] [data-reply-thread]`);
+      }, 150);
+    };
+    // A sidebar conversation's card in the Annotations tab leads back to the
+    // assistant (lib/assistant/open-conversation.ts): the tray opens on it,
+    // and the panel opens the conversation.
+    const onOpenConversation = () => {
+      if (!canEdit) return;
+      setCollapsed(false);
+      setTab("assistant");
+      rememberTray({ collapsed: false, tab: "assistant" });
       openSheet();
       revealTray();
     };
@@ -580,14 +634,16 @@ export function Workspace({
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
     window.addEventListener("dissect:show-annotations", onShowAnnotations);
+    window.addEventListener(OPEN_CONVERSATION_EVENT, onOpenConversation);
     window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
+      window.removeEventListener(OPEN_CONVERSATION_EVENT, onOpenConversation);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, [revealTray, rememberTray, openSheet]);
+  }, [revealTray, rememberTray, openSheet, canEdit]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the
@@ -641,6 +697,17 @@ export function Workspace({
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     window.addEventListener("blur", onUp);
+  }
+
+  // Breakwork from the side bar: the reader of the open document opens it
+  // (reader-interactions.tsx listens for OPEN_STRUCTURE_EVENT). A recording
+  // has no Breakwork.
+  const structureNew = useNewFeature("structure");
+  const breakworkOn = documents.some((d) => d.id === activeDocumentId && d.kind !== "media");
+  function openBreakwork() {
+    structureNew.seen();
+    setMoreOpen(false);
+    window.dispatchEvent(new CustomEvent(OPEN_STRUCTURE_EVENT, { detail: { documentId: activeDocumentId } }));
   }
 
   function show(next: Tab) {
@@ -748,16 +815,22 @@ export function Workspace({
   // and they are gone. Docking opens the tray on notes on its own (onDock
   // below); this undoes only the fold it made, so a tray the reader had
   // folded stays folded.
-  const floatingId = actions.floating?.id ?? null;
+  // Several notes can float: the reader opens the tray again to take the
+  // next one out, and it folds again as that one lands. A note that docks
+  // folds nothing: docking opens the tray on the note.
+  const floatCount = actions.floating.length;
   const trayFold = useSyncExternalStore(subscribeTrayFold, readTrayFold, () => false);
-  const needsRoom = floatingId !== null || trayFold;
+  const needsRoom = floatCount > 0 || trayFold;
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
+  const roomFor = useRef({ floatCount: 0, trayFold: false });
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
+    const more = floatCount > roomFor.current.floatCount || (trayFold && !roomFor.current.trayFold);
+    roomFor.current = { floatCount, trayFold };
     if (needsRoom) {
+      if (!more) return;
       setMobileTray(false);
       if (!collapsedRef.current) {
         foldedForFloat.current = true;
@@ -767,8 +840,58 @@ export function Workspace({
       foldedForFloat.current = false;
       setCollapsed(false);
     }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [needsRoom]);
+  }, [needsRoom, floatCount, trayFold]);
+
+  // The peek (SPEC.md §6), md+: the pointer on the rail of a folded tray
+  // draws the tray over the reader, on the tab it was left on, and the
+  // reader keeps its width. The pointer off the rail and the tray folds it
+  // again. A press or the focus in the tray, or a press on a rail button,
+  // opens the tray for good, as the chevron does. "closing": the tray is
+  // sliding shut, still over the reader. No peek while a button is held (a
+  // drag across the rail) or while the tray is folded for a floating note.
+  const [peek, setPeek] = useState<"open" | "closing" | null>(null);
+  if (!collapsed && peek !== null) setPeek(null);
+  const peekTimer = useRef<number | null>(null);
+  const clearPeekTimer = () => {
+    if (peekTimer.current !== null) window.clearTimeout(peekTimer.current);
+    peekTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (peekTimer.current !== null) window.clearTimeout(peekTimer.current);
+    },
+    [],
+  );
+  function peekEnter(e: React.PointerEvent) {
+    if (e.pointerType !== "mouse" || phone) return;
+    clearPeekTimer();
+    if (!collapsed || needsRoom || peek === "open" || e.buttons !== 0) return;
+    peekTimer.current = window.setTimeout(() => setPeek("open"), PEEK_OPEN_MS);
+  }
+  function peekLeave(e: React.PointerEvent) {
+    if (e.pointerType !== "mouse" || phone) return;
+    clearPeekTimer();
+    if (peek === null) return;
+    // A press held as the pointer leaves is a drag out of the tray (the
+    // resize bar, a note): the press opened the tray already.
+    peekTimer.current = window.setTimeout(
+      () => {
+        setPeek((now) => (now === null ? null : "closing"));
+        peekTimer.current = window.setTimeout(() => setPeek((now) => (now === "closing" ? null : now)), PEEK_SLIDE_MS);
+      },
+      peek === "open" ? PEEK_CLOSE_MS : 0,
+    );
+  }
+  function pinPeek() {
+    if (peek !== "open" || !collapsed) return;
+    clearPeekTimer();
+    setPeek(null);
+    setCollapsed(false);
+    rememberTray({ collapsed: false, tab });
+  }
+  const peekOpen = collapsed && peek === "open";
+  // The rail's button for the tab a peek shows reads pressed, as for an open tray.
+  const railButton = (which: Tab) => (isOpen(which) || (peekOpen && tab === which) ? RAIL_BUTTON_ON : RAIL_BUTTON);
 
   return (
     // print: the shell flattens to plain flow so the whole document prints,
@@ -782,7 +905,7 @@ export function Workspace({
     <FunnelStepMark step="reader" />
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
-      data-note-floating={actions.floating ? "" : undefined}
+      data-note-floating={actions.floating.length > 0 ? "" : undefined}
       // The sheet is open (below md): the Reader view button moves to the
       // reader's bottom right (reader-panes.tsx).
       data-sheet-open={mobileTray ? "" : undefined}
@@ -890,17 +1013,18 @@ export function Workspace({
         </button>
       </header>
 
-      {/* A note taken out of the tray, over the article. Docking it opens the
-          tray on notes, where the note's card takes it back. */}
-      {actions.floating && (
+      {/* The notes taken out of the tray, over the article, one card each.
+          Docking one opens the tray on notes, where the note's card takes
+          it back. */}
+      {actions.floating.map((edit) => (
         <FloatingNoteEditor
-          key={actions.floating.id}
-          edit={actions.floating}
-          note={flattenNotes(tree).find((n) => n.id === actions.floating?.id) ?? null}
+          key={edit.id}
+          edit={edit}
+          note={flattenNotes(tree).find((n) => n.id === edit.id) ?? null}
           actions={actions}
           onDock={() => show("notes")}
         />
-      )}
+      ))}
 
       <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block print:pb-0">
         {/* The strip: in a split view (globals.css .reader-strip) the reader
@@ -929,17 +1053,24 @@ export function Workspace({
         </div>
 
         {/* The tray column: on md+ it slides shut to zero width when collapsed
-            and the reader takes the room; below md it is the bottom sheet's
+            and the reader takes the room; a peek draws it over the reader,
+            beside the rail, and the reader keeps its width; below md it is the bottom sheet's
             row under the reader, SHEET_HEIGHT tall while mobileTray is set
             and empty otherwise. In a split view the width changes at once —
             the strip's scroll is the motion. */}
         <div
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
-          inert={(collapsed && !mobileTray) || undefined}
+          inert={(collapsed && !peekOpen && !mobileTray) || undefined}
+          onPointerEnter={peekEnter}
+          onPointerLeave={peekLeave}
+          onPointerDownCapture={pinPeek}
+          onFocusCapture={pinPeek}
           className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
-            resizing || split ? "tray-column-resizing" : ""
-          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"} ${mobileTray ? SHEET_HEIGHT : ""}`}
+            resizing || (split && peek === null) ? "tray-column-resizing" : ""
+          } ${collapsed && !peekOpen ? "md:w-0" : "md:w-[var(--tray-w)]"} ${
+            collapsed && peek !== null ? PEEK_COLUMN : ""
+          } ${mobileTray ? SHEET_HEIGHT : ""}`}
         >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
@@ -1016,7 +1147,7 @@ export function Workspace({
                   documents={notebook.documents}
                   scope={noteScope}
                   onScope={setNoteScope}
-                  visible={isOpen("notes")}
+                  visible={isOpen("notes") || (peekOpen && tab === "notes")}
                 />
               </div>
             )}
@@ -1074,6 +1205,8 @@ export function Workspace({
           data-track-surface="sidebar"
           data-nudge="rail"
           aria-label={t("panes.workspace")}
+          onPointerEnter={peekEnter}
+          onPointerLeave={peekLeave}
           className="fixed inset-x-0 bottom-0 z-30 flex h-[calc(54px+env(safe-area-inset-bottom))] flex-row items-center justify-around border-t border-line bg-sand-100 px-3 pt-1 pb-[env(safe-area-inset-bottom)] md:relative md:z-auto md:h-auto md:w-[52px] md:shrink-0 md:flex-col md:justify-start md:gap-1.5 md:border-t-0 md:border-l md:px-0 md:pt-2.5 md:pb-2.5 print:hidden"
         >
           <button
@@ -1097,7 +1230,7 @@ export function Workspace({
               aria-label={t("panes.assistant")}
               data-tip={t("panes.assistantTabTitle")}
               aria-current={isOpen("assistant")}
-              className={isOpen("assistant") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+              className={railButton("assistant")}
             >
               <SparkleIcon />
             </button>
@@ -1120,7 +1253,7 @@ export function Workspace({
             aria-label={t("panes.notes")}
             data-tip={pending.length > 0 ? t("panes.pendingCountTitle") : t("panes.notesTabTitle")}
             aria-current={isOpen("notes")}
-            className={isOpen("notes") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("notes")}
           >
             <NotesIcon />
             {notesBloom > 0 && (
@@ -1142,7 +1275,7 @@ export function Workspace({
             aria-label={t("panes.annotations")}
             data-tip={t("panes.annotationsTabTitle")}
             aria-current={isOpen("annotations")}
-            className={isOpen("annotations") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("annotations")}
           >
             <CommentIcon />
           </button>
@@ -1153,11 +1286,24 @@ export function Workspace({
             aria-label={t("panes.distill")}
             data-tip={t("panes.distillTabTitle")}
             aria-current={isOpen("distill")}
-            className={isOpen("distill") ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            className={railButton("distill")}
           >
-            {/* The glyph the article's Extract button carries. */}
             <QuoteIcon />
           </button>
+
+          {/* Breakwork (SPEC.md §32): the structure of the open document,
+              over the reader. Below md it is a row of the More menu. */}
+          {breakworkOn && (
+            <button
+              onClick={openBreakwork}
+              data-track="structure"
+              aria-label={t("structure.structure")}
+              data-tip={t("structure.structureButtonTitle")}
+              className={`max-md:hidden ${RAIL_BUTTON}${structureNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+            >
+              <StructureIcon />
+            </button>
+          )}
 
           {/* Below md the bar's last button: More, a menu of what a phone
               has no room for at rest — the reader views (reader-panes.tsx
@@ -1188,6 +1334,12 @@ export function Workspace({
                 <GraphIcon size={15} />
                 {t("panes.graph")}
               </button>
+              {breakworkOn && (
+                <button data-more-row onClick={openBreakwork} data-track="more:structure" className={MORE_ROW}>
+                  <StructureIcon size={15} />
+                  {t("structure.structure")}
+                </button>
+              )}
               <button
                 data-more-row
                 onClick={() => {

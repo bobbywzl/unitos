@@ -52,16 +52,17 @@ function subscribe(l: () => void) {
   };
 }
 
-/** The line a collapsed row shows: the stored gist, else the one fetched this
-    session for this content, else the first words. wanted: the row is
-    collapsed, so a missing gist is asked for. plainText is the note's text
-    with the markdown taken off (lib/markdown-preview.ts). */
-export function useGist(
+/** The gist as written by AI: the stored one, else the one fetched this
+    session for this content; null until one is written. wanted: the note
+    shows its gist (a collapsed row, an open note with no title), so a
+    missing gist is asked for. plainText is the note's text with the
+    markdown taken off (lib/markdown-preview.ts). */
+export function useWrittenGist(
   noteId: string,
   stored: string | null,
   plainText: string,
   wanted: boolean,
-): string {
+): string | null {
   const got = useSyncExternalStore(
     subscribe,
     () => {
@@ -73,5 +74,10 @@ export function useGist(
   useEffect(() => {
     if (wanted && stored === null && got === null) ask(noteId, plainText);
   }, [wanted, stored, got, noteId, plainText]);
-  return stored ?? got ?? clipWords(plainText, GIST_MAX_CHARS);
+  return stored ?? got;
+}
+
+/** The line a collapsed row shows: the gist, else the first words. */
+export function useGist(noteId: string, stored: string | null, plainText: string, wanted: boolean): string {
+  return useWrittenGist(noteId, stored, plainText, wanted) ?? clipWords(plainText, GIST_MAX_CHARS);
 }

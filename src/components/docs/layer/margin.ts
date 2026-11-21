@@ -56,6 +56,21 @@ export function pageGeometry(container: HTMLElement | null, shift: number): Page
   };
 }
 
+/** The shift the page shows now. The canvas slides to a new --docs-shift
+    over 0.2 s (frame.css: its right padding is its own plus twice the
+    shift), so right after the pane is told a shift the page still stands at
+    the shift before. A measure taken then must take out this shift, not the
+    one the pane was told: with the told one the page reads further right
+    than it is, by the way it still has to go. `told` when the canvas cannot
+    say. */
+export function shownShift(container: HTMLElement | null, told: number): number {
+  const canvas = container?.querySelector<HTMLElement>("[data-docs-page]")?.closest<HTMLElement>(".docs-canvas");
+  if (!canvas) return told;
+  const own = parseFloat(canvas.style.getPropertyValue("--docs-pad-r"));
+  const shown = (parseFloat(getComputedStyle(canvas).paddingRight) - (Number.isFinite(own) ? own : 24)) / 2;
+  return Number.isFinite(shown) ? Math.max(0, shown) : told;
+}
+
 /** A card with the page moved by `shift`: beside the page, else over its
     margin clear of the text; null when neither fits. */
 export function slotAt(geo: PageGeometry, shift: number): { left: number; width: number } | null {

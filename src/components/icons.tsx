@@ -142,6 +142,37 @@ export function MoreIcon(props: IconProps) {
   );
 }
 
+/** A star: a piece's stars in Breakwork. Filled when `filled`. */
+export function StarIcon({ filled, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Icon {...props}>
+      <path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z" fill={filled ? "currentColor" : "none"} />
+    </Icon>
+  );
+}
+
+/** An arrow against a bar at the top: move to the top of the group. */
+export function ToTopIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 4h14" />
+      <path d="M12 20V9" />
+      <path d="m6 15 6-6 6 6" />
+    </Icon>
+  );
+}
+
+/** An arrow against a bar at the bottom: move to the bottom of the group. */
+export function ToBottomIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 20h14" />
+      <path d="M12 4v11" />
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -339,6 +339,8 @@ export function resolveProposal(
         bucketId,
         order: order++,
         label: (draft.labels[String(n)] ?? old?.label ?? "").trim(),
+        // The reader's stars stay through a proposal.
+        stars: old?.stars ?? 0,
       });
     }
   }

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
-import { outboundFetch } from "@/lib/outbound-fetch";
+import { publicFetch } from "@/lib/public-url";
 import { parseRegion, type Region } from "@/lib/video/types";
 
 // Figure content for model calls, shared by every route that anchors on a
@@ -107,7 +107,8 @@ export async function fetchFigureImage(
   }
   if (!/^https?:\/\//.test(resolved)) return null;
   try {
-    const res = await outboundFetch(resolved, {
+    // The address comes from the page: public addresses only.
+    const res = await publicFetch(resolved, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; Unitos/1.0)",
         Accept: "image/png,image/jpeg,image/webp,image/gif,image/*;q=0.8",

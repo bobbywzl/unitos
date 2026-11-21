@@ -31,9 +31,9 @@ import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
 import { afterNoteClose, flushNoteDrafts, handOffNoteDraft, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
 
-// The floating card: one note taken out of the tray, over the article
+// A floating card: a note taken out of the tray, over the article
 // (floating-note-editor.tsx). It opens in its draggable mode; the pencil
-// opens its editor.
+// opens its editor. Several notes can float at once, one card each.
 export type FloatingEdit = {
   id: string;
   /** The draft the floating card's editor opens with. */
@@ -222,12 +222,13 @@ export type OutlineActions = {
   isCollapsed: (id: string) => boolean;
   toggleCollapsed: (id: string) => void;
   setNotesView: (view: CollapsedView) => void;
-  floating: FloatingEdit | null;
+  /** The notes out in floating cards, in the order they were taken out. */
+  floating: FloatingEdit[];
   floatNote: (edit: FloatingEdit) => void;
-  /** The floating card's draft as it is typed, so docking can carry it. */
-  floatingDraftChanged: (draft: string) => void;
-  /** Close the floating card. reopen: the note's tray card opens its editor on the draft. */
-  dockNote: (reopen: boolean) => void;
+  /** A floating card's draft as it is typed, so docking can carry it. */
+  floatingDraftChanged: (id: string, draft: string) => void;
+  /** Close a note's floating card. reopen: the note's tray card opens its editor on the draft. */
+  dockNote: (id: string, reopen: boolean) => void;
 };
 
 // The notes view persists per browser and per project, so the tray and the
@@ -526,8 +527,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   const [editRequest, setEditRequest] = useState<{ id: string; draft?: string } | null>(null);
   // The floating card, and its draft as typed — a ref, so a keystroke in the
   // card never re-renders the workspace.
-  const [floating, setFloating] = useState<FloatingEdit | null>(null);
-  const floatingDraft = useRef("");
+  const [floating, setFloating] = useState<FloatingEdit[]>([]);
+  const floatingDraft = useRef(new Map<string, string>());
   if (prevSections !== notebook.sections) {
     setPrevSections(notebook.sections);
     setTree(notebook.sections);
@@ -1665,15 +1666,18 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     setNotesView: notesView.setView,
     floating,
     floatNote(edit) {
-      floatingDraft.current = edit.draft;
-      setFloating(edit);
+      floatingDraft.current.set(edit.id, edit.draft);
+      // A note already out keeps its card; the new landing takes its place.
+      setFloating((list) => [...list.filter((f) => f.id !== edit.id), edit]);
     },
-    floatingDraftChanged(draft) {
-      floatingDraft.current = draft;
+    floatingDraftChanged(id, draft) {
+      floatingDraft.current.set(id, draft);
     },
-    dockNote(reopen) {
-      if (floating && reopen) setEditRequest({ id: floating.id, draft: floatingDraft.current });
-      setFloating(null);
+    dockNote(id, reopen) {
+      const draft = floatingDraft.current.get(id);
+      floatingDraft.current.delete(id);
+      if (reopen && floating.some((f) => f.id === id)) setEditRequest({ id, draft });
+      setFloating((list) => list.filter((f) => f.id !== id));
     },
   };
 

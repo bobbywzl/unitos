@@ -93,6 +93,7 @@ export const en = {
   replicaFixed: "These words stay: a bullet, the speaker notes' label, a chart's data, a formula's cell, or a cell a merge covers",
   replicaEmpty: "The slide has no text there to hold new words",
   replicaStale: "The block changed since the edit was made. Ask again",
+  replicaLarge: "This sheet is too large for that change here. A cell's words can change. To add or remove rows or columns, or to change a sheet with formulas, edit the file and add it again",
   replicaCells: "A table keeps its rows and columns: change words within a cell",
   replicaHeld: "These words stay: a formula, the break between a cell's paragraphs, or a cell a merge covers",
   replicaReads: "A formula reads a cell of the row or column this edit takes out",
@@ -123,7 +124,7 @@ export const en = {
   noVideoBlock: "This document has no video block",
 
   // Assistant
-  assistantNeedsKey: "MOONSHOT_API_KEY is not set. The assistant needs it.",
+  assistantNeedsKey: "The assistant's model has no API key set.",
   assistantFailed: "The assistant failed. {reason}",
   taskCorpusScope: "This task runs at Project scope",
   questionRequired: "Type a question or attach an image or a file",
@@ -184,6 +185,7 @@ export const en = {
   mediaUnavailable: "This media link did not load. The file may be private, removed, or blocked.",
   unreadableContent:
     "No readable text was found on this page. The page may draw its text with scripts after loading, which this reader cannot run. Open the page in your browser, save it as a PDF, and upload that PDF.",
+  fileEmpty: "This file has no text to read.",
   reparseFailedReason: "Re-parse failed. {reason}",
   exportCitation: "{title}, block {blockId}",
   annotationNotSaved: "Not saved. Try again.",
@@ -206,7 +208,7 @@ export const en = {
   distillRegenerateLimit: "This extraction ran again twice already, the most an extraction runs again",
   formalizeNoTopics: "Formalize returned no resolvable topics",
   askRequiresRangeAndQuestion: "ASK requires a time range and a question",
-  voiceNoteNeedsKey: "GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set. The voice command needs one.",
+  voiceNoteNeedsKey: "XAI_API_KEY, DEEPGRAM_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is not set. Writing out speech needs one.",
   voiceCommandNeedsKey: "ANTHROPIC_API_KEY is not set. The voice command needs it.",
   organizeNeedsKey: "No model key is set. Save as note needs one.",
   organizeFailed: "The answer could not be saved as a note. {reason}",
@@ -242,6 +244,7 @@ export const en = {
   voiceNoteNotAudio: "The recording is not audio",
   voiceNoteEmpty: "The recording is empty",
   voiceNoteTooLarge: "The recording is too large. Keep a command under five minutes.",
+  speechNotWritten: "The recording could not be written out. Try again.",
   voiceNoteNoSpeech: "No speech was found in the recording",
   compareNeedsText: "Both documents need text to compare",
   compareNoPoints: "Compare found no points",
@@ -269,7 +272,8 @@ export const en = {
   notImage: "File is not an image (png, jpg, gif, webp, bmp)",
   imageNotFound: "Image not found",
   imageTooLarge: "Image is larger than 25 MB",
-  heicNotRead: "{name} could not be read. Save it as a jpg and add it again.",
+  imageNotRead: "{name} could not be read. Save it as a jpg and add it again.",
+  imageReading: "Reading {name}…",
   imageNeedsPremium:
     "Images this large need Unitos Premium. After the trial, images up to 5 MB drop.",
   pdfTooLarge: "PDF is larger than 50 MB",
@@ -300,6 +304,11 @@ export const en = {
   fetchServerError: "{host} answered with a server error (HTTP {status}). Try again later.",
   fetchTimeout: "{host} did not answer within 30 seconds. Try again.",
   fetchUnreachable: "{host} could not be reached. Check the link.",
+  fetchScheme: "This is not a web link. A link starts with http:// or https://.",
+  fetchPrivate: "This link points to a private network address. Unitos reads public web pages only.",
+  fetchImage: "This link is an image, not a web page. Download the image and upload the file.",
+  fetchFile: "This link is a file, not a web page or a PDF. Download the file and upload it.",
+  fetchTooLarge: "The file at this link is larger than 50 MB.",
   fetchArchivedCopy: "{host} refused the request. Reading the archived copy…",
   glossaryNeedsKey: "MOONSHOT_API_KEY is not set. Glossary extraction needs it.",
   glossaryFailed: "Glossary extraction failed",
@@ -355,7 +364,7 @@ export const en = {
   frameFetchFailed: "Frame fetch failed ({status})",
 
   // Voice
-  speechNeedsKey: "Voice failed; OPENAI_API_KEY is not set",
+  speechNeedsKey: "No server voice could read the text; the browser voice reads it",
   voiceFailedRetry: "Voice failed. Try again.",
   voiceFailedStatus: "Voice failed ({status})",
 

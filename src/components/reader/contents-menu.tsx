@@ -224,12 +224,15 @@ export function ContentsMenu({
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
         data-tip={t("reader.contentsTitle")}
+        aria-label={t("reader.contents")}
         className={`pointer-events-auto flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-semibold shadow-float ${
           open ? "text-clay-800" : "text-clay-800 hover:text-clay-600"
         }`}
       >
         <ContentsIcon size={13} />
-        {t("reader.contents")}
+        {/* While a note floats the column stands at the pane's left and the
+            button shows its symbol alone (globals.css). */}
+        <span className="contents-label">{t("reader.contents")}</span>
       </button>
       <Presence show={open} exit="pop">
         {open && (

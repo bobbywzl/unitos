@@ -12,6 +12,7 @@ import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import {
   BUCKET_GAP,
   BUCKET_WIDTH,
+  comparePieces,
   emptyStructure,
   newId,
   pieceHash,
@@ -19,9 +20,11 @@ import {
   readStructure,
   tidy,
   type BucketHue,
+  type PieceStars,
   type Structure,
   type StructureBody,
   type StructureEnd,
+  type StructurePiece,
 } from "@/lib/structure";
 import {
   StructureProvider,
@@ -51,6 +54,20 @@ const StructureCanvas = dynamic(() => import("@/components/structure/structure-c
 
 const SAVE_DELAY_MS = 500;
 const UNDO_MAX = 50;
+
+/** A bucket's pieces numbered as listed: 0 first. */
+function renumber(pieces: StructurePiece[]): StructurePiece[] {
+  return pieces.map((p, i) => (p.order === i ? p : { ...p, order: i }));
+}
+
+/** Where the pieces with these stars sit in a bucket's list (sorted by
+    stars, the most first): the first index of the group and the index after
+    its last — the same index when the group is empty. */
+function groupBounds(sorted: StructurePiece[], stars: PieceStars): [number, number] {
+  const start = sorted.findIndex((p) => p.stars <= stars);
+  const end = sorted.findIndex((p) => p.stars < stars);
+  return [start === -1 ? sorted.length : start, end === -1 ? sorted.length : end];
+}
 // The blocks a structure sorts: text, never a page marker or the video block.
 const NEVER = new Set(["PAGE", "VIDEO"]);
 
@@ -261,29 +278,57 @@ export function StructureOverlay({
         }),
       moveBucket: (id, x, y) =>
         change((s) => ({ ...s, buckets: s.buckets.map((b) => (b.id === id ? { ...b, x, y } : b)) })),
-      placeBlock: (blockId, bucketId, index) =>
+      placeBlock: (blockId, bucketId, index, stars) =>
         change((s) => {
           const fresh = pieceOf(blockId);
           const existing = s.pieces.find((p) => p.blockId === blockId);
           if (!fresh && !existing) return s;
           const others = s.pieces.filter((p) => p.blockId !== blockId);
-          const inBucket = others.filter((p) => p.bucketId === bucketId).sort((a, b) => a.order - b.order);
-          const at = index === undefined ? inBucket.length : Math.max(0, Math.min(index, inBucket.length));
-          const piece = {
+          // The bucket's pieces as it lists them (by stars, then order): the
+          // index is a place in that list. A drop names the stars of the
+          // group it lands in; a placement with none keeps the piece's own.
+          const inBucket = others.filter((p) => p.bucketId === bucketId).sort(comparePieces);
+          const piece: StructurePiece = {
             blockId,
             hash: existing?.hash ?? fresh!.hash,
             preview: existing?.preview ?? fresh!.preview,
             label: existing?.label ?? "",
+            stars: stars ?? existing?.stars ?? 0,
             bucketId,
-            order: at,
+            order: 0,
           };
+          const [groupStart, groupEnd] = groupBounds(inBucket, piece.stars);
+          const at = index === undefined ? groupEnd : Math.max(groupStart, Math.min(index, groupEnd));
           inBucket.splice(at, 0, piece);
-          const reordered = inBucket.map((p, i) => ({ ...p, order: i }));
-          return { ...s, pieces: [...others.filter((p) => p.bucketId !== bucketId), ...reordered] };
+          return { ...s, pieces: [...others.filter((p) => p.bucketId !== bucketId), ...renumber(inBucket)] };
         }),
       unplaceBlock: (blockId) => change((s) => ({ ...s, pieces: s.pieces.filter((p) => p.blockId !== blockId) })),
       labelPiece: (blockId, label) =>
         change((s) => ({ ...s, pieces: s.pieces.map((p) => (p.blockId === blockId ? { ...p, label } : p)) })),
+      starPiece: (blockId, stars) =>
+        change((s) => {
+          const piece = s.pieces.find((p) => p.blockId === blockId);
+          if (!piece || piece.stars === stars) return s;
+          // The piece joins the end of its new group; the rest of the bucket
+          // keeps its order.
+          const rest = s.pieces.filter((p) => p.blockId !== blockId);
+          const inBucket = rest.filter((p) => p.bucketId === piece.bucketId).sort(comparePieces);
+          const [, groupEnd] = groupBounds(inBucket, stars);
+          inBucket.splice(groupEnd, 0, { ...piece, stars });
+          return { ...s, pieces: [...rest.filter((p) => p.bucketId !== piece.bucketId), ...renumber(inBucket)] };
+        }),
+      movePiece: (blockId, to) =>
+        change((s) => {
+          const piece = s.pieces.find((p) => p.blockId === blockId);
+          if (!piece) return s;
+          const rest = s.pieces.filter((p) => p.blockId !== blockId);
+          const inBucket = rest.filter((p) => p.bucketId === piece.bucketId).sort(comparePieces);
+          // The top or the bottom of the piece's own group: the pieces of
+          // its bucket with the same stars.
+          const [groupStart, groupEnd] = groupBounds(inBucket, piece.stars);
+          inBucket.splice(to === "top" ? groupStart : groupEnd, 0, piece);
+          return { ...s, pieces: [...rest.filter((p) => p.bucketId !== piece.bucketId), ...renumber(inBucket)] };
+        }),
       connect: (from: StructureEnd, to: StructureEnd) => {
         if (from.kind === to.kind && from.id === to.id) return null;
         let id: string | null = null;

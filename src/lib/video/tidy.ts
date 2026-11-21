@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractJson } from "@/lib/derive/json";
-import { geminiCall, geminiConfigured } from "@/lib/video/gemini";
+import { geminiCall, geminiConfigured, videoTextConfigured } from "@/lib/video/gemini";
 import { clipSegments, groupSegments, normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
 
 // Transcript cleanup (SPEC.md §11): every new video and audio transcript is
@@ -125,16 +125,18 @@ export function stripFillers(text: string): string {
   return out;
 }
 
-/** Clean transcript lines. Gemini when a key is set (fillers, stutters, false
-    starts, punctuation); the rules pass otherwise or when Gemini fails. Lines
+/** Clean transcript lines. Gemini when a key is set, Claude Haiku 5.5 while
+    Gemini is off (fillers, stutters, false starts, punctuation); the rules
+    pass otherwise or when the model fails. Lines
     cleaned down to nothing drop out; every kept line keeps its time range. */
 export async function tidyTranscript(
   lines: TranscriptSegment[],
   userId: string | null = null,
-): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "rules" }> {
+): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "Claude Haiku 5.5" | "rules" }> {
   if (lines.length === 0) return { lines, provider: "rules" };
 
-  if (geminiConfigured()) {
+  // A text pass: on Claude Haiku 5.5 while Gemini is off (lib/video/gemini.ts).
+  if (videoTextConfigured()) {
     try {
       const cleaned: string[] = [];
       for (let i = 0; i < lines.length; i += BATCH_LINES) {
@@ -145,10 +147,10 @@ export async function tidyTranscript(
         lines: lines
           .map((line, i) => ({ ...line, text: cleaned[i] }))
           .filter((line) => line.text !== ""),
-        provider: "Gemini",
+        provider: geminiConfigured() ? "Gemini" : "Claude Haiku 5.5",
       };
     } catch (err) {
-      console.warn("[tidy] Gemini cleanup failed, using rules:", err instanceof Error ? err.message : err);
+      console.warn("[tidy] the model's cleanup failed, using rules:", err instanceof Error ? err.message : err);
     }
   }
 
@@ -168,7 +170,7 @@ export async function transcriptLines(
   segments: TranscriptSegment[],
   clip: { clipStart: number | null; clipEnd: number | null } | null,
   userId: string | null,
-): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "rules" }> {
+): Promise<{ lines: TranscriptSegment[]; provider: "Gemini" | "Claude Haiku 5.5" | "rules" }> {
   const kept = clipSegments(segments, clip?.clipStart ?? null, clip?.clipEnd ?? null);
   const grouped = groupSegments(normalizeSegments(kept));
   const tidied = await tidyTranscript(grouped, userId);

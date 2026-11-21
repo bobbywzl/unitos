@@ -180,13 +180,13 @@ function rectOf(root: ParentNode, id: string): DOMRect | null {
   return el instanceof HTMLElement ? el.getBoundingClientRect() : null;
 }
 
-/** The floating card over the article (floating-note-editor.tsx), when one
-    is open: its note's id and its box. A hold on it merges into it. */
-function floatingCard(): { id: string; rect: DOMRect } | null {
-  const el = document.querySelector<HTMLElement>("[data-floating-note]");
-  const id = el?.dataset.floatingNote;
-  if (!el || !id) return null;
-  return { id, rect: el.getBoundingClientRect() };
+/** The floating cards over the article (floating-note-editor.tsx): each
+    note's id and its box. A hold on one merges into it. */
+function floatingCards(): { id: string; rect: DOMRect }[] {
+  return Array.from(document.querySelectorAll<HTMLElement>("[data-floating-note]")).flatMap((el) => {
+    const id = el.dataset.floatingNote;
+    return id ? [{ id, rect: el.getBoundingClientRect() }] : [];
+  });
 }
 
 function inRect(x: number, y: number, r: DOMRect | null): boolean {
@@ -299,8 +299,7 @@ function mergeCandidateAt(
     best = { id, rect, cover };
   };
   for (const [, entry] of lists) for (const id of entry.ids) consider(id, rectOf(root, id));
-  const floating = floatingCard();
-  if (floating) consider(floating.id, floating.rect);
+  for (const floating of floatingCards()) consider(floating.id, floating.rect);
   return best;
 }
 
@@ -417,7 +416,7 @@ export function SortableBoard({
     onMerge?.(itemId, intoId);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        const target = rectOf(root(), intoId) ?? (floatingCard()?.id === intoId ? floatingCard()!.rect : null);
+        const target = rectOf(root(), intoId) ?? floatingCards().find((f) => f.id === intoId)?.rect ?? null;
         if (!target) return;
         setFall({ from: card, to: target });
         if (fallTimer.current) clearTimeout(fallTimer.current);

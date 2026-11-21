@@ -18,9 +18,20 @@ let provider: GoogleGenerativeAIProvider | null = null;
 /** The model to call. The provider is built once per process, on first use.
     A role's default id resolves to the role's current id (lib/models.ts);
     any other id is called as written. */
-export async function gemini(modelId: string): Promise<LanguageModel> {
+function geminiProvider(): GoogleGenerativeAIProvider {
   provider ??= createGoogleGenerativeAI({ apiKey: geminiApiKey(), baseURL: `${geminiBaseUrl()}/v1beta` });
-  return provider(await resolveModelId(modelId));
+  return provider;
+}
+
+export async function gemini(modelId: string): Promise<LanguageModel> {
+  return geminiProvider()(await resolveModelId(modelId));
+}
+
+/** Google Search for a Gemini call (lib/web-search.ts): Google runs the
+    search inside the call, and the pages come back as the stream's url
+    sources. */
+export function geminiGoogleSearch() {
+  return geminiProvider().tools.googleSearch({});
 }
 
 /** Gemini's thinking level for an effort. Gemini 3 takes low, medium, and

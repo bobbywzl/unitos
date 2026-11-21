@@ -6,13 +6,15 @@ import { useRouter } from "next/navigation";
 import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CommentIcon, LinkIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon, QuoteIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { BLOCK_HREF, BLOCKS_HREF, linkifyBlockTags, NOTE_HREF } from "@/lib/block-tags";
 import { imageWidth } from "@/lib/note-markup";
 import {
   annotationReferenceHref,
+  BOX_EMPTY,
+  contentEnd,
   parseAnnotationReference,
   type ParsedAnnotationReference,
   type ReferencedAnnotation,
@@ -238,6 +240,89 @@ function rehypeLinkCards() {
       }
     };
     walk(tree);
+  };
+}
+
+// An annotation reference in a rendered note (SPEC.md §6,
+// lib/annotation-reference.ts) draws as one box: the row is the box's head,
+// the quote above the row is a quote symbol in the head, and the blocks
+// after the row are the box's content. The note's markdown is the quote, the
+// row, and the content, one after the other, so the content's end is read
+// here: at the block the row's key names (contentEnd), so words written
+// under the content stay outside the box; for a row with no key (a
+// reference dropped before the box) or a key whose words were edited, at
+// the next heading, quote, rule, or row, else the note's end. A reference
+// with no content — a highlight that is only its quote — stays the quote
+// and the row.
+const BOX_HREF = "dataBoxHref";
+const BOX_LABEL = "dataBoxLabel";
+const BOX_QUOTE = "dataBoxQuote";
+
+/** The annotation reference a block is: a paragraph that is one link to an annotation. */
+function referenceRow(node: HastRoot["children"][number]): { href: string; label: string } | null {
+  if (node.type !== "element" || node.tagName !== "p") return null;
+  const kept = node.children.filter((c) => !(c.type === "text" && c.value.trim() === ""));
+  const only = kept.length === 1 ? kept[0] : null;
+  if (only?.type !== "element" || only.tagName !== "a") return null;
+  const href = only.properties.href;
+  if (typeof href !== "string" || !parseAnnotationReference(href)) return null;
+  return { href, label: hastText(only) };
+}
+
+const blank = (node: HastRoot["children"][number]) => node.type !== "element";
+const boxBoundary = (node: HastRoot["children"][number]) =>
+  node.type === "element" && (/^(h[1-6]|blockquote|hr)$/.test(node.tagName) || referenceRow(node) !== null);
+
+function rehypeAnnotationBoxes() {
+  return (tree: HastRoot) => {
+    const kids = tree.children;
+    const out: HastRoot["children"] = [];
+    for (let i = 0; i < kids.length; i++) {
+      const row = referenceRow(kids[i]);
+      const reference = row ? parseAnnotationReference(row.href) : null;
+      if (!row || !reference || reference.box === BOX_EMPTY) {
+        out.push(kids[i]);
+        continue;
+      }
+      // The blocks after the row, to the next row: the content is among them.
+      let stop = i + 1;
+      while (stop < kids.length && !referenceRow(kids[stop])) stop++;
+      const after = kids.slice(i + 1, stop);
+      let count = -1;
+      if (reference.box) count = contentEnd(reference.box, after.map((n) => (blank(n) ? "" : hastText(n)))) + 1;
+      if (count <= 0) {
+        // No key, or its words were edited. A highlight with no key keeps
+        // its quote and its row: what follows it may be the reader's words.
+        if (!reference.box && reference.kind === "highlight") count = 0;
+        else {
+          const to = after.findIndex(boxBoundary);
+          count = to < 0 ? after.length : to;
+        }
+      }
+      const content = after.slice(0, count);
+      while (content.length > 0 && blank(content[content.length - 1])) content.pop();
+      if (content.every(blank)) {
+        out.push(kids[i]);
+        continue;
+      }
+      // The quote right above the row goes into the head.
+      let quote = "";
+      let last = out.length - 1;
+      while (last >= 0 && blank(out[last])) last--;
+      const above = last >= 0 ? out[last] : null;
+      if (above?.type === "element" && above.tagName === "blockquote") {
+        quote = hastText(above).trim();
+        out.length = last;
+      }
+      out.push({
+        type: "element",
+        tagName: "section",
+        properties: { [BOX_HREF]: row.href, [BOX_LABEL]: row.label, [BOX_QUOTE]: quote },
+        children: content as ElementContent[],
+      });
+      i += content.length;
+    }
+    tree.children = out;
   };
 }
 
@@ -495,8 +580,110 @@ async function showCitedNote(noteId: string, go: (href: string) => void): Promis
   );
 }
 
-function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
+/** Opens the annotation a reference names: beside the note on the notes
+    full page (onAnnotationReference), else in the reader. */
+function useOpenReference() {
   const { onAnnotationReference } = useContext(MarkdownData);
+  const router = useRouter();
+  return (href: string, reference: ParsedAnnotationReference, label: string) => {
+    if (onAnnotationReference) {
+      onAnnotationReference({ ...reference, label });
+      return;
+    }
+    window.getSelection()?.removeAllRanges();
+    router.push(href);
+    // Already on that document: the push changes nothing, so the mark
+    // flashes and the annotation opens from here.
+    if (reference.sourceId) {
+      window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: reference.sourceId } }));
+      window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: reference.sourceId } }));
+    }
+  };
+}
+
+const QUOTE_TIP_MAX = 180;
+
+/** The box an annotation reference draws as in a rendered note
+    (rehypeAnnotationBoxes): the head names the annotation's kind and opens
+    it; the quote symbol in the head stands for the words the annotation is
+    anchored to and jumps to them in the reader; the content is the
+    annotation's text. Any other section draws as it is. */
+function AnnotationBox({ node, children: boxChildren, ...props }: Override<"section">) {
+  const { sources, notebookId } = useContext(MarkdownData);
+  const t = useT();
+  const router = useRouter();
+  const openReference = useOpenReference();
+  const href = node?.properties[BOX_HREF];
+  const reference = typeof href === "string" ? parseAnnotationReference(href) : null;
+  if (typeof href !== "string" || !reference) return <section {...props}>{boxChildren}</section>;
+  const label = String(node?.properties[BOX_LABEL] ?? "");
+  const quote = String(node?.properties[BOX_QUOTE] ?? "");
+  const kind = reference.kind;
+  // Where the quote symbol jumps: the note's own source for these words
+  // (the copy the drop made), else the annotation's anchor. A source whose
+  // document was deleted, or whose anchor no longer resolves, has nowhere
+  // to jump.
+  const source = quote && sources && sources.length > 0 ? sourceOfQuote(quote, sources) : null;
+  const target = source
+    ? source.orphaned || source.documentId === ""
+      ? null
+      : { documentId: source.documentId, sourceId: source.id }
+    : reference.sourceId
+      ? { documentId: reference.documentId, sourceId: reference.sourceId }
+      : null;
+  const words = quote.replace(/\s+/g, " ");
+  const clipped = words.length > QUOTE_TIP_MAX ? `${words.slice(0, QUOTE_TIP_MAX - 1)}…` : words;
+  return (
+    <section
+      data-annotation-box=""
+      className="note-annotation-box"
+      style={kind ? ({ "--kind": annotationKindColor(kind, null) } as React.CSSProperties) : undefined}
+    >
+      <header className="note-annotation-box-head">
+        <a
+          href={href}
+          draggable={false}
+          data-track="note-annotation-open"
+          data-tip={t("outline.annotationReferenceTitle")}
+          className="note-annotation-box-name"
+          onClick={(e) => {
+            e.preventDefault();
+            openReference(href, reference, label);
+          }}
+        >
+          <span className="note-annotation-box-icon">
+            {kind && kind !== "highlight" ? <AnnotationKindIcon kind={kind} size={13} /> : <CommentIcon size={13} />}
+          </span>
+          <span className="truncate">{label}</span>
+        </a>
+        {quote && (
+          <button
+            type="button"
+            data-track="note-annotation-quote"
+            data-tip={t(target ? "outline.annotationQuoteJump" : "outline.annotationQuote", { quote: clipped })}
+            aria-label={t(target ? "outline.annotationQuoteJump" : "outline.annotationQuote", { quote: clipped })}
+            aria-disabled={target ? undefined : true}
+            className="note-annotation-box-quote"
+            onClick={() => {
+              if (!target || !notebookId) return;
+              window.getSelection()?.removeAllRanges();
+              // The reader opens on the quote's document and flashes the
+              // words; already on it, the event flashes them at once.
+              router.push(`/n/${notebookId}?doc=${encodeURIComponent(target.documentId)}&src=${encodeURIComponent(target.sourceId)}`);
+              window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: target.sourceId } }));
+            }}
+          >
+            <QuoteIcon size={12} />
+          </button>
+        )}
+      </header>
+      <div className="note-annotation-box-body">{boxChildren}</div>
+    </section>
+  );
+}
+
+function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
+  const openReference = useOpenReference();
   const t = useT();
   const router = useRouter();
   // One link carries every style over its run, innermost last.
@@ -553,29 +740,11 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
   // the annotation beside the note, or in the reader.
   const reference = parseAnnotationReference(href);
   if (reference && href) {
-    const label = hastText(node);
     return (
       <AnnotationReferenceCard
         href={href}
         kind={reference.kind}
-        onOpen={() => {
-          if (onAnnotationReference) {
-            onAnnotationReference({ ...reference, label });
-            return;
-          }
-          window.getSelection()?.removeAllRanges();
-          router.push(href);
-          // Already on that document: the push changes nothing, so the
-          // mark flashes and the annotation opens from here.
-          if (reference.sourceId) {
-            window.dispatchEvent(
-              new CustomEvent("dissect:flash-source", { detail: { sourceId: reference.sourceId } }),
-            );
-            window.dispatchEvent(
-              new CustomEvent("dissect:open-annotation", { detail: { sourceId: reference.sourceId } }),
-            );
-          }
-        }}
+        onOpen={() => openReference(href, reference, hastText(node))}
       >
         {linkChildren}
       </AnnotationReferenceCard>
@@ -595,7 +764,14 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
   );
 }
 
-const components: Components = { blockquote: QuoteBlock, li: ListItem, input: TaskInput, img: Image, a: Link };
+const components: Components = {
+  blockquote: QuoteBlock,
+  li: ListItem,
+  input: TaskInput,
+  img: Image,
+  a: Link,
+  section: AnnotationBox,
+};
 
 /** breaks: single newlines render as line breaks (notes). onToggleTask: a
     checklist item's box is a control; a click reports the item's line (from
@@ -628,7 +804,10 @@ export function Markdown({
   const text = breaks ? hardBreaks(alignListIndents(children)) : alignListIndents(children);
   const needle = highlight?.trim() ?? "";
   const rehypePlugins = useMemo(
-    () => (needle ? [rehypeLinkCards, () => rehypeSearchHits(needle)] : [rehypeLinkCards]),
+    () =>
+      needle
+        ? [rehypeAnnotationBoxes, rehypeLinkCards, () => rehypeSearchHits(needle)]
+        : [rehypeAnnotationBoxes, rehypeLinkCards],
     [needle],
   );
   const data = useMemo<MarkdownData>(

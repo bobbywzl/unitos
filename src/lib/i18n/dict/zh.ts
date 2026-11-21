@@ -19,6 +19,7 @@ import { zh as panels } from "@/lib/i18n/dict/panels.zh";
 import { zh as panes } from "@/lib/i18n/dict/panes.zh";
 import { zh as plans } from "@/lib/i18n/dict/plans.zh";
 import { zh as stitch } from "@/lib/i18n/dict/stitch.zh";
+import { zh as phone } from "@/lib/i18n/dict/phone.zh";
 import { zh as structure } from "@/lib/i18n/dict/structure.zh";
 import { zh as video } from "@/lib/i18n/dict/video.zh";
 import { zh as settings } from "@/lib/i18n/dict/settings.zh";
@@ -45,6 +46,7 @@ export const ZH = {
   panes,
   plans,
   stitch,
+  phone,
   structure,
   video,
   settings,
