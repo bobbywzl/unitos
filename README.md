@@ -76,13 +76,13 @@ Or run every AI call through the gateway: `litellm/README.md` has the steps. Wit
 
 Vercel caps request bodies at about 4.5 MB, so PDF uploads above that fail there. Self-hosted deployments take PDFs up to 50 MB.
 
-Supabase instead of Neon works too: enable the `vector` extension, then set `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=1`) and `DIRECT_URL` (port 5432) in Environment Variables.
+Supabase instead of Neon works too: enable the `vector` extension, then set `DATABASE_URL` (pooled, port 6543, `?pgbouncer=true&connection_limit=4`; see `.env.example` for why 4) and `DIRECT_URL` (port 5432) in Environment Variables.
 
 ## Setup
 
 1. `npm install`
 2. Copy `.env.example` to `.env` and fill in:
-   - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=1`)
+   - `DATABASE_URL` — Supabase pooled connection (port 6543, `?pgbouncer=true&connection_limit=4`)
    - `DIRECT_URL` — Supabase direct connection (port 5432), used for migrations
    - `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_ADMIN_KEY` — the AI gateway (`litellm/README.md`). With the first two set, every AI call goes through it and the provider keys below are not read; the third opens the admin gateway page
    - `MOONSHOT_API_KEY` — required for derivations, the assistant, and glossary (`MOONSHOT_BASE_URL` overrides the endpoint)
@@ -116,3 +116,27 @@ DIRECT_URL="postgresql://postgres@localhost:5432/dissect"
 ```
 
 Then `npx prisma migrate dev`.
+
+## Performance
+
+The rules the perf loop of November 2026 settled on (`scripts/qa/perf/README.md`
+says how to measure a round):
+
+- **Reads that depend on nothing run side by side.** A page or route starts
+  every read that needs only the ids in one `Promise.all`; Prisma reads a
+  nested include one relation at a time, so the project's relation groups
+  read as separate queries in parallel. With the pooled connection, the
+  parallelism needs `connection_limit` above 1 (`.env.example`).
+- **A document's stored file leaves the database only when asked for.**
+  `lib/db.ts` omits `fileData` by default; a read that needs the bytes
+  names them.
+- **A page downloads its own language alone.** English is in every
+  bundle; the Chinese strings are their own chunk, loaded by the provider a
+  page in Chinese renders. The middleware carries its own three strings.
+- **Heavy renderers are dynamic imports.** KaTeX, the video pane, the page
+  editor, the graph, the structure canvas, and the markdown renderer come
+  with the documents or panels that use them.
+- **The reader shows its frame at once** (`app/n/[notebookId]/loading.tsx`),
+  the dashboard fetches the reader's scripts while idle (`ReaderWarmup`) and
+  prefetches the last project's page whole, so a project opens on scripts
+  and data the browser already holds.

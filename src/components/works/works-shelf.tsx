@@ -184,13 +184,14 @@ export function WorksShelf({
       </div>
 
       <ul className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-        {works.map((work) => (
+        {works.map((work, i) => (
           <WorkCard
             key={work.id}
             work={work}
             onRename={rename}
             onDelete={remove}
             offline={offlineOf(work.id)}
+            prefetchPage={i === 0}
           />
         ))}
       </ul>

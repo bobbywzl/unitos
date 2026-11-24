@@ -1,7 +1,7 @@
 // The phone page (SPEC.md §33): the iPhone app's screen. Two tabs, Notes and
 // Assistant, and no side bar.
 
-const en = {
+export const en = {
   title: "Unitos",
   project: "Project",
   section: "Section",
@@ -44,45 +44,3 @@ const en = {
   conversationNotSaved: "The answer is here, but the conversation was not saved. It is saved with your next message.",
   settings: "Settings",
 };
-
-const zh: Record<keyof typeof en, string> = {
-  title: "Unitos",
-  project: "项目",
-  section: "章节",
-  tabNotes: "笔记",
-  tabAssistant: "助手",
-  notePlaceholder: "写一条笔记，或按下麦克风说话",
-  addNote: "添加笔记",
-  adding: "正在添加…",
-  noNotes: "这个章节还没有笔记。",
-  pending: "待定",
-  waitsForNetwork: "网络恢复后保存",
-  notAdded: "未添加。你写的内容仍在输入框里，请重试。",
-  viewerNotes: "你可以阅读这个项目。所有者可以允许你在其中书写。",
-  speak: "说一条笔记",
-  stopSpeaking: "停止并写下所说的内容",
-  transcribing: "正在写下所说的内容…",
-  micDenied: "Unitos 的麦克风已关闭。请在设置中打开。",
-  cannotRecord: "这台设备无法在这里录音。请使用键盘上的麦克风。",
-  heardNothing: "没有听到内容，请重试。",
-  editNote: "编辑笔记",
-  save: "保存",
-  saving: "正在保存…",
-  cancel: "取消",
-  notSaved: "未保存。你写的内容已保留，请重试。",
-  mergedWithOther: "这条笔记在别处有改动。两边的内容都保留在笔记里。",
-  firstProjectTitle: "为你的第一个项目命名",
-  firstProjectHint: "项目用来存放你的文档和笔记。",
-  firstProjectPlaceholder: "项目名称",
-  createProject: "创建项目",
-  assistantPlaceholder: "就这个项目提问",
-  send: "发送",
-  stop: "停止",
-  newChat: "新对话",
-  assistantEmpty: "向助手询问这个项目的文档和笔记。",
-  viewerAssistant: "助手只回答可以在项目中书写的人。",
-  conversationNotSaved: "回答在这里，但对话没有保存。它会随你的下一条消息一起保存。",
-  settings: "设置",
-};
-
-export const phone = { en, zh } as const;

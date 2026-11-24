@@ -1,4 +1,4 @@
-import { suggestionAuthor } from "@/lib/docs/schema";
+import { suggestionAuthor } from "@/lib/docs/suggestion-id";
 
 // The assistant's suggestions (SPEC.md §29): the author they carry and the
 // ops the model answers with, resolved against the paragraph index. Shared

@@ -24,34 +24,37 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
   const { notebookId } = await props.params;
   const user = await currentUser();
   if (!user) redirect("/signin");
-  const notebook = await db.notebook.findUnique({
-    where: { id: notebookId },
-    include: {
-      collaborators: true,
-      // Attach order: the columns of the By document view (SPEC.md §6).
-      documents: {
-        orderBy: { document: { createdAt: "asc" } },
-        include: { document: { select: { id: true, title: true } } },
-      },
-      sections: {
-        orderBy: { order: "asc" },
-        include: {
-          notes: {
-            where: { status: { not: "REJECTED" } },
-            orderBy: { order: "asc" },
-            include: {
-              sources: { include: { document: { select: { id: true, title: true } } } },
-              replies: { orderBy: { createdAt: "asc" } },
-            },
+  // The project's rows read side by side (Prisma reads a nested include one
+  // relation at a time, in sequence), with the translator and the billing switch.
+  const [notebookCore, notebookDocuments, sections, t, billing] = await Promise.all([
+    db.notebook.findUnique({ where: { id: notebookId }, include: { collaborators: true } }),
+    // Attach order: the columns of the By document view (SPEC.md §6).
+    db.notebookDocument.findMany({
+      where: { notebookId },
+      orderBy: { document: { createdAt: "asc" } },
+      include: { document: { select: { id: true, title: true } } },
+    }),
+    db.section.findMany({
+      where: { notebookId },
+      orderBy: { order: "asc" },
+      include: {
+        notes: {
+          where: { status: { not: "REJECTED" } },
+          orderBy: { order: "asc" },
+          include: {
+            sources: { include: { document: { select: { id: true, title: true } } } },
+            replies: { orderBy: { createdAt: "asc" } },
           },
         },
       },
-    },
-  });
-  if (!notebook) notFound();
+    }),
+    serverT(),
+    billingLinks(),
+  ]);
+  if (!notebookCore) notFound();
+  const notebook = { ...notebookCore, documents: notebookDocuments, sections };
   const myRole = authEnabled() ? roleOf(notebook, user) : "owner";
   if (!myRole) notFound();
-  const t = await serverT();
 
   const toView = (s: (typeof notebook.sections)[number]): SectionView => ({
     id: s.id,
@@ -127,7 +130,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     premium: tier !== "expired",
     ultra: tier === "ultra",
-    billing: await billingLinks(),
+    billing,
   };
 
   return (

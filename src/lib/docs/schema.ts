@@ -94,17 +94,7 @@ export const SUGGESTION_MARK_TYPES: ReadonlySet<string> = new Set(["insertion", 
 /** What a suggestion puts at a paragraph's edge to hold a suggested break. */
 export const ZWSP = "\u200B";
 
-/** The account id a suggestion's id ("<account id>.<ms>") names. */
-export function suggestionAuthor(id: unknown): string {
-  const s = String(id);
-  return s.slice(0, Math.max(0, s.lastIndexOf(".")));
-}
-
-/** When a suggestion was made (ms since epoch). */
-export function suggestionTime(id: unknown): number {
-  const s = String(id);
-  return Number(s.slice(s.lastIndexOf(".") + 1));
-}
+export { suggestionAuthor, suggestionTime } from "@/lib/docs/suggestion-id";
 
 /** The nodes that hold a paragraph index row each (a Block): every node
     whose words a reader can select, plus the image, the figure object, and
