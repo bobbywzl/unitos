@@ -374,7 +374,6 @@ export const en = {
   feedbackNoAccount: "This feedback has no account to notify.",
 
   // Export
-  exportFormatInvalid: "format must be md or docx",
   documentExportFormatInvalid: "format must be docx, html, md, txt, or original",
   documentExportNoFile: "This document has no stored file to download",
   documentExportEmpty: "This document has no words to download yet",

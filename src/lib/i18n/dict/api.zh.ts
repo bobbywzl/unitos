@@ -332,7 +332,6 @@ export const zh: Record<keyof typeof en, string> = {
   feedbackLimit: "反馈已达上限。请明天再试。",
   feedbackNoAccount: "这条反馈没有可通知的账户。",
 
-  exportFormatInvalid: "format 必须是 md 或 docx",
   documentExportFormatInvalid: "format 必须是 docx、html、md、txt 或 original",
   documentExportNoFile: "这份文档没有可下载的原文件",
   documentExportEmpty: "这份文档还没有可下载的文字",

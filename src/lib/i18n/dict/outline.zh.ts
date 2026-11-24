@@ -2,9 +2,6 @@ import type { en } from "@/lib/i18n/dict/outline";
 
 export const zh: Record<keyof typeof en, string> = {
   reader: "阅读器",
-  export: "导出",
-  exportMarkdown: "Markdown",
-  exportWord: "Word",
 
   searchNotes: "搜索笔记",
   noNotesMatch: "没有匹配“{query}”的笔记。",
@@ -186,7 +183,6 @@ export const zh: Record<keyof typeof en, string> = {
   micDenied: "麦克风权限被拒绝。请在浏览器中允许后再说出指令。",
   deleteSectionTitle: "删除此章节及其笔记",
   addSectionTitle: "添加一个章节来存放笔记",
-  exportTitle: "把笔记导出为 Markdown 或 Word",
   pinTitle: "把选中的笔记置顶到所在章节",
   unpinTitle: "取消置顶选中的笔记",
   deleteSelectedTitle: "删除选中的笔记",

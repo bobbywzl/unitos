@@ -2,11 +2,8 @@
 // exists in both languages — zh's type enforces it.
 
 export const en = {
-  // Notes full page header (notes/page.tsx, export-menu.tsx, outline.tsx)
+  // Notes full page header (notes/page.tsx, outline.tsx)
   reader: "Reader",
-  export: "Export",
-  exportMarkdown: "Markdown",
-  exportWord: "Word",
 
   // Search and empty states
   searchNotes: "Search notes",
@@ -228,7 +225,6 @@ export const en = {
   micDenied: "Microphone access was refused. Allow it in the browser to speak a command.",
   deleteSectionTitle: "Delete this section and its notes",
   addSectionTitle: "Add a section to file notes in",
-  exportTitle: "Export the notes as Markdown or Word",
   pinTitle: "Pin the selected notes to the top of their section",
   unpinTitle: "Unpin the selected notes",
   deleteSelectedTitle: "Delete the selected notes",

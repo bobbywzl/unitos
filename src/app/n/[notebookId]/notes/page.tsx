@@ -12,7 +12,6 @@ import { ActiveTimeClock } from "@/components/active-time-clock";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { SaveIndicator } from "@/components/save-indicator";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
-import { ExportMenu } from "@/components/export-menu";
 import { NotesPageFrame } from "@/components/outline/annotation-side";
 import { Outline } from "@/components/outline/outline";
 import { billingLinks } from "@/lib/billing/switch";
@@ -155,7 +154,6 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
           >
             {t("outline.reader")}
           </Link>
-          <ExportMenu notebookId={notebook.id} />
           <FeedbackHeaderButton />
         </div>
       </header>
