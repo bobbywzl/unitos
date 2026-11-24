@@ -14,6 +14,8 @@ import {
   STREAM_NOTE_TOKEN,
   VISUALIZE_CHECK,
   VISUALIZE_CHECK_MAX_SVG,
+  VISUALIZE_CHECK_MIN_MS,
+  VISUALIZE_DEADLINE_MARGIN_MS,
   VISUALIZE_EFFORT,
 } from "@/lib/derive/config";
 import { derivationFeature, fallbackCall, featureCall, featureConfigured, featureModelId } from "@/lib/feature-models";
@@ -282,6 +284,8 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
+  // Visualize's time budget counts from here: the host's maxDuration does.
+  const startedAt = Date.now();
   if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.deriveNeedsKey") }, { status: 503 });
   }
@@ -1061,8 +1065,13 @@ async function handle(req: Request, t: TFunc) {
   // confirm. A confirmed run (data.confirm) draws the best picture anyway,
   // the check never withdraws it, and the caption carries "May not be
   // accurate." when the model is still not certain. Runs behind the
-  // heartbeat stream.
+  // heartbeat stream, inside a time budget: each call aborts at the
+  // deadline, so the run answers before the host ends the function, and
+  // the check starts only with time left for it.
   if (data.type === "VISUALIZE" && anchor) {
+    const deadline = startedAt + maxDuration * 1000 - VISUALIZE_DEADLINE_MARGIN_MS;
+    const timeLeft = () => deadline - Date.now();
+    const callSignal = () => AbortSignal.any([req.signal, AbortSignal.timeout(Math.max(1, timeLeft()))]);
     return heartbeatResponse(
       req,
       t,
@@ -1080,9 +1089,12 @@ async function handle(req: Request, t: TFunc) {
           schema: ctx.confirmed ? visualizeOutputSchema.extend({ visual: visualSchema }) : visualizeOutputSchema,
           label: "VISUALIZE",
           usage: visualUsage,
-          abortSignal: req.signal,
+          abortSignal: callSignal(),
         });
-        if (!result.ok) throw new DeriveFailure(result.error);
+        if (!result.ok) {
+          if (timeLeft() <= 0 && !req.signal.aborted) throw new ReaderLine(t("api.visualizeOutOfTime"));
+          throw new DeriveFailure(result.error);
+        }
         const { judgment, visual: drawn } = result.data;
         if (!drawn || (!judgment.certain && !ctx.confirmed)) {
           return { ok: true, unsure: true, reason: judgment.reason.trim() };
@@ -1099,7 +1111,11 @@ async function handle(req: Request, t: TFunc) {
         // be the worse outcome. A simulation is checked on its spec — its
         // frames are the server's, and too long to read back.
         const simulation = drawn.kind === "simulation";
-        if (VISUALIZE_CHECK && (simulation || rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG)) {
+        const checkFits = simulation || rendered.svg.length <= VISUALIZE_CHECK_MAX_SVG;
+        if (VISUALIZE_CHECK && checkFits && timeLeft() < VISUALIZE_CHECK_MIN_MS) {
+          console.warn(`[derive] VISUALIZE:check skipped: ${Math.round(timeLeft() / 1000)} s left; the picture stands`);
+        }
+        if (VISUALIZE_CHECK && checkFits && timeLeft() >= VISUALIZE_CHECK_MIN_MS) {
           const checked = await callForJson({
             model: visualModel,
             // The document prefix again, so the cache holds; the draft is
@@ -1128,7 +1144,8 @@ async function handle(req: Request, t: TFunc) {
             schema: visualizeCheckSchema,
             label: "VISUALIZE:check",
             usage: visualUsage,
-            abortSignal: req.signal,
+            // At the deadline the check fails, and the picture stands as drawn.
+            abortSignal: callSignal(),
           });
           if (checked.ok && !checked.data.keep) {
             if (!checked.data.visual) {

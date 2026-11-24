@@ -271,6 +271,7 @@ export const zh: Record<keyof typeof en, string> = {
   emptyResponse: "模型返回了空响应。请重试。",
   simplifyFailed: "简化失败",
   visualizeFailed: "可视化失败",
+  visualizeOutOfTime: "可视化在画完之前超时了。请重试。",
   distillFailed: "提取失败",
   distillUnfinished: "提取未完成。请重试。",
   distilledToast: "提取完成——打开“提取”查看",

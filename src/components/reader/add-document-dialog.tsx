@@ -514,8 +514,6 @@ export function AddDocumentDialog({
             </button>
             {waysIn && (
               <div className="flex flex-col gap-2 rounded-2xl bg-sand-100 p-3 text-xs text-sand-800">
-                <span className="text-[13px] font-semibold">{t("panes.waysInTitle")}</span>
-                <span className="text-sand-600">{t("panes.waysInLead")}</span>
                 <div className="flex flex-wrap items-center gap-2">
                   <a
                     // React refuses a javascript: href as a prop; the link is

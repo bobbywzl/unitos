@@ -179,6 +179,7 @@ export const zh: Record<keyof typeof en, string> = {
   findFailed: "查找失败。{reason}",
   salienceFailed: "要点识别失败。{reason}",
   visualizeMayBeInaccurate: "可能不准确。",
+  visualizeOutOfTime: "可视化在画完之前超时了。请重试。",
   visualizeNeedsUltra: "可视化是 Unitos Ultra 功能。",
   visualizeNeedsKey: "未设置 ANTHROPIC_API_KEY。可视化需要它。",
   continueNeedsUltra: "将工具输出继续为对话是 Unitos Ultra 功能。",
@@ -262,10 +263,10 @@ export const zh: Record<keyof typeof en, string> = {
   modelKeyInvalid: "AI 服务拒绝了密钥。请检查 ANTHROPIC_API_KEY。",
   ingestTimedOut: "添加超时。请重试；很长的页面或很大的 PDF 可能需要拆分。",
   fetchBlocked:
-    "{host} 拒绝了请求（HTTP {status}）。该网站拦截自动读取，也没有存档副本。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
+    "{host} 拦截了 Unitos（HTTP {status}）。试试“发送到 Unitos”、粘贴或 PDF。",
   fetchChallenge:
-    "{host} 返回了人机验证页面而不是文章，也没有存档副本。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
-  fetchWall: "{host} 返回的是同意页、登录页、订阅页或错误页，不是文章。请从浏览器发送页面、粘贴文章，或将页面另存为 PDF 后拖到这里。",
+    "{host} 要求人机验证。试试“发送到 Unitos”、粘贴或 PDF。",
+  fetchWall: "{host} 返回了登录页或付费墙。试试“发送到 Unitos”、粘贴或 PDF。",
   fetchNotFound: "{host} 上没有此链接对应的页面（HTTP {status}）。请检查链接。",
   tidyingPaste: "正在整理粘贴的文章",
   pastedArticle: "粘贴的文章",

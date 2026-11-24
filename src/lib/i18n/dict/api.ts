@@ -199,6 +199,7 @@ export const en = {
   findFailed: "Find failed. {reason}",
   salienceFailed: "Salience failed. {reason}",
   visualizeMayBeInaccurate: "May not be accurate.",
+  visualizeOutOfTime: "Visualize ran out of time before the picture was drawn. Try again.",
   visualizeNeedsUltra: "Visualize is Unitos Ultra.",
   visualizeNeedsKey: "ANTHROPIC_API_KEY is not set. Visualize needs it.",
   continueNeedsUltra: "Continuing a tool's output into a conversation is Unitos Ultra.",
@@ -291,11 +292,11 @@ export const en = {
   ingestTimedOut: "The add ran out of time. Try again; a long page or a large PDF may need splitting.",
   // Why a page could not be fetched (lib/parse/fetch-page.ts), in plain words
   fetchBlocked:
-    "{host} refused the request (HTTP {status}). The site blocks automated readers, and no archived copy exists. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
+    "{host} blocked Unitos (HTTP {status}). Try Send to Unitos, paste, or a PDF.",
   fetchChallenge:
-    "{host} showed a human check instead of the page, and no archived copy exists. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
+    "{host} showed a human check. Try Send to Unitos, paste, or a PDF.",
   fetchWall:
-    "{host} answered with a consent, sign-in, subscription, or error page, not the article. Send the page from your browser, paste the article, or save the page as a PDF and drop it here.",
+    "{host} showed a sign-in or paywall page. Try Send to Unitos, paste, or a PDF.",
   fetchNotFound: "{host} has no page at this link (HTTP {status}). Check the link.",
   tidyingPaste: "Tidying the pasted article",
   pastedArticle: "Pasted article",

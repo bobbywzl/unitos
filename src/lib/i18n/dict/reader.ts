@@ -304,6 +304,7 @@ export const en = {
   emptyResponse: "The model returned an empty response. Try again.",
   simplifyFailed: "Simplify failed",
   visualizeFailed: "Visualize failed",
+  visualizeOutOfTime: "Visualize ran out of time before the picture was drawn. Try again.",
   distillFailed: "Extract failed",
   distillUnfinished: "Extract did not finish. Try again.",
   distilledToast: "Extracted — open Extract to read it",

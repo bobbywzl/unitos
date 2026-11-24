@@ -5,7 +5,8 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { LocateIcon } from "@/components/icons";
+import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
+import { QuoteJump } from "@/components/quote-jump";
 import {
   annotationReferenceHref,
   type ParsedAnnotationReference,
@@ -230,26 +231,36 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
   return (
     <aside
       data-annotation-side=""
-      className="content-in flex max-h-[calc(100vh-48px)] flex-col overflow-hidden rounded-2xl border bg-card p-4 shadow-soft"
-      // The border is the annotation's kind color (SPEC.md §6), as everywhere.
-      style={{ borderColor: annotation ? annotationKindColor(annotation.kind, annotation.color) : "var(--line)" }}
+      // The kind box (globals.css .kind-box), as everywhere an annotation
+      // draws: the head names the kind in its color, the quote symbol shows
+      // the anchored words and jumps to them, and the text is inside.
+      className="content-in kind-box flex max-h-[calc(100vh-48px)] flex-col overflow-hidden shadow-soft"
+      style={
+        {
+          "--kind": annotation ? annotationKindColor(annotation.kind, annotation.color) : "var(--sand-400)",
+        } as React.CSSProperties
+      }
     >
-      <div className="mb-2 flex shrink-0 items-center gap-2">
-        <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+      <div className="kind-box-head shrink-0">
+        <span className="kind-box-name">
+          {annotation && (
+            <span className="kind-box-icon">
+              {annotation.kind === "highlight" ? (
+                <span className="size-2 rounded-full bg-current" />
+              ) : (
+                <AnnotationKindIcon kind={annotation.kind} size={13} />
+              )}
+            </span>
+          )}
           {annotation ? t(ANNOTATION_KIND_KEY[annotation.kind]) : t("outline.annotationReference")}
         </span>
         <span className="ml-auto flex items-center gap-1">
-          {annotation && annotation.sourceId && !annotation.orphaned && (
-            <button
-              type="button"
-              onClick={jump}
-              data-track="annotation-side-jump"
-              aria-label={t("outline.annotationJump")}
-              data-tip={t("outline.annotationJump")}
-              className="flex size-7 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-            >
-              <LocateIcon size={14} />
-            </button>
+          {annotation?.quotedText && (
+            <QuoteJump
+              quote={annotation.quotedText}
+              onJump={annotation.sourceId && !annotation.orphaned ? jump : undefined}
+              track="annotation-side-jump"
+            />
           )}
           <button
             type="button"
@@ -257,24 +268,21 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
             data-track="annotation-side-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="flex size-7 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-card hover:text-clay-800"
           >
             ✕
           </button>
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="kind-box-body min-h-0 flex-1 overflow-y-auto">
         {error && (
           <p className={`text-[12px] ${error === t("outline.annotationGone") ? "text-sand-700" : "text-red-500"}`}>{error}</p>
         )}
         {!annotation && !error && <p className="text-[12px] text-sand-500">{t("common.loading")}</p>}
         {annotation && (
           <>
-            {annotation.quotedText && (
-              <blockquote className="my-0 mb-2 border-l-2 border-clay-300 pl-3 text-[13px] leading-[20px] text-sand-700">
-                {annotation.quotedText}
-              </blockquote>
-            )}
+            {/* A highlight with no comment: the quoted words are what it holds. */}
+            {!body && annotation.quotedText && <p className="text-[13px] leading-[20px]">{annotation.quotedText}</p>}
             {body && (
               <Markdown breaks>{body}</Markdown>
             )}

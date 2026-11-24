@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { createContext, useContext, useMemo } from "react";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CommentIcon, LinkIcon, QuoteIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon } from "@/components/icons";
+import { QuoteJump } from "@/components/quote-jump";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { BLOCK_HREF, BLOCKS_HREF, linkifyBlockTags, NOTE_HREF } from "@/lib/block-tags";
@@ -252,11 +253,14 @@ function rehypeLinkCards() {
 // under the content stay outside the box; for a row with no key (a
 // reference dropped before the box) or a key whose words were edited, at
 // the next heading, quote, rule, or row, else the note's end. A reference
-// with no content — a highlight that is only its quote — stays the quote
-// and the row.
+// with no content — a highlight that is only its quote — is a box of the
+// quoted words. The box is the kind box every surface draws an annotation
+// as (globals.css .kind-box).
 const BOX_HREF = "dataBoxHref";
 const BOX_LABEL = "dataBoxLabel";
 const BOX_QUOTE = "dataBoxQuote";
+// The reference landed no content: the quoted words are the box's content.
+const BOX_QUOTE_BODY = "dataBoxQuoteBody";
 
 /** The annotation reference a block is: a paragraph that is one link to an annotation. */
 function referenceRow(node: HastRoot["children"][number]): { href: string; label: string } | null {
@@ -280,8 +284,33 @@ function rehypeAnnotationBoxes() {
     for (let i = 0; i < kids.length; i++) {
       const row = referenceRow(kids[i]);
       const reference = row ? parseAnnotationReference(row.href) : null;
-      if (!row || !reference || reference.box === BOX_EMPTY) {
+      if (!row || !reference) {
         out.push(kids[i]);
+        continue;
+      }
+      // The quote right above the row, when there is one.
+      const quoteAbove = () => {
+        let last = out.length - 1;
+        while (last >= 0 && blank(out[last])) last--;
+        const above = last >= 0 ? out[last] : null;
+        return above?.type === "element" && above.tagName === "blockquote" ? { at: last, words: hastText(above).trim() } : null;
+      };
+      // A reference that landed no content (a highlight that is only its
+      // quote): the box holds the quoted words. With no quote above it the
+      // row stays a row.
+      if (reference.box === BOX_EMPTY) {
+        const quote = quoteAbove();
+        if (!quote?.words) {
+          out.push(kids[i]);
+          continue;
+        }
+        out.length = quote.at;
+        out.push({
+          type: "element",
+          tagName: "section",
+          properties: { [BOX_HREF]: row.href, [BOX_LABEL]: row.label, [BOX_QUOTE]: quote.words, [BOX_QUOTE_BODY]: "" },
+          children: [],
+        });
         continue;
       }
       // The blocks after the row, to the next row: the content is among them.
@@ -306,14 +335,9 @@ function rehypeAnnotationBoxes() {
         continue;
       }
       // The quote right above the row goes into the head.
-      let quote = "";
-      let last = out.length - 1;
-      while (last >= 0 && blank(out[last])) last--;
-      const above = last >= 0 ? out[last] : null;
-      if (above?.type === "element" && above.tagName === "blockquote") {
-        quote = hastText(above).trim();
-        out.length = last;
-      }
+      const above = quoteAbove();
+      const quote = above?.words ?? "";
+      if (above) out.length = above.at;
       out.push({
         type: "element",
         tagName: "section",
@@ -601,8 +625,6 @@ function useOpenReference() {
   };
 }
 
-const QUOTE_TIP_MAX = 180;
-
 /** The box an annotation reference draws as in a rendered note
     (rehypeAnnotationBoxes): the head names the annotation's kind and opens
     it; the quote symbol in the head stands for the words the annotation is
@@ -631,53 +653,52 @@ function AnnotationBox({ node, children: boxChildren, ...props }: Override<"sect
     : reference.sourceId
       ? { documentId: reference.documentId, sourceId: reference.sourceId }
       : null;
-  const words = quote.replace(/\s+/g, " ");
-  const clipped = words.length > QUOTE_TIP_MAX ? `${words.slice(0, QUOTE_TIP_MAX - 1)}…` : words;
+  // A reference with no content of its own — a highlight that is only its
+  // quote — shows the quoted words as the box's content.
+  const quoteIsContent = node?.properties[BOX_QUOTE_BODY] !== undefined;
+  const jump =
+    target && notebookId
+      ? () => {
+          window.getSelection()?.removeAllRanges();
+          // The reader opens on the quote's document and flashes the
+          // words; already on it, the event flashes them at once.
+          router.push(`/n/${notebookId}?doc=${encodeURIComponent(target.documentId)}&src=${encodeURIComponent(target.sourceId)}`);
+          window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: target.sourceId } }));
+        }
+      : undefined;
   return (
     <section
       data-annotation-box=""
-      className="note-annotation-box"
+      className="kind-box"
       style={kind ? ({ "--kind": annotationKindColor(kind, null) } as React.CSSProperties) : undefined}
     >
-      <header className="note-annotation-box-head">
+      <header className="kind-box-head">
         <a
           href={href}
           draggable={false}
           data-track="note-annotation-open"
           data-tip={t("outline.annotationReferenceTitle")}
-          className="note-annotation-box-name"
+          className="kind-box-name"
           onClick={(e) => {
             e.preventDefault();
             openReference(href, reference, label);
           }}
         >
-          <span className="note-annotation-box-icon">
-            {kind && kind !== "highlight" ? <AnnotationKindIcon kind={kind} size={13} /> : <CommentIcon size={13} />}
+          <span className="kind-box-icon">
+            {/* A highlight's symbol is its color dot (annotation-kind-icon.tsx). */}
+            {kind === "highlight" ? (
+              <span className="size-2 rounded-full bg-current" />
+            ) : kind ? (
+              <AnnotationKindIcon kind={kind} size={13} />
+            ) : (
+              <CommentIcon size={13} />
+            )}
           </span>
           <span className="truncate">{label}</span>
         </a>
-        {quote && (
-          <button
-            type="button"
-            data-track="note-annotation-quote"
-            data-tip={t(target ? "outline.annotationQuoteJump" : "outline.annotationQuote", { quote: clipped })}
-            aria-label={t(target ? "outline.annotationQuoteJump" : "outline.annotationQuote", { quote: clipped })}
-            aria-disabled={target ? undefined : true}
-            className="note-annotation-box-quote"
-            onClick={() => {
-              if (!target || !notebookId) return;
-              window.getSelection()?.removeAllRanges();
-              // The reader opens on the quote's document and flashes the
-              // words; already on it, the event flashes them at once.
-              router.push(`/n/${notebookId}?doc=${encodeURIComponent(target.documentId)}&src=${encodeURIComponent(target.sourceId)}`);
-              window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: target.sourceId } }));
-            }}
-          >
-            <QuoteIcon size={12} />
-          </button>
-        )}
+        {quote && <QuoteJump quote={quote} onJump={jump} track="note-annotation-quote" className="ml-auto" />}
       </header>
-      <div className="note-annotation-box-body">{boxChildren}</div>
+      <div className="kind-box-body">{quoteIsContent ? <p>{quote}</p> : boxChildren}</div>
     </section>
   );
 }
