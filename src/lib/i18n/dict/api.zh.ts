@@ -333,7 +333,12 @@ export const zh: Record<keyof typeof en, string> = {
   feedbackNoAccount: "这条反馈没有可通知的账户。",
 
   exportFormatInvalid: "format 必须是 md 或 docx",
-  documentExportFormatInvalid: "format 必须是 docx",
+  documentExportFormatInvalid: "format 必须是 docx、html、md、txt 或 original",
+  documentExportNoFile: "这份文档没有可下载的原文件",
+  documentExportEmpty: "这份文档还没有可下载的文字",
+  documentExportTooLarge: "这份文档太大，无法生成 Word 文件。请改为下载网页、Markdown 或纯文本",
+  exportSlide: "第 {n} 张幻灯片",
+  exportPage: "第 {n} 页",
 
   adminNotConfigured: "管理登录未配置（未设置 ADMIN_PASSWORD）。",
   invalidPassword: "密码错误",

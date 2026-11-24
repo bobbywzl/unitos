@@ -596,6 +596,20 @@ export function OfflineIcon(props: IconProps) {
   );
 }
 
+// Download (SPEC.md §15): a sheet with an arrow down, the document as a
+// file. Not OfflineIcon's arrow into a tray, which keeps the project in the
+// browser.
+export function DownloadIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M12 11v6" />
+      <path d="M9.5 14.5L12 17l2.5-2.5" />
+    </Icon>
+  );
+}
+
 // The Drive glyph: a triangle of three strokes, the assistant's Add from
 // Google Drive button.
 export function DriveIcon(props: IconProps) {

@@ -20,6 +20,7 @@ import {
   GraphIcon,
   MoreIcon,
   NotesIcon,
+  DownloadIcon,
   OfflineIcon,
   QuestionIcon,
   QuoteIcon,
@@ -69,6 +70,7 @@ import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import { DOWNLOAD_OPEN_EVENT, DownloadMenu } from "@/components/reader/download-menu";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
 import { useDrawnView, type ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -954,6 +956,9 @@ export function Workspace({
         <OfflineStatus />
         <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
+        {/* Download (SPEC.md §15): the open document as a file. Below md it
+            is a row of the bar's More menu, which opens the same list. */}
+        <DownloadMenu document={documents.find((d) => d.id === activeDocumentId) ?? null} />
         {/* History (SPEC.md §12): opens the tray on History. Below md it
             is a row of the bar's More menu. */}
         <button
@@ -1352,6 +1357,17 @@ export function Workspace({
                 <EditsIcon size={15} />
                 {t("panes.history")}
               </button>
+              {activeDocumentId && (
+                <button
+                  data-more-row
+                  onClick={() => window.dispatchEvent(new Event(DOWNLOAD_OPEN_EVENT))}
+                  data-track="more:download"
+                  className={MORE_ROW}
+                >
+                  <DownloadIcon size={15} />
+                  {t("panes.download")}
+                </button>
+              )}
               {offlineOn && (
                 <button
                   data-more-row

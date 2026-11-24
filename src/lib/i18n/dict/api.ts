@@ -375,7 +375,13 @@ export const en = {
 
   // Export
   exportFormatInvalid: "format must be md or docx",
-  documentExportFormatInvalid: "format must be docx",
+  documentExportFormatInvalid: "format must be docx, html, md, txt, or original",
+  documentExportNoFile: "This document has no stored file to download",
+  documentExportEmpty: "This document has no words to download yet",
+  documentExportTooLarge: "This document is too large for a Word file. Download the web page, Markdown, or plain text instead",
+  // The words a download adds of its own (lib/export/document.ts).
+  exportSlide: "Slide {n}",
+  exportPage: "Page {n}",
 
   // Admin
   adminNotConfigured: "Admin login is not configured (ADMIN_PASSWORD unset).",

@@ -1,4 +1,3 @@
-import type { User } from "@prisma/client";
 import {
   AlignmentType,
   Bookmark,
@@ -58,7 +57,6 @@ import type { FigureMediaView } from "@/components/docs/insert/figure";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
 import { levelMarker, lineLevel } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
-import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
@@ -1012,26 +1010,6 @@ async function authorNames(doc: RichNode, more: (string | null)[]): Promise<Map<
   const assistant = (await serverT())("reader.assistant");
   for (const id of ids) if (isAssistantAuthor(id)) names.set(id, assistant);
   return names;
-}
-
-/** A document's open comments in the projects `user` can open (every one
-    with sign-in off), oldest first: a resolved comment stays out of the file. */
-export async function docxComments(documentId: string, user: User): Promise<DocxComment[]> {
-  const mine = { OR: [{ userId: user.id }, { collaborators: { some: { email: user.email } } }] };
-  const here = { documentId, orphaned: false, layer: null };
-  const notes = await db.note.findMany({
-    where: {
-      derivationType: null,
-      color: null,
-      resolvedById: null,
-      status: { not: "REJECTED" },
-      section: { hidden: true, ...(authEnabled() ? { notebook: mine } : {}) },
-      sources: { some: here },
-    },
-    orderBy: { createdAt: "asc" },
-    select: { content: true, createdAt: true, createdById: true, sources: { where: here, select: { blockId: true, startOffset: true, endOffset: true } } },
-  });
-  return notes.map((n) => ({ sources: n.sources, authorId: n.createdById, date: n.createdAt, text: n.content }));
 }
 
 /** The .docx of a document with rich text (a blank document or an
